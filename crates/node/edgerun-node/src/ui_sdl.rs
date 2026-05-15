@@ -9,16 +9,24 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::vec;
 use std::vec::Vec;
 
-use edgerun_crypto::{fill_random, sha256};
 use edgerun_protocols::keygen::{generate_node_signing_key, node_id_from_signing_key};
 use edgerun_protocols::seal::{
-    SealKey, generate_seal_key, seal_node_signing_key, seal_with_key, unseal_node_signing_key,
-    unseal_with_key,
+    SealKey, generate_seal_key, seal_node_signing_key, unseal_node_signing_key,
 };
 use edgerun_ui_core::gpu::sdl::{
     SDL_KEY_ESCAPE, SdlEventResult, SdlGlWindowOptions, SdlInputEvent, run_sdl_gl_window,
 };
-use edgerun_ui_core::gpu::{ButtonStyle, Color4, HitKind, UiAction, UiIcon, UiNode};
+use edgerun_ui_core::gpu::{
+    ButtonStyle, Color4, HitKind, INITIAL_SETUP_CONFIRM_FIELD_ID, INITIAL_SETUP_CREATE_BUTTON_ID,
+    INITIAL_SETUP_PASSWORD_FIELD_ID, InitialSetupUiIntent, InitialSetupUiState, UiAction, UiIcon,
+    UiNode, YUBIKEY_GRANT_PIN_FIELD_ID, YUBIKEY_GRANT_SIGN_BUTTON_ID, YubiKeyGrantCeremonyIntent,
+    YubiKeyGrantCeremonyState, build_yubikey_grant_ceremony_surface,
+};
+use edgerun_ui_core::initial_setup::file_store::PasswordRootFileStore;
+use edgerun_ui_core::initial_setup::{
+    FingerprintPresenceRef, TpmDeviceAuthorityRef, UserDeviceAdmissionGrant,
+    YubiKeyUserAuthorityRef,
+};
 
 use crate::capacity::{NodeCapacity, format_bytes};
 use crate::hardware::HardwareInventory;
@@ -39,6 +47,7 @@ const ACTION_STORAGE_NETWORK: u32 = 20_102;
 const ACTION_ADMISSION_DAO: u32 = 21_001;
 const ACTION_ADMISSION_DEVICE: u32 = 21_002;
 const ACTION_ADMISSION_OWNED: u32 = 21_003;
+const ACTION_TRUST_RUN_NEXT: u32 = 21_004;
 const ACTION_TPM_DEVICE_KEY: u32 = 21_101;
 const ACTION_YUBIKEY_UNLOCK: u32 = 21_102;
 const ACTION_FINGERPRINT_UNLOCK: u32 = 21_103;
@@ -61,16 +70,11 @@ const NODE_ID_FILE: &str = "node-id.bin";
 const TPM_STATUS_FILE: &str = "tpm-device-key.status";
 const YUBIKEY_STATUS_FILE: &str = "yubikey-unlock.status";
 const FINGERPRINT_STATUS_FILE: &str = "fingerprint-unlock.status";
-const PASSWORD_SALT_FILE: &str = "password-root.salt";
-const PASSWORD_VERIFIER_FILE: &str = "password-root.verifier";
-const PASSWORD_SECRET_FILE: &str = "password-root.envelope";
-const PASSWORD_KDF_ROUNDS_FILE: &str = "password-root.kdf-rounds";
-const PASSWORD_KDF_ROUNDS: u32 = 120_000;
-const PASSWORD_MIN_LEN: usize = 8;
-const PASSWORD_SALT_LEN: usize = 32;
-const LOCAL_SECRET_LEN: usize = 32;
-const PASSWORD_KDF_DOMAIN: &[u8] = b"edgerun:v1:node-ui:password-root:kdf";
-const PASSWORD_VERIFIER_DOMAIN: &[u8] = b"edgerun:v1:node-ui:password-root:verifier";
+const TPM_AUTHORITY_FILE: &str = "tpm-device-authority.bin";
+const YUBIKEY_AUTHORITY_FILE: &str = "yubikey-user-authority.bin";
+const FINGERPRINT_PRESENCE_FILE: &str = "fingerprint-presence.bin";
+const DEVICE_GRANT_FILE: &str = "user-device-admission-grant.bin";
+const DEVICE_GRANT_STATUS_FILE: &str = "user-device-admission-grant.status";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActivePanel {
@@ -145,10 +149,14 @@ struct NodeControlState {
     fingerprint_status: String,
     password_status: String,
     sealed_key_status: String,
+    fingerprint_presence: Option<FingerprintPresenceRef>,
+    tpm_device_authority: Option<TpmDeviceAuthorityRef>,
+    yubikey_user_authority: Option<YubiKeyUserAuthorityRef>,
+    device_grant: Option<UserDeviceAdmissionGrant>,
+    device_grant_status: String,
     sealed_node_id: Option<[u8; 64]>,
     sealed_node_key: Option<Vec<u8>>,
     seal_key: Option<SealKey>,
-    local_secret: Option<[u8; LOCAL_SECRET_LEN]>,
     local_cache: bool,
     network_storage: bool,
     systemd_inventory: bool,
@@ -180,10 +188,14 @@ impl Default for NodeControlState {
             fingerprint_status: "not enrolled".to_string(),
             password_status: "not configured".to_string(),
             sealed_key_status: "not sealed".to_string(),
+            fingerprint_presence: None,
+            tpm_device_authority: None,
+            yubikey_user_authority: None,
+            device_grant: None,
+            device_grant_status: "not granted".to_string(),
             sealed_node_id: None,
             sealed_node_key: None,
             seal_key: None,
-            local_secret: None,
             local_cache: false,
             network_storage: false,
             systemd_inventory: false,
@@ -219,32 +231,33 @@ impl SealedNodeKey {
     }
 }
 
-#[derive(Clone, Debug)]
-struct PasswordRoot {
-    salt: [u8; PASSWORD_SALT_LEN],
-    verifier: [u8; LOCAL_SECRET_LEN],
-    secret: [u8; LOCAL_SECRET_LEN],
-    envelope: Vec<u8>,
-    rounds: u32,
-}
-
-#[derive(Clone, Debug)]
-struct PasswordRootRecord {
-    salt: [u8; PASSWORD_SALT_LEN],
-    verifier: [u8; LOCAL_SECRET_LEN],
-    envelope: Vec<u8>,
-    rounds: u32,
-}
-
 struct PendingAction {
     label: &'static str,
     receiver: Receiver<ActionResult>,
 }
 
 enum ActionResult {
-    Tpm(Result<String, String>),
-    YubiKey(Result<String, String>),
-    Fingerprint(Result<String, String>),
+    Tpm(Result<TpmActionMaterial, String>),
+    YubiKey(Result<YubiKeyActionMaterial, String>),
+    Fingerprint(Result<FingerprintActionMaterial, String>),
+}
+
+#[derive(Clone, Debug)]
+struct TpmActionMaterial {
+    summary: String,
+    authority: TpmDeviceAuthorityRef,
+}
+
+#[derive(Clone, Debug)]
+struct YubiKeyActionMaterial {
+    summary: String,
+    authority: YubiKeyUserAuthorityRef,
+}
+
+#[derive(Clone, Debug)]
+struct FingerprintActionMaterial {
+    summary: String,
+    presence: FingerprintPresenceRef,
 }
 
 fn background_action_label(id: u32) -> Option<&'static str> {
@@ -263,9 +276,7 @@ fn spawn_background_action(id: u32) -> Option<PendingAction> {
         let result = match id {
             ACTION_TPM_DEVICE_KEY => ActionResult::Tpm(provision_tpm_device_key()),
             ACTION_YUBIKEY_UNLOCK => ActionResult::YubiKey(probe_yubikey_unlock()),
-            ACTION_FINGERPRINT_UNLOCK => ActionResult::Fingerprint(
-                crate::hardware::enroll_first_fingerprint_template("EdgeRun device unlock"),
-            ),
+            ACTION_FINGERPRINT_UNLOCK => ActionResult::Fingerprint(enroll_fingerprint_presence()),
             _ => return,
         };
         let _ = sender.send(result);
@@ -300,25 +311,41 @@ impl LocalAuthorityStore {
 
     fn load(&self) -> NodeControlState {
         let mut control = NodeControlState::default();
-        if let Ok(record) = self.load_password_root_record() {
+        if let Ok(status) = PasswordRootFileStore::new(self.root.clone()).status() {
             control.password_root = true;
             control.password_status = format!(
                 "configured, {} envelope, {} KDF rounds",
-                format_bytes(record.envelope.len() as u64),
-                record.rounds
+                format_bytes(status.envelope_len as u64),
+                status.kdf_rounds
             );
         }
+        if let Ok(summary) = self.read_status(DEVICE_GRANT_STATUS_FILE) {
+            control.device_grant_status = summary;
+        }
+        if let Ok(grant) = self.load_device_grant() {
+            control.device_grant_status = grant_summary(&grant);
+            control.device_grant = Some(grant);
+        }
         if let Ok(summary) = self.read_status(TPM_STATUS_FILE) {
-            control.tpm_device_key = true;
             control.tpm_status = summary;
         }
+        if let Ok(authority) = self.load_tpm_authority() {
+            control.tpm_device_key = true;
+            control.tpm_device_authority = Some(authority);
+        }
         if let Ok(summary) = self.read_status(YUBIKEY_STATUS_FILE) {
-            control.yubikey_unlock = true;
             control.yubikey_status = summary;
         }
+        if let Ok(authority) = self.load_yubikey_authority() {
+            control.yubikey_unlock = true;
+            control.yubikey_user_authority = Some(authority);
+        }
         if let Ok(summary) = self.read_status(FINGERPRINT_STATUS_FILE) {
-            control.fingerprint_unlock = true;
             control.fingerprint_status = summary;
+        }
+        if let Ok(presence) = self.load_fingerprint_presence() {
+            control.fingerprint_unlock = true;
+            control.fingerprint_presence = Some(presence);
         }
         if let (Ok(node_id_bytes), Ok(envelope)) = (
             fs::read(self.root.join(NODE_ID_FILE)),
@@ -360,64 +387,6 @@ impl LocalAuthorityStore {
         Ok(())
     }
 
-    fn persist_password_root(&self, root: &PasswordRoot) -> Result<(), String> {
-        fs::create_dir_all(&self.root).map_err(|err| {
-            format!(
-                "create authority root {} failed: {err}",
-                self.root.display()
-            )
-        })?;
-        fs::write(self.root.join(PASSWORD_SALT_FILE), root.salt)
-            .map_err(|err| format!("write password salt failed: {err}"))?;
-        fs::write(self.root.join(PASSWORD_VERIFIER_FILE), root.verifier)
-            .map_err(|err| format!("write password verifier failed: {err}"))?;
-        fs::write(self.root.join(PASSWORD_SECRET_FILE), &root.envelope)
-            .map_err(|err| format!("write password secret envelope failed: {err}"))?;
-        fs::write(
-            self.root.join(PASSWORD_KDF_ROUNDS_FILE),
-            root.rounds.to_string().as_bytes(),
-        )
-        .map_err(|err| format!("write password KDF rounds failed: {err}"))?;
-        Ok(())
-    }
-
-    fn load_password_root_record(&self) -> Result<PasswordRootRecord, String> {
-        let salt_bytes = fs::read(self.root.join(PASSWORD_SALT_FILE))
-            .map_err(|err| format!("read password salt failed: {err}"))?;
-        let verifier_bytes = fs::read(self.root.join(PASSWORD_VERIFIER_FILE))
-            .map_err(|err| format!("read password verifier failed: {err}"))?;
-        let envelope = fs::read(self.root.join(PASSWORD_SECRET_FILE))
-            .map_err(|err| format!("read password secret envelope failed: {err}"))?;
-        let rounds = fs::read_to_string(self.root.join(PASSWORD_KDF_ROUNDS_FILE))
-            .ok()
-            .and_then(|value| value.trim().parse::<u32>().ok())
-            .unwrap_or(PASSWORD_KDF_ROUNDS);
-        if salt_bytes.len() != PASSWORD_SALT_LEN {
-            return Err("password salt has invalid length".to_string());
-        }
-        if verifier_bytes.len() != LOCAL_SECRET_LEN {
-            return Err("password verifier has invalid length".to_string());
-        }
-        if envelope.is_empty() {
-            return Err("password secret envelope is empty".to_string());
-        }
-        let mut salt = [0u8; PASSWORD_SALT_LEN];
-        salt.copy_from_slice(&salt_bytes);
-        let mut verifier = [0u8; LOCAL_SECRET_LEN];
-        verifier.copy_from_slice(&verifier_bytes);
-        Ok(PasswordRootRecord {
-            salt,
-            verifier,
-            envelope,
-            rounds,
-        })
-    }
-
-    fn unlock_password_root(&self, password: &str) -> Result<[u8; LOCAL_SECRET_LEN], String> {
-        let record = self.load_password_root_record()?;
-        unlock_password_root_record(password, &record)
-    }
-
     fn persist_status(&self, file: &str, status: &str) -> Result<(), String> {
         fs::create_dir_all(&self.root).map_err(|err| {
             format!(
@@ -427,6 +396,87 @@ impl LocalAuthorityStore {
         })?;
         fs::write(self.root.join(file), status.as_bytes())
             .map_err(|err| format!("write status {file} failed: {err}"))
+    }
+
+    fn persist_device_grant(&self, grant: &UserDeviceAdmissionGrant) -> Result<(), String> {
+        fs::create_dir_all(&self.root).map_err(|err| {
+            format!(
+                "create authority root {} failed: {err}",
+                self.root.display()
+            )
+        })?;
+        fs::write(self.root.join(DEVICE_GRANT_FILE), grant.to_bytes())
+            .map_err(|err| format!("write device admission grant failed: {err}"))?;
+        let summary = grant_summary(grant);
+        fs::write(self.root.join(DEVICE_GRANT_STATUS_FILE), summary.as_bytes())
+            .map_err(|err| format!("write device admission grant status failed: {err}"))
+    }
+
+    fn persist_tpm_authority(&self, authority: &TpmDeviceAuthorityRef) -> Result<(), String> {
+        fs::create_dir_all(&self.root).map_err(|err| {
+            format!(
+                "create authority root {} failed: {err}",
+                self.root.display()
+            )
+        })?;
+        fs::write(self.root.join(TPM_AUTHORITY_FILE), authority.to_bytes())
+            .map_err(|err| format!("write TPM authority failed: {err}"))
+    }
+
+    fn persist_yubikey_authority(&self, authority: &YubiKeyUserAuthorityRef) -> Result<(), String> {
+        fs::create_dir_all(&self.root).map_err(|err| {
+            format!(
+                "create authority root {} failed: {err}",
+                self.root.display()
+            )
+        })?;
+        fs::write(self.root.join(YUBIKEY_AUTHORITY_FILE), authority.to_bytes())
+            .map_err(|err| format!("write YubiKey authority failed: {err}"))
+    }
+
+    fn persist_fingerprint_presence(
+        &self,
+        presence: &FingerprintPresenceRef,
+    ) -> Result<(), String> {
+        fs::create_dir_all(&self.root).map_err(|err| {
+            format!(
+                "create authority root {} failed: {err}",
+                self.root.display()
+            )
+        })?;
+        fs::write(
+            self.root.join(FINGERPRINT_PRESENCE_FILE),
+            presence.to_bytes(),
+        )
+        .map_err(|err| format!("write fingerprint presence failed: {err}"))
+    }
+
+    fn load_device_grant(&self) -> Result<UserDeviceAdmissionGrant, String> {
+        let bytes = fs::read(self.root.join(DEVICE_GRANT_FILE))
+            .map_err(|err| format!("read device admission grant failed: {err}"))?;
+        UserDeviceAdmissionGrant::from_bytes(&bytes)
+            .map_err(|err| format!("parse device admission grant failed: {err:?}"))
+    }
+
+    fn load_tpm_authority(&self) -> Result<TpmDeviceAuthorityRef, String> {
+        let bytes = fs::read(self.root.join(TPM_AUTHORITY_FILE))
+            .map_err(|err| format!("read TPM authority failed: {err}"))?;
+        TpmDeviceAuthorityRef::from_bytes(&bytes)
+            .map_err(|err| format!("parse TPM authority failed: {err:?}"))
+    }
+
+    fn load_yubikey_authority(&self) -> Result<YubiKeyUserAuthorityRef, String> {
+        let bytes = fs::read(self.root.join(YUBIKEY_AUTHORITY_FILE))
+            .map_err(|err| format!("read YubiKey authority failed: {err}"))?;
+        YubiKeyUserAuthorityRef::from_bytes(&bytes)
+            .map_err(|err| format!("parse YubiKey authority failed: {err:?}"))
+    }
+
+    fn load_fingerprint_presence(&self) -> Result<FingerprintPresenceRef, String> {
+        let bytes = fs::read(self.root.join(FINGERPRINT_PRESENCE_FILE))
+            .map_err(|err| format!("read fingerprint presence failed: {err}"))?;
+        FingerprintPresenceRef::from_bytes(&bytes)
+            .map_err(|err| format!("parse fingerprint presence failed: {err:?}"))
     }
 
     fn read_status(&self, file: &str) -> Result<String, String> {
@@ -449,8 +499,35 @@ fn generate_and_seal_node_key() -> Result<SealedNodeKey, String> {
     })
 }
 
+fn is_initial_setup_action(action: &UiAction) -> bool {
+    match action {
+        UiAction::TextChanged { id, .. } | UiAction::Submitted { id } => {
+            matches!(
+                *id,
+                INITIAL_SETUP_PASSWORD_FIELD_ID | INITIAL_SETUP_CONFIRM_FIELD_ID
+            )
+        }
+        UiAction::Activated(hit) => {
+            hit.kind == HitKind::Button && hit.id == INITIAL_SETUP_CREATE_BUTTON_ID
+        }
+        _ => false,
+    }
+}
+
+fn is_yubikey_grant_action(action: &UiAction) -> bool {
+    match action {
+        UiAction::TextChanged { id, .. } | UiAction::Submitted { id } => {
+            *id == YUBIKEY_GRANT_PIN_FIELD_ID
+        }
+        UiAction::Activated(hit) => {
+            hit.kind == HitKind::Button && hit.id == YUBIKEY_GRANT_SIGN_BUTTON_ID
+        }
+        _ => false,
+    }
+}
+
 #[cfg(all(feature = "all-hardware", target_os = "linux"))]
-fn provision_tpm_device_key() -> Result<String, String> {
+fn provision_tpm_device_key() -> Result<TpmActionMaterial, String> {
     use edgerun_tpm::{LinuxTpmDevice, LinuxTpmSigningKey, TpmDevice, TpmHandle, TpmSigningKey};
 
     const HANDLE: u32 = 0x8100_0001;
@@ -459,22 +536,36 @@ fn provision_tpm_device_key() -> Result<String, String> {
         let mut tpm = TpmDevice::new(LinuxTpmDevice::new(path));
         match tpm.create_ecdsa_p256_signing_key(HANDLE) {
             Ok(key) => {
-                return Ok(format!(
+                let summary = format!(
                     "{path} handle 0x{:08x}, pub {}, name {}",
                     key.persistent_handle,
                     format_bytes(key.public_key_bytes.len() as u64),
                     short_hex(&key.name, 6)
-                ));
+                );
+                return Ok(TpmActionMaterial {
+                    summary,
+                    authority: TpmDeviceAuthorityRef {
+                        key_name: format!("{path}:0x{:08x}", key.persistent_handle),
+                        public_key: key.public_key_bytes,
+                    },
+                });
             }
             Err(create_err) => {
                 let signing_key = LinuxTpmSigningKey::new(path, TpmHandle(HANDLE));
                 match signing_key.key_info() {
                     Ok(info) => {
-                        return Ok(format!(
+                        let summary = format!(
                             "{path} existing handle 0x{HANDLE:08x}, {:?}, pub {}",
                             info.algorithm,
                             format_bytes(info.public_key.len() as u64)
-                        ));
+                        );
+                        return Ok(TpmActionMaterial {
+                            summary,
+                            authority: TpmDeviceAuthorityRef {
+                                key_name: info.key_name,
+                                public_key: info.public_key,
+                            },
+                        });
                     }
                     Err(read_err) => {
                         last_error = format!(
@@ -493,12 +584,81 @@ fn provision_tpm_device_key() -> Result<String, String> {
 }
 
 #[cfg(not(all(feature = "all-hardware", target_os = "linux")))]
-fn provision_tpm_device_key() -> Result<String, String> {
+fn provision_tpm_device_key() -> Result<TpmActionMaterial, String> {
     Err("TPM device key provisioning requires Linux all-hardware support".to_string())
 }
 
 #[cfg(all(feature = "all-hardware", target_os = "linux"))]
-fn probe_yubikey_unlock() -> Result<String, String> {
+fn probe_yubikey_unlock() -> Result<YubiKeyActionMaterial, String> {
+    use edgerun_yubikey::{LinuxPcscYubiKey, LinuxUsbYubiKey, YubiKeyPivSlot, YubiKeySigningKey};
+
+    let devices =
+        LinuxUsbYubiKey::discover().map_err(|err| format!("YubiKey discovery failed: {err}"))?;
+    let device = devices
+        .into_iter()
+        .next()
+        .ok_or_else(|| "no YubiKey USB device found".to_string())?;
+    let key = LinuxPcscYubiKey::new(device.clone(), YubiKeyPivSlot::Signature);
+    let capabilities = key
+        .probe_capabilities()
+        .map_err(|err| format!("YubiKey PIV probe failed: {err}"))?;
+    let key_info = key
+        .key_info()
+        .map_err(|err| format!("YubiKey key info failed: {err}"))?;
+    if key_info.public_key.is_empty() {
+        return Err(
+            "YubiKey PIV signature slot 9c has no public key; create a P-256 signing key before registering this user authority"
+                .to_string(),
+        );
+    }
+    let summary = format!(
+        "bus {} dev {}, PIV={}, attestation={}, metadata={}",
+        device.bus,
+        device.device,
+        capabilities.piv_applet,
+        capabilities.slot_attestation || capabilities.attestation_certificate,
+        capabilities.slot_metadata
+    );
+    Ok(YubiKeyActionMaterial {
+        summary,
+        authority: YubiKeyUserAuthorityRef {
+            slot: key_info.slot,
+            public_key: key_info.public_key,
+            attestation_chain: key_info.attestation_chain,
+        },
+    })
+}
+
+#[cfg(not(all(feature = "all-hardware", target_os = "linux")))]
+fn probe_yubikey_unlock() -> Result<YubiKeyActionMaterial, String> {
+    Err("YubiKey unlock probing requires Linux all-hardware support".to_string())
+}
+
+fn enroll_fingerprint_presence() -> Result<FingerprintActionMaterial, String> {
+    let summary = crate::hardware::enroll_first_fingerprint_template("EdgeRun device presence")?;
+    Ok(FingerprintActionMaterial {
+        presence: FingerprintPresenceRef {
+            provider: "local-fingerprint".to_string(),
+            template_ref: summary.clone(),
+        },
+        summary,
+    })
+}
+
+fn grant_summary(grant: &UserDeviceAdmissionGrant) -> String {
+    format!(
+        "signed {}, policy {}, sig {}",
+        short_hex(&grant.claim_hash(), 8),
+        short_hex(&grant.policy_hash, 8),
+        format_bytes(grant.user_signature.len() as u64)
+    )
+}
+
+#[cfg(all(feature = "all-hardware", target_os = "linux"))]
+fn sign_user_device_grant(
+    mut grant: UserDeviceAdmissionGrant,
+    pin: Option<&str>,
+) -> Result<UserDeviceAdmissionGrant, String> {
     use edgerun_yubikey::{LinuxPcscYubiKey, LinuxUsbYubiKey, YubiKeyPivSlot};
 
     let devices =
@@ -507,23 +667,23 @@ fn probe_yubikey_unlock() -> Result<String, String> {
         .into_iter()
         .next()
         .ok_or_else(|| "no YubiKey USB device found".to_string())?;
-    let key = LinuxPcscYubiKey::new(device.clone(), YubiKeyPivSlot::Authentication);
-    let capabilities = key
-        .probe_capabilities()
-        .map_err(|err| format!("YubiKey PIV probe failed: {err}"))?;
-    Ok(format!(
-        "bus {} dev {}, PIV={}, attestation={}, metadata={}",
-        device.bus,
-        device.device,
-        capabilities.piv_applet,
-        capabilities.slot_attestation || capabilities.attestation_certificate,
-        capabilities.slot_metadata
-    ))
+    let key = LinuxPcscYubiKey::new(device, YubiKeyPivSlot::Signature);
+    let signature = if let Some(pin) = pin {
+        key.sign_with_pin(pin.as_bytes(), &grant.signing_preimage())
+    } else {
+        key.sign_without_pin(&grant.signing_preimage())
+    }
+    .map_err(|err| format!("YubiKey grant signature failed: {err}"))?;
+    grant.user_signature = signature;
+    Ok(grant)
 }
 
 #[cfg(not(all(feature = "all-hardware", target_os = "linux")))]
-fn probe_yubikey_unlock() -> Result<String, String> {
-    Err("YubiKey unlock probing requires Linux all-hardware support".to_string())
+fn sign_user_device_grant(
+    _grant: UserDeviceAdmissionGrant,
+    _pin: Option<&str>,
+) -> Result<UserDeviceAdmissionGrant, String> {
+    Err("YubiKey grant signing requires Linux all-hardware support".to_string())
 }
 
 fn short_hex(bytes: &[u8], count: usize) -> String {
@@ -571,10 +731,11 @@ impl NodeControlState {
                 true
             }
             ACTION_TPM_DEVICE_KEY => match provision_tpm_device_key() {
-                Ok(summary) => {
+                Ok(material) => {
                     self.tpm_device_key = true;
-                    self.tpm_status = summary.clone();
-                    self.record_event_owned(format!("TPM device key ready: {summary}"));
+                    self.tpm_status = material.summary.clone();
+                    self.tpm_device_authority = Some(material.authority);
+                    self.record_event_owned(format!("TPM device key ready: {}", self.tpm_status));
                     true
                 }
                 Err(err) => {
@@ -585,10 +746,14 @@ impl NodeControlState {
                 }
             },
             ACTION_YUBIKEY_UNLOCK => match probe_yubikey_unlock() {
-                Ok(summary) => {
+                Ok(material) => {
                     self.yubikey_unlock = true;
-                    self.yubikey_status = summary.clone();
-                    self.record_event_owned(format!("YubiKey unlock ready: {summary}"));
+                    self.yubikey_status = material.summary.clone();
+                    self.yubikey_user_authority = Some(material.authority);
+                    self.record_event_owned(format!(
+                        "YubiKey user key ready: {}",
+                        self.yubikey_status
+                    ));
                     true
                 }
                 Err(err) => {
@@ -598,22 +763,24 @@ impl NodeControlState {
                     false
                 }
             },
-            ACTION_FINGERPRINT_UNLOCK => {
-                match crate::hardware::enroll_first_fingerprint_template("EdgeRun device unlock") {
-                    Ok(summary) => {
-                        self.fingerprint_unlock = true;
-                        self.fingerprint_status = summary.clone();
-                        self.record_event_owned(format!("Fingerprint unlock enrolled: {summary}"));
-                        true
-                    }
-                    Err(err) => {
-                        self.fingerprint_unlock = false;
-                        self.fingerprint_status = err.clone();
-                        self.record_event_owned(format!("Fingerprint enrollment failed: {err}"));
-                        false
-                    }
+            ACTION_FINGERPRINT_UNLOCK => match enroll_fingerprint_presence() {
+                Ok(material) => {
+                    self.fingerprint_unlock = true;
+                    self.fingerprint_status = material.summary.clone();
+                    self.fingerprint_presence = Some(material.presence);
+                    self.record_event_owned(format!(
+                        "Fingerprint presence enrolled: {}",
+                        self.fingerprint_status
+                    ));
+                    true
                 }
-            }
+                Err(err) => {
+                    self.fingerprint_unlock = false;
+                    self.fingerprint_status = err.clone();
+                    self.record_event_owned(format!("Fingerprint enrollment failed: {err}"));
+                    false
+                }
+            },
             ACTION_SEAL_MASTER_KEY => match generate_and_seal_node_key() {
                 Ok(sealed) => {
                     self.master_key_sealed = true;
@@ -719,10 +886,11 @@ impl NodeControlState {
     fn apply_background_result(&mut self, result: ActionResult) {
         match result {
             ActionResult::Tpm(result) => match result {
-                Ok(summary) => {
+                Ok(material) => {
                     self.tpm_device_key = true;
-                    self.tpm_status = summary.clone();
-                    self.record_event_owned(format!("TPM device key ready: {summary}"));
+                    self.tpm_status = material.summary.clone();
+                    self.tpm_device_authority = Some(material.authority);
+                    self.record_event_owned(format!("TPM device key ready: {}", self.tpm_status));
                 }
                 Err(err) => {
                     self.tpm_device_key = false;
@@ -731,10 +899,14 @@ impl NodeControlState {
                 }
             },
             ActionResult::YubiKey(result) => match result {
-                Ok(summary) => {
+                Ok(material) => {
                     self.yubikey_unlock = true;
-                    self.yubikey_status = summary.clone();
-                    self.record_event_owned(format!("YubiKey unlock ready: {summary}"));
+                    self.yubikey_status = material.summary.clone();
+                    self.yubikey_user_authority = Some(material.authority);
+                    self.record_event_owned(format!(
+                        "YubiKey user key ready: {}",
+                        self.yubikey_status
+                    ));
                 }
                 Err(err) => {
                     self.yubikey_unlock = false;
@@ -743,10 +915,14 @@ impl NodeControlState {
                 }
             },
             ActionResult::Fingerprint(result) => match result {
-                Ok(summary) => {
+                Ok(material) => {
                     self.fingerprint_unlock = true;
-                    self.fingerprint_status = summary.clone();
-                    self.record_event_owned(format!("Fingerprint unlock enrolled: {summary}"));
+                    self.fingerprint_status = material.summary.clone();
+                    self.fingerprint_presence = Some(material.presence);
+                    self.record_event_owned(format!(
+                        "Fingerprint presence enrolled: {}",
+                        self.fingerprint_status
+                    ));
                 }
                 Err(err) => {
                     self.fingerprint_unlock = false;
@@ -802,7 +978,8 @@ impl NodeControlState {
     }
 
     fn setup_count(&self) -> usize {
-        usize::from(self.admission_mode != AdmissionMode::None)
+        usize::from(self.password_root || self.has_device_grant())
+            + usize::from(self.admission_mode != AdmissionMode::None)
             + usize::from(self.tpm_device_key)
             + usize::from(self.yubikey_unlock)
             + usize::from(self.fingerprint_unlock)
@@ -810,6 +987,10 @@ impl NodeControlState {
             + usize::from(self.unseal_tested)
             + usize::from(self.local_cache)
             + usize::from(self.network_storage)
+    }
+
+    fn has_device_grant(&self) -> bool {
+        self.device_grant.is_some() || self.device_grant_status != "not granted"
     }
 
     fn service_count(&self) -> usize {
@@ -827,12 +1008,16 @@ impl NodeControlState {
     }
 
     fn next_step(&self) -> &'static str {
-        if self.admission_mode == AdmissionMode::None {
-            "choose admission authority"
+        if !self.fingerprint_unlock {
+            "enroll fingerprint presence"
         } else if !self.tpm_device_key {
             "create TPM device key"
-        } else if !self.yubikey_unlock && !self.fingerprint_unlock {
-            "enroll unlock factor"
+        } else if !self.yubikey_unlock {
+            "register YubiKey user key"
+        } else if !self.has_device_grant() {
+            "sign user-device grant"
+        } else if self.admission_mode == AdmissionMode::None {
+            "choose admission authority"
         } else if !self.master_key_sealed {
             "seal node signing key"
         } else if !self.unseal_tested {
@@ -843,6 +1028,30 @@ impl NodeControlState {
             "attach storage route"
         } else {
             "ready for signed setup"
+        }
+    }
+
+    fn next_action_id(&self) -> Option<u32> {
+        if !self.fingerprint_unlock {
+            Some(ACTION_FINGERPRINT_UNLOCK)
+        } else if !self.tpm_device_key {
+            Some(ACTION_TPM_DEVICE_KEY)
+        } else if !self.yubikey_unlock {
+            Some(ACTION_YUBIKEY_UNLOCK)
+        } else if !self.has_device_grant() {
+            None
+        } else if self.admission_mode == AdmissionMode::None {
+            Some(ACTION_ADMISSION_DEVICE)
+        } else if !self.master_key_sealed {
+            Some(ACTION_SEAL_MASTER_KEY)
+        } else if !self.unseal_tested {
+            Some(ACTION_TEST_UNSEAL)
+        } else if !self.local_cache {
+            Some(ACTION_STORAGE_LOCAL_CACHE)
+        } else if !self.network_storage {
+            Some(ACTION_STORAGE_NETWORK)
+        } else {
+            None
         }
     }
 
@@ -970,6 +1179,8 @@ pub fn run_window_for_frames_with_root(
         report: MachineReport::collect(),
         active_panel: ActivePanel::MachineReport,
         control: store.load(),
+        setup_ui: InitialSetupUiState::default(),
+        yubikey_grant_ui: YubiKeyGrantCeremonyState::default(),
         store,
         pending_action: None,
         scroll_y: 0.0,
@@ -994,6 +1205,20 @@ pub fn run_window_for_frames_with_root(
                 state.borrow_mut().report = MachineReport::collect();
                 SdlEventResult::dirty()
             }
+            SdlInputEvent::UiAction { action } if is_initial_setup_action(&action) => {
+                if state.borrow_mut().handle_initial_setup_action(&action) {
+                    SdlEventResult::dirty()
+                } else {
+                    SdlEventResult::default()
+                }
+            }
+            SdlInputEvent::UiAction { action } if is_yubikey_grant_action(&action) => {
+                if state.borrow_mut().handle_yubikey_grant_action(&action) {
+                    SdlEventResult::dirty()
+                } else {
+                    SdlEventResult::default()
+                }
+            }
             SdlInputEvent::UiAction {
                 action: UiAction::Activated(hit),
             } if hit.kind == HitKind::MenuItem => {
@@ -1013,6 +1238,13 @@ pub fn run_window_for_frames_with_root(
                 action: UiAction::Activated(hit),
             } if hit.kind == HitKind::Button => {
                 let mut state = state.borrow_mut();
+                if hit.id == ACTION_TRUST_RUN_NEXT {
+                    return if state.run_next_trust_step() {
+                        SdlEventResult::dirty()
+                    } else {
+                        SdlEventResult::default()
+                    };
+                }
                 if state.pending_action.is_some() {
                     state
                         .control
@@ -1052,6 +1284,8 @@ pub fn run_window_for_frames_with_root(
             build_layout(
                 &state.report,
                 &state.control,
+                &state.setup_ui,
+                &state.yubikey_grant_ui,
                 state.active_panel,
                 width as f32,
                 height as f32,
@@ -1065,12 +1299,90 @@ struct NodeUiState {
     report: MachineReport,
     active_panel: ActivePanel,
     control: NodeControlState,
+    setup_ui: InitialSetupUiState,
+    yubikey_grant_ui: YubiKeyGrantCeremonyState,
     store: LocalAuthorityStore,
     pending_action: Option<PendingAction>,
     scroll_y: f32,
 }
 
 impl NodeUiState {
+    fn run_next_trust_step(&mut self) -> bool {
+        if !self.control.has_device_grant()
+            && self.control.fingerprint_unlock
+            && self.control.tpm_device_key
+            && self.control.yubikey_unlock
+        {
+            self.yubikey_grant_ui.status =
+                "Enter the YubiKey PIV PIN, then sign the user-device grant".to_string();
+            self.control
+                .record_event("YubiKey grant signature requires the PIN ceremony below");
+            return true;
+        }
+        let Some(action_id) = self.control.next_action_id() else {
+            self.control.record_event("Trust setup is already staged");
+            return true;
+        };
+        if self.pending_action.is_some() {
+            self.control
+                .record_event("Another hardware action is already running");
+            return true;
+        }
+        if let Some(pending) = spawn_background_action(action_id) {
+            self.control
+                .record_event_owned(format!("{} started", pending.label));
+            self.pending_action = Some(pending);
+            return true;
+        }
+        if self.control.apply_action(action_id) {
+            if action_id == ACTION_SEAL_MASTER_KEY {
+                if let Err(err) = self.persist_current_node_key() {
+                    self.control
+                        .record_event_owned(format!("Persist sealed node key failed: {err}"));
+                }
+            }
+            return true;
+        }
+        false
+    }
+
+    fn handle_initial_setup_action(&mut self, action: &UiAction) -> bool {
+        match self.setup_ui.handle_action(action) {
+            InitialSetupUiIntent::None => true,
+            InitialSetupUiIntent::CreatePasswordRoot { password } => {
+                match PasswordRootFileStore::new(self.store.root().to_path_buf()).create(&password)
+                {
+                    Ok(status) => {
+                        self.setup_ui.mark_configured(status.envelope_len);
+                        self.control.password_root = true;
+                        self.control.password_status = format!(
+                            "configured, {} envelope, {} KDF rounds",
+                            format_bytes(status.envelope_len as u64),
+                            status.kdf_rounds
+                        );
+                        self.control.record_event("Password root configured");
+                    }
+                    Err(err) => {
+                        let message = format!("Password root setup failed: {err:?}");
+                        self.setup_ui.mark_error(message.clone());
+                        self.control.record_event_owned(message);
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    fn handle_yubikey_grant_action(&mut self, action: &UiAction) -> bool {
+        match self.yubikey_grant_ui.handle_action(action) {
+            YubiKeyGrantCeremonyIntent::None => true,
+            YubiKeyGrantCeremonyIntent::SignGrant { pin } => {
+                self.sign_and_persist_device_grant(pin);
+                true
+            }
+        }
+    }
+
     fn poll_pending_action(&mut self) -> bool {
         let Some(pending) = self.pending_action.as_ref() else {
             return false;
@@ -1100,6 +1412,36 @@ impl NodeUiState {
                         self.control
                             .record_event_owned(format!("Persist hardware status failed: {err}"));
                     }
+                }
+                match status_file {
+                    TPM_STATUS_FILE => {
+                        if let Some(authority) = &self.control.tpm_device_authority {
+                            if let Err(err) = self.store.persist_tpm_authority(authority) {
+                                self.control.record_event_owned(format!(
+                                    "Persist TPM authority failed: {err}"
+                                ));
+                            }
+                        }
+                    }
+                    YUBIKEY_STATUS_FILE => {
+                        if let Some(authority) = &self.control.yubikey_user_authority {
+                            if let Err(err) = self.store.persist_yubikey_authority(authority) {
+                                self.control.record_event_owned(format!(
+                                    "Persist YubiKey authority failed: {err}"
+                                ));
+                            }
+                        }
+                    }
+                    FINGERPRINT_STATUS_FILE => {
+                        if let Some(presence) = &self.control.fingerprint_presence {
+                            if let Err(err) = self.store.persist_fingerprint_presence(presence) {
+                                self.control.record_event_owned(format!(
+                                    "Persist fingerprint presence failed: {err}"
+                                ));
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 self.pending_action = None;
                 true
@@ -1134,6 +1476,48 @@ impl NodeUiState {
             self.store.root().display()
         ));
         Ok(())
+    }
+
+    fn sign_and_persist_device_grant(&mut self, pin: Option<String>) {
+        let (Some(user), Some(device), Some(fingerprint)) = (
+            self.control.yubikey_user_authority.clone(),
+            self.control.tpm_device_authority.clone(),
+            self.control.fingerprint_presence.clone(),
+        ) else {
+            self.control.record_event(
+                "Device grant requires fingerprint presence, TPM device key, and YubiKey user key",
+            );
+            return;
+        };
+        let issued = unix_secs();
+        let expires = issued.saturating_add(366 * 24 * 60 * 60);
+        let grant = UserDeviceAdmissionGrant::from_unsigned_parts(
+            &user,
+            &device,
+            &fingerprint,
+            issued,
+            expires,
+        );
+        match sign_user_device_grant(grant, pin.as_deref()) {
+            Ok(grant) => {
+                let summary = grant_summary(&grant);
+                if let Err(err) = self.store.persist_device_grant(&grant) {
+                    self.control
+                        .record_event_owned(format!("Persist device grant failed: {err}"));
+                    return;
+                }
+                self.control.device_grant = Some(grant);
+                self.control.device_grant_status = summary.clone();
+                self.yubikey_grant_ui.mark_signed(summary.clone());
+                self.control
+                    .record_event_owned(format!("User-device admission grant ready: {summary}"));
+            }
+            Err(err) => {
+                self.yubikey_grant_ui.mark_error(err.clone());
+                self.control
+                    .record_event_owned(format!("User-device grant signing failed: {err}"));
+            }
+        }
     }
 }
 
@@ -1243,6 +1627,8 @@ fn merge_rows(groups: &[&Vec<String>]) -> Vec<String> {
 fn build_layout(
     report: &MachineReport,
     control: &NodeControlState,
+    setup_ui: &InitialSetupUiState,
+    yubikey_grant_ui: &YubiKeyGrantCeremonyState,
     active_panel: ActivePanel,
     width: f32,
     _height: f32,
@@ -1262,7 +1648,14 @@ fn build_layout(
                 )
                 .child(
                     UiNode::scroll_area_px("flex-1 w-full overflow-hidden p-7 gap-6", scroll_y)
-                        .child(panel_body(report, control, active_panel, content_w))
+                        .child(panel_body(
+                            report,
+                            control,
+                            setup_ui,
+                            yubikey_grant_ui,
+                            active_panel,
+                            content_w,
+                        ))
                         .child(
                             UiNode::text("Press R to refresh. Esc closes the native node UI.")
                                 .class("h-6 text-muted"),
@@ -1374,6 +1767,8 @@ fn header_layout(report: &MachineReport, active_panel: ActivePanel) -> UiNode {
 fn panel_body(
     report: &MachineReport,
     control: &NodeControlState,
+    setup_ui: &InitialSetupUiState,
+    yubikey_grant_ui: &YubiKeyGrantCeremonyState,
     active_panel: ActivePanel,
     width: f32,
 ) -> UiNode {
@@ -1381,7 +1776,7 @@ fn panel_body(
         ActivePanel::MachineReport => machine_report_panel(report, width),
         ActivePanel::NodeInstances => node_instances_panel(report, control, width),
         ActivePanel::Storage => storage_panel(report, control, width),
-        ActivePanel::Trust => trust_panel(report, control, width),
+        ActivePanel::Trust => trust_panel(report, control, setup_ui, yubikey_grant_ui, width),
         ActivePanel::Services => services_panel(report, control, width),
     }
 }
@@ -1899,176 +2294,320 @@ fn services_panel(report: &MachineReport, control: &NodeControlState, width: f32
         ))
 }
 
-fn trust_panel(report: &MachineReport, control: &NodeControlState, width: f32) -> UiNode {
-    UiNode::column("w-full gap-6")
-        .child(
-            UiNode::card("bg-panel border rounded-lg p-4 gap-3 h-28")
-                .child(
-                    UiNode::row("h-8 w-full items-center justify-between gap-3")
-                        .child(UiNode::text("Control plane state").class("h-5 text-text truncate"))
-                        .child(UiNode::badge(&format!("{}/8 staged", control.setup_count()), ACCENT)),
+fn trust_panel(
+    report: &MachineReport,
+    control: &NodeControlState,
+    setup_ui: &InitialSetupUiState,
+    yubikey_grant_ui: &YubiKeyGrantCeremonyState,
+    width: f32,
+) -> UiNode {
+    UiNode::column("w-full gap-6").child(
+        UiNode::card("bg-panel border rounded-lg p-4 gap-3 h-28")
+            .child(
+                UiNode::row("h-8 w-full items-center justify-between gap-3")
+                    .child(UiNode::text("Control plane state").class("h-5 text-text truncate"))
+                    .child(UiNode::badge(
+                        &format!("{}/{} staged", control.setup_count(), TRUST_SETUP_TOTAL),
+                        ACCENT,
+                    )),
+            )
+            .child(UiNode::text(&control.last_event).class("h-5 text-muted truncate"))
+            .child(
+                UiNode::progress_bar(
+                    control.setup_count() as f32 / TRUST_SETUP_TOTAL as f32,
+                    ACCENT,
                 )
-                .child(UiNode::text(&control.last_event).class("h-5 text-muted truncate"))
-                .child(UiNode::progress_bar(control.setup_count() as f32 / 8.0, ACCENT).class("h-3 w-full")),
-        )
-        .child(
-            UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-4 gap-4", width)
-                .class("w-full")
-                .child(metric_node(
-                    "Admission",
-                    control.admission_label(),
-                    control.admission_detail(),
-                    if control.admission_mode == AdmissionMode::None { AMBER } else { ACCENT },
-                ))
-                .child(metric_node(
-                    "Device Key",
-                    if control.tpm_device_key { "TPM ready" } else { "not provisioned" },
-                    &control.tpm_status,
-                    if control.tpm_device_key { ACCENT } else { AMBER },
-                ))
-                .child(metric_node(
-                    "Master Key",
-                    if control.master_key_sealed { "sealed" } else { "locked" },
-                    &control.sealed_key_status,
-                    if control.master_key_sealed { ACCENT } else { BLUE },
-                ))
-                .child(metric_node("Proof Trail", "local", "audit events from this device", ACCENT)),
-        )
-        .child(
-            UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-2 gap-4", width)
-                .class("w-full")
-                .child(control_card(
-                    "Next Steps",
-                    "Dependency order before this device should admit real work.",
-                    UiIcon::Route,
-                    BLUE,
-                    &[
-                        control_value("current state", "local staged readiness", control.readiness_label()),
-                        control_value("next action", "highest priority missing setup", control.next_step()),
-                        control_value(
-                            "signed execution",
-                            "hardware actions run against local device backends",
-                            if control.tpm_device_key || control.master_key_sealed {
-                                "active"
-                            } else {
-                                "pending"
-                            },
-                        ),
-                    ],
-                ))
-                .child(activity_card(control)),
-        )
-        .child(
-            UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-2 gap-4", width)
-                .class("w-full")
-                .child(control_card(
-                    "Admission Authority",
-                    "Choose the policy gate this device uses before work enters the network.",
-                    UiIcon::Shield,
-                    ACCENT,
-                    &[
-                        control_button(
-                            "Use EdgeRun DAO admission",
-                            "default public admission path",
-                            ACTION_ADMISSION_DAO,
-                            admission_button_label(control, AdmissionMode::EdgeRunDao),
-                        ),
-                        control_button(
-                            "Create device admission",
-                            "local policy for this machine",
-                            ACTION_ADMISSION_DEVICE,
-                            admission_button_label(control, AdmissionMode::Device),
-                        ),
-                        control_button(
-                            "Attach owned admission",
-                            "use a user or organization authority",
-                            ACTION_ADMISSION_OWNED,
-                            admission_button_label(control, AdmissionMode::Owned),
-                        ),
-                        control_value("route policy", "relay/channel assignment required", "strict"),
-                    ],
-                ))
-                .child(control_card(
-                    "Device Key",
-                    "Bind this native node identity to hardware before admitting local roles.",
-                    UiIcon::Key,
-                    BLUE,
-                    &[
-                        control_button(
-                            "Create TPM device key",
-                            "derive node identity from hardware key",
-                            ACTION_TPM_DEVICE_KEY,
-                            if control.tpm_device_key { "Ready" } else { "Create" },
-                        ),
-                        control_button(
-                            "Enroll YubiKey unlock",
-                            "require security key for release",
-                            ACTION_YUBIKEY_UNLOCK,
-                            if control.yubikey_unlock { "Ready" } else { "Probe" },
-                        ),
-                        control_button(
-                            "Enroll fingerprint unlock",
-                            "local biometric gate when supported",
-                            ACTION_FINGERPRINT_UNLOCK,
-                            if control.fingerprint_unlock { "Ready" } else { "Enroll" },
-                        ),
-                        control_value(
-                            "node identity",
-                            "must match derive_node_id(public_key, role)",
-                            if control.tpm_device_key { &control.tpm_status } else { "pending" },
-                        ),
-                        control_value("YubiKey", "PIV applet and attestation probe", &control.yubikey_status),
-                        control_value("fingerprint", "hardware template enrollment", &control.fingerprint_status),
-                    ],
-                )),
-        )
-        .child(
-            UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-2 gap-4", width)
-                .class("w-full")
-                .child(control_card(
-                    "Node Signing Key",
-                    "Generate and seal local node identity material before enabling service authority.",
-                    UiIcon::Lock,
-                    AMBER,
-                    &[
-                        control_button(
-                            "Generate sealed node key",
-                            "generate and seal device node key",
-                            ACTION_SEAL_MASTER_KEY,
-                            if control.master_key_sealed { "Sealed" } else { "Generate" },
-                        ),
-                        control_button(
-                            "Test unseal",
-                            "round-trip the sealed key envelope",
-                            ACTION_TEST_UNSEAL,
-                            if control.unseal_tested { "Passed" } else { "Run" },
-                        ),
-                        control_value("sealed key", "in-memory envelope from protocol seal crate", &control.sealed_key_status),
-                        control_value("browser node handoff", "WASM node should ask host notary to release plaintext", "planned"),
-                    ],
-                ))
-                .child(control_card(
-                    "Proof Dashboard",
-                    "Every admission, unseal, relay setup, and storage grant should leave evidence.",
-                    UiIcon::Trust,
-                    ACCENT,
-                    &[
-                        control_value(
-                            "admission policy hash",
-                            "content-addressed policy commitment",
-                            if control.admission_mode == AdmissionMode::None { "unknown" } else { "staged" },
-                        ),
-                        control_value("delivery reports", "notary signs plaintext release events", "planned"),
-                        control_value(
-                            "relay/storage grants",
-                            "show accepted route authority",
-                            if control.network_storage { "staged" } else { "pending" },
-                        ),
-                    ],
-                )),
-        )
-        .child(section_subset_card(report, "Authority", "detected local trust providers", ACCENT))
-        .child(section_subset_card(report, "Input", "possible unlock factors on this device", AMBER))
+                .class("h-3 w-full"),
+            ),
+    )
+    .child(
+        UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-4 gap-4", width)
+            .class("w-full")
+            .child(metric_node(
+                "Admission",
+                control.admission_label(),
+                control.admission_detail(),
+                if control.admission_mode == AdmissionMode::None {
+                    AMBER
+                } else {
+                    ACCENT
+                },
+            ))
+            .child(metric_node(
+                "Device Key",
+                if control.tpm_device_key {
+                    "TPM ready"
+                } else {
+                    "not provisioned"
+                },
+                &control.tpm_status,
+                if control.tpm_device_key {
+                    ACCENT
+                } else {
+                    AMBER
+                },
+            ))
+            .child(metric_node(
+                "User Grant",
+                if control.has_device_grant() {
+                    "signed"
+                } else {
+                    "missing"
+                },
+                &control.device_grant_status,
+                if control.has_device_grant() {
+                    ACCENT
+                } else {
+                    AMBER
+                },
+            ))
+            .child(metric_node(
+                "Proof Trail",
+                "local",
+                "audit events from this device",
+                ACCENT,
+            )),
+    )
+    .child(
+        UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-2 gap-4", width)
+            .class("w-full")
+            .child(control_card(
+                "Next Steps",
+                "Dependency order before this device should admit real work.",
+                UiIcon::Route,
+                BLUE,
+                &[
+                    control_value(
+                        "current state",
+                        "local staged readiness",
+                        control.readiness_label(),
+                    ),
+                    control_value("authority model", "fingerprint + TPM + YubiKey", "passwordless"),
+                    control_value(
+                        "next action",
+                        "highest priority missing setup",
+                        control.next_step(),
+                    ),
+                    control_value(
+                        "signed execution",
+                        "hardware actions run against local device backends",
+                        if control.tpm_device_key || control.master_key_sealed {
+                            "active"
+                        } else {
+                            "pending"
+                        },
+                    ),
+                    control_button(
+                        control.next_step(),
+                        "run the next enrollment step",
+                        ACTION_TRUST_RUN_NEXT,
+                        if control.next_action_id().is_some() {
+                            "Run"
+                        } else if control.has_device_grant() {
+                            "Ready"
+                        } else {
+                            "Sign"
+                        },
+                    ),
+                ],
+            ))
+            .child(activity_card(control)),
+    )
+    .when(
+        control.device_grant.is_none() && control.device_grant_status == "not granted",
+        build_yubikey_grant_ceremony_surface(yubikey_grant_ui),
+    )
+    .child(
+        UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-2 gap-4", width)
+            .class("w-full")
+            .child(control_card(
+                "Admission Authority",
+                "Choose the policy gate this device uses before work enters the network.",
+                UiIcon::Shield,
+                ACCENT,
+                &[
+                    control_button(
+                        "Use EdgeRun DAO admission",
+                        "default public admission path",
+                        ACTION_ADMISSION_DAO,
+                        admission_button_label(control, AdmissionMode::EdgeRunDao),
+                    ),
+                    control_button(
+                        "Create device admission",
+                        "local policy for this machine",
+                        ACTION_ADMISSION_DEVICE,
+                        admission_button_label(control, AdmissionMode::Device),
+                    ),
+                    control_button(
+                        "Attach owned admission",
+                        "use a user or organization authority",
+                        ACTION_ADMISSION_OWNED,
+                        admission_button_label(control, AdmissionMode::Owned),
+                    ),
+                    control_value(
+                        "route policy",
+                        "relay/channel assignment required",
+                        "strict",
+                    ),
+                ],
+            ))
+            .child(control_card(
+                "Passwordless Authority",
+                "Fingerprint proves presence, TPM identifies device, YubiKey signs user consent.",
+                UiIcon::Key,
+                BLUE,
+                &[
+                    control_button(
+                        "Create TPM device key",
+                        "derive node identity from hardware key",
+                        ACTION_TPM_DEVICE_KEY,
+                        if control.tpm_device_key {
+                            "Ready"
+                        } else {
+                            "Create"
+                        },
+                    ),
+                    control_button(
+                        "Register YubiKey user key",
+                        "read PIV signing slot public key and attestation",
+                        ACTION_YUBIKEY_UNLOCK,
+                        if control.yubikey_unlock {
+                            "Ready"
+                        } else {
+                            "Probe"
+                        },
+                    ),
+                    control_button(
+                        "Enroll fingerprint presence",
+                        "local biometric gate for device actions",
+                        ACTION_FINGERPRINT_UNLOCK,
+                        if control.fingerprint_unlock {
+                            "Ready"
+                        } else {
+                            "Enroll"
+                        },
+                    ),
+                    control_value(
+                        "grant signature",
+                        "YubiKey signs this TPM device and fingerprint policy",
+                        if control.has_device_grant() {
+                            "signed"
+                        } else {
+                            "required"
+                        },
+                    ),
+                    control_value(
+                        "node identity",
+                        "must match derive_node_id(public_key, role)",
+                        if control.tpm_device_key {
+                            &control.tpm_status
+                        } else {
+                            "pending"
+                        },
+                    ),
+                    control_value(
+                        "YubiKey",
+                        "PIV applet and attestation probe",
+                        &control.yubikey_status,
+                    ),
+                    control_value(
+                        "grant",
+                        "user controls admission to this device",
+                        &control.device_grant_status,
+                    ),
+                    control_value(
+                        "fingerprint",
+                        "hardware template enrollment",
+                        &control.fingerprint_status,
+                    ),
+                ],
+            )),
+    )
+    .child(
+        UiNode::grid_auto_for_width("grid grid-cols-1 lg:grid-cols-2 gap-4", width)
+            .class("w-full")
+            .child(control_card(
+                "Node Signing Key",
+                "Generate and seal local node identity material before enabling service authority.",
+                UiIcon::Lock,
+                AMBER,
+                &[
+                    control_button(
+                        "Generate sealed node key",
+                        "generate and seal device node key",
+                        ACTION_SEAL_MASTER_KEY,
+                        if control.master_key_sealed {
+                            "Sealed"
+                        } else {
+                            "Generate"
+                        },
+                    ),
+                    control_button(
+                        "Test unseal",
+                        "round-trip the sealed key envelope",
+                        ACTION_TEST_UNSEAL,
+                        if control.unseal_tested {
+                            "Passed"
+                        } else {
+                            "Run"
+                        },
+                    ),
+                    control_value(
+                        "sealed key",
+                        "in-memory envelope from protocol seal crate",
+                        &control.sealed_key_status,
+                    ),
+                    control_value(
+                        "browser node handoff",
+                        "WASM node should ask host notary to release plaintext",
+                        "planned",
+                    ),
+                ],
+            ))
+            .child(control_card(
+                "Proof Dashboard",
+                "Every admission, unseal, relay setup, and storage grant should leave evidence.",
+                UiIcon::Trust,
+                ACCENT,
+                &[
+                    control_value(
+                        "admission policy hash",
+                        "content-addressed policy commitment",
+                        if control.admission_mode == AdmissionMode::None {
+                            "unknown"
+                        } else {
+                            "staged"
+                        },
+                    ),
+                    control_value(
+                        "delivery reports",
+                        "notary signs plaintext release events",
+                        "planned",
+                    ),
+                    control_value(
+                        "relay/storage grants",
+                        "show accepted route authority",
+                        if control.network_storage {
+                            "staged"
+                        } else {
+                            "pending"
+                        },
+                    ),
+                ],
+            )),
+    )
+    .child(section_subset_card(
+        report,
+        "Authority",
+        "detected local trust providers",
+        ACCENT,
+    ))
+    .child(section_subset_card(
+        report,
+        "Input",
+        "possible unlock factors on this device",
+        AMBER,
+    ))
 }
 
 fn metric_grid_layout(report: &MachineReport, width: f32) -> UiNode {
@@ -2311,14 +2850,18 @@ fn section_node(section: &ReportSection) -> UiNode {
 }
 
 fn refresh_label() -> String {
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs() % 86_400)
-        .unwrap_or(0);
+    let seconds = unix_secs() % 86_400;
     let hour = seconds / 3600;
     let minute = (seconds % 3600) / 60;
     let second = seconds % 60;
     format!("{hour:02}:{minute:02}:{second:02}")
+}
+
+fn unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -2333,6 +2876,8 @@ mod tests {
         let layout = build_layout(
             &report,
             &control,
+            &InitialSetupUiState::default(),
+            &YubiKeyGrantCeremonyState::default(),
             ActivePanel::MachineReport,
             1180.0,
             760.0,
@@ -2351,6 +2896,8 @@ mod tests {
         let layout = build_layout(
             &report,
             &control,
+            &InitialSetupUiState::default(),
+            &YubiKeyGrantCeremonyState::default(),
             ActivePanel::MachineReport,
             760.0,
             520.0,
@@ -2373,7 +2920,16 @@ mod tests {
             ActivePanel::Trust,
             ActivePanel::Services,
         ] {
-            let layout = build_layout(&report, &control, panel, 1180.0, 760.0, 0.0);
+            let layout = build_layout(
+                &report,
+                &control,
+                &InitialSetupUiState::default(),
+                &YubiKeyGrantCeremonyState::default(),
+                panel,
+                1180.0,
+                760.0,
+                0.0,
+            );
             let issues = layout.layout_issues(UiRect::new(0.0, 0.0, 1180.0, 760.0));
 
             assert!(issues.is_empty(), "{panel:?}: {issues:?}");
@@ -2384,7 +2940,13 @@ mod tests {
     fn trust_panel_exposes_control_plane_actions() {
         let report = fixture_report();
         let control = NodeControlState::default();
-        let layout = trust_panel(&report, &control, 932.0);
+        let layout = trust_panel(
+            &report,
+            &control,
+            &InitialSetupUiState::default(),
+            &YubiKeyGrantCeremonyState::default(),
+            932.0,
+        );
         let mut scene = GpuScene::new(BG);
         {
             let mut ui = UiPainter::new(&mut scene);
@@ -2406,6 +2968,13 @@ mod tests {
                 .any(|hit| hit.kind == HitKind::Button && hit.id == 21_201),
             "trust panel should expose node key sealing action"
         );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == ACTION_TRUST_RUN_NEXT),
+            "trust panel should expose guided enrollment action"
+        );
     }
 
     #[test]
@@ -2418,7 +2987,7 @@ mod tests {
         assert!(control.apply_action(ACTION_TEST_UNSEAL));
         assert_eq!(control.admission_label(), "device");
         assert_eq!(control.setup_count(), 3);
-        assert_eq!(control.next_step(), "create TPM device key");
+        assert_eq!(control.next_step(), "enroll fingerprint presence");
         assert!(
             control
                 .events
@@ -2428,10 +2997,38 @@ mod tests {
             control.events.first()
         );
 
-        let layout = trust_panel(&report, &control, 932.0);
-        let issues = layout.layout_issues(UiRect::new(0.0, 0.0, 932.0, 3400.0));
+        let layout = trust_panel(
+            &report,
+            &control,
+            &InitialSetupUiState::default(),
+            &YubiKeyGrantCeremonyState::default(),
+            932.0,
+        );
+        let issues = layout.layout_issues(UiRect::new(0.0, 0.0, 932.0, 4300.0));
 
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn trust_next_action_follows_passwordless_enrollment_order() {
+        let mut control = NodeControlState::default();
+        assert_eq!(control.next_action_id(), Some(ACTION_FINGERPRINT_UNLOCK));
+
+        control.fingerprint_unlock = true;
+        assert_eq!(control.next_action_id(), Some(ACTION_TPM_DEVICE_KEY));
+
+        control.tpm_device_key = true;
+        assert_eq!(control.next_action_id(), Some(ACTION_YUBIKEY_UNLOCK));
+
+        control.yubikey_unlock = true;
+        assert_eq!(control.next_action_id(), None);
+        assert_eq!(control.next_step(), "sign user-device grant");
+
+        control.device_grant_status = "grant abc, policy def, signature 64 B".to_string();
+        assert_eq!(control.next_action_id(), Some(ACTION_ADMISSION_DEVICE));
+
+        control.admission_mode = AdmissionMode::Device;
+        assert_eq!(control.next_action_id(), Some(ACTION_SEAL_MASTER_KEY));
     }
 
     #[test]
@@ -2447,14 +3044,22 @@ mod tests {
         let sealed = generate_and_seal_node_key().expect("sealed node key");
 
         store.persist_node_key(&sealed).expect("persist node key");
+        let tpm_authority = TpmDeviceAuthorityRef {
+            key_name: "test-tpm".to_string(),
+            public_key: vec![2; 64],
+        };
         store
             .persist_status(TPM_STATUS_FILE, "test tpm status")
             .expect("persist tpm status");
+        store
+            .persist_tpm_authority(&tpm_authority)
+            .expect("persist tpm authority");
 
         let loaded = store.load();
         assert!(loaded.master_key_sealed);
         assert!(loaded.tpm_device_key);
         assert_eq!(loaded.tpm_status, "test tpm status");
+        assert_eq!(loaded.tpm_device_authority, Some(tpm_authority));
         assert_eq!(loaded.sealed_node_id, Some(sealed.node_id));
         assert_eq!(
             loaded.sealed_node_key.as_deref(),
@@ -2519,6 +3124,8 @@ mod tests {
         let layout = build_layout(
             &report,
             &control,
+            &InitialSetupUiState::default(),
+            &YubiKeyGrantCeremonyState::default(),
             ActivePanel::MachineReport,
             1180.0,
             760.0,

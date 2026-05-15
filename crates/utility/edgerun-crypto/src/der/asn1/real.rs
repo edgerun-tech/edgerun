@@ -246,4 +246,3 @@ pub(crate) fn encode_f64(sign: u64, exponent: u64, mantissa: u64) -> f64 {
     let bits = sign << 63 | exponent_with_bias << 52 | (mantissa - 1);
     f64::from_bits(bits)
 }
-

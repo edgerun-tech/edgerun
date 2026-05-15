@@ -7,8 +7,10 @@ use edgerun_json::Value as JsonValue;
 use schemars::JsonSchema;
 
 /// EXPERIMENTAL - thread realtime audio chunk.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeAudioChunk {
     pub data: String,
     pub sample_rate: u32,
@@ -57,18 +59,13 @@ impl From<ThreadRealtimeAudioChunk> for CoreRealtimeAudioFrame {
 
 /// EXPERIMENTAL - start a thread-scoped realtime session.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeStartParams {
     pub thread_id: String,
     /// Selects text or audio output for the realtime session. Transport and voice stay
     /// independent so clients can choose how they connect separately from what the model emits.
     pub output_modality: RealtimeOutputModality,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<Option<String>>,
     pub realtime_session_id: Option<String>,
     pub transport: Option<ThreadRealtimeStartTransport>,
@@ -77,7 +74,7 @@ pub struct ThreadRealtimeStartParams {
 
 /// EXPERIMENTAL - transport used by thread realtime.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum ThreadRealtimeStartTransport {
     Websocket,
     Webrtc {
@@ -88,63 +85,79 @@ pub enum ThreadRealtimeStartTransport {
 }
 
 /// EXPERIMENTAL - response for starting thread realtime.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeStartResponse {}
 
 /// EXPERIMENTAL - append audio input to thread realtime.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeAppendAudioParams {
     pub thread_id: String,
     pub audio: ThreadRealtimeAudioChunk,
 }
 
 /// EXPERIMENTAL - response for appending realtime audio input.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeAppendAudioResponse {}
 
 /// EXPERIMENTAL - append text input to thread realtime.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeAppendTextParams {
     pub thread_id: String,
     pub text: String,
 }
 
 /// EXPERIMENTAL - response for appending realtime text input.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeAppendTextResponse {}
 
 /// EXPERIMENTAL - stop thread realtime.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeStopParams {
     pub thread_id: String,
 }
 
 /// EXPERIMENTAL - response for stopping thread realtime.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeStopResponse {}
 
 /// EXPERIMENTAL - list voices supported by thread realtime.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeListVoicesParams {}
 
 /// EXPERIMENTAL - response for listing supported realtime voices.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeListVoicesResponse {
     pub voices: RealtimeVoicesList,
 }
 
 /// EXPERIMENTAL - emitted when thread realtime startup is accepted.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeStartedNotification {
     pub thread_id: String,
     pub realtime_session_id: Option<String>,
@@ -153,7 +166,7 @@ pub struct ThreadRealtimeStartedNotification {
 
 /// EXPERIMENTAL - raw non-audio thread realtime item emitted by the backend.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeItemAddedNotification {
     pub thread_id: String,
     pub item: JsonValue,
@@ -162,7 +175,7 @@ pub struct ThreadRealtimeItemAddedNotification {
 /// EXPERIMENTAL - flat transcript delta emitted whenever realtime
 /// transcript text changes.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeTranscriptDeltaNotification {
     pub thread_id: String,
     pub role: String,
@@ -173,7 +186,7 @@ pub struct ThreadRealtimeTranscriptDeltaNotification {
 /// EXPERIMENTAL - final transcript text emitted when realtime completes
 /// a transcript part.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeTranscriptDoneNotification {
     pub thread_id: String,
     pub role: String,
@@ -183,7 +196,7 @@ pub struct ThreadRealtimeTranscriptDoneNotification {
 
 /// EXPERIMENTAL - streamed output audio emitted by thread realtime.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeOutputAudioDeltaNotification {
     pub thread_id: String,
     pub audio: ThreadRealtimeAudioChunk,
@@ -191,7 +204,7 @@ pub struct ThreadRealtimeOutputAudioDeltaNotification {
 
 /// EXPERIMENTAL - emitted with the remote SDP for a WebRTC realtime session.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeSdpNotification {
     pub thread_id: String,
     pub sdp: String,
@@ -199,7 +212,7 @@ pub struct ThreadRealtimeSdpNotification {
 
 /// EXPERIMENTAL - emitted when thread realtime encounters an error.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeErrorNotification {
     pub thread_id: String,
     pub message: String,
@@ -207,7 +220,7 @@ pub struct ThreadRealtimeErrorNotification {
 
 /// EXPERIMENTAL - emitted when thread realtime transport closes.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRealtimeClosedNotification {
     pub thread_id: String,
     pub reason: Option<String>,

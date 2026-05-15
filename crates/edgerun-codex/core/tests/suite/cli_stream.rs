@@ -619,7 +619,7 @@ async fn integration_git_info_unit_test() {
 
     // 5. Test serialization to ensure it works in SessionMeta
     let serialized = edgerun_json::to_string(&git_info).unwrap();
-    let deserialized: GitInfo = edgerun_json::from_serde_str(&serialized).unwrap();
+    let deserialized: GitInfo = edgerun_json::from_json_str(&serialized).unwrap();
 
     assert_eq!(git_info.commit_hash, deserialized.commit_hash);
     assert_eq!(git_info.branch, deserialized.branch);

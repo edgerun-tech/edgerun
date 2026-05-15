@@ -101,8 +101,8 @@ struct SendInputArgs {
     target: String,
     message: Option<String>,
     items: Option<Vec<UserInput>>,
-    #[serde(default)]
-    #[json(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     interrupt: bool,
 }
 

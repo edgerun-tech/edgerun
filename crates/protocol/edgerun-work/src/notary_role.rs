@@ -1,15 +1,14 @@
 use alloc::vec::Vec;
 
-use edgerun_crypto::Ed25519SigningKey;
-use edgerun_crypto::sealing::{SealedBytes, seal_aes256_gcm, unseal_aes256_gcm};
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
+use crate::generated_wire::ArchivedNotaryPayload;
 use crate::identity::node_identity_from_key;
 use crate::preimage::{HashBuilder, PreimageBuilder};
 use crate::protocol::*;
-use crate::roles::{RoleContext, RoleInput, RoleOutput, WorkRole, network_message_for_role};
+use crate::roles::{network_message_for_role, RoleContext, RoleInput, RoleOutput, WorkRole};
 use crate::signing::{empty_signature, sign_ed25519, verify_signature};
+use edgerun_crypto::sealing::{seal_aes256_gcm, unseal_aes256_gcm, SealedBytes};
+use edgerun_crypto::Ed25519SigningKey;
 
 const NOTARY_AAD_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:notary:aad";
 const NOTARY_SEALED_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:notary:sealed";
@@ -26,8 +25,7 @@ pub enum NotaryError {
     InvalidReport,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotarySealRequest {
     pub abi_version: u16,
     pub aad: Vec<u8>,
@@ -35,8 +33,7 @@ pub struct NotarySealRequest {
     pub plaintext: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotarySealResponse {
     pub abi_version: u16,
     pub notary: NodeIdentity,
@@ -47,8 +44,7 @@ pub struct NotarySealResponse {
     pub sealed_envelope: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotaryUnsealRequest {
     pub abi_version: u16,
     pub aad: Vec<u8>,
@@ -56,8 +52,7 @@ pub struct NotaryUnsealRequest {
     pub sealed_envelope: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotaryDeliveryReport {
     pub abi_version: u16,
     pub notary: NodeIdentity,
@@ -73,8 +68,7 @@ pub struct NotaryDeliveryReport {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotaryUnsealResponse {
     pub abi_version: u16,
     pub plaintext_hash: Hash,
@@ -82,8 +76,7 @@ pub struct NotaryUnsealResponse {
     pub delivery_report: NotaryDeliveryReport,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NotaryPayload {
     SealRequest(NotarySealRequest),
     SealResponse(NotarySealResponse),

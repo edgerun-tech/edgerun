@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 /// PTY size in character cells for `process/spawn` PTY sessions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessTerminalSize {
     /// Terminal height in character cells.
     pub rows: u16,
@@ -40,7 +40,7 @@ impl FromJson for ProcessTerminalSize {
 /// `processHandle` has been registered. Process output and exit are reported via
 /// `process/outputDelta` and `process/exited` notifications.
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessSpawnParams {
     /// Command argv vector. Empty arrays are rejected.
     pub command: Vec<String>,
@@ -54,37 +54,27 @@ pub struct ProcessSpawnParams {
     /// Enable PTY mode.
     ///
     /// This implies `streamStdin` and `streamStdoutStderr`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub tty: bool,
     /// Allow follow-up `process/writeStdin` requests to write stdin bytes.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub stream_stdin: bool,
     /// Stream stdout/stderr via `process/outputDelta` notifications.
     ///
     /// Streamed bytes are not duplicated into the `process/exited` notification.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub stream_stdout_stderr: bool,
     /// Optional per-stream stdout/stderr capture cap in bytes.
     ///
     /// When omitted, the server default applies. Set to `null` to disable the
     /// cap.
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub output_bytes_cap: Option<Option<usize>>,
     /// Optional timeout in milliseconds.
     ///
     /// When omitted, the server default applies. Set to `null` to disable the
     /// timeout.
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<Option<i64>>,
     /// Optional environment overrides merged into the app-server process
     /// environment.
@@ -144,20 +134,20 @@ impl FromJson for ProcessSpawnParams {
 
 /// Successful response for `process/spawn`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessSpawnResponse {}
 
 /// Write stdin bytes to a running `process/spawn` session, close stdin, or
 /// both.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessWriteStdinParams {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
     /// Optional base64-encoded stdin bytes to write.
     pub delta_base64: Option<String>,
     /// Close stdin after writing `deltaBase64`, if present.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub close_stdin: bool,
 }
 
@@ -186,12 +176,12 @@ impl FromJson for ProcessWriteStdinParams {
 
 /// Empty success response for `process/writeStdin`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessWriteStdinResponse {}
 
 /// Terminate a running `process/spawn` session.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessKillParams {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
@@ -214,12 +204,12 @@ impl FromJson for ProcessKillParams {
 
 /// Empty success response for `process/kill`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessKillResponse {}
 
 /// Resize a running PTY-backed `process/spawn` session.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessResizePtyParams {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
@@ -248,12 +238,12 @@ impl FromJson for ProcessResizePtyParams {
 
 /// Empty success response for `process/resizePty`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessResizePtyResponse {}
 
 /// Stream label for `process/outputDelta` notifications.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ProcessOutputStream {
     /// stdout stream. PTY mode multiplexes terminal output here.
     Stdout,
@@ -285,7 +275,7 @@ impl FromJson for ProcessOutputStream {
 
 /// Base64-encoded output chunk emitted for a streaming `process/spawn` request.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessOutputDeltaNotification {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
@@ -323,7 +313,7 @@ impl FromJson for ProcessOutputDeltaNotification {
 
 /// Final process exit notification for `process/spawn`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ProcessExitedNotification {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,

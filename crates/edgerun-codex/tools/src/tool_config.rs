@@ -26,9 +26,7 @@ pub enum ShellCommandBackendConfig {
 pub enum ToolUserShellType {
     Zsh,
     Bash,
-    PowerShell,
     Sh,
-    Cmd,
 }
 
 pub fn request_user_input_available_modes(features: &Features) -> Vec<ModeKind> {
@@ -370,7 +368,7 @@ impl ToolsConfig {
 }
 
 fn conpty_supported() -> bool {
-    cfg!(windows)
+    false
 }
 
 fn supports_image_generation(model_info: &ModelInfo) -> bool {

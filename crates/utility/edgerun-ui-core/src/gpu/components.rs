@@ -6,6 +6,13 @@
 
 use super::{Axis, ButtonStyle, Color4, HitKind, UiPainter, UiRect, palette};
 
+const CARD_PAD_X: f32 = 16.0;
+const CARD_PAD_Y: f32 = 14.0;
+const CONTROL_PAD_X: f32 = 14.0;
+const ROW_PAD_X: f32 = 14.0;
+const ROW_ICON: f32 = 34.0;
+const ROW_ICON_GAP: f32 = 12.0;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PanelHeader<'a> {
     pub title: &'a str,
@@ -487,38 +494,32 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
         theme.radius.card,
         colors.panel,
     );
-    let title_y = rect.y + 14.0;
+    let content = rect.inset(CARD_PAD_X, CARD_PAD_Y);
+    let title_y = content.y;
     let value_y = if rect.h < 118.0 {
-        rect.y + 39.0
+        content.y + 25.0
     } else {
-        rect.y + 48.0
+        content.y + 34.0
     };
     let detail_y = if rect.h < 118.0 {
         rect.y + rect.h - 24.0
     } else {
         rect.y + rect.h - 30.0
     };
+    ui.bounded_label(content.x, title_y, content.w, spec.title, 2.0, colors.muted);
     ui.bounded_label(
-        rect.x + 16.0,
-        title_y,
-        rect.w - 32.0,
-        spec.title,
-        2.0,
-        colors.muted,
-    );
-    ui.bounded_label(
-        rect.x + 16.0,
+        content.x,
         value_y,
-        rect.w - 32.0,
+        content.w,
         spec.value,
         if rect.h < 118.0 { 3.0 } else { 4.0 },
         colors.text,
     );
     if !spec.detail.is_empty() {
         ui.bounded_label(
-            rect.x + 16.0,
+            content.x,
             detail_y,
-            rect.w - 32.0,
+            content.w,
             spec.detail,
             2.0,
             colors.muted,
@@ -526,7 +527,7 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
     }
     if let Some(progress) = spec.progress {
         ui.progress_bar(
-            UiRect::new(rect.x + 16.0, rect.y + rect.h - 47.0, rect.w - 32.0, 6.0),
+            UiRect::new(content.x, rect.y + rect.h - 47.0, content.w, 6.0),
             progress,
             resolve_component_accent(ui, spec.accent),
         );
@@ -536,7 +537,7 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
 pub fn field(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Field<'_>) {
     let colors = ui.theme().colors;
     ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, colors.muted);
-    let field_rect = UiRect::new(rect.x, rect.y + 25.0, rect.w, 40.0);
+    let field_rect = UiRect::new(rect.x, rect.y + 24.0, rect.w, 40.0);
     if let Some(id) = spec.id {
         ui.hit(
             HitKind::Input,
@@ -551,7 +552,7 @@ pub fn field(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Field<'_>) {
     if !spec.helper.is_empty() {
         ui.bounded_label(
             rect.x,
-            rect.y + 72.0,
+            rect.y + 70.0,
             rect.w,
             spec.helper,
             2.0,
@@ -567,7 +568,7 @@ pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
         rect
     } else {
         ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, colors.muted);
-        UiRect::new(rect.x, rect.y + 25.0, rect.w, rect.h - 25.0)
+        UiRect::new(rect.x, rect.y + 24.0, rect.w, rect.h - 24.0)
     };
     if let Some(id) = spec.id {
         ui.hit(
@@ -589,9 +590,10 @@ pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
             colors.border
         },
     );
-    let text_x = field_rect.x + 14.0;
-    let text_y = field_rect.y + 14.0;
-    let text_w = field_rect.w - 28.0;
+    let text = field_rect.inset(CONTROL_PAD_X, 12.0);
+    let text_x = text.x;
+    let text_y = text.y;
+    let text_w = text.w;
     let max_lines = ((field_rect.h - 24.0) / 22.0).floor().max(1.0) as usize;
     ui.wrapped_label(
         text_x,
@@ -704,7 +706,8 @@ pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Transacti
     );
     ui.fill_rect(rect, 0.0, colors.panel);
     ui.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
-    let icon = UiRect::new(rect.x + 12.0, rect.y + 12.0, 34.0, 34.0);
+    let icon =
+        UiRect::new(rect.x + ROW_PAD_X, rect.y, ROW_ICON, rect.h).with_height_centered(ROW_ICON);
     let amount_color = if spec.positive {
         colors.success
     } else {
@@ -713,16 +716,16 @@ pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Transacti
     ui.fill_rect(icon, 4.0, colors.row);
     ui.border_rect(icon, 4.0, colors.border.with_alpha(0.68));
     ui.bounded_label(
-        rect.x + 58.0,
-        rect.y + 12.0,
+        icon.x + icon.w + ROW_ICON_GAP,
+        rect.y + 10.0,
         rect.w * 0.36,
         spec.title,
         2.0,
         colors.text,
     );
     ui.bounded_label(
-        rect.x + 58.0,
-        rect.y + 34.0,
+        icon.x + icon.w + ROW_ICON_GAP,
+        rect.y + 32.0,
         rect.w * 0.36,
         spec.subtitle,
         2.0,
@@ -750,6 +753,7 @@ pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
     let theme = ui.theme();
     let colors = theme.colors;
     ui.hit(HitKind::MenuItem, spec.id, rect.x, rect.y, rect.w, rect.h);
+    let content = rect.inset_ltrb(ROW_PAD_X, 0.0, ROW_PAD_X, 0.0);
     if spec.selected {
         ui.fill_rect(rect, theme.radius.card, colors.active);
         let accent = resolve_component_accent(ui, spec.accent);
@@ -761,9 +765,14 @@ pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
         );
     }
     ui.bounded_label(
-        rect.x + 14.0,
-        rect.y + 10.0,
-        rect.w - 28.0,
+        content.x,
+        rect.y
+            + if spec.detail.is_empty() {
+                (rect.h - 14.0) * 0.5
+            } else {
+                10.0
+            },
+        content.w,
         spec.label,
         2.0,
         if spec.selected {
@@ -774,9 +783,9 @@ pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
     );
     if !spec.detail.is_empty() {
         ui.bounded_label(
-            rect.x + 14.0,
+            content.x,
             rect.y + 31.0,
-            rect.w - 28.0,
+            content.w,
             spec.detail,
             2.0,
             colors.muted,
@@ -814,10 +823,16 @@ pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_
             (label.chars().count() as f32 * 9.0 + 26.0).clamp(72.0, 136.0)
         }
     };
-    let text_w = (rect.w - accessory_w - 38.0).max(0.0);
+    let content = rect.inset_ltrb(ROW_PAD_X, 0.0, ROW_PAD_X, 0.0);
+    let text_w = (content.w - accessory_w - 12.0).max(0.0);
     ui.bounded_label(
-        rect.x + 14.0,
-        rect.y + 10.0,
+        content.x,
+        rect.y
+            + if spec.detail.is_empty() {
+                (rect.h - 14.0) * 0.5
+            } else {
+                10.0
+            },
         text_w,
         spec.label,
         2.0,
@@ -825,7 +840,7 @@ pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_
     );
     if !spec.detail.is_empty() {
         ui.bounded_label(
-            rect.x + 14.0,
+            content.x,
             rect.y + 31.0,
             text_w,
             spec.detail,
@@ -834,7 +849,7 @@ pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_
         );
     }
 
-    let right = rect.x + rect.w - 14.0;
+    let right = content.x + content.w;
     match spec.accessory {
         ControlAccessory::None => {}
         ControlAccessory::Value(value) => ui.bounded_label(

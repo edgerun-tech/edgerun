@@ -34,17 +34,17 @@ struct BarrierState {
 struct BarrierArgs {
     id: String,
     participants: usize,
-    #[json(default = "default_timeout_ms")]
+    #[schemars(default = "default_timeout_ms")]
     timeout_ms: u64,
 }
 
 #[derive(Debug, FromJson)]
 struct TestSyncArgs {
-    #[json(default)]
+    #[schemars(default)]
     sleep_before_ms: Option<u64>,
-    #[json(default)]
+    #[schemars(default)]
     sleep_after_ms: Option<u64>,
-    #[json(default)]
+    #[schemars(default)]
     barrier: Option<BarrierArgs>,
 }
 

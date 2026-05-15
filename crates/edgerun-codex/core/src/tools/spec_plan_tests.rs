@@ -810,7 +810,7 @@ fn image_generation_tools_require_feature_and_supported_model() {
     assert_contains_tool_names(&supported_tools, &["image_generation"]);
     let image_generation_tool = find_tool(&supported_tools, "image_generation");
     assert_eq!(
-        edgerun_json::to_serde_value(&image_generation_tool.spec).expect("serialize image tool"),
+        edgerun_json::to_value(&&image_generation_tool.spec),
         edgerun_json::json!({
             "type": "image_generation",
             "output_format": "png"
@@ -2143,7 +2143,7 @@ fn code_mode_exec_description_omits_nested_tool_details_when_not_code_mode_only(
 }
 
 fn model_info() -> ModelInfo {
-    edgerun_json::from_serde_value(json!({
+    edgerun_json::from_json_value(json!({
         "slug": "gpt-5-codex",
         "display_name": "GPT-5 Codex",
         "description": null,

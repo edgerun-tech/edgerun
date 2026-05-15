@@ -2,9 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-use edgerun_async_trait::async_trait;
 use codex_app_server_protocol::AuthMode;
 use codex_protocol::account::PlanType;
+use edgerun_async_trait::async_trait;
 use edgerun_tokio::sync::RwLock;
 
 #[derive(Clone, Debug)]

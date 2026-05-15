@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::parser::{self, ParserPool};
-use crate::rust_edit::{scan_items, RustItemKind};
+use crate::rust_edit::{RustItemKind, scan_items};
 use crate::uir::CallKind;
 
 #[derive(Debug, Clone)]

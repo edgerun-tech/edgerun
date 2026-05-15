@@ -26,8 +26,8 @@ use crate::sha2::Sha512;
 #[cfg(feature = "pkcs8")]
 use crate::ed25519::pkcs8;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "digest")]
 use crate::ed25519_dalek::context::Context;
@@ -686,7 +686,7 @@ impl TryFrom<crate::pkcs8::spki::SubjectPublicKeyInfoRef<'_>> for VerifyingKey {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for VerifyingKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -696,7 +696,7 @@ impl Serialize for VerifyingKey {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'d> Deserialize<'d> for VerifyingKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -704,28 +704,31 @@ impl<'d> Deserialize<'d> for VerifyingKey {
     {
         struct VerifyingKeyVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for VerifyingKeyVisitor {
+        impl<'de> edgerun_json_compat::de::Visitor<'de> for VerifyingKeyVisitor {
             type Value = VerifyingKey;
 
             fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 write!(formatter, concat!("An ed25519 verifying (public) key"))
             }
 
-            fn visit_bytes<E: serde::de::Error>(self, bytes: &[u8]) -> Result<Self::Value, E> {
+            fn visit_bytes<E: edgerun_json_compat::de::Error>(
+                self,
+                bytes: &[u8],
+            ) -> Result<Self::Value, E> {
                 VerifyingKey::try_from(bytes).map_err(E::custom)
             }
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
 
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
 
                 let remaining = (0..)
@@ -734,13 +737,13 @@ impl<'d> Deserialize<'d> for VerifyingKey {
                     .count();
 
                 if remaining > 0 {
-                    return Err(serde::de::Error::invalid_length(
+                    return Err(edgerun_json_compat::de::Error::invalid_length(
                         32 + remaining,
                         &"expected 32 bytes",
                     ));
                 }
 
-                VerifyingKey::try_from(&bytes[..]).map_err(serde::de::Error::custom)
+                VerifyingKey::try_from(&bytes[..]).map_err(edgerun_json_compat::de::Error::custom)
             }
         }
 

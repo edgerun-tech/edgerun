@@ -2,37 +2,34 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use edgerun_crypto::Ed25519SigningKey;
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::channel::{ChannelEndpoint, RouteBinding};
 use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
+use crate::generated_wire::{ArchivedProgramIoEvents, ArchivedProgramIoPayload};
 use crate::identity::node_identity_from_key;
 use crate::protocol::{
-    DEPARTMENT_COMPUTE, Hash, NODE_ROLE_COMPUTE, NodeId, NodeIdentity, WORK_TYPE_PROGRAM_CLOSE,
-    WORK_TYPE_PROGRAM_EVENT, WORK_TYPE_PROGRAM_OPEN, WORK_TYPE_PROGRAM_POLL,
-    WORK_TYPE_PROGRAM_STDIN, WorkPacket, WorkProtocolError,
+    Hash, NodeId, NodeIdentity, WorkPacket, WorkProtocolError, DEPARTMENT_COMPUTE,
+    NODE_ROLE_COMPUTE, WORK_TYPE_PROGRAM_CLOSE, WORK_TYPE_PROGRAM_EVENT, WORK_TYPE_PROGRAM_OPEN,
+    WORK_TYPE_PROGRAM_POLL, WORK_TYPE_PROGRAM_STDIN,
 };
 use crate::roles::{
-    ROLE_STATUS_ACCEPTED, RoleContext, RoleInput, RoleOutput, WorkRole, WorkServiceResponse,
-    execute_role_packet, network_message_for_role,
+    execute_role_packet, network_message_for_role, RoleContext, RoleInput, RoleOutput, WorkRole,
+    WorkServiceResponse, ROLE_STATUS_ACCEPTED,
 };
 use crate::route_builder::route_binding;
 use crate::signing::{sign_network_message_payload, simple_network_message_id};
+use edgerun_crypto::Ed25519SigningKey;
 
 pub const PROGRAM_STREAM_STDIN: u16 = 0;
 pub const PROGRAM_STREAM_STDOUT: u16 = 1;
 pub const PROGRAM_STREAM_STDERR: u16 = 2;
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramEnv {
     pub key: String,
     pub value: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramOpen {
     pub session_id: Hash,
     pub program: String,
@@ -41,29 +38,25 @@ pub struct ProgramOpen {
     pub cwd: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramStdin {
     pub session_id: Hash,
     pub bytes: Vec<u8>,
     pub eof: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramClose {
     pub session_id: Hash,
     pub signal: u16,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramPoll {
     pub session_id: Hash,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramOutput {
     pub session_id: Hash,
     pub stream: u16,
@@ -71,15 +64,13 @@ pub struct ProgramOutput {
     pub eof: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramExit {
     pub session_id: Hash,
     pub code: i32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProgramIoPayload {
     Open(ProgramOpen),
     Stdin(ProgramStdin),
@@ -87,15 +78,13 @@ pub enum ProgramIoPayload {
     Poll(ProgramPoll),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProgramIoEvent {
     Output(ProgramOutput),
     Exit(ProgramExit),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramIoEvents {
     pub events: Vec<ProgramIoEvent>,
 }

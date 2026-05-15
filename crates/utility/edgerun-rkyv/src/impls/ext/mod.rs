@@ -2,7 +2,7 @@
 // ground and build some momentum.
 
 // These are NOT PLANNED to remain in rkyv for the final release. Much like
-// serde, these implementations should be moved into their respective crates
+// edgerun_json_compat, these implementations should be moved into their respective crates
 // over time. Before adding support for another crate, please consider getting
 // rkyv support in the crate instead.
 

@@ -810,7 +810,7 @@ async fn stdio_mcp_tool_call_includes_sandbox_state_meta() -> anyhow::Result<()>
         .expect("sandbox state metadata should be present");
     let (sandbox_policy, _) =
         turn_permission_fields(PermissionProfile::read_only(), fixture.config.cwd.as_path());
-    let expected_sandbox_policy = edgerun_json::to_serde_value(&sandbox_policy)?;
+    let expected_sandbox_policy = edgerun_json::to_value(&sandbox_policy);
     assert_eq!(
         sandbox_meta.get("sandboxPolicy"),
         Some(&expected_sandbox_policy)
@@ -2002,7 +2002,7 @@ async fn streamable_http_with_oauth_round_trip_impl() -> anyhow::Result<()> {
             // Keep OAuth credentials isolated to this test home because Bazel
             // runs the full core suite in one process.
             config.mcp_oauth_credentials_store_mode =
-                edgerun_json::from_serde_value(json!("file"))
+                edgerun_json::from_json_value(json!("file"))
                     .expect("`file` should deserialize as OAuthCredentialsStoreMode");
             insert_mcp_server(
                 config,

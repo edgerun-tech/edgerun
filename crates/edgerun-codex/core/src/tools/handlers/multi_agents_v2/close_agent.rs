@@ -119,7 +119,7 @@ impl ToolHandler for Handler {
 }
 
 #[derive(Debug, FromJson)]
-#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 struct CloseAgentArgs {
     target: String,
 }

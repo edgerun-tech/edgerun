@@ -348,25 +348,25 @@ impl TryFrom<&[u8]> for CompressedRistretto {
 }
 
 // ------------------------------------------------------------------------
-// Serde support
+// JsonCompat support
 // ------------------------------------------------------------------------
 // Serializes to and from `RistrettoPoint` directly, doing compression
 // and decompression internally.  This means that users can create
-// structs containing `RistrettoPoint`s and use Serde's derived
+// structs containing `RistrettoPoint`s and use JsonCompat's derived
 // serializers to serialize those structures.
 
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::de::Visitor;
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for RistrettoPoint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.compress().as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -375,13 +375,13 @@ impl Serialize for RistrettoPoint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for CompressedRistretto {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -390,7 +390,7 @@ impl Serialize for CompressedRistretto {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de> Deserialize<'de> for RistrettoPoint {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -407,18 +407,18 @@ impl<'de> Deserialize<'de> for RistrettoPoint {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<RistrettoPoint, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
                 CompressedRistretto(bytes)
                     .decompress()
-                    .ok_or_else(|| serde::de::Error::custom("decompression failed"))
+                    .ok_or_else(|| edgerun_json_compat::de::Error::custom("decompression failed"))
             }
         }
 
@@ -426,7 +426,7 @@ impl<'de> Deserialize<'de> for RistrettoPoint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de> Deserialize<'de> for CompressedRistretto {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -443,14 +443,14 @@ impl<'de> Deserialize<'de> for CompressedRistretto {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<CompressedRistretto, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
                 Ok(CompressedRistretto(bytes))
             }
@@ -1220,8 +1220,8 @@ mod test {
     use crate::rand_core::OsRng;
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_bincode_basepoint_roundtrip() {
+    #[cfg(feature = "edgerun_json_compat")]
+    fn edgerun_json_compat_bincode_basepoint_roundtrip() {
         use bincode;
 
         let encoded = bincode::serialize(&constants::RISTRETTO_BASEPOINT_POINT).unwrap();

@@ -50,8 +50,8 @@ impl Path {
     /// use proc_macro2::TokenStream;
     /// use syn::{Attribute, Error, Meta, Result};
     ///
-    /// fn get_serde_meta_item(attr: &Attribute) -> Result<Option<&TokenStream>> {
-    ///     if attr.path().is_ident("serde") {
+    /// fn get_edgerun_json_compat_meta_item(attr: &Attribute) -> Result<Option<&TokenStream>> {
+    ///     if attr.path().is_ident("edgerun_json_compat") {
     ///         match &attr.meta {
     ///             Meta::List(meta) => Ok(Some(&meta.tokens)),
     ///             bad => Err(Error::new_spanned(bad, "unrecognized attribute")),

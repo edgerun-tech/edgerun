@@ -67,9 +67,9 @@ pub const MU: [u64; 5] = [
 ///
 /// Please see the documentation for the relevant traits for more information.
 ///
-/// # `serde` support
+/// # `edgerun_json_compat` support
 ///
-/// When the `serde` feature of this crate is enabled, the `Serialize` and
+/// When the `edgerun_json_compat` feature of this crate is enabled, the `Serialize` and
 /// `Deserialize` traits are impl'd for this type.
 ///
 /// The serialization is a fixed-width big endian encoding. When used with

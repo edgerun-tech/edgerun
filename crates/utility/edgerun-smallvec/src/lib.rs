@@ -16,10 +16,10 @@
 //!
 //! ## Optional features
 //!
-//! ### `serde`
+//! ### `edgerun_json_compat`
 //!
-//! When this optional dependency is enabled, `SmallVec` implements the `serde::Serialize` and
-//! `serde::Deserialize` traits.
+//! When this optional dependency is enabled, `SmallVec` implements the `edgerun_json_compat::Serialize` and
+//! `edgerun_json_compat::Deserialize` traits.
 //!
 //! ### `write`
 //!
@@ -122,13 +122,13 @@ use core::slice::{self, SliceIndex};
 #[cfg(feature = "malloc_size_of")]
 use malloc_size_of::{MallocShallowSizeOf, MallocSizeOf, MallocSizeOfOps};
 
-#[cfg(feature = "serde")]
-use serde::{
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{
     de::{Deserialize, Deserializer, SeqAccess, Visitor},
     ser::{Serialize, SerializeSeq, Serializer},
 };
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 use core::marker::PhantomData;
 
 #[cfg(feature = "write")]
@@ -1915,8 +1915,8 @@ impl<A: Array<Item = u8>> io::Write for SmallVec<A> {
     }
 }
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "edgerun_json_compat")))]
 impl<A: Array> Serialize for SmallVec<A>
 where
     A::Item: Serialize,
@@ -1930,8 +1930,8 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "edgerun_json_compat")))]
 impl<'de, A: Array> Deserialize<'de> for SmallVec<A>
 where
     A::Item: Deserialize<'de>,
@@ -1943,12 +1943,12 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 struct SmallVecVisitor<A> {
     phantom: PhantomData<A>,
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de, A: Array> Visitor<'de> for SmallVecVisitor<A>
 where
     A::Item: Deserialize<'de>,
@@ -1963,7 +1963,7 @@ where
     where
         B: SeqAccess<'de>,
     {
-        use serde::de::Error;
+        use edgerun_json_compat::de::Error;
         let len = seq.size_hint().unwrap_or(0);
         let mut values = SmallVec::new();
         values.try_reserve(len).map_err(B::Error::custom)?;

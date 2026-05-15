@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum TurnStatus {
     Completed,
     Interrupted,
@@ -55,7 +55,7 @@ impl FromJson for TurnStatus {
 
 // Turn APIs
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnEnvironmentParams {
     pub environment_id: String,
     pub cwd: AbsolutePathBuf,
@@ -81,7 +81,7 @@ impl FromJson for TurnEnvironmentParams {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnStartParams {
     pub thread_id: String,
     pub input: Vec<UserInput>,
@@ -101,12 +101,7 @@ pub struct TurnStartParams {
     /// Override the model for this turn and subsequent turns.
     pub model: Option<String>,
     /// Override the service tier for this turn and subsequent turns.
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<Option<String>>,
     /// Override the reasoning effort for this turn and subsequent turns.
     pub effort: Option<ReasoningEffort>,
@@ -244,13 +239,15 @@ fn collaboration_mode_from_json(value: JsonValue) -> Result<CollaborationMode, J
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnStartResponse {
     pub turn: Turn,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnSteerParams {
     pub thread_id: String,
     pub input: Vec<UserInput>,
@@ -262,25 +259,25 @@ pub struct TurnSteerParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnSteerResponse {
     pub turn_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnInterruptParams {
     pub thread_id: String,
     pub turn_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnInterruptResponse {}
 
 // User input types
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ByteRange {
     pub start: usize,
     pub end: usize,
@@ -324,7 +321,7 @@ impl From<ByteRange> for CoreByteRange {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TextElement {
     /// Byte range in the parent `text` buffer that this element occupies.
     pub byte_range: ByteRange,
@@ -384,12 +381,12 @@ impl From<TextElement> for CoreTextElement {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum UserInput {
     Text {
         text: String,
         /// UI-defined spans within `text` used to render or persist special elements.
-        #[serde(default)]
+        #[schemars(default)]
         text_elements: Vec<TextElement>,
     },
     Image {
@@ -539,14 +536,14 @@ impl UserInput {
     }
 }
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnStartedNotification {
     pub thread_id: String,
     pub turn: Turn,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct Usage {
     pub input_tokens: i32,
     pub cached_input_tokens: i32,
@@ -554,14 +551,14 @@ pub struct Usage {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnCompletedNotification {
     pub thread_id: String,
     pub turn: Turn,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 /// Notification that the turn-level unified diff has changed.
 /// Contains the latest aggregated diff across all file changes in the turn.
 pub struct TurnDiffUpdatedNotification {
@@ -571,7 +568,7 @@ pub struct TurnDiffUpdatedNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnPlanUpdatedNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -580,14 +577,16 @@ pub struct TurnPlanUpdatedNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TurnPlanStep {
     pub step: String,
     pub status: TurnPlanStepStatus,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub enum TurnPlanStepStatus {
     Pending,
     InProgress,

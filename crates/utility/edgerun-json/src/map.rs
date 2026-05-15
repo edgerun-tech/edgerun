@@ -278,6 +278,15 @@ impl<K, V> Map<K, V> {
             .map(|index| self.0.remove(index).1)
     }
 
+    pub fn remove_any(&mut self, keys: &[&str]) -> Option<JsonValue> {
+        for key in keys {
+            if let Some(value) = self.remove(key) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
     pub fn take_required<T: FromJson>(&mut self, key: &str) -> Result<T, JsonValueError> {
         let value = self
             .remove(key)

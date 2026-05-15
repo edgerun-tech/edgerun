@@ -44,8 +44,10 @@ use crate::crypto_bigint::{Bounded, Encoding, Integer, Limb, Word, Zero};
 use crate::subtle::{Choice, ConditionallySelectable};
 use core::fmt;
 
-#[cfg(feature = "serde")]
-use serdect::serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compatct::edgerun_json_compat::{
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 #[cfg(feature = "p256_arithmetic")]
 use crate::zeroize::DefaultIsZeroes;
@@ -265,7 +267,7 @@ impl<const LIMBS: usize> fmt::UpperHex for Uint<LIMBS> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de, const LIMBS: usize> Deserialize<'de> for Uint<LIMBS>
 where
     Uint<LIMBS>: Encoding,
@@ -275,13 +277,13 @@ where
         D: Deserializer<'de>,
     {
         let mut buffer = Self::ZERO.to_le_bytes();
-        serdect::array::deserialize_hex_or_bin(buffer.as_mut(), deserializer)?;
+        edgerun_json_compatct::array::deserialize_hex_or_bin(buffer.as_mut(), deserializer)?;
 
         Ok(Self::from_le_bytes(buffer))
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<const LIMBS: usize> Serialize for Uint<LIMBS>
 where
     Uint<LIMBS>: Encoding,
@@ -290,7 +292,10 @@ where
     where
         S: Serializer,
     {
-        serdect::array::serialize_hex_lower_or_bin(&Encoding::to_le_bytes(self), serializer)
+        edgerun_json_compatct::array::serialize_hex_lower_or_bin(
+            &Encoding::to_le_bytes(self),
+            serializer,
+        )
     }
 }
 
@@ -397,7 +402,7 @@ mod tests {
     #[cfg(feature = "crypto_bigint_alloc")]
     use alloc::format;
 
-    #[cfg(feature = "serde")]
+    #[cfg(feature = "edgerun_json_compat")]
     use crate::crypto_bigint::U64;
 
     #[cfg(feature = "crypto_bigint_alloc")]
@@ -462,9 +467,9 @@ mod tests {
         assert_eq!(b, select_1);
     }
 
-    #[cfg(feature = "serde")]
+    #[cfg(feature = "edgerun_json_compat")]
     #[test]
-    fn serde() {
+    fn edgerun_json_compat() {
         const TEST: U64 = U64::from_u64(0x0011223344556677);
 
         let serialized = bincode::serialize(&TEST).unwrap();
@@ -473,9 +478,9 @@ mod tests {
         assert_eq!(TEST, deserialized);
     }
 
-    #[cfg(feature = "serde")]
+    #[cfg(feature = "edgerun_json_compat")]
     #[test]
-    fn serde_owned() {
+    fn edgerun_json_compat_owned() {
         const TEST: U64 = U64::from_u64(0x0011223344556677);
 
         let serialized = bincode::serialize(&TEST).unwrap();

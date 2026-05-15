@@ -27,9 +27,11 @@ pub fn deflate_raw_decompress_with_limit(
     data: &[u8],
     limit: usize,
 ) -> Result<Vec<u8>, CompressionError> {
-    miniz_oxide::inflate::decompress_to_vec_with_limit(data, limit).map_err(|error| match error.status {
-        miniz_oxide::inflate::TINFLStatus::HasMoreOutput => CompressionError::LimitExceeded,
-        _ => CompressionError::InvalidDeflate,
+    miniz_oxide::inflate::decompress_to_vec_with_limit(data, limit).map_err(|error| {
+        match error.status {
+            miniz_oxide::inflate::TINFLStatus::HasMoreOutput => CompressionError::LimitExceeded,
+            _ => CompressionError::InvalidDeflate,
+        }
     })
 }
 

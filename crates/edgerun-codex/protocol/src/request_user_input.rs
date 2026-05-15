@@ -15,16 +15,16 @@ pub struct RequestUserInputQuestion {
     pub id: String,
     pub header: String,
     pub question: String,
-    #[serde(rename = "isOther", default)]
-    #[json(rename = "isOther", default)]
+    #[schemars(rename = "isOther", default)]
+    #[schemars(rename = "isOther", default)]
     #[schemars(rename = "isOther")]
     pub is_other: bool,
-    #[serde(rename = "isSecret", default)]
-    #[json(rename = "isSecret", default)]
+    #[schemars(rename = "isSecret", default)]
+    #[schemars(rename = "isSecret", default)]
     #[schemars(rename = "isSecret")]
     pub is_secret: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[json(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub options: Option<Vec<RequestUserInputQuestionOption>>,
 }
 
@@ -48,9 +48,9 @@ pub struct RequestUserInputEvent {
     /// Responses API call id for the associated tool call, if available.
     pub call_id: String,
     /// Turn ID that this request belongs to.
-    /// Uses `#[serde(default)]` for backwards compatibility.
-    #[serde(default)]
-    #[json(default)]
+    /// Uses `#[schemars(default)]` for backwards compatibility.
+    #[schemars(default)]
+    #[schemars(default)]
     pub turn_id: String,
     pub questions: Vec<RequestUserInputQuestion>,
 }

@@ -1,7 +1,7 @@
-#![cfg(feature = "serde")]
+#![cfg(feature = "edgerun_json_compat")]
 #![warn(rust_2018_idioms)]
 
-use serde_test::{assert_tokens, Token};
+use edgerun_json_compat_test::{assert_tokens, Token};
 
 #[test]
 fn test_ser_de_empty() {

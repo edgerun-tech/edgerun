@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 
 // Types for the TODO tool arguments matching codex-vscode/todo-mcp/src/main.rs
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum StepStatus {
     Pending,
     InProgress,
@@ -26,7 +26,7 @@ impl FromJson for StepStatus {
 }
 
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson)]
-#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 pub struct PlanItemArg {
     pub step: String,
     pub status: StepStatus,
@@ -43,10 +43,10 @@ impl FromJson for PlanItemArg {
 }
 
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson)]
-#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 pub struct UpdatePlanArgs {
     /// Arguments for the `update_plan` todo/checklist tool (not plan mode).
-    #[serde(default)]
+    #[schemars(default)]
     pub explanation: Option<String>,
     pub plan: Vec<PlanItemArg>,
 }

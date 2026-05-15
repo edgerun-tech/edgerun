@@ -5,7 +5,6 @@ use edgerun_json::JsonValueError;
 use edgerun_json::ToJson;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[serde(untagged)]
 pub enum PlanType {
     Known(KnownPlan),
     Unknown(String),
@@ -49,7 +48,6 @@ impl FromJson for PlanType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
 pub enum KnownPlan {
     Free,
     Go,
@@ -57,14 +55,10 @@ pub enum KnownPlan {
     Pro,
     ProLite,
     Team,
-    #[serde(rename = "self_serve_business_usage_based")]
     SelfServeBusinessUsageBased,
     Business,
-    #[serde(rename = "enterprise_cbp_usage_based")]
     EnterpriseCbpUsageBased,
-    #[serde(alias = "hc")]
     Enterprise,
-    #[serde(alias = "education")]
     Edu,
 }
 

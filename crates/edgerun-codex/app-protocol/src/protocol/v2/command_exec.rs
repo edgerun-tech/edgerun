@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 /// PTY size in character cells for `command/exec` PTY sessions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecTerminalSize {
     /// Terminal height in character cells.
     pub rows: u16,
@@ -40,7 +40,7 @@ impl FromJson for CommandExecTerminalSize {
 /// sent only after all `command/exec/outputDelta` notifications for that
 /// connection have been emitted.
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecParams {
     /// Command argv vector. Empty arrays are rejected.
     pub command: Vec<String>,
@@ -54,18 +54,18 @@ pub struct CommandExecParams {
     /// Enable PTY mode.
     ///
     /// This implies `streamStdin` and `streamStdoutStderr`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub tty: bool,
     /// Allow follow-up `command/exec/write` requests to write stdin bytes.
     ///
     /// Requires a client-supplied `processId`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub stream_stdin: bool,
     /// Stream stdout/stderr via `command/exec/outputDelta` notifications.
     ///
     /// Streamed bytes are not duplicated into the final response and require a
     /// client-supplied `processId`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub stream_stdout_stderr: bool,
     /// Optional per-stream stdout/stderr capture cap in bytes.
     ///
@@ -75,12 +75,12 @@ pub struct CommandExecParams {
     /// Disable stdout/stderr capture truncation for this request.
     ///
     /// Cannot be combined with `outputBytesCap`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub disable_output_cap: bool,
     /// Disable the timeout entirely for this request.
     ///
     /// Cannot be combined with `timeoutMs`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub disable_timeout: bool,
     /// Optional timeout in milliseconds.
     ///
@@ -159,7 +159,7 @@ impl FromJson for CommandExecParams {
 
 /// Final buffered result for `command/exec`.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecResponse {
     /// Process exit code.
     pub exit_code: i32,
@@ -176,7 +176,7 @@ pub struct CommandExecResponse {
 /// Write stdin bytes to a running `command/exec` session, close stdin, or
 /// both.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecWriteParams {
     /// Client-supplied, connection-scoped `processId` from the original
     /// `command/exec` request.
@@ -184,7 +184,7 @@ pub struct CommandExecWriteParams {
     /// Optional base64-encoded stdin bytes to write.
     pub delta_base64: Option<String>,
     /// Close stdin after writing `deltaBase64`, if present.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub close_stdin: bool,
 }
 
@@ -213,12 +213,12 @@ impl FromJson for CommandExecWriteParams {
 
 /// Empty success response for `command/exec/write`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecWriteResponse {}
 
 /// Terminate a running `command/exec` session.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecTerminateParams {
     /// Client-supplied, connection-scoped `processId` from the original
     /// `command/exec` request.
@@ -242,12 +242,12 @@ impl FromJson for CommandExecTerminateParams {
 
 /// Empty success response for `command/exec/terminate`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecTerminateResponse {}
 
 /// Resize a running PTY-backed `command/exec` session.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecResizeParams {
     /// Client-supplied, connection-scoped `processId` from the original
     /// `command/exec` request.
@@ -277,12 +277,12 @@ impl FromJson for CommandExecResizeParams {
 
 /// Empty success response for `command/exec/resize`.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecResizeResponse {}
 
 /// Stream label for `command/exec/outputDelta` notifications.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum CommandExecOutputStream {
     /// stdout stream. PTY mode multiplexes terminal output here.
     Stdout,
@@ -316,7 +316,7 @@ impl FromJson for CommandExecOutputStream {
 /// These notifications are connection-scoped. If the originating connection
 /// closes, the server terminates the process.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecOutputDeltaNotification {
     /// Client-supplied, connection-scoped `processId` from the original
     /// `command/exec` request.

@@ -377,7 +377,7 @@ mod tests {
             Some("application/json")
         );
         let parsed: edgerun_json::Value =
-            edgerun_json::from_serde_str(body).expect("parse json body");
+            edgerun_json::from_json_str(body).expect("parse json body");
         assert_eq!(
             parsed,
             edgerun_json::json!({

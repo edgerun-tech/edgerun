@@ -1,6 +1,6 @@
 use proc_macro::{Delimiter, TokenStream, TokenTree};
 
-#[proc_macro_derive(JsonSchema, attributes(schemars, serde))]
+#[proc_macro_derive(JsonSchema, attributes(schemars))]
 pub fn derive_json_schema(input: TokenStream) -> TokenStream {
     let item = match parse_item(input) {
         Some(item) => item,
@@ -153,9 +153,8 @@ fn struct_schema_body(item: &Item) -> String {
         return titled_object_schema(&item.schema_name);
     };
     let fields = parse_struct_fields(body);
-    let rename_all = attr_value(&item.attrs, "serde", "rename_all");
-    let deny_unknown = has_attr_flag(&item.attrs, "serde", "deny_unknown_fields")
-        || has_attr_flag(&item.attrs, "schemars", "deny_unknown_fields");
+    let rename_all = attr_value(&item.attrs, "schemars", "rename_all");
+    let deny_unknown = has_attr_flag(&item.attrs, "schemars", "deny_unknown_fields");
     object_schema_code(
         &item.schema_name,
         &fields,
@@ -169,9 +168,9 @@ fn enum_schema_body(item: &Item) -> String {
         return titled_object_schema(&item.schema_name);
     };
     let variants = parse_enum_variants(body);
-    let rename_all = attr_value(&item.attrs, "serde", "rename_all");
-    let tag = attr_value(&item.attrs, "serde", "tag");
-    let untagged = has_attr_flag(&item.attrs, "serde", "untagged");
+    let rename_all = attr_value(&item.attrs, "schemars", "rename_all");
+    let tag = attr_value(&item.attrs, "schemars", "tag");
+    let untagged = has_attr_flag(&item.attrs, "schemars", "untagged");
 
     if variants.iter().all(|variant| variant.body.is_none()) && tag.is_none() && !untagged {
         let values = variants
@@ -252,7 +251,7 @@ fn object_schema_code(
             escape(&field_name),
             ty,
         ));
-        if !is_optional_type(&field.ty) && !has_attr_flag(&field.attrs, "serde", "default") {
+        if !is_optional_type(&field.ty) && !has_attr_flag(&field.attrs, "schemars", "default") {
             code.push_str(&format!(
                 "required.push(::std::string::String::from(\"{}\"));",
                 escape(&field_name),
@@ -303,7 +302,7 @@ fn tagged_variant_schema_code(tag: &str, variant_name: &str, fields: &[Field]) -
             escape(&field_name),
             ty,
         ));
-        if !is_optional_type(&field.ty) && !has_attr_flag(&field.attrs, "serde", "default") {
+        if !is_optional_type(&field.ty) && !has_attr_flag(&field.attrs, "schemars", "default") {
             code.push_str(&format!(
                 "required.push(::std::string::String::from(\"{}\"));",
                 escape(&field_name),
@@ -511,7 +510,7 @@ fn attr_matches(attr: &str, attr_name: &str) -> bool {
 }
 
 fn has_skip(attrs: &[String]) -> bool {
-    has_attr_flag(attrs, "serde", "skip") || has_attr_flag(attrs, "schemars", "skip")
+    has_attr_flag(attrs, "schemars", "skip")
 }
 
 fn find_key_value(attr: &str, key: &str) -> Option<String> {
@@ -525,7 +524,6 @@ fn find_key_value(attr: &str, key: &str) -> Option<String> {
 
 fn renamed(attrs: &[String], rename_all: Option<&str>, rust_name: &str) -> String {
     attr_value(attrs, "schemars", "rename")
-        .or_else(|| attr_value(attrs, "serde", "rename"))
         .unwrap_or_else(|| apply_rename_all(rust_name, rename_all))
 }
 

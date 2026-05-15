@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use crate::identity::verify_node_identity;
 use crate::protocol::*;
 use crate::types::{
-    Department, NodeRole, WorkType, department_for_work_type_typed, role_for_department_typed,
+    department_for_work_type_typed, role_for_department_typed, Department, NodeRole, WorkType,
 };
 
 pub const ROLE_STATUS_ACCEPTED: u16 = 1;

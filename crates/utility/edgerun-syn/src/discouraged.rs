@@ -116,7 +116,7 @@ pub trait Speculative {
     /// as the turbofish above, take the following unfinished "turbofish":
     ///
     /// ```text
-    /// let _ = f<&'a fn(), for<'a> serde::>();
+    /// let _ = f<&'a fn(), for<'a> edgerun_json_compat::>();
     /// ```
     ///
     /// If this is parsed as generic arguments, we can provide the error message
@@ -125,7 +125,7 @@ pub trait Speculative {
     /// error: expected identifier
     ///  --> src.rs:L:C
     ///   |
-    /// L | let _ = f<&'a fn(), for<'a> serde::>();
+    /// L | let _ = f<&'a fn(), for<'a> edgerun_json_compat::>();
     ///   |                                    ^
     /// ```
     ///
@@ -138,7 +138,7 @@ pub trait Speculative {
     /// error: expected `:`
     ///  --> src.rs:L:C
     ///   |
-    /// L | let _ = f<&'a fn(), for<'a> serde::>();
+    /// L | let _ = f<&'a fn(), for<'a> edgerun_json_compat::>();
     ///   |               ^^
     /// ```
     ///

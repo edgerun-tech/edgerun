@@ -29,10 +29,8 @@ v2_enum_from_core! {
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct NetworkApprovalContext {
     pub host: String,
     pub protocol: NetworkApprovalProtocol,
@@ -58,15 +56,15 @@ impl From<CoreNetworkApprovalContext> for NetworkApprovalContext {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct AdditionalFileSystemPermissions {
     /// This will be removed in favor of `entries`.
     pub read: Option<Vec<AbsolutePathBuf>>,
     /// This will be removed in favor of `entries`.
     pub write: Option<Vec<AbsolutePathBuf>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub glob_scan_max_depth: Option<NonZeroUsize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub entries: Option<Vec<FileSystemSandboxEntry>>,
 }
 
@@ -157,7 +155,7 @@ impl From<AdditionalFileSystemPermissions> for CoreFileSystemPermissions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct AdditionalNetworkPermissions {
     pub enabled: Option<bool>,
 }
@@ -203,14 +201,12 @@ v2_enum_from_core!(
     }
 );
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[schemars(tag = "kind", rename_all = "snake_case")]
 pub enum FileSystemSpecialPath {
     Root,
     Minimal,
-    #[serde(alias = "current_working_directory")]
+    #[schemars(alias = "current_working_directory")]
     ProjectRoots {
         subpath: Option<PathBuf>,
     },
@@ -308,7 +304,7 @@ impl From<FileSystemSpecialPath> for CoreFileSystemSpecialPath {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum FileSystemPath {
     Path { path: AbsolutePathBuf },
     GlobPattern { pattern: String },
@@ -382,7 +378,7 @@ impl From<FileSystemPath> for CoreFileSystemPath {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct FileSystemSandboxEntry {
     pub path: FileSystemPath,
     pub access: FileSystemAccessMode,
@@ -490,7 +486,7 @@ fn optional_nonzero_usize(value: Option<Value>) -> Result<Option<NonZeroUsize>, 
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(transparent)]
+#[schemars(transparent)]
 pub struct ExecPolicyAmendment {
     pub command: Vec<String>,
 }
@@ -529,10 +525,8 @@ v2_enum_from_core!(
     }
 );
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct NetworkPolicyAmendment {
     pub host: String,
     pub action: NetworkPolicyRuleAction,

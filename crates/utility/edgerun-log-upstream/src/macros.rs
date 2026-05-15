@@ -505,10 +505,6 @@ macro_rules! __log_value {
     (($args:expr):sval) => {
         $crate::__log_value_sval!($args)
     };
-    // serde::Serialize
-    (($args:expr):serde) => {
-        $crate::__log_value_serde!($args)
-    };
 }
 
 #[doc(hidden)]
@@ -535,26 +531,6 @@ macro_rules! __log_value_sval {
 macro_rules! __log_value_sval {
     ($args:expr) => {
         compile_error!("capturing values as `sval::Value` requites the `kv_sval` feature of `log`")
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[cfg(feature = "kv_serde")]
-macro_rules! __log_value_serde {
-    ($args:expr) => {
-        $crate::__private_api::capture_serde(&&$args)
-    };
-}
-
-#[doc(hidden)]
-#[macro_export]
-#[cfg(not(feature = "kv_serde"))]
-macro_rules! __log_value_serde {
-    ($args:expr) => {
-        compile_error!(
-            "capturing values as `serde::Serialize` requites the `kv_serde` feature of `log`"
-        )
     };
 }
 

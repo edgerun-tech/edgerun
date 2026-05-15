@@ -71,7 +71,10 @@ use crate::zeroize::Zeroize;
 /// Holds the \\(u\\)-coordinate of a point on the Montgomery form of
 /// Curve25519 or its twist.
 #[derive(Copy, Clone, Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "edgerun_json_compat",
+    derive(edgerun_json_compat::Serialize, edgerun_json_compat::Deserialize)
+)]
 pub struct MontgomeryPoint(pub [u8; 32]);
 
 /// Equality of `MontgomeryPoint`s is defined mod p.
@@ -447,8 +450,8 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_bincode_basepoint_roundtrip() {
+    #[cfg(feature = "edgerun_json_compat")]
+    fn edgerun_json_compat_bincode_basepoint_roundtrip() {
         use bincode;
 
         let encoded = bincode::serialize(&constants::X25519_BASEPOINT).unwrap();

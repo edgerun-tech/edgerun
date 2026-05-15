@@ -177,7 +177,7 @@ async fn build_arc_monitor_request_includes_relevant_history_and_null_policies()
     let request = build_arc_monitor_request(
         &session,
         &turn_context,
-        edgerun_json::from_serde_value(edgerun_json::json!({ "tool": "mcp_tool_call" }))
+        edgerun_json::from_json_value(edgerun_json::json!({ "tool": "mcp_tool_call" }))
             .expect("action should deserialize"),
         "normal",
     )
@@ -242,7 +242,7 @@ async fn build_arc_monitor_request_includes_relevant_history_and_null_policies()
                 user: None,
                 developer: None,
             }),
-            action: edgerun_json::from_serde_value(
+            action: edgerun_json::from_json_value(
                 edgerun_json::json!({ "tool": "mcp_tool_call" })
             )
             .expect("action should deserialize"),

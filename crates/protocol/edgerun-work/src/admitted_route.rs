@@ -1,7 +1,5 @@
 use alloc::vec::Vec;
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::codec::packet_hash;
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
@@ -10,8 +8,7 @@ use crate::signing::{verify_work_admission, verify_work_receipt};
 
 const ADMITTED_CAPABILITY_ROUTE_DOMAIN: &[u8] = b"edgerun:v1:work:admitted-capability-route";
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdmittedCapabilityRoute {
     pub abi_version: u16,
     pub route_id: Hash,

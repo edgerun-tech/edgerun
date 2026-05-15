@@ -10,7 +10,7 @@ rust-version.workspace = true
 
 [features]
 default = ["std"]
-std = ["edgerun-wire/std", "dep:edgerun-protocols", "edgerun-protocols/websocket"]
+std = ["dep:edgerun-protocols", "edgerun-protocols/websocket"]
 wasm-chat = []
 wasm-example = []
 virtual-disk = [
@@ -25,8 +25,6 @@ virtual-disk = [
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "x25519", "aead", "hmac"] }
 edgerun-protocols = { workspace = true, default-features = false, optional = true }
 edgerun-virtual-disk = { workspace = true, default-features = false, features = ["std"], optional = true }
-edgerun-wire = { workspace = true, default-features = false }
-rkyv = { workspace = true, features = ["alloc", "bytecheck"] }
 
 [[example]]
 name = "blake3_1024_wasm"

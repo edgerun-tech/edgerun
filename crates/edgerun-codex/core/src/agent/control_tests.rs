@@ -167,7 +167,7 @@ fn history_contains_assistant_inter_agent_communication(
         }
         content.iter().any(|content_item| match content_item {
             ContentItem::OutputText { text } => {
-                edgerun_json::from_serde_str::<InterAgentCommunication>(text)
+                edgerun_json::from_json_str::<InterAgentCommunication>(text)
                     .ok()
                     .as_ref()
                     == Some(expected)

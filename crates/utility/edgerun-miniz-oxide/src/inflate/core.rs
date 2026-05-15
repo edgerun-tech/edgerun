@@ -9,27 +9,19 @@ use ::core::convert::TryInto;
 
 use self::output_buffer::{InputWrapper, OutputBuffer};
 
-#[cfg(feature = "serde")]
-use crate::serde::big_array::BigArray;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
 pub const TINFL_LZ_DICT_SIZE: usize = 32_768;
 
 /// A struct containing huffman code lengths and the huffman code tree used by the decompressor.
 #[cfg_attr(not(feature = "rustc-dep-of-std"), derive(Clone))]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 struct HuffmanTable {
     /// Fast lookup table for shorter huffman codes.
     ///
     /// See `HuffmanTable::fast_lookup`.
-    #[cfg_attr(feature = "serde", serde(with = "BigArray"))]
     pub look_up: [i16; FAST_LOOKUP_SIZE as usize],
     /// Full huffman tree.
     ///
     /// Positive values are edge nodes/symbols, negative values are
     /// parent nodes/references to other nodes.
-    #[cfg_attr(feature = "serde", serde(with = "BigArray"))]
     pub tree: [i16; MAX_HUFF_TREE_SIZE],
 }
 
@@ -196,7 +188,6 @@ enum HuffmanTableType {
 /// (if you still have access to it), so `num_bits` is the only field that is always required.
 #[derive(Clone)]
 #[cfg(feature = "block-boundary")]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct BlockBoundaryState {
     /// The number of bits from the last byte of input consumed,
     /// that are needed for decoding the next deflate block.
@@ -232,7 +223,6 @@ impl Default for BlockBoundaryState {
 /// Main decompression struct.
 ///
 #[cfg_attr(not(feature = "rustc-dep-of-std"), derive(Clone))]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DecompressorOxide {
     /// Current state of the decompressor.
     state: core::State,
@@ -265,14 +255,12 @@ pub struct DecompressorOxide {
     /// Huffman tables.
     tables: [HuffmanTable; MAX_HUFF_TABLES],
 
-    #[cfg_attr(feature = "serde", serde(with = "BigArray"))]
     code_size_literal: [u8; MAX_HUFF_SYMBOLS_0],
     code_size_dist: [u8; MAX_HUFF_SYMBOLS_1],
     code_size_huffman: [u8; MAX_HUFF_SYMBOLS_2],
     /// Raw block header.
     raw_header: [u8; 4],
     /// Huffman length codes.
-    #[cfg_attr(feature = "serde", serde(with = "BigArray"))]
     // MAX_HUFF_SYMBOLS_0 + MAX_HUFF_SYMBOLS_1 + 137
     // Extended to 512 to allow masking to help evade bounds checks.
     len_codes: [u8; LEN_CODES_SIZE],
@@ -406,7 +394,6 @@ impl Default for DecompressorOxide {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[non_exhaustive]
 enum State {
     Start = 0,

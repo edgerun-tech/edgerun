@@ -636,7 +636,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn directory_uses_acme_camel_case_fields_without_serde() {
+    fn directory_uses_acme_camel_case_fields_without_edgerun_json_compat() {
         let directory: Directory = edgerun_json::from_json_str(
             r#"{
                 "newNonce":"https://example.test/nonce",

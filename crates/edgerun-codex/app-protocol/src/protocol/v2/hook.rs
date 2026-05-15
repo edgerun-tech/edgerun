@@ -74,7 +74,7 @@ v2_enum_from_core!(
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookOutputEntry {
     pub kind: HookOutputEntryKind,
     pub text: String,
@@ -90,7 +90,7 @@ impl From<CoreHookOutputEntry> for HookOutputEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookRunSummary {
     pub id: String,
     pub event_name: HookEventName,
@@ -98,7 +98,7 @@ pub struct HookRunSummary {
     pub execution_mode: HookExecutionMode,
     pub scope: HookScope,
     pub source_path: AbsolutePathBuf,
-    #[serde(default = "default_hook_source")]
+    #[schemars(default = "default_hook_source")]
     pub source: HookSource,
     pub display_order: i64,
     pub status: HookRunStatus,
@@ -131,7 +131,7 @@ impl From<CoreHookRunSummary> for HookRunSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookStartedNotification {
     pub thread_id: String,
     pub turn_id: Option<String>,
@@ -139,7 +139,7 @@ pub struct HookStartedNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookCompletedNotification {
     pub thread_id: String,
     pub turn_id: Option<String>,

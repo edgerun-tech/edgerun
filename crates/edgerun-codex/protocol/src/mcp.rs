@@ -10,8 +10,10 @@ use edgerun_json::Value;
 use schemars::JsonSchema;
 
 /// ID of a request, which can be either a string or an integer.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(untagged)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(untagged)]
 pub enum RequestId {
     String(String),
     Integer(i64),
@@ -28,98 +30,98 @@ impl std::fmt::Display for RequestId {
 
 /// Definition for a tool the client can call.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct Tool {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub input_schema: edgerun_json::Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<edgerun_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<edgerun_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub icons: Option<Vec<edgerun_json::Value>>,
-    #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+    #[schemars(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<edgerun_json::Value>,
 }
 
 /// A known resource that the server is capable of reading.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct Resource {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<edgerun_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     pub uri: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub icons: Option<Vec<edgerun_json::Value>>,
-    #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+    #[schemars(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<edgerun_json::Value>,
 }
 
 /// Contents returned when reading a resource from an MCP server.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(untagged)]
+#[schemars(untagged)]
 pub enum ResourceContent {
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Text {
         /// The URI of this resource.
         uri: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         mime_type: Option<String>,
         text: String,
-        #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+        #[schemars(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
         meta: Option<edgerun_json::Value>,
     },
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Blob {
         /// The URI of this resource.
         uri: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         mime_type: Option<String>,
         blob: String,
-        #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+        #[schemars(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
         meta: Option<edgerun_json::Value>,
     },
 }
 
 /// A template description for resources available on the server.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ResourceTemplate {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<edgerun_json::Value>,
     pub uri_template: String,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
 }
 
 /// The server's response to a tool call.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CallToolResult {
     pub content: Vec<edgerun_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub structured_content: Option<edgerun_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
-    #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+    #[schemars(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<edgerun_json::Value>,
 }
 
@@ -138,7 +140,7 @@ impl ToJson for CallToolResult {
 //
 // These conversions intentionally live in `codex-protocol` so other crates can convert
 // “wire-shaped” MCP JSON into our JSON-schema-friendly protocol types without depending on
-// `mcp-types` or a serde bridge.
+// `mcp-types` or a third-party JSON bridge.
 
 fn lossy_i64(value: edgerun_json::Value) -> Option<i64> {
     let number = edgerun_json::JsonNumber::from_json(value).ok()?;

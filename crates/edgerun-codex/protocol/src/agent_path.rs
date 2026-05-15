@@ -8,7 +8,7 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, JsonSchema)]
-#[serde(try_from = "String", into = "String")]
+#[schemars(try_from = "String", into = "String")]
 #[schemars(with = "String")]
 pub struct AgentPath(String);
 

@@ -1,24 +1,23 @@
 use alloc::vec::Vec;
 
-use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
-use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Ed25519VerifyingKey, Nonce, Tag};
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::chat_index::{
-    MessageObject, chat_payload_hash, finalize_message_object, thread_id_for_participants,
+    chat_payload_hash, finalize_message_object, thread_id_for_participants, MessageObject,
 };
 use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
+use crate::generated_wire::ArchivedSealedMessagePayload;
 use crate::identity::verify_node_identity;
 use crate::preimage::PreimageBuilder;
 use crate::protocol::{
     Hash, NetworkMessage, NodeId, NodeIdentity, PublicKey, WORK_WIRE_ABI_VERSION,
 };
+use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
+use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Ed25519VerifyingKey, Nonce, Tag};
 
 const MESSAGE_SEAL_DOMAIN: &[u8] = b"edgerun:v1:work:message-seal";
 const MESSAGE_SEAL_KDF_INFO: &[u8] = b"edgerun:v1:work:message-seal:key";
 const X25519_KEY_LEN: usize = 32;
-const NONCE_LEN: usize = 12;
-const TAG_LEN: usize = 16;
+pub(crate) const NONCE_LEN: usize = 12;
+pub(crate) const TAG_LEN: usize = 16;
 
 pub type EncryptionPublicKey = [u8; X25519_KEY_LEN];
 pub type EncryptionSecretKey = [u8; X25519_KEY_LEN];
@@ -35,8 +34,7 @@ pub enum MessageSealError {
     PacketTooLarge,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SealedMessagePayload {
     pub abi_version: u16,
     pub from: NodeId,

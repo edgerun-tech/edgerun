@@ -27,13 +27,6 @@
 //!
 //! ### Deprecated features
 //!
-//! #### `serde-serialize`
-//!
-//! **Deprecated:** Use the [`serde-wasm-bindgen`](https://docs.rs/serde-wasm-bindgen/latest/serde_wasm_bindgen/) crate instead.
-//!
-//! Enables the `JsValue::from_serde` and `JsValue::into_serde` methods for
-//! serializing and deserializing Rust types to and from JavaScript.
-//!
 //! #### `spans`
 //!
 //! **Deprecated:** This feature became a no-op in wasm-bindgen v0.2.20 (Sep 7, 2018).
@@ -263,73 +256,6 @@ impl JsValue {
     /// JS object corresponding to the symbol created.
     pub fn symbol(description: Option<&str>) -> JsValue {
         __wbindgen_symbol_new(description)
-    }
-
-    /// Creates a new `JsValue` from the JSON serialization of the object `t`
-    /// provided.
-    ///
-    /// **This function is deprecated**, due to [creating a dependency cycle in
-    /// some circumstances][dep-cycle-issue]. Use [`serde-wasm-bindgen`] or
-    /// [`gloo_utils::format::JsValueSerdeExt`] instead.
-    ///
-    /// [dep-cycle-issue]: https://github.com/wasm-bindgen/wasm-bindgen/issues/2770
-    /// [`serde-wasm-bindgen`]: https://docs.rs/serde-wasm-bindgen
-    /// [`gloo_utils::format::JsValueSerdeExt`]: https://docs.rs/gloo-utils/latest/gloo_utils/format/trait.JsValueSerdeExt.html
-    ///
-    /// This function will serialize the provided value `t` to a JSON string,
-    /// send the JSON string to JS, parse it into a JS object, and then return
-    /// a handle to the JS object. This is unlikely to be super speedy so it's
-    /// not recommended for large payloads, but it's a nice to have in some
-    /// situations!
-    ///
-    /// Usage of this API requires activating the `serde-serialize` feature of
-    /// the `wasm-bindgen` crate.
-    ///
-    /// # Errors
-    ///
-    /// Returns any error encountered when serializing `T` into JSON.
-    #[cfg(feature = "serde-serialize")]
-    #[deprecated = "causes dependency cycles, use `serde-wasm-bindgen` or `gloo_utils::format::JsValueSerdeExt` instead"]
-    pub fn from_serde<T>(t: &T) -> edgerun_json::Result<JsValue>
-    where
-        T: serde::ser::Serialize + ?Sized,
-    {
-        let s = edgerun_json::to_string(t)?;
-        Ok(__wbindgen_json_parse(s))
-    }
-
-    /// Invokes `JSON.stringify` on this value and then parses the resulting
-    /// JSON into an arbitrary Rust value.
-    ///
-    /// **This function is deprecated**, due to [creating a dependency cycle in
-    /// some circumstances][dep-cycle-issue]. Use [`serde-wasm-bindgen`] or
-    /// [`gloo_utils::format::JsValueSerdeExt`] instead.
-    ///
-    /// [dep-cycle-issue]: https://github.com/wasm-bindgen/wasm-bindgen/issues/2770
-    /// [`serde-wasm-bindgen`]: https://docs.rs/serde-wasm-bindgen
-    /// [`gloo_utils::format::JsValueSerdeExt`]: https://docs.rs/gloo-utils/latest/gloo_utils/format/trait.JsValueSerdeExt.html
-    ///
-    /// This function will first call `JSON.stringify` on the `JsValue` itself.
-    /// The resulting string is then passed into Rust which then parses it as
-    /// JSON into the resulting value.
-    ///
-    /// Usage of this API requires activating the `serde-serialize` feature of
-    /// the `wasm-bindgen` crate.
-    ///
-    /// # Errors
-    ///
-    /// Returns any error encountered when parsing the JSON into a `T`.
-    #[cfg(feature = "serde-serialize")]
-    #[deprecated = "causes dependency cycles, use `serde-wasm-bindgen` or `gloo_utils::format::JsValueSerdeExt` instead"]
-    pub fn into_serde<T>(&self) -> edgerun_json::Result<T>
-    where
-        T: for<'a> serde::de::Deserialize<'a>,
-    {
-        let s = __wbindgen_json_serialize(self);
-        // Turns out `JSON.stringify(undefined) === undefined`, so if
-        // we're passed `undefined` reinterpret it as `null` for JSON
-        // purposes.
-        edgerun_json::from_serde_str(s.as_deref().unwrap_or("null"))
     }
 
     /// Returns the `f64` value of this JS value if it's an instance of a

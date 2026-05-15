@@ -908,7 +908,7 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
         .get("output")
         .cloned()
         .expect("dynamic tool output should be present");
-    let payload: FunctionCallOutputPayload = edgerun_json::from_serde_value(output)?;
+    let payload: FunctionCallOutputPayload = edgerun_json::from_json_value(output)?;
     assert_eq!(
         payload,
         FunctionCallOutputPayload::from_text("dynamic-search-ok".to_string())

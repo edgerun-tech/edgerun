@@ -1,9 +1,9 @@
-use super::app_registry::app_id_for_kind;
+use super::app_registry::{SHELL_LAUNCHER_BUTTON_ID, app_id_for_kind};
 #[cfg(any(feature = "fontdue-text", test))]
 use super::{
-    EDGERUN_APP_REGISTRY, SHELL_LAUNCHER_BUTTON_ID, UiPainter, UiRect, UiShadcnBadgeVariant,
-    UiShadcnButtonSize, UiShadcnButtonVariant, card, row, shadcn_badge, shadcn_button,
-    shadcn_command, shadcn_item, text,
+    EDGERUN_APP_REGISTRY, UiPainter, UiRect, UiShadcnBadgeVariant, UiShadcnButtonSize,
+    UiShadcnButtonVariant, card, row, shadcn_badge, shadcn_button, shadcn_command, shadcn_item,
+    text,
 };
 use super::{
     GpuHit, GpuScene, HitKind, UiAction, UiAppKind, UiComponentPreviewState, UiEvent,

@@ -24,6 +24,11 @@ use crate::protocol::WebSearchEndEvent;
 use crate::user_input::ByteRange;
 use crate::user_input::TextElement;
 use crate::user_input::UserInput;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value as JsonValue;
 use schemars::JsonSchema;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -31,7 +36,7 @@ use std::time::Duration;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type")]
+#[schemars(tag = "type")]
 pub enum TurnItem {
     UserMessage(UserMessageItem),
     HookPrompt(HookPromptItem),
@@ -59,14 +64,14 @@ pub struct HookPromptItem {
 }
 
 #[derive(Debug, Clone, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookPromptFragment {
     pub text: String,
     pub hook_run_id: String,
 }
 
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type")]
+#[schemars(tag = "type")]
 pub enum AgentMessageContent {
     Text { text: String },
 }
@@ -84,9 +89,9 @@ pub struct AgentMessageItem {
     ///
     /// This is currently used by TUI rendering to distinguish mid-turn
     /// commentary from a final answer and avoid status-indicator jitter.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<MessagePhase>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub memory_citation: Option<MemoryCitation>,
 }
 
@@ -100,7 +105,7 @@ pub struct PlanItem {
 pub struct ReasoningItem {
     pub id: String,
     pub summary_text: Vec<String>,
-    #[serde(default)]
+    #[schemars(default)]
     pub raw_content: Vec<String>,
 }
 
@@ -121,47 +126,86 @@ pub struct ImageViewItem {
 pub struct ImageGenerationItem {
     pub id: String,
     pub status: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub revised_prompt: Option<String>,
     pub result: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub saved_path: Option<AbsolutePathBuf>,
 }
 
-#[derive(Debug, Clone, JsonSchema, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, JsonSchema, PartialEq)]
 pub struct FileChangeItem {
     pub id: String,
     pub changes: HashMap<PathBuf, FileChange>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<PatchApplyStatus>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub auto_approved: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub stdout: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub stderr: Option<String>,
 }
 
+impl ToJson for FileChangeItem {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        object.push_field("id", self.id.clone());
+        let mut changes = Map::new();
+        for (path, change) in &self.changes {
+            changes.push_field(path.to_string_lossy().to_string(), change.to_json());
+        }
+        object.push_field("changes", JsonValue::Object(changes));
+        object.push_opt_field("status", self.status.as_ref().map(ToJson::to_json));
+        object.push_opt_field("auto_approved", self.auto_approved);
+        object.push_opt_field("stdout", self.stdout.clone());
+        object.push_opt_field("stderr", self.stderr.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for FileChangeItem {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileChangeItem")?;
+        let changes_value: JsonValue = object.take_required("changes")?;
+        let changes_value = changes_value.into_object("changes")?;
+        let mut changes = HashMap::new();
+        for (path, change) in changes_value.into_vec() {
+            changes.insert(PathBuf::from(path), FileChange::from_json(change)?);
+        }
+        Ok(Self {
+            id: object.take_required("id")?,
+            changes,
+            status: object.take_optional("status")?,
+            auto_approved: object.take_optional("auto_approved")?,
+            stdout: object.take_optional("stdout")?,
+            stderr: object.take_optional("stderr")?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, JsonSchema, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct McpToolCallItem {
     pub id: String,
     pub server: String,
     pub tool: String,
     pub arguments: edgerun_json::Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub mcp_app_resource_uri: Option<String>,
     pub status: McpToolCallStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<CallToolResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<McpToolCallError>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<Duration>,
 }
 
-#[derive(Debug, Clone, Copy, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, Copy, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub enum McpToolCallStatus {
     InProgress,
     Completed,
@@ -169,7 +213,7 @@ pub enum McpToolCallStatus {
 }
 
 #[derive(Debug, Clone, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct McpToolCallError {
     pub message: String,
 }

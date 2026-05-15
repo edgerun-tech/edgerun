@@ -93,7 +93,6 @@ impl<'v> ToValue for Value<'v> {
 /// - **Integers:** `u8`-`u128`, `i8`-`i128`, `NonZero*`.
 /// - **Floating point numbers:** `f32`-`f64`.
 /// - **Errors:** `dyn (Error + 'static)`.
-/// - **`serde`:** Any type in `serde`'s data model.
 /// - **`sval`:** Any type in `sval`'s data model.
 ///
 /// # Serialization
@@ -106,15 +105,13 @@ impl<'v> ToValue for Value<'v> {
 ///
 /// For more complex types one of the following traits can be used:
 ///  * `sval::Value`, requires the `kv_sval` feature.
-///  * `serde::Serialize`, requires the `kv_serde` feature.
 ///
-/// You don't need a visitor to serialize values through `serde` or `sval`.
+/// You don't need a visitor to serialize values through `sval`.
 ///
 /// A value can always be serialized using any supported framework, regardless
 /// of how it was captured. If, for example, a value was captured using its
-/// `Display` implementation, it will serialize through `serde` as a string. If it was
-/// captured as a struct using `serde`, it will also serialize as a struct
-/// through `sval`, or can be formatted using a `Debug`-compatible representation.
+/// `Display` implementation, it can be formatted using a `Debug`-compatible
+/// representation.
 #[derive(Clone)]
 pub struct Value<'v> {
     inner: inner::Inner<'v>,
@@ -146,17 +143,6 @@ impl<'v> Value<'v> {
     {
         Value {
             inner: inner::Inner::from_display(value),
-        }
-    }
-
-    /// Get a value from a type implementing `serde::Serialize`.
-    #[cfg(any())]
-    pub fn from_serde<T>(value: &'v T) -> Self
-    where
-        T: serde_core::Serialize,
-    {
-        Value {
-            inner: inner::Inner::from_serde1(value),
         }
     }
 
@@ -212,8 +198,8 @@ impl<'v> Value<'v> {
 
     /// Inspect this value using a simple visitor.
     ///
-    /// When the `kv_serde` or `kv_sval` features are enabled, you can also
-    /// serialize a value using its `Serialize` or `Value` implementation.
+    /// When the `kv_sval` feature is enabled, you can also serialize a value
+    /// using its `Value` implementation.
     pub fn visit(&self, visitor: impl VisitValue<'v>) -> Result<(), Error> {
         inner::visit(&self.inner, visitor)
     }
@@ -228,16 +214,6 @@ impl<'v> fmt::Debug for Value<'v> {
 impl<'v> fmt::Display for Value<'v> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.inner, f)
-    }
-}
-
-#[cfg(any())]
-impl<'v> serde_core::Serialize for Value<'v> {
-    fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde_core::Serializer,
-    {
-        self.inner.serialize(s)
     }
 }
 
@@ -450,13 +426,13 @@ mod std_support {
 /// A visitor for a [`Value`].
 ///
 /// Also see [`Value`'s documentation on serialization]. Value visitors are a simple alternative
-/// to a more fully-featured serialization framework like `serde` or `sval`. A value visitor
+/// to a more fully-featured serialization framework like `sval`. A value visitor
 /// can differentiate primitive types through methods like [`VisitValue::visit_bool`] and
 /// [`VisitValue::visit_str`], but more complex types like maps and sequences
 /// will fallthrough to [`VisitValue::visit_any`].
 ///
-/// If you're trying to serialize a value to a format like JSON, you can use either `serde`
-/// or `sval` directly with the value. You don't need a visitor.
+/// If you're trying to serialize a value to a format like JSON, use the EdgeRun
+/// JSON traits directly.
 ///
 /// [`Value`'s documentation on serialization]: Value#serialization
 pub trait VisitValue<'v> {
@@ -465,7 +441,7 @@ pub trait VisitValue<'v> {
     /// This is the only required method on `VisitValue` and acts as a fallback for any
     /// more specific methods that aren't overridden.
     /// The `Value` may be formatted using its `fmt::Debug` or `fmt::Display` implementation,
-    /// or serialized using its `sval::Value` or `serde::Serialize` implementation.
+    /// or serialized using its `sval::Value` implementation.
     fn visit_any(&mut self, value: Value) -> Result<(), Error>;
 
     /// Visit an empty value.
@@ -1079,16 +1055,6 @@ impl<'v> Value<'v> {
         Value::from_dyn_error(err)
     }
 
-    /// Get a value from a type implementing `serde::Serialize`.
-    #[cfg(feature = "kv_unstable_serde")]
-    #[deprecated(note = "use `from_serde` instead")]
-    pub fn capture_serde<T>(value: &'v T) -> Self
-    where
-        T: serde_core::Serialize + 'static,
-    {
-        Value::from_serde(value)
-    }
-
     /// Get a value from a type implementing `sval::Value`.
     #[cfg(any())]
     #[deprecated(note = "use `from_sval` instead")]
@@ -1149,16 +1115,6 @@ macro_rules! as_display {
 macro_rules! as_error {
     ($capture:expr) => {
         $crate::kv::Value::from_dyn_error(&$capture)
-    };
-}
-
-#[cfg(feature = "kv_unstable_serde")]
-#[deprecated(note = "use the `key:serde = value` macro syntax instead")]
-/// Get a value from a type implementing `serde::Serialize`.
-#[macro_export]
-macro_rules! as_serde {
-    ($capture:expr) => {
-        $crate::kv::Value::from_serde(&$capture)
     };
 }
 

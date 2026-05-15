@@ -19,8 +19,8 @@ use core::{
     ops::{Mul, Neg},
 };
 
-#[cfg(feature = "primeorder_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
+#[cfg(feature = "primeorder_edgerun_json_compat")]
+use edgerun_json_compatct::edgerun_json_compat::{Deserialize, Serialize, de, ser};
 
 /// Point on a Weierstrass curve in affine coordinates.
 #[derive(Clone, Copy, Debug)]
@@ -449,10 +449,10 @@ where
 }
 
 //
-// serde support
+// edgerun_json_compat support
 //
 
-#[cfg(feature = "primeorder_serde")]
+#[cfg(feature = "primeorder_edgerun_json_compat")]
 impl<C> Serialize for AffinePoint<C>
 where
     C: PrimeCurveParams,
@@ -468,7 +468,7 @@ where
     }
 }
 
-#[cfg(feature = "primeorder_serde")]
+#[cfg(feature = "primeorder_edgerun_json_compat")]
 impl<'de, C> Deserialize<'de> for AffinePoint<C>
 where
     C: PrimeCurveParams,

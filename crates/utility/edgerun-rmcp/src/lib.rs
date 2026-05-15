@@ -273,11 +273,10 @@ pub mod model {
     impl FromJson for PrimitiveSchema {
         fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
             let mut object = value.into_object("PrimitiveSchema")?;
-            let kind = String::from_json(
-                object
-                    .remove("type")
-                    .ok_or_else(|| JsonValueError::WrongType("missing schema type".to_string()))?,
-            )?;
+            let kind =
+                String::from_json(object.remove("type").ok_or_else(|| {
+                    JsonValueError::WrongType("missing schema type".to_string())
+                })?)?;
             let value = JsonValue::Object(object);
             match kind.as_str() {
                 "string" => StringSchema::from_json(value).map(Self::String),

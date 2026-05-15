@@ -203,8 +203,8 @@ struct SpawnAgentArgs {
     agent_type: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
-    #[serde(default)]
-    #[json(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     fork_context: bool,
 }
 

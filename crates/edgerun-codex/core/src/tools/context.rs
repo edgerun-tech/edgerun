@@ -216,11 +216,7 @@ impl ToolOutput for ToolSearchOutput {
         let tools = self
             .tools
             .iter()
-            .map(|tool| {
-                edgerun_json::to_serde_value(tool).unwrap_or_else(|err| {
-                    JsonValue::String(format!("failed to serialize tool_search output: {err}"))
-                })
-            })
+            .map(edgerun_json::to_value)
             .collect();
         telemetry_preview(&JsonValue::Array(tools).to_string())
     }
@@ -237,11 +233,7 @@ impl ToolOutput for ToolSearchOutput {
             tools: self
                 .tools
                 .iter()
-                .map(|tool| {
-                    edgerun_json::to_serde_value(tool).unwrap_or_else(|err| {
-                        JsonValue::String(format!("failed to serialize tool_search output: {err}"))
-                    })
-                })
+                .map(edgerun_json::to_value)
                 .collect(),
         }
     }

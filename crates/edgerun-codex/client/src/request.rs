@@ -103,8 +103,10 @@ impl Request {
                                 .to_string(),
                         );
                     }
-                    return Err("zstd request compression is disabled until an owned codec exists"
-                        .to_string());
+                    return Err(
+                        "zstd request compression is disabled until an owned codec exists"
+                            .to_string(),
+                    );
                 } else {
                     json
                 };

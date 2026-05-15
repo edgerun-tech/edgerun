@@ -2785,7 +2785,7 @@ mod tests {
                     CollabAgentState {
                         status: crate::protocol::v2::CollabAgentStatus::Completed,
                         message: None,
-                    },
+                    }
                 )]
                 .into_iter()
                 .collect(),
@@ -2843,7 +2843,7 @@ mod tests {
                     CollabAgentState {
                         status: crate::protocol::v2::CollabAgentStatus::Running,
                         message: None,
-                    },
+                    }
                 )]
                 .into_iter()
                 .collect(),
@@ -2913,7 +2913,7 @@ mod tests {
                     CollabAgentState {
                         status: crate::protocol::v2::CollabAgentStatus::Interrupted,
                         message: None,
-                    },
+                    }
                 )]
                 .into_iter()
                 .collect(),

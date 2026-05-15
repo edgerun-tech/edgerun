@@ -18,17 +18,17 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum ConfigLayerSource {
     /// Managed preferences layer delivered by MDM (macOS only).
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Mdm {
         domain: String,
         key: String,
     },
 
     /// Managed config layer from a file (usually `managed_config.toml`).
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     System {
         /// This is the path to the system config.toml file, though it is not
         /// guaranteed to exist.
@@ -39,7 +39,7 @@ pub enum ConfigLayerSource {
     /// in that it is expected to be:
     /// - writable by the user
     /// - generally outside the workspace directory
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     User {
         /// This is the path to the user's config.toml file, though it is not
         /// guaranteed to exist.
@@ -48,7 +48,7 @@ pub enum ConfigLayerSource {
 
     /// Path to a .codex/ folder within a project. There could be multiple of
     /// these between `cwd` and the project/repo root.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Project {
         dot_codex_folder: AbsolutePathBuf,
     },
@@ -60,7 +60,7 @@ pub enum ConfigLayerSource {
     /// as the last layer on top of everything else. This scheme did not quite
     /// work out as intended, but we keep this variant as a "best effort" while
     /// we phase out `managed_config.toml` in favor of `requirements.toml`.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     LegacyManagedConfigTomlFromFile {
         file: AbsolutePathBuf,
     },
@@ -93,14 +93,14 @@ impl PartialOrd for ConfigLayerSource {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct ToolsV2 {
     pub web_search: Option<WebSearchToolConfig>,
     pub view_image: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct ProfileV2 {
     pub model: Option<String>,
     pub model_provider: Option<String>,
@@ -115,7 +115,7 @@ pub struct ProfileV2 {
     pub web_search: Option<WebSearchMode>,
     pub tools: Option<ToolsV2>,
     pub chatgpt_base_url: Option<String>,
-    #[serde(default, flatten)]
+    #[schemars(default, flatten)]
     pub additional: HashMap<String, JsonValue>,
 }
 
@@ -128,15 +128,17 @@ impl crate::experimental_api::ExperimentalApi for ProfileV2 {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct AnalyticsConfig {
     pub enabled: Option<bool>,
-    #[serde(default, flatten)]
+    #[schemars(default, flatten)]
     pub additional: HashMap<String, JsonValue>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum AppToolApproval {
     Auto,
     Prompt,
@@ -144,34 +146,34 @@ pub enum AppToolApproval {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct AppsDefaultConfig {
-    #[serde(default = "default_enabled")]
+    #[schemars(default = "default_enabled")]
     pub enabled: bool,
-    #[serde(default = "default_enabled")]
+    #[schemars(default = "default_enabled")]
     pub destructive_enabled: bool,
-    #[serde(default = "default_enabled")]
+    #[schemars(default = "default_enabled")]
     pub open_world_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct AppToolConfig {
     pub enabled: Option<bool>,
     pub approval_mode: Option<AppToolApproval>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct AppToolsConfig {
-    #[serde(default, flatten)]
+    #[schemars(default, flatten)]
     pub tools: HashMap<String, AppToolConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct AppConfig {
-    #[serde(default = "default_enabled")]
+    #[schemars(default = "default_enabled")]
     pub enabled: bool,
     pub destructive_enabled: Option<bool>,
     pub open_world_enabled: Option<bool>,
@@ -181,16 +183,16 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct AppsConfig {
-    #[serde(default, rename = "_default")]
+    #[schemars(default, rename = "_default")]
     pub default: Option<AppsDefaultConfig>,
-    #[serde(default, flatten)]
+    #[schemars(default, flatten)]
     pub apps: HashMap<String, AppConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct Config {
     pub model: Option<String>,
     pub review_model: Option<String>,
@@ -205,7 +207,7 @@ pub struct Config {
     pub web_search: Option<WebSearchMode>,
     pub tools: Option<ToolsV2>,
     pub profile: Option<String>,
-    #[serde(default)]
+    #[schemars(default)]
     pub profiles: HashMap<String, ProfileV2>,
     pub instructions: Option<String>,
     pub developer_instructions: Option<String>,
@@ -215,9 +217,9 @@ pub struct Config {
     pub model_verbosity: Option<Verbosity>,
     pub service_tier: Option<String>,
     pub analytics: Option<AnalyticsConfig>,
-    #[serde(default)]
+    #[schemars(default)]
     pub apps: Option<AppsConfig>,
-    #[serde(default, flatten)]
+    #[schemars(default, flatten)]
     pub additional: HashMap<String, JsonValue>,
 }
 
@@ -233,38 +235,38 @@ impl crate::experimental_api::ExperimentalApi for Config {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigLayerMetadata {
     pub name: ConfigLayerSource,
     pub version: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigLayer {
     pub name: ConfigLayerSource,
     pub version: String,
     pub config: JsonValue,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum MergeStrategy {
     Replace,
     Upsert,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum WriteStatus {
     Ok,
     OkOverridden,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct OverriddenMetadata {
     pub message: String,
     pub overriding_layer: ConfigLayerMetadata,
@@ -272,7 +274,7 @@ pub struct OverriddenMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigWriteResponse {
     pub status: WriteStatus,
     pub version: String,
@@ -282,7 +284,7 @@ pub struct ConfigWriteResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ConfigWriteErrorCode {
     ConfigLayerReadonly,
     ConfigVersionConflict,
@@ -293,9 +295,9 @@ pub enum ConfigWriteErrorCode {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigReadParams {
-    #[serde(default)]
+    #[schemars(default)]
     pub include_layers: bool,
     /// Optional working directory to resolve project config layers. If specified,
     /// return the effective config as seen from that directory (i.e., including any
@@ -304,16 +306,16 @@ pub struct ConfigReadParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigReadResponse {
     pub config: Config,
     pub origins: HashMap<String, ConfigLayerMetadata>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub layers: Option<Vec<ConfigLayer>>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigRequirements {
     pub allowed_approvals_reviewers: Option<Vec<ApprovalsReviewer>>,
     pub allowed_web_search_modes: Option<Vec<WebSearchMode>>,
@@ -324,53 +326,52 @@ pub struct ConfigRequirements {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ManagedHooksRequirements {
     pub managed_dir: Option<PathBuf>,
-    pub windows_managed_dir: Option<PathBuf>,
-    #[serde(rename = "PreToolUse")]
+    #[schemars(rename = "PreToolUse")]
     pub pre_tool_use: Vec<ConfiguredHookMatcherGroup>,
-    #[serde(rename = "PostToolUse")]
+    #[schemars(rename = "PostToolUse")]
     pub post_tool_use: Vec<ConfiguredHookMatcherGroup>,
-    #[serde(rename = "PreCompact")]
+    #[schemars(rename = "PreCompact")]
     pub pre_compact: Vec<ConfiguredHookMatcherGroup>,
-    #[serde(rename = "PostCompact")]
+    #[schemars(rename = "PostCompact")]
     pub post_compact: Vec<ConfiguredHookMatcherGroup>,
-    #[serde(rename = "SessionStart")]
+    #[schemars(rename = "SessionStart")]
     pub session_start: Vec<ConfiguredHookMatcherGroup>,
-    #[serde(rename = "UserPromptSubmit")]
+    #[schemars(rename = "UserPromptSubmit")]
     pub user_prompt_submit: Vec<ConfiguredHookMatcherGroup>,
-    #[serde(rename = "Stop")]
+    #[schemars(rename = "Stop")]
     pub stop: Vec<ConfiguredHookMatcherGroup>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfiguredHookMatcherGroup {
     pub matcher: Option<String>,
     pub hooks: Vec<ConfiguredHookHandler>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type")]
+#[schemars(tag = "type")]
 pub enum ConfiguredHookHandler {
-    #[serde(rename = "command")]
+    #[schemars(rename = "command")]
     Command {
         command: String,
-        #[serde(rename = "timeoutSec")]
+        #[schemars(rename = "timeoutSec")]
         timeout_sec: Option<u64>,
         r#async: bool,
-        #[serde(rename = "statusMessage")]
+        #[schemars(rename = "statusMessage")]
         status_message: Option<String>,
     },
-    #[serde(rename = "prompt")]
+    #[schemars(rename = "prompt")]
     Prompt {},
-    #[serde(rename = "agent")]
+    #[schemars(rename = "agent")]
     Agent {},
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct NetworkRequirements {
     pub enabled: Option<bool>,
     pub http_port: Option<u16>,
@@ -447,7 +448,7 @@ impl FromJson for NetworkRequirements {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 pub enum NetworkDomainPermission {
     Allow,
     Deny,
@@ -475,7 +476,7 @@ impl FromJson for NetworkDomainPermission {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 pub enum NetworkUnixSocketPermission {
     Allow,
     None,
@@ -503,13 +504,13 @@ impl FromJson for NetworkUnixSocketPermission {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ResidencyRequirement {
     Us,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigRequirementsReadResponse {
     /// Null if no requirements are configured (e.g. no requirements.toml/MDM entries).
     pub requirements: Option<ConfigRequirements>,
@@ -517,23 +518,23 @@ pub struct ConfigRequirementsReadResponse {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, edgerun_json::ToJson)]
 pub enum ExternalAgentConfigMigrationItemType {
-    #[serde(rename = "AGENTS_MD")]
+    #[schemars(rename = "AGENTS_MD")]
     AgentsMd,
-    #[serde(rename = "CONFIG")]
+    #[schemars(rename = "CONFIG")]
     Config,
-    #[serde(rename = "SKILLS")]
+    #[schemars(rename = "SKILLS")]
     Skills,
-    #[serde(rename = "PLUGINS")]
+    #[schemars(rename = "PLUGINS")]
     Plugins,
-    #[serde(rename = "MCP_SERVER_CONFIG")]
+    #[schemars(rename = "MCP_SERVER_CONFIG")]
     McpServerConfig,
-    #[serde(rename = "SUBAGENTS")]
+    #[schemars(rename = "SUBAGENTS")]
     Subagents,
-    #[serde(rename = "HOOKS")]
+    #[schemars(rename = "HOOKS")]
     Hooks,
-    #[serde(rename = "COMMANDS")]
+    #[schemars(rename = "COMMANDS")]
     Commands,
-    #[serde(rename = "SESSIONS")]
+    #[schemars(rename = "SESSIONS")]
     Sessions,
 }
 
@@ -557,11 +558,11 @@ impl FromJson for ExternalAgentConfigMigrationItemType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginsMigration {
-    #[serde(rename = "marketplaceName")]
+    #[schemars(rename = "marketplaceName")]
     pub marketplace_name: String,
-    #[serde(rename = "pluginNames")]
+    #[schemars(rename = "pluginNames")]
     pub plugin_names: Vec<String>,
 }
 
@@ -576,7 +577,7 @@ impl FromJson for PluginsMigration {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SessionMigration {
     pub path: PathBuf,
     pub cwd: PathBuf,
@@ -595,7 +596,7 @@ impl FromJson for SessionMigration {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct McpServerMigration {
     pub name: String,
 }
@@ -610,7 +611,7 @@ impl FromJson for McpServerMigration {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookMigration {
     pub name: String,
 }
@@ -625,7 +626,7 @@ impl FromJson for HookMigration {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SubagentMigration {
     pub name: String,
 }
@@ -640,7 +641,7 @@ impl FromJson for SubagentMigration {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandMigration {
     pub name: String,
 }
@@ -655,19 +656,19 @@ impl FromJson for CommandMigration {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MigrationDetails {
-    #[serde(default)]
+    #[schemars(default)]
     pub plugins: Vec<PluginsMigration>,
-    #[serde(default)]
+    #[schemars(default)]
     pub sessions: Vec<SessionMigration>,
-    #[serde(default)]
+    #[schemars(default)]
     pub mcp_servers: Vec<McpServerMigration>,
-    #[serde(default)]
+    #[schemars(default)]
     pub hooks: Vec<HookMigration>,
-    #[serde(default)]
+    #[schemars(default)]
     pub subagents: Vec<SubagentMigration>,
-    #[serde(default)]
+    #[schemars(default)]
     pub commands: Vec<CommandMigration>,
 }
 
@@ -686,7 +687,7 @@ impl FromJson for MigrationDetails {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExternalAgentConfigMigrationItem {
     pub item_type: ExternalAgentConfigMigrationItemType,
     pub description: String,
@@ -711,23 +712,23 @@ impl FromJson for ExternalAgentConfigMigrationItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExternalAgentConfigDetectResponse {
     pub items: Vec<ExternalAgentConfigMigrationItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExternalAgentConfigDetectParams {
     /// If true, include detection under the user's home (~/.claude, ~/.codex, etc.).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub include_home: bool,
     /// Zero or more working directories to include for repo-scoped detection.
     pub cwds: Option<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExternalAgentConfigImportParams {
     pub migration_items: Vec<ExternalAgentConfigMigrationItem>,
 }
@@ -746,15 +747,15 @@ fn json_path_buf(value: String) -> PathBuf {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExternalAgentConfigImportResponse {}
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExternalAgentConfigImportCompletedNotification {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigValueWriteParams {
     pub key_path: String,
     pub value: JsonValue,
@@ -765,19 +766,19 @@ pub struct ConfigValueWriteParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigBatchWriteParams {
     pub edits: Vec<ConfigEdit>,
     /// Path to the config file to write; defaults to the user's `config.toml` when omitted.
     pub file_path: Option<String>,
     pub expected_version: Option<String>,
     /// When true, hot-reload the updated user config into all loaded threads after writing.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub reload_user_config: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigEdit {
     pub key_path: String,
     pub value: JsonValue,
@@ -785,7 +786,7 @@ pub struct ConfigEdit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TextPosition {
     /// 1-based line number.
     pub line: usize,
@@ -794,23 +795,23 @@ pub struct TextPosition {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TextRange {
     pub start: TextPosition,
     pub end: TextPosition,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ConfigWarningNotification {
     /// Concise summary of the warning.
     pub summary: String,
     /// Optional extra guidance or error details.
     pub details: Option<String>,
     /// Optional path to the config file that triggered the warning.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     /// Optional range for the error location inside the config file.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub range: Option<TextRange>,
 }

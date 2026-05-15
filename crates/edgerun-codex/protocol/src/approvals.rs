@@ -19,7 +19,7 @@ use std::path::PathBuf;
 /// `prefix_rule(..., decision="allow")`, letting the agent bypass approval for
 /// commands that start with this token sequence.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(transparent)]
+#[schemars(transparent)]
 pub struct ExecPolicyAmendment {
     pub command: Vec<String>,
 }
@@ -41,12 +41,12 @@ impl From<Vec<String>> for ExecPolicyAmendment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum NetworkApprovalProtocol {
     // TODO(viyatb): Add websocket protocol variants when managed proxy policy
     // decisions expose websocket traffic as a distinct approval context.
     Http,
-    #[serde(alias = "https_connect", alias = "http-connect")]
+    #[schemars(alias = "https_connect", alias = "http-connect")]
     Https,
     Socks5Tcp,
     Socks5Udp,
@@ -84,16 +84,18 @@ pub struct NetworkApprovalContext {
     pub protocol: NetworkApprovalProtocol,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum NetworkPolicyRuleAction {
     Allow,
     Deny,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
-#[json(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 pub enum GuardianRiskLevel {
     Low,
     Medium,
@@ -102,8 +104,8 @@ pub enum GuardianRiskLevel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
-#[json(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 pub enum GuardianUserAuthorization {
     Unknown,
     Low,
@@ -113,15 +115,17 @@ pub enum GuardianUserAuthorization {
 
 /// Final allow/deny outcome returned by the guardian reviewer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
-#[json(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 pub enum GuardianAssessmentOutcome {
     Allow,
     Deny,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum GuardianAssessmentStatus {
     InProgress,
     Approved,
@@ -130,14 +134,16 @@ pub enum GuardianAssessmentStatus {
     Aborted,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum GuardianAssessmentDecisionSource {
     Agent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum GuardianCommandSource {
     Shell,
     UnifiedExec,
@@ -166,7 +172,7 @@ impl FromJson for GuardianCommandSource {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum GuardianAssessmentAction {
     Command {
         source: GuardianCommandSource,
@@ -317,28 +323,28 @@ pub struct GuardianAssessmentEvent {
     /// Stable identifier for this guardian review lifecycle.
     pub id: String,
     /// Thread item being reviewed, when the review maps to a concrete item.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub target_item_id: Option<String>,
     /// Turn ID that this assessment belongs to.
-    /// Uses `#[serde(default)]` for backwards compatibility.
-    #[serde(default)]
+    /// Uses `#[schemars(default)]` for backwards compatibility.
+    #[schemars(default)]
     pub turn_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub completed_at_ms: Option<i64>,
     pub status: GuardianAssessmentStatus,
     /// Coarse risk label. Omitted while the assessment is in progress.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub risk_level: Option<GuardianRiskLevel>,
     /// How directly the transcript authorizes the reviewed action.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub user_authorization: Option<GuardianUserAuthorization>,
     /// Human-readable explanation of the final assessment. Omitted while in progress.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub rationale: Option<String>,
     /// Source that produced the terminal assessment decision.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub decision_source: Option<GuardianAssessmentDecisionSource>,
     /// Canonical action payload that was reviewed.
     pub action: GuardianAssessmentAction,
@@ -352,11 +358,11 @@ pub struct ExecApprovalRequestEvent {
     ///
     /// When absent, the approval is for the command item itself (`call_id`).
     /// This is present for subcommand approvals (via execve intercept).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub approval_id: Option<String>,
     /// Turn ID that this command belongs to.
-    /// Uses `#[serde(default)]` for backwards compatibility.
-    #[serde(default)]
+    /// Uses `#[schemars(default)]` for backwards compatibility.
+    #[schemars(default)]
     pub turn_id: String,
     pub started_at_ms: i64,
     /// The command to be executed.
@@ -364,22 +370,22 @@ pub struct ExecApprovalRequestEvent {
     /// The command's working directory.
     pub cwd: AbsolutePathBuf,
     /// Optional human-readable reason for the approval (e.g. retry without sandbox).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     /// Optional network context for a blocked request that can be approved.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub network_approval_context: Option<NetworkApprovalContext>,
     /// Proposed execpolicy amendment that can be applied to allow future runs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub proposed_execpolicy_amendment: Option<ExecPolicyAmendment>,
     /// Proposed network policy amendments (for example allow/deny this host in future).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub proposed_network_policy_amendments: Option<Vec<NetworkPolicyAmendment>>,
     /// Ordered list of decisions the client may present for this prompt.
     ///
     /// When absent, clients should derive the legacy default set from the
     /// other fields on this request.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub available_decisions: Option<Vec<ReviewDecision>>,
     pub parsed_cmd: Vec<ParsedCommand>,
 }
@@ -436,16 +442,16 @@ impl ExecApprovalRequestEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "mode", rename_all = "snake_case")]
+#[schemars(tag = "mode", rename_all = "snake_case")]
 pub enum ElicitationRequest {
     Form {
-        #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+        #[schemars(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
         meta: Option<JsonValue>,
         message: String,
         requested_schema: JsonValue,
     },
     Url {
-        #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+        #[schemars(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
         meta: Option<JsonValue>,
         message: String,
         url: String,
@@ -464,37 +470,83 @@ impl ElicitationRequest {
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ElicitationRequestEvent {
     /// Turn ID that this elicitation belongs to, when known.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
     pub server_name: String,
     pub id: RequestId,
     pub request: ElicitationRequest,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub enum ElicitationAction {
     Accept,
     Decline,
     Cancel,
 }
 
-#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, JsonSchema)]
 pub struct ApplyPatchApprovalRequestEvent {
     /// Responses API call id for the associated patch apply call, if available.
     pub call_id: String,
     /// Turn ID that this patch belongs to.
-    /// Uses `#[serde(default)]` for backwards compatibility with older senders.
-    #[serde(default)]
+    /// Uses `#[schemars(default)]` for backwards compatibility with older senders.
+    #[schemars(default)]
     pub turn_id: String,
     pub started_at_ms: i64,
     pub changes: HashMap<PathBuf, FileChange>,
     /// Optional explanatory reason (e.g. request for extra write access).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     /// When set, the agent is asking the user to allow writes under this root for the remainder of the session.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub grant_root: Option<PathBuf>,
+}
+
+impl ToJson for ApplyPatchApprovalRequestEvent {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        object.push_field("call_id", self.call_id.clone());
+        object.push_field("turn_id", self.turn_id.clone());
+        object.push_field("started_at_ms", self.started_at_ms);
+        let mut changes = Map::new();
+        for (path, change) in &self.changes {
+            changes.push_field(path.to_string_lossy().to_string(), change.to_json());
+        }
+        object.push_field("changes", JsonValue::Object(changes));
+        object.push_opt_field("reason", self.reason.clone());
+        object.push_opt_field(
+            "grant_root",
+            self.grant_root
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+        );
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for ApplyPatchApprovalRequestEvent {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ApplyPatchApprovalRequestEvent")?;
+        let changes_value: JsonValue = object.take_required("changes")?;
+        let changes_value = changes_value.into_object("changes")?;
+        let mut changes = HashMap::new();
+        for (path, change) in changes_value.into_vec() {
+            changes.insert(PathBuf::from(path), FileChange::from_json(change)?);
+        }
+        Ok(Self {
+            call_id: object.take_required("call_id")?,
+            turn_id: object.take_optional("turn_id")?.unwrap_or_default(),
+            started_at_ms: object.take_required("started_at_ms")?,
+            changes,
+            reason: object.take_optional("reason")?,
+            grant_root: object
+                .take_optional::<String>("grant_root")?
+                .map(PathBuf::from),
+        })
+    }
 }
 
 #[cfg(test)]

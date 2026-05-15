@@ -24,6 +24,7 @@ mod extracted_system;
 #[cfg(all(feature = "gpu-gl", not(target_arch = "wasm32")))]
 pub mod gl;
 mod icons;
+mod initial_setup_ui;
 mod node;
 mod paint;
 mod painter;
@@ -102,6 +103,12 @@ pub use icons::{UiIcon, UiIconAtlasRect, UiIconSet};
 #[cfg(feature = "tabler-svg-atlas")]
 pub use icons::{UiIconAtlas, tabler_svg_icon_atlas};
 use icons::{draw_canonical_icon, icon_circle, icon_line};
+pub use initial_setup_ui::{
+    INITIAL_SETUP_CONFIRM_FIELD_ID, INITIAL_SETUP_CREATE_BUTTON_ID,
+    INITIAL_SETUP_PASSWORD_FIELD_ID, InitialSetupUiIntent, InitialSetupUiState,
+    YUBIKEY_GRANT_PIN_FIELD_ID, YUBIKEY_GRANT_SIGN_BUTTON_ID, YubiKeyGrantCeremonyIntent,
+    YubiKeyGrantCeremonyState, build_initial_setup_surface, build_yubikey_grant_ceremony_surface,
+};
 pub use node::{
     UiLayoutIssue, UiNode, UiNodeKind, UiResolvedLayout, app_launcher_item, attachment_preview,
     avatar_node, badge, bar_chart_labels, bar_chart_node, breadcrumb, button, capability_grant_row,

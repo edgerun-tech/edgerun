@@ -60,9 +60,9 @@ use {
 /// When the `pem` feature of this crate (or a specific RustCrypto elliptic
 /// curve crate) is enabled, a [`FromStr`] impl is also available.
 ///
-/// # `serde` support
+/// # `edgerun_json_compat` support
 ///
-/// When the optional `serde` feature of this create is enabled, [`Serialize`]
+/// When the optional `edgerun_json_compat` feature of this create is enabled, [`Serialize`]
 /// and [`Deserialize`] impls are provided for this type.
 ///
 /// The serialization is binary-oriented and supports ASN.1 DER

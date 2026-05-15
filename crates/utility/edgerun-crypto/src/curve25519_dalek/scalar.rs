@@ -373,19 +373,19 @@ impl ConditionallySelectable for Scalar {
     }
 }
 
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::de::Visitor;
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "edgerun_json_compat")))]
 impl Serialize for Scalar {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -394,8 +394,8 @@ impl Serialize for Scalar {
     }
 }
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "edgerun_json_compat")))]
 impl<'de> Deserialize<'de> for Scalar {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -415,17 +415,18 @@ impl<'de> Deserialize<'de> for Scalar {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Scalar, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
-                Option::from(Scalar::from_canonical_bytes(bytes))
-                    .ok_or_else(|| serde::de::Error::custom("scalar was not canonically encoded"))
+                Option::from(Scalar::from_canonical_bytes(bytes)).ok_or_else(|| {
+                    edgerun_json_compat::de::Error::custom("scalar was not canonically encoded")
+                })
             }
         }
 
@@ -1779,8 +1780,8 @@ pub(crate) mod test {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_bincode_scalar_roundtrip() {
+    #[cfg(feature = "edgerun_json_compat")]
+    fn edgerun_json_compat_bincode_scalar_roundtrip() {
         use bincode;
         let encoded = bincode::serialize(&X).unwrap();
         let parsed: Scalar = bincode::deserialize(&encoded).unwrap();

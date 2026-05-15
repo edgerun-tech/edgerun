@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use crate::local_uuid;
 use crate::local_uuid::Uuid;
@@ -42,6 +43,14 @@ impl TryFrom<String> for ThreadId {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::from_string(value.as_str())
+    }
+}
+
+impl FromStr for ThreadId {
+    type Err = local_uuid::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::from_string(value)
     }
 }
 

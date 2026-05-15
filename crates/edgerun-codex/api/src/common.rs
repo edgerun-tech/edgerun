@@ -58,7 +58,7 @@ impl ToJson for CompactionInput<'_> {
 #[derive(Debug, Clone, ToJson)]
 pub struct MemorySummarizeInput {
     pub model: String,
-    #[json(rename = "traces")]
+    #[schemars(rename = "traces")]
     pub raw_memories: Vec<RawMemory>,
     pub reasoning: Option<Reasoning>,
 }

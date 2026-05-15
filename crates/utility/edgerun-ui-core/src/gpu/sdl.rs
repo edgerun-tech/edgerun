@@ -1,11 +1,13 @@
 use std::ffi::{CStr, CString};
 use std::format;
 use std::os::raw::{c_char, c_int, c_void};
+use std::string::String;
 use std::string::ToString;
 
 use super::gl::GlRenderer;
 use super::{
-    Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiNode, UiPainter, UiRect, UiRuntimeState,
+    Color4, FontAtlas, GpuScene, HitKind, UiAction, UiEvent, UiKey, UiNode, UiPainter, UiRect,
+    UiRuntimeState,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -16,6 +18,7 @@ const SDL_WINDOW_RESIZABLE: u32 = 0x0000_0020;
 const SDL_QUIT: u32 = 0x100;
 const SDL_WINDOWEVENT: u32 = 0x200;
 const SDL_KEYDOWN: u32 = 0x300;
+const SDL_TEXTINPUT: u32 = 0x303;
 const SDL_MOUSEMOTION: u32 = 0x400;
 const SDL_MOUSEBUTTONDOWN: u32 = 0x401;
 const SDL_MOUSEBUTTONUP: u32 = 0x402;
@@ -27,8 +30,16 @@ const SDL_GL_CONTEXT_MINOR_VERSION: c_int = 18;
 const SDL_GL_CONTEXT_PROFILE_MASK: c_int = 21;
 const SDL_GL_CONTEXT_PROFILE_CORE: c_int = 0x0001;
 const SDL_GL_DOUBLEBUFFER: c_int = 5;
+const SDL_SYSTEM_CURSOR_ARROW: c_int = 0;
+const SDL_SYSTEM_CURSOR_IBEAM: c_int = 1;
+const SDL_SYSTEM_CURSOR_SIZEWE: c_int = 7;
+const SDL_SYSTEM_CURSOR_SIZENS: c_int = 8;
+const SDL_SYSTEM_CURSOR_HAND: c_int = 11;
 
 pub const SDL_KEY_ESCAPE: i32 = 27;
+pub const SDL_KEY_BACKSPACE: i32 = 8;
+pub const SDL_KEY_TAB: i32 = 9;
+pub const SDL_KEY_ENTER: i32 = 13;
 
 pub struct SdlDirectDrawCapability {
     _private: (),
@@ -107,6 +118,7 @@ pub enum SdlInputEvent {
     CloseRequested,
     Tick,
     KeyDown { key: i32 },
+    TextInput { text: String },
     MouseWheel { y: f32 },
     MouseMotion { x: f32, y: f32 },
     MouseDown { x: f32, y: f32 },
@@ -117,6 +129,8 @@ pub enum SdlInputEvent {
 
 #[repr(C)]
 struct SDL_Window(c_void);
+#[repr(C)]
+struct SDL_Cursor(c_void);
 
 type SdlGlContext = *mut c_void;
 
@@ -144,6 +158,18 @@ impl RawSdlEvent {
 
     fn key_sym(&self) -> i32 {
         i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
+
+    fn text_input(&self) -> Option<String> {
+        let bytes = &self.data[12..44];
+        let len = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(bytes.len());
+        if len == 0 {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&bytes[..len]).into_owned())
     }
 
     fn wheel_y(&self) -> f32 {
@@ -181,12 +207,36 @@ unsafe extern "C" {
     fn SDL_GetWindowSize(window: *mut SDL_Window, w: *mut c_int, h: *mut c_int);
     fn SDL_SetWindowMinimumSize(window: *mut SDL_Window, min_w: c_int, min_h: c_int);
     fn SDL_PollEvent(event: *mut RawSdlEvent) -> c_int;
+    fn SDL_CreateSystemCursor(id: c_int) -> *mut SDL_Cursor;
+    fn SDL_SetCursor(cursor: *mut SDL_Cursor);
+    fn SDL_FreeCursor(cursor: *mut SDL_Cursor);
+    fn SDL_StartTextInput();
+    fn SDL_StopTextInput();
     fn SDL_Delay(ms: u32);
 }
 
 struct Sdl;
 struct Window(*mut SDL_Window);
 struct GlContext(SdlGlContext);
+struct Cursor(*mut SDL_Cursor);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SdlCursorKind {
+    Arrow,
+    Hand,
+    Text,
+    ResizeX,
+    ResizeY,
+}
+
+struct CursorSet {
+    arrow: Cursor,
+    hand: Cursor,
+    text: Cursor,
+    resize_x: Cursor,
+    resize_y: Cursor,
+    active: SdlCursorKind,
+}
 
 impl Drop for Sdl {
     fn drop(&mut self) {
@@ -210,12 +260,113 @@ impl Drop for GlContext {
     }
 }
 
+impl Drop for Cursor {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { SDL_FreeCursor(self.0) };
+        }
+    }
+}
+
+impl CursorSet {
+    fn new() -> Result<Self, String> {
+        let arrow = create_system_cursor(SDL_SYSTEM_CURSOR_ARROW, "arrow")?;
+        let hand = create_system_cursor(SDL_SYSTEM_CURSOR_HAND, "hand")?;
+        let text = create_system_cursor(SDL_SYSTEM_CURSOR_IBEAM, "text")?;
+        let resize_x = create_system_cursor(SDL_SYSTEM_CURSOR_SIZEWE, "resize-x")?;
+        let resize_y = create_system_cursor(SDL_SYSTEM_CURSOR_SIZENS, "resize-y")?;
+        unsafe { SDL_SetCursor(arrow.0) };
+        Ok(Self {
+            arrow,
+            hand,
+            text,
+            resize_x,
+            resize_y,
+            active: SdlCursorKind::Arrow,
+        })
+    }
+
+    fn set(&mut self, kind: SdlCursorKind) {
+        if self.active == kind {
+            return;
+        }
+        let cursor = match kind {
+            SdlCursorKind::Arrow => self.arrow.0,
+            SdlCursorKind::Hand => self.hand.0,
+            SdlCursorKind::Text => self.text.0,
+            SdlCursorKind::ResizeX => self.resize_x.0,
+            SdlCursorKind::ResizeY => self.resize_y.0,
+        };
+        unsafe { SDL_SetCursor(cursor) };
+        self.active = kind;
+    }
+}
+
+fn create_system_cursor(id: c_int, label: &str) -> Result<Cursor, String> {
+    let cursor = unsafe { SDL_CreateSystemCursor(id) };
+    if cursor.is_null() {
+        Err(format!(
+            "SDL_CreateSystemCursor({label}) failed: {}",
+            sdl_error()
+        ))
+    } else {
+        Ok(Cursor(cursor))
+    }
+}
+
 pub fn run_sdl_gl_window(
     options: SdlGlWindowOptions<'_>,
     on_event: impl FnMut(SdlInputEvent) -> SdlEventResult,
     layout: impl FnMut(i32, i32) -> UiNode,
 ) -> Result<(), String> {
     run_sdl_gl_layout_window(options, on_event, layout)
+}
+
+fn map_sdl_key(key: i32) -> UiKey {
+    match key {
+        SDL_KEY_BACKSPACE => UiKey::Backspace,
+        SDL_KEY_ENTER => UiKey::Enter,
+        SDL_KEY_ESCAPE => UiKey::Escape,
+        SDL_KEY_TAB => UiKey::Tab,
+        0x4000_0050 => UiKey::ArrowLeft,
+        0x4000_004f => UiKey::ArrowRight,
+        0x4000_0052 => UiKey::ArrowUp,
+        0x4000_0051 => UiKey::ArrowDown,
+        value => UiKey::Other(value as u32),
+    }
+}
+
+fn cursor_for_scene_position(scene: &GpuScene, x: f32, y: f32) -> SdlCursorKind {
+    scene
+        .hit_test(x, y)
+        .map(cursor_for_hit_kind)
+        .unwrap_or(SdlCursorKind::Arrow)
+}
+
+fn cursor_for_hit_kind(hit: super::runtime::GpuHit) -> SdlCursorKind {
+    match hit.kind {
+        HitKind::Input | HitKind::TextArea | HitKind::Composer => SdlCursorKind::Text,
+        HitKind::Slider => SdlCursorKind::ResizeX,
+        HitKind::Scrollbar => SdlCursorKind::ResizeY,
+        HitKind::Button
+        | HitKind::Tab
+        | HitKind::Toggle
+        | HitKind::ListRow
+        | HitKind::Checkbox
+        | HitKind::Radio
+        | HitKind::Select
+        | HitKind::Breadcrumb
+        | HitKind::TreeItem
+        | HitKind::MenuItem
+        | HitKind::TransactionRow
+        | HitKind::Send
+        | HitKind::WorkspaceTab
+        | HitKind::WorkspaceClose
+        | HitKind::WorkspaceSplit
+        | HitKind::ShellLauncher
+        | HitKind::AppLauncherItem
+        | HitKind::Contact => SdlCursorKind::Hand,
+    }
 }
 
 pub fn run_sdl_gl_layout_window(
@@ -295,9 +446,11 @@ fn run_sdl_gl_window_backend(
     }
     unsafe {
         SDL_GL_SetSwapInterval(1);
+        SDL_StartTextInput();
     }
     let atlas = FontAtlas::load_inter(18.0)?;
     let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
+    let mut cursors = CursorSet::new()?;
     let mut scene = GpuScene::new(options.clear);
     let mut running = true;
     let mut rendered_frames = 0u32;
@@ -327,7 +480,37 @@ fn run_sdl_gl_window_backend(
                 SDL_QUIT => Some(SdlInputEvent::CloseRequested),
                 SDL_KEYDOWN => Some(SdlInputEvent::KeyDown {
                     key: event.key_sym(),
+                })
+                .inspect(|mapped| {
+                    if let SdlInputEvent::KeyDown { key } = mapped {
+                        let action = runtime.handle_event(
+                            &scene,
+                            UiEvent::KeyDown {
+                                key: map_sdl_key(*key),
+                            },
+                        );
+                        if action != UiAction::None {
+                            dirty = true;
+                            let result = on_event(SdlInputEvent::UiAction { action });
+                            dirty |= result.dirty;
+                            running &= !result.quit;
+                        }
+                    }
                 }),
+                SDL_TEXTINPUT => {
+                    if let Some(text) = event.text_input() {
+                        let action = runtime.handle_event(&scene, UiEvent::TextInput(text.clone()));
+                        if action != UiAction::None {
+                            dirty = true;
+                            let result = on_event(SdlInputEvent::UiAction { action });
+                            dirty |= result.dirty;
+                            running &= !result.quit;
+                        }
+                        Some(SdlInputEvent::TextInput { text })
+                    } else {
+                        None
+                    }
+                }
                 SDL_MOUSEWHEEL => {
                     let action = runtime.handle_event(
                         &scene,
@@ -348,6 +531,7 @@ fn run_sdl_gl_window_backend(
                 SDL_MOUSEMOTION => {
                     pointer_x = event.mouse_x();
                     pointer_y = event.mouse_y();
+                    cursors.set(cursor_for_scene_position(&scene, pointer_x, pointer_y));
                     let action = runtime.handle_event(
                         &scene,
                         UiEvent::PointerMove {
@@ -447,6 +631,7 @@ fn run_sdl_gl_window_backend(
 
         if dirty {
             render(&mut scene, &atlas, width, height, Some(&runtime));
+            cursors.set(cursor_for_scene_position(&scene, pointer_x, pointer_y));
             renderer.render(width, height, &scene);
             unsafe {
                 SDL_GL_SwapWindow(window.0);
@@ -462,6 +647,10 @@ fn run_sdl_gl_window_backend(
         unsafe {
             SDL_Delay(16);
         }
+    }
+
+    unsafe {
+        SDL_StopTextInput();
     }
 
     Ok(())
@@ -505,4 +694,43 @@ fn sdl_error() -> String {
     unsafe { CStr::from_ptr(ptr) }
         .to_string_lossy()
         .into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gpu::runtime::GpuHit;
+
+    #[test]
+    fn sdl_cursor_kind_follows_hit_semantics() {
+        assert_eq!(
+            cursor_for_hit_kind(GpuHit::new(HitKind::Input, 1, 0.0, 0.0, 10.0, 10.0)),
+            SdlCursorKind::Text
+        );
+        assert_eq!(
+            cursor_for_hit_kind(GpuHit::new(HitKind::TextArea, 1, 0.0, 0.0, 10.0, 10.0)),
+            SdlCursorKind::Text
+        );
+        assert_eq!(
+            cursor_for_hit_kind(GpuHit::new(HitKind::Slider, 1, 0.0, 0.0, 10.0, 10.0)),
+            SdlCursorKind::ResizeX
+        );
+        assert_eq!(
+            cursor_for_hit_kind(GpuHit::new(HitKind::Scrollbar, 1, 0.0, 0.0, 10.0, 10.0)),
+            SdlCursorKind::ResizeY
+        );
+        assert_eq!(
+            cursor_for_hit_kind(GpuHit::new(HitKind::Button, 1, 0.0, 0.0, 10.0, 10.0)),
+            SdlCursorKind::Hand
+        );
+    }
+
+    #[test]
+    fn sdl_cursor_resets_to_arrow_without_hit() {
+        let scene = GpuScene::new(Color4::rgba(0.0, 0.0, 0.0, 1.0));
+        assert_eq!(
+            cursor_for_scene_position(&scene, 40.0, 40.0),
+            SdlCursorKind::Arrow
+        );
+    }
 }

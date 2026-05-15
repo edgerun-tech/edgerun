@@ -5,8 +5,6 @@ use codex_config::ConfigLayerSource;
 use codex_config::config_toml::ConfigLockfileToml;
 use codex_config::config_toml::ConfigToml;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
 use edgerun_similar::TextDiff;
 
 pub(crate) const CONFIG_LOCK_VERSION: u32 = 1;
@@ -134,7 +132,7 @@ fn config_lock_error(message: impl Into<String>) -> io::Error {
     io::Error::other(message.into())
 }
 
-fn compact_diff<T: Serialize>(root: &str, expected: &T, actual: &T) -> io::Result<String> {
+fn compact_diff<T: edgerun_json::ToJson>(root: &str, expected: &T, actual: &T) -> io::Result<String> {
     let expected = toml::to_string_pretty(expected).map_err(|err| {
         config_lock_error(format!(
             "failed to serialize expected {root} lock TOML: {err}"
@@ -152,14 +150,14 @@ fn compact_diff<T: Serialize>(root: &str, expected: &T, actual: &T) -> io::Resul
         .to_string())
 }
 
-fn toml_value<T: Serialize>(value: &T, label: &str) -> io::Result<toml::Value> {
+fn toml_value<T: edgerun_json::ToJson>(value: &T, label: &str) -> io::Result<toml::Value> {
     toml::Value::try_from(value)
         .map_err(|err| config_lock_error(format!("failed to serialize {label}: {err}")))
 }
 
-pub(crate) fn toml_round_trip<T>(value: &impl Serialize, label: &'static str) -> io::Result<T>
+pub(crate) fn toml_round_trip<T>(value: &impl edgerun_json::ToJson, label: &'static str) -> io::Result<T>
 where
-    T: DeserializeOwned + Serialize,
+    T: edgerun_json::FromJson + edgerun_json::ToJson,
 {
     let value = toml_value(value, label)?;
     let toml = value.clone().try_into().map_err(|err| {

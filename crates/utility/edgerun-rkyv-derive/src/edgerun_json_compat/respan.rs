@@ -1,5 +1,5 @@
-// Code in this file is taken whole or in part from serde:
-// https://github.com/serde-rs/serde
+// Code in this file is taken whole or in part from edgerun_json_compat:
+// https://github.com/edgerun_json_compat-rs/edgerun_json_compat
 // The original license for this code is included in LICENSE
 
 use proc_macro2::{Group, Span, TokenStream, TokenTree};

@@ -145,11 +145,7 @@ pub mod absolute_path {
     }
 
     pub fn canonicalize_preserving_symlinks(path: &Path) -> std::io::Result<PathBuf> {
-        if path.exists() {
-            std::fs::canonicalize(path)
-        } else {
-            Ok(AbsolutePathBuf::from_absolute_path(path)?.into_path_buf())
-        }
+        Ok(AbsolutePathBuf::from_absolute_path(path)?.into_path_buf())
     }
 
     fn normalize(path: &Path) -> PathBuf {
@@ -297,12 +293,19 @@ pub mod image {
             Some("jpg" | "jpeg") => "image/jpeg",
             Some("webp") => "image/webp",
             Some("gif") => "image/gif",
+            Some("svg") => "image/svg+xml",
+            Some("json") => "application/json",
             _ => {
                 return Err(ImageProcessingError::UnsupportedImageFormat {
                     mime: "unknown".to_string(),
                 });
             }
         };
+        if !mime.starts_with("image/") || mime == "image/svg+xml" {
+            return Err(ImageProcessingError::UnsupportedImageFormat {
+                mime: mime.to_string(),
+            });
+        }
         Ok(EncodedImage {
             bytes: file_bytes,
             mime: mime.to_string(),
@@ -312,7 +315,7 @@ pub mod image {
 
 pub mod network_proxy {
     #[derive(Debug, Clone, PartialEq, Eq, edgerun_json::FromJson)]
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     pub enum NetworkDecisionSource {
         Decider,
         User,
@@ -320,7 +323,7 @@ pub mod network_proxy {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, edgerun_json::FromJson)]
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     pub enum NetworkPolicyDecision {
         Allow,
         Deny,

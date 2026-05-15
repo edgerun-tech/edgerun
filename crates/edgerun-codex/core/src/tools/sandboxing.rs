@@ -224,7 +224,7 @@ pub(crate) fn sandbox_override_for_first_attempt(
 }
 
 pub(crate) trait Approvable<Req> {
-    type ApprovalKey: Hash + Eq + Clone + Debug + Serialize;
+    type ApprovalKey: Hash + Eq + Clone + Debug + edgerun_json::ToJson;
 
     // In most cases (shell, unified_exec), a request will have a single approval key.
     //

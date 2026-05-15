@@ -3,7 +3,7 @@ use crate::RequestId;
 use schemars::JsonSchema;
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct DeprecationNoticeNotification {
     /// Concise summary of what is deprecated.
     pub summary: String,
@@ -12,7 +12,7 @@ pub struct DeprecationNoticeNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct WarningNotification {
     /// Optional thread target when the warning applies to a specific thread.
     pub thread_id: Option<String>,
@@ -21,7 +21,7 @@ pub struct WarningNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct GuardianWarningNotification {
     /// Thread target for the guardian warning.
     pub thread_id: String,
@@ -30,7 +30,7 @@ pub struct GuardianWarningNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ErrorNotification {
     pub error: TurnError,
     // Set to true if the error is transient and the app-server process will automatically retry.
@@ -41,7 +41,7 @@ pub struct ErrorNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ServerRequestResolvedNotification {
     pub thread_id: String,
     pub request_id: RequestId,

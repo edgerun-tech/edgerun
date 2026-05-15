@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::settlement::{
-    SettlementError, SettlementLedger, work_admission_hash, work_receipt_hash,
+    work_admission_hash, work_receipt_hash, SettlementError, SettlementLedger,
 };
 use crate::signing::{verify_work_admission, verify_work_receipt};
 

@@ -88,7 +88,7 @@ fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<Value>> {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            edgerun_json::from_serde_str(line).context("parse post tool use hook input")
+            edgerun_json::from_json_str(line).context("parse post tool use hook input")
         })
         .collect()
 }

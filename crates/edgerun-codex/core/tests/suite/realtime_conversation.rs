@@ -101,7 +101,7 @@ impl Match for RealtimeCallRequestCapture {
 
 fn normalized_json_string(raw: &str) -> Result<String> {
     let value: Value =
-        edgerun_json::from_serde_str(raw).context("expected JSON fixture to parse")?;
+        edgerun_json::from_json_str(raw).context("expected JSON fixture to parse")?;
     edgerun_json::to_string(&value).context("expected JSON fixture to serialize")
 }
 

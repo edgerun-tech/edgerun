@@ -12,7 +12,7 @@ use std::fmt;
 pub const JSONRPC_VERSION: &str = "2.0";
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Hash, Eq, JsonSchema)]
-#[serde(untagged)]
+#[schemars(untagged)]
 pub enum RequestId {
     String(String),
     Integer(i64),
@@ -40,7 +40,9 @@ impl FromJson for RequestId {
     fn from_json(value: JsonValue) -> std::result::Result<Self, JsonValueError> {
         match value {
             JsonValue::String(value) => Ok(Self::String(value)),
-            JsonValue::Number(number) => i64::from_json(JsonValue::Number(number)).map(Self::Integer),
+            JsonValue::Number(number) => {
+                i64::from_json(JsonValue::Number(number)).map(Self::Integer)
+            }
             other => Err(JsonValueError::WrongType(format!(
                 "expected JSON-RPC request id, found {}",
                 other.variant_name()
@@ -53,7 +55,7 @@ pub type Result = edgerun_json::Value;
 
 /// Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(untagged)]
+#[schemars(untagged)]
 pub enum JSONRPCMessage {
     Request(JSONRPCRequest),
     Notification(JSONRPCNotification),
@@ -66,10 +68,10 @@ pub enum JSONRPCMessage {
 pub struct JSONRPCRequest {
     pub id: RequestId,
     pub method: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<edgerun_json::Value>,
     /// Optional W3C Trace Context for distributed tracing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<W3cTraceContext>,
 }
 
@@ -77,7 +79,7 @@ pub struct JSONRPCRequest {
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct JSONRPCNotification {
     pub method: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<edgerun_json::Value>,
 }
 
@@ -98,7 +100,7 @@ pub struct JSONRPCError {
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct JSONRPCErrorError {
     pub code: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<edgerun_json::Value>,
     pub message: String,
 }

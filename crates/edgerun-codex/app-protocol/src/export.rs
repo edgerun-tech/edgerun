@@ -1360,7 +1360,7 @@ where
     write_json_schema_with_return::<T>(out_dir, name)
 }
 
-fn write_pretty_json(path: PathBuf, value: &impl Serialize) -> Result<()> {
+fn write_pretty_json(path: PathBuf, value: &impl edgerun_json::ToJson) -> Result<()> {
     let json = edgerun_json::to_vec_pretty(value)
         .with_context(|| format!("Failed to serialize JSON schema to {}", path.display()))?;
     fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))?;

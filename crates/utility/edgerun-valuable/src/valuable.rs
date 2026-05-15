@@ -199,9 +199,9 @@ macro_rules! atomic {
             $(#[$attrs])*
             impl Valuable for core::sync::atomic::$ty {
                 fn as_value(&self) -> Value<'_> {
-                    // Use SeqCst to match Debug and serde which use SeqCst.
+                    // Use SeqCst to match Debug and edgerun_json_compat which use SeqCst.
                     // https://github.com/rust-lang/rust/blob/1.52.1/library/core/src/sync/atomic.rs#L1361-L1366
-                    // https://github.com/serde-rs/serde/issues/1496
+                    // https://github.com/edgerun_json_compat-rs/edgerun_json_compat/issues/1496
                     Value::$variant(self.load(core::sync::atomic::Ordering::SeqCst))
                 }
 

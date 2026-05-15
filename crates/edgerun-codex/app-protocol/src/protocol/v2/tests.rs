@@ -1292,7 +1292,7 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                         title: Some("Confirm".to_string()),
                         description: Some("Approve the pending action".to_string()),
                         default: Some(true),
-                    }),
+                    })
                 ),
                 (
                     "count".to_string(),
@@ -1303,7 +1303,7 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                         minimum: Some(1.0),
                         maximum: Some(5.0),
                         default: Some(3.0),
-                    }),
+                    })
                 ),
                 (
                     "email".to_string(),
@@ -1315,7 +1315,7 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                         max_length: None,
                         format: Some(McpElicitationStringFormat::Email),
                         default: Some("dev@example.com".to_string()),
-                    }),
+                    })
                 ),
                 (
                     "legacyChoice".to_string(),
@@ -1327,8 +1327,8 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                             enum_: vec!["allow".to_string(), "deny".to_string()],
                             enum_names: Some(vec!["Allow".to_string(), "Deny".to_string(),]),
                             default: Some("allow".to_string()),
-                        },
-                    )),
+                        }
+                    ))
                 ),
             ]),
             required: Some(vec!["email".to_string(), "confirmed".to_string()]),
@@ -1779,7 +1779,7 @@ fn skills_list_params_serialization_uses_force_reload() {
         }),
         json!({
             "perCwdExtraUserRoots": null,
-        }),
+        })
     );
 
     assert_eq!(
@@ -1800,7 +1800,7 @@ fn skills_list_params_serialization_uses_force_reload() {
                     "extraUserRoots": ["/shared/skills", "/tmp/x"],
                 }
             ],
-        }),
+        })
     );
 }
 
@@ -1819,7 +1819,7 @@ fn plugin_source_serializes_local_git_and_remote_variants() {
         json!({
             "type": "local",
             "path": local_path_json,
-        }),
+        })
     );
 
     assert_eq!(
@@ -1835,14 +1835,14 @@ fn plugin_source_serializes_local_git_and_remote_variants() {
             "path": "plugins/example",
             "refName": "main",
             "sha": "abc123",
-        }),
+        })
     );
 
     assert_eq!(
         edgerun_json::to_value(&PluginSource::Remote),
         json!({
             "type": "remote",
-        }),
+        })
     );
 }
 
@@ -1858,7 +1858,7 @@ fn marketplace_add_params_serialization_uses_optional_ref_name_and_sparse_paths(
             "source": "owner/repo",
             "refName": null,
             "sparsePaths": null,
-        }),
+        })
     );
 
     assert_eq!(
@@ -1871,7 +1871,7 @@ fn marketplace_add_params_serialization_uses_optional_ref_name_and_sparse_paths(
             "source": "owner/repo",
             "refName": "main",
             "sparsePaths": ["plugins/foo"],
-        }),
+        })
     );
 }
 
@@ -1883,14 +1883,14 @@ fn marketplace_upgrade_params_serialization_uses_optional_marketplace_name() {
         }),
         json!({
             "marketplaceName": null,
-        }),
+        })
     );
 
     assert_eq!(
         edgerun_json::from_value::<MarketplaceUpgradeParams>(json!({})).unwrap(),
         MarketplaceUpgradeParams {
             marketplace_name: None,
-        },
+        }
     );
 
     assert_eq!(
@@ -1899,7 +1899,7 @@ fn marketplace_upgrade_params_serialization_uses_optional_marketplace_name() {
         }),
         json!({
             "marketplaceName": "debug",
-        }),
+        })
     );
 }
 
@@ -1917,7 +1917,7 @@ fn plugin_marketplace_entry_serializes_remote_only_path_as_null() {
             "path": null,
             "interface": null,
             "plugins": [],
-        }),
+        })
     );
 }
 
@@ -1971,7 +1971,7 @@ fn plugin_interface_serializes_local_paths_and_remote_urls_separately() {
             "logoUrl": "https://example.com/linear/logo.png",
             "screenshots": [],
             "screenshotUrls": ["https://example.com/linear/screenshot.png"],
-        }),
+        })
     );
 }
 
@@ -1986,7 +1986,7 @@ fn plugin_list_params_ignore_removed_force_remote_sync_field() {
         PluginListParams {
             cwds: None,
             marketplace_kinds: None,
-        },
+        }
     );
 }
 
@@ -2008,7 +2008,7 @@ fn plugin_list_params_serializes_marketplace_kind_filter() {
                 "workspace-directory",
                 "shared-with-me",
             ],
-        }),
+        })
     );
 }
 
@@ -2031,7 +2031,7 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
             "marketplacePath": marketplace_path_json.clone(),
             "remoteMarketplaceName": null,
             "pluginName": "gmail",
-        }),
+        })
     );
 
     assert_eq!(
@@ -2045,7 +2045,7 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
             marketplace_path: Some(marketplace_path),
             remote_marketplace_name: None,
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 
     assert_eq!(
@@ -2058,7 +2058,7 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
             marketplace_path: None,
             remote_marketplace_name: Some("openai-curated".to_string()),
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 }
 
@@ -2081,7 +2081,7 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
             "marketplacePath": marketplace_path_json.clone(),
             "remoteMarketplaceName": null,
             "pluginName": "gmail",
-        }),
+        })
     );
 
     assert_eq!(
@@ -2095,7 +2095,7 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
             marketplace_path: Some(marketplace_path),
             remote_marketplace_name: None,
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 
     assert_eq!(
@@ -2109,7 +2109,7 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
             marketplace_path: None,
             remote_marketplace_name: Some("openai-curated".to_string()),
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 }
 
@@ -2125,7 +2125,7 @@ fn plugin_skill_read_params_serialization_uses_remote_plugin_id() {
             "remoteMarketplaceName": "chatgpt-global",
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
             "skillName": "plan-work",
-        }),
+        })
     );
 }
 
@@ -2151,13 +2151,13 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
             "remotePluginId": null,
             "discoverability": null,
             "shareTargets": null,
-        }),
+        })
     );
 
     assert_eq!(
         edgerun_json::to_value(&PluginShareSaveParams {
             plugin_path,
-            remote_plugin_id: Some("plugins~Plugin_00000000000000000000000000000000".to_string(),),
+            remote_plugin_id: Some("plugins~Plugin_00000000000000000000000000000000".to_string()),
             discoverability: Some(PluginShareDiscoverability::Private),
             share_targets: Some(vec![
                 PluginShareTarget {
@@ -2184,7 +2184,7 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
                     "principalId": "workspace-1",
                 },
             ],
-        }),
+        })
     );
 
     assert_eq!(
@@ -2195,7 +2195,7 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
         json!({
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
             "shareUrl": "",
-        }),
+        })
     );
 
     assert_eq!(
@@ -2212,7 +2212,7 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
                 "principalType": "group",
                 "principalId": "group-1",
             }],
-        }),
+        })
     );
 
     assert_eq!(
@@ -2229,12 +2229,12 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
                 "principalId": "user-1",
                 "name": "Gavin",
             }],
-        }),
+        })
     );
 
     assert_eq!(
         edgerun_json::from_value::<PluginShareListParams>(json!({})).unwrap(),
-        PluginShareListParams {},
+        PluginShareListParams {}
     );
 
     assert_eq!(
@@ -2243,7 +2243,7 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
         }),
         json!({
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
-        }),
+        })
     );
 }
 
@@ -2287,7 +2287,7 @@ fn plugin_share_list_response_serializes_share_items() {
                 "shareUrl": "https://chatgpt.example/plugins/share/share-key-1",
                 "localPluginPath": null,
             }],
-        }),
+        })
     );
 }
 
@@ -2325,7 +2325,7 @@ fn plugin_uninstall_params_serialization_omits_force_remote_sync() {
         }),
         json!({
             "pluginId": "gmail@openai-curated",
-        }),
+        })
     );
 
     assert_eq!(
@@ -2336,7 +2336,7 @@ fn plugin_uninstall_params_serialization_omits_force_remote_sync() {
         .unwrap(),
         PluginUninstallParams {
             plugin_id: "gmail@openai-curated".to_string(),
-        },
+        }
     );
 
     assert_eq!(
@@ -2345,7 +2345,7 @@ fn plugin_uninstall_params_serialization_omits_force_remote_sync() {
         }),
         json!({
             "pluginId": "plugins~Plugin_gmail",
-        }),
+        })
     );
 
     assert_eq!(
@@ -2356,7 +2356,7 @@ fn plugin_uninstall_params_serialization_omits_force_remote_sync() {
         .unwrap(),
         PluginUninstallParams {
             plugin_id: "plugins~Plugin_gmail".to_string(),
-        },
+        }
     );
 }
 
@@ -2377,7 +2377,7 @@ fn marketplace_remove_response_serializes_nullable_installed_root() {
         json!({
             "marketplaceName": "debug",
             "installedRoot": installed_root_json,
-        }),
+        })
     );
 
     assert_eq!(
@@ -2388,7 +2388,7 @@ fn marketplace_remove_response_serializes_nullable_installed_root() {
         json!({
             "marketplaceName": "debug",
             "installedRoot": null,
-        }),
+        })
     );
 }
 
@@ -2418,7 +2418,7 @@ fn marketplace_upgrade_response_serializes_camel_case_fields() {
                 "marketplaceName": "broken",
                 "message": "failed to clone",
             }],
-        }),
+        })
     );
 }
 

@@ -247,7 +247,7 @@ impl JaegerRemoteSampler {
         }
 
         // deserialize the response
-        edgerun_json::from_serde_slice(&resp.body()[..])
+        edgerun_json::from_slice(&resp.body()[..])
             .map_err(|err| format!("cannot deserialize the response, {err}"))
     }
 }
@@ -299,7 +299,7 @@ mod tests {
                 "samplingRate": 0.5
             }
         }"#;
-        let resp: super::SamplingStrategyResponse = edgerun_json::from_serde_str(json).unwrap();
+        let resp: super::SamplingStrategyResponse = edgerun_json::from_json_str(json).unwrap();
         assert_eq!(resp.strategy_type, SamplingStrategyType::Probabilistic);
         assert_eq!(resp.probabilistic_sampling.unwrap().sampling_rate, 0.5);
     }

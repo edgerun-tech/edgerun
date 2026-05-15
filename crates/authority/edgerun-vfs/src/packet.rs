@@ -2,8 +2,9 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use edgerun_wire::{Archive, Deserialize, Serialize};
-use edgerun_work::codec::{blake3_hash, wire_bytes, wire_from_bytes};
+use edgerun_work::codec::{
+    blake3_hash, wire_bytes, wire_from_bytes, EdgeWire, WireCursor, WireWriter,
+};
 use edgerun_work::preimage::{HashBuilder, PreimageBuilder};
 use edgerun_work::protocol::{Hash, WorkProtocolError};
 
@@ -22,8 +23,7 @@ const VFS_TREE_MANIFEST_DOMAIN: &[u8] = b"edgerun:v1:vfs:tree-manifest";
 const VFS_OBJECT_TRANSFORM_DOMAIN: &[u8] = b"edgerun:v1:vfs:object-transform";
 const VFS_OBJECT_SEAL_AAD_DOMAIN: &[u8] = b"edgerun:v1:vfs:object-seal-aad";
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VfsObjectPacket {
     pub abi_version: u16,
     pub object_id: Hash,
@@ -36,8 +36,7 @@ pub struct VfsObjectPacket {
     pub bytes: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VfsFileRef {
     pub abi_version: u16,
     pub path: String,
@@ -46,16 +45,14 @@ pub struct VfsFileRef {
     pub file_hash: Hash,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VfsTreeManifest {
     pub abi_version: u16,
     pub root_hash: Hash,
     pub files: Vec<VfsFileRef>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VfsObjectTransformRef {
     pub abi_version: u16,
     pub plaintext_object_id: Hash,
@@ -67,8 +64,7 @@ pub struct VfsObjectTransformRef {
     pub transform_hash: Hash,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VfsObjectSealRequest {
     pub abi_version: u16,
     pub plaintext_object_id: Hash,
@@ -79,8 +75,7 @@ pub struct VfsObjectSealRequest {
     pub payload: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VfsObjectUnsealRequest {
     pub abi_version: u16,
     pub transport_object_id: Hash,
@@ -91,8 +86,7 @@ pub struct VfsObjectUnsealRequest {
     pub sealed_envelope: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = edgerun_wire)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VfsWireRecord {
     ObjectPacket(VfsObjectPacket),
     FileRef(VfsFileRef),
@@ -100,6 +94,195 @@ pub enum VfsWireRecord {
     ObjectSealRequest(VfsObjectSealRequest),
     ObjectUnsealRequest(VfsObjectUnsealRequest),
     TreeManifest(VfsTreeManifest),
+}
+
+pub type ArchivedVfsWireRecord = VfsWireRecord;
+
+impl EdgeWire for VfsObjectPacket {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        self.abi_version.encode_wire(out);
+        self.object_id.encode_wire(out);
+        self.object_len.encode_wire(out);
+        self.packet_index.encode_wire(out);
+        self.packet_count.encode_wire(out);
+        self.offset.encode_wire(out);
+        self.payload_hash.encode_wire(out);
+        self.packet_id.encode_wire(out);
+        self.bytes.encode_wire(out);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        Ok(Self {
+            abi_version: u16::decode_wire(input)?,
+            object_id: <Hash as EdgeWire>::decode_wire(input)?,
+            object_len: u64::decode_wire(input)?,
+            packet_index: u32::decode_wire(input)?,
+            packet_count: u32::decode_wire(input)?,
+            offset: u64::decode_wire(input)?,
+            payload_hash: <Hash as EdgeWire>::decode_wire(input)?,
+            packet_id: <Hash as EdgeWire>::decode_wire(input)?,
+            bytes: Vec::<u8>::decode_wire(input)?,
+        })
+    }
+}
+
+impl EdgeWire for VfsFileRef {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        self.abi_version.encode_wire(out);
+        self.path.encode_wire(out);
+        self.object_id.encode_wire(out);
+        self.object_len.encode_wire(out);
+        self.file_hash.encode_wire(out);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        Ok(Self {
+            abi_version: u16::decode_wire(input)?,
+            path: String::decode_wire(input)?,
+            object_id: <Hash as EdgeWire>::decode_wire(input)?,
+            object_len: u64::decode_wire(input)?,
+            file_hash: <Hash as EdgeWire>::decode_wire(input)?,
+        })
+    }
+}
+
+impl EdgeWire for VfsTreeManifest {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        self.abi_version.encode_wire(out);
+        self.root_hash.encode_wire(out);
+        self.files.encode_wire(out);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        Ok(Self {
+            abi_version: u16::decode_wire(input)?,
+            root_hash: <Hash as EdgeWire>::decode_wire(input)?,
+            files: Vec::<VfsFileRef>::decode_wire(input)?,
+        })
+    }
+}
+
+impl EdgeWire for VfsObjectTransformRef {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        self.abi_version.encode_wire(out);
+        self.plaintext_object_id.encode_wire(out);
+        self.plaintext_len.encode_wire(out);
+        self.transport_object_id.encode_wire(out);
+        self.transport_len.encode_wire(out);
+        self.compression_kind.encode_wire(out);
+        self.seal_kind.encode_wire(out);
+        self.transform_hash.encode_wire(out);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        Ok(Self {
+            abi_version: u16::decode_wire(input)?,
+            plaintext_object_id: <Hash as EdgeWire>::decode_wire(input)?,
+            plaintext_len: u64::decode_wire(input)?,
+            transport_object_id: <Hash as EdgeWire>::decode_wire(input)?,
+            transport_len: u64::decode_wire(input)?,
+            compression_kind: u16::decode_wire(input)?,
+            seal_kind: u16::decode_wire(input)?,
+            transform_hash: <Hash as EdgeWire>::decode_wire(input)?,
+        })
+    }
+}
+
+impl EdgeWire for VfsObjectSealRequest {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        self.abi_version.encode_wire(out);
+        self.plaintext_object_id.encode_wire(out);
+        self.plaintext_len.encode_wire(out);
+        self.compression_kind.encode_wire(out);
+        self.seal_kind.encode_wire(out);
+        self.aad.encode_wire(out);
+        self.payload.encode_wire(out);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        Ok(Self {
+            abi_version: u16::decode_wire(input)?,
+            plaintext_object_id: <Hash as EdgeWire>::decode_wire(input)?,
+            plaintext_len: u64::decode_wire(input)?,
+            compression_kind: u16::decode_wire(input)?,
+            seal_kind: u16::decode_wire(input)?,
+            aad: Vec::<u8>::decode_wire(input)?,
+            payload: Vec::<u8>::decode_wire(input)?,
+        })
+    }
+}
+
+impl EdgeWire for VfsObjectUnsealRequest {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        self.abi_version.encode_wire(out);
+        self.transport_object_id.encode_wire(out);
+        self.transport_len.encode_wire(out);
+        self.compression_kind.encode_wire(out);
+        self.seal_kind.encode_wire(out);
+        self.aad.encode_wire(out);
+        self.sealed_envelope.encode_wire(out);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        Ok(Self {
+            abi_version: u16::decode_wire(input)?,
+            transport_object_id: <Hash as EdgeWire>::decode_wire(input)?,
+            transport_len: u64::decode_wire(input)?,
+            compression_kind: u16::decode_wire(input)?,
+            seal_kind: u16::decode_wire(input)?,
+            aad: Vec::<u8>::decode_wire(input)?,
+            sealed_envelope: Vec::<u8>::decode_wire(input)?,
+        })
+    }
+}
+
+impl EdgeWire for VfsWireRecord {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        match self {
+            Self::ObjectPacket(value) => {
+                0u16.encode_wire(out);
+                value.encode_wire(out);
+            }
+            Self::FileRef(value) => {
+                1u16.encode_wire(out);
+                value.encode_wire(out);
+            }
+            Self::ObjectTransformRef(value) => {
+                2u16.encode_wire(out);
+                value.encode_wire(out);
+            }
+            Self::ObjectSealRequest(value) => {
+                3u16.encode_wire(out);
+                value.encode_wire(out);
+            }
+            Self::ObjectUnsealRequest(value) => {
+                4u16.encode_wire(out);
+                value.encode_wire(out);
+            }
+            Self::TreeManifest(value) => {
+                5u16.encode_wire(out);
+                value.encode_wire(out);
+            }
+        }
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        match u16::decode_wire(input)? {
+            0 => Ok(Self::ObjectPacket(VfsObjectPacket::decode_wire(input)?)),
+            1 => Ok(Self::FileRef(VfsFileRef::decode_wire(input)?)),
+            2 => Ok(Self::ObjectTransformRef(
+                VfsObjectTransformRef::decode_wire(input)?,
+            )),
+            3 => Ok(Self::ObjectSealRequest(VfsObjectSealRequest::decode_wire(
+                input,
+            )?)),
+            4 => Ok(Self::ObjectUnsealRequest(
+                VfsObjectUnsealRequest::decode_wire(input)?,
+            )),
+            5 => Ok(Self::TreeManifest(VfsTreeManifest::decode_wire(input)?)),
+            _ => Err(WorkProtocolError::InvalidShape),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

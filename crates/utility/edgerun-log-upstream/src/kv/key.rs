@@ -132,22 +132,6 @@ mod sval_support {
     }
 }
 
-#[cfg(any())]
-mod serde_support {
-    use super::*;
-
-    use serde_core::{Serialize, Serializer};
-
-    impl<'a> Serialize for Key<'a> {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            self.key.serialize(serializer)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

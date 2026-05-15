@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ThreadStartSource {
     Startup,
     Clear,
@@ -51,50 +51,14 @@ impl FromJson for ThreadStartSource {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct DynamicToolSpec {
     pub namespace: Option<String>,
     pub name: String,
     pub description: String,
     pub input_schema: JsonValue,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub defer_loading: bool,
-}
-
-#[derive(edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
-struct DynamicToolSpecDe {
-    namespace: Option<String>,
-    name: String,
-    description: String,
-    input_schema: JsonValue,
-    defer_loading: Option<bool>,
-    expose_to_context: Option<bool>,
-}
-
-impl<'de> Deserialize<'de> for DynamicToolSpec {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: edgerun_serde::Deserializer<'de>,
-    {
-        let DynamicToolSpecDe {
-            namespace,
-            name,
-            description,
-            input_schema,
-            defer_loading,
-            expose_to_context,
-        } = DynamicToolSpecDe::deserialize(deserializer)?;
-
-        Ok(Self {
-            namespace,
-            name,
-            description,
-            input_schema,
-            defer_loading: defer_loading
-                .unwrap_or_else(|| expose_to_context.map(|visible| !visible).unwrap_or(false)),
-        })
-    }
 }
 
 impl ToJson for DynamicToolSpec {
@@ -136,16 +100,11 @@ impl FromJson for DynamicToolSpec {
 // === Threads, Turns, and Items ===
 // Thread APIs
 #[derive(Debug, Clone, PartialEq, Default, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadStartParams {
     pub model: Option<String>,
     pub model_provider: Option<String>,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<Option<String>>,
     pub cwd: Option<String>,
     /// Override where approval requests are routed for review on this thread
@@ -173,12 +132,12 @@ pub struct ThreadStartParams {
     pub mock_experimental_field: Option<String>,
     /// If true, opt into emitting raw Responses API items on the event stream.
     /// This is for internal use only (e.g. Codex Cloud).
-    #[serde(default)]
+    #[schemars(default)]
     pub experimental_raw_events: bool,
     /// Deprecated and ignored by app-server. Kept only so older clients can
     /// continue sending the field while rollout persistence always uses the
     /// limited history policy.
-    #[serde(default)]
+    #[schemars(default)]
     pub persist_extended_history: bool,
 }
 
@@ -279,22 +238,24 @@ impl crate::experimental_api::ExperimentalApi for ThreadStartParams {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct MockExperimentalMethodParams {
     /// Test-only payload field.
     pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MockExperimentalMethodResponse {
     /// Echoes the input `value`.
     pub echoed: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadStartResponse {
     pub thread: Thread,
     pub model: String,
@@ -302,7 +263,7 @@ pub struct ThreadStartResponse {
     pub service_tier: Option<String>,
     pub cwd: AbsolutePathBuf,
     /// Instruction source files currently loaded for this thread.
-    #[serde(default)]
+    #[schemars(default)]
     pub instruction_sources: Vec<AbsolutePathBuf>,
     /// Reviewer currently used for approval requests on this thread.
     pub approvals_reviewer: ApprovalsReviewer,
@@ -335,8 +296,10 @@ impl FromJson for ThreadStartResponse {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 /// There are three ways to resume a thread:
 /// 1. By thread_id: load the thread from disk by thread_id and resume it.
 /// 2. By history: instantiate the thread from memory and resume it.
@@ -361,12 +324,7 @@ pub struct ThreadResumeParams {
     /// Configuration overrides for the resumed thread, if any.
     pub model: Option<String>,
     pub model_provider: Option<String>,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<Option<String>>,
     pub cwd: Option<String>,
     /// Override where approval requests are routed for review on this thread
@@ -379,17 +337,17 @@ pub struct ThreadResumeParams {
     /// When true, return only thread metadata and live-resume state without
     /// populating `thread.turns`. This is useful when the client plans to call
     /// `thread/turns/list` immediately after resuming.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub exclude_turns: bool,
     /// Deprecated and ignored by app-server. Kept only so older clients can
     /// continue sending the field while rollout persistence always uses the
     /// limited history policy.
-    #[serde(default)]
+    #[schemars(default)]
     pub persist_extended_history: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadResumeResponse {
     pub thread: Thread,
     pub model: String,
@@ -397,7 +355,7 @@ pub struct ThreadResumeResponse {
     pub service_tier: Option<String>,
     pub cwd: AbsolutePathBuf,
     /// Instruction source files currently loaded for this thread.
-    #[serde(default)]
+    #[schemars(default)]
     pub instruction_sources: Vec<AbsolutePathBuf>,
     /// Reviewer currently used for approval requests on this thread.
     pub approvals_reviewer: ApprovalsReviewer,
@@ -430,8 +388,10 @@ impl FromJson for ThreadResumeResponse {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Default, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 /// There are two ways to fork a thread:
 /// 1. By thread_id: load the thread from disk by thread_id and fork it into a new thread.
 /// 2. By path: load the thread from disk by path and fork it into a new thread.
@@ -449,12 +409,7 @@ pub struct ThreadForkParams {
     /// Configuration overrides for the forked thread, if any.
     pub model: Option<String>,
     pub model_provider: Option<String>,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<Option<String>>,
     pub cwd: Option<String>,
     /// Override where approval requests are routed for review on this thread
@@ -463,24 +418,24 @@ pub struct ThreadForkParams {
     pub config: Option<HashMap<String, edgerun_json::Value>>,
     pub base_instructions: Option<String>,
     pub developer_instructions: Option<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub ephemeral: bool,
     /// Optional client-supplied analytics source classification for this forked thread.
     pub thread_source: Option<ThreadSource>,
     /// When true, return only thread metadata and live fork state without
     /// populating `thread.turns`. This is useful when the client plans to call
     /// `thread/turns/list` immediately after forking.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub exclude_turns: bool,
     /// Deprecated and ignored by app-server. Kept only so older clients can
     /// continue sending the field while rollout persistence always uses the
     /// limited history policy.
-    #[serde(default)]
+    #[schemars(default)]
     pub persist_extended_history: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadForkResponse {
     pub thread: Thread,
     pub model: String,
@@ -488,7 +443,7 @@ pub struct ThreadForkResponse {
     pub service_tier: Option<String>,
     pub cwd: AbsolutePathBuf,
     /// Instruction source files currently loaded for this thread.
-    #[serde(default)]
+    #[schemars(default)]
     pub instruction_sources: Vec<AbsolutePathBuf>,
     /// Reviewer currently used for approval requests on this thread.
     pub approvals_reviewer: ApprovalsReviewer,
@@ -551,29 +506,29 @@ fn thread_lifecycle_response_from_json(
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadArchiveParams {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadArchiveResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadUnsubscribeParams {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadUnsubscribeResponse {
     pub status: ThreadUnsubscribeStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ThreadUnsubscribeStatus {
     NotLoaded,
     NotSubscribed,
@@ -582,7 +537,7 @@ pub enum ThreadUnsubscribeStatus {
 
 /// Parameters for `thread/increment_elicitation`.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadIncrementElicitationParams {
     /// Thread whose out-of-band elicitation counter should be incremented.
     pub thread_id: String,
@@ -590,7 +545,7 @@ pub struct ThreadIncrementElicitationParams {
 
 /// Response for `thread/increment_elicitation`.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadIncrementElicitationResponse {
     /// Current out-of-band elicitation count after the increment.
     pub count: u64,
@@ -600,7 +555,7 @@ pub struct ThreadIncrementElicitationResponse {
 
 /// Parameters for `thread/decrement_elicitation`.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadDecrementElicitationParams {
     /// Thread whose out-of-band elicitation counter should be decremented.
     pub thread_id: String,
@@ -608,7 +563,7 @@ pub struct ThreadDecrementElicitationParams {
 
 /// Response for `thread/decrement_elicitation`.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadDecrementElicitationResponse {
     /// Current out-of-band elicitation count after the decrement.
     pub count: u64,
@@ -617,20 +572,20 @@ pub struct ThreadDecrementElicitationResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadSetNameParams {
     pub thread_id: String,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadUnarchiveParams {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadSetNameResponse {}
 
 v2_enum_from_core! {
@@ -643,7 +598,7 @@ v2_enum_from_core! {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoal {
     pub thread_id: String,
     pub objective: String,
@@ -670,53 +625,50 @@ impl From<codex_protocol::protocol::ThreadGoal> for ThreadGoal {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalSetParams {
     pub thread_id: String,
     pub objective: Option<String>,
     pub status: Option<ThreadGoalStatus>,
-    #[serde(
-        default,
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub token_budget: Option<Option<i64>>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalSetResponse {
     pub goal: ThreadGoal,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalGetParams {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalGetResponse {
     pub goal: Option<ThreadGoal>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalClearParams {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalClearResponse {
     pub cleared: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadMetadataUpdateParams {
     pub thread_id: String,
     /// Patch the stored Git metadata for this thread.
@@ -726,45 +678,32 @@ pub struct ThreadMetadataUpdateParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadMetadataGitInfoUpdateParams {
     /// Omit to leave the stored commit unchanged, set to `null` to clear it,
     /// or provide a non-empty string to replace it.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub sha: Option<Option<String>>,
     /// Omit to leave the stored branch unchanged, set to `null` to clear it,
     /// or provide a non-empty string to replace it.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<Option<String>>,
     /// Omit to leave the stored origin URL unchanged, set to `null` to clear it,
     /// or provide a non-empty string to replace it.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
-        deserialize_with = "crate::protocol::serde_helpers::deserialize_double_option"
-    )]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub origin_url: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadMetadataUpdateResponse {
     pub thread: Thread,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub enum ThreadMemoryMode {
     Enabled,
     Disabled,
@@ -787,38 +726,38 @@ impl ThreadMemoryMode {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadMemoryModeSetParams {
     pub thread_id: String,
     pub mode: ThreadMemoryMode,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadMemoryModeSetResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MemoryResetResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadUnarchiveResponse {
     pub thread: Thread,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadCompactStartParams {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadCompactStartResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadShellCommandParams {
     pub thread_id: String,
     /// Shell command string evaluated by the thread's configured shell.
@@ -848,7 +787,7 @@ impl FromJson for ThreadShellCommandParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadShellCommandResponse {}
 
 impl ToJson for ThreadShellCommandResponse {
@@ -865,7 +804,7 @@ impl FromJson for ThreadShellCommandResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadApproveGuardianDeniedActionParams {
     pub thread_id: String,
     /// Serialized `codex_protocol::protocol::GuardianAssessmentEvent`.
@@ -873,21 +812,21 @@ pub struct ThreadApproveGuardianDeniedActionParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadApproveGuardianDeniedActionResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadBackgroundTerminalsCleanParams {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadBackgroundTerminalsCleanResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRollbackParams {
     pub thread_id: String,
     /// The number of turns to drop from the end of the thread. Must be >= 1.
@@ -898,7 +837,7 @@ pub struct ThreadRollbackParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadRollbackResponse {
     /// The updated thread after applying the rollback, with `turns` populated.
     ///
@@ -909,7 +848,7 @@ pub struct ThreadRollbackResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadListParams {
     /// Opaque pagination cursor returned by a previous call.
     pub cursor: Option<String>,
@@ -934,7 +873,7 @@ pub struct ThreadListParams {
     /// If true, return from the state DB without scanning JSONL rollouts to
     /// repair thread metadata. Omitted or false preserves scan-and-repair
     /// behavior.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub use_state_db_only: bool,
     /// Optional substring filter for the extracted thread title.
     pub search_term: Option<String>,
@@ -959,7 +898,7 @@ impl FromJson for ThreadListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(untagged)]
+#[schemars(untagged)]
 pub enum ThreadListCwdFilter {
     One(String),
     Many(Vec<String>),
@@ -975,10 +914,10 @@ impl FromJson for ThreadListCwdFilter {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ThreadSourceKind {
     Cli,
-    #[serde(rename = "vscode")]
+    #[schemars(rename = "vscode")]
     VsCode,
     Exec,
     AppServer,
@@ -1011,7 +950,7 @@ impl FromJson for ThreadSourceKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum ThreadSortKey {
     CreatedAt,
     UpdatedAt,
@@ -1030,7 +969,7 @@ impl FromJson for ThreadSortKey {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum SortDirection {
     Asc,
     Desc,
@@ -1058,7 +997,7 @@ impl FromJson for SortDirection {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadListResponse {
     pub data: Vec<Thread>,
     /// Opaque cursor to pass to the next call to continue after the last item.
@@ -1071,8 +1010,10 @@ pub struct ThreadListResponse {
     pub backwards_cursor: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadLoadedListParams {
     /// Opaque pagination cursor returned by a previous call.
     pub cursor: Option<String>,
@@ -1081,7 +1022,7 @@ pub struct ThreadLoadedListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadLoadedListResponse {
     /// Thread ids for sessions currently loaded in memory.
     pub data: Vec<String>,
@@ -1091,12 +1032,12 @@ pub struct ThreadLoadedListResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum ThreadStatus {
     NotLoaded,
     Idle,
     SystemError,
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Active {
         active_flags: Vec<ThreadActiveFlag>,
     },
@@ -1136,7 +1077,7 @@ impl FromJson for ThreadStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ThreadActiveFlag {
     WaitingOnApproval,
     WaitingOnUserInput,
@@ -1164,22 +1105,22 @@ impl FromJson for ThreadActiveFlag {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadReadParams {
     pub thread_id: String,
     /// When true, include turns and their items from rollout history.
-    #[serde(default)]
+    #[schemars(default)]
     pub include_turns: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadReadResponse {
     pub thread: Thread,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadInjectItemsParams {
     pub thread_id: String,
     /// Raw Responses API items to append to the thread's model-visible history.
@@ -1187,11 +1128,11 @@ pub struct ThreadInjectItemsParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadInjectItemsResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadTurnsListParams {
     pub thread_id: String,
     /// Opaque cursor to pass to the next call to continue after the last turn.
@@ -1218,7 +1159,7 @@ impl FromJson for ThreadTurnsListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadTurnsListResponse {
     pub data: Vec<Turn>,
     /// Opaque cursor to pass to the next call to continue after the last turn.
@@ -1232,7 +1173,7 @@ pub struct ThreadTurnsListResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadTurnsItemsListParams {
     pub thread_id: String,
     pub turn_id: String,
@@ -1276,7 +1217,7 @@ impl FromJson for ThreadTurnsItemsListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadTurnsItemsListResponse {
     pub data: Vec<ThreadItem>,
     /// Opaque cursor to pass to the next call to continue after the last item.
@@ -1298,7 +1239,7 @@ impl ToJson for ThreadTurnsItemsListResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadTokenUsageUpdatedNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -1306,7 +1247,7 @@ pub struct ThreadTokenUsageUpdatedNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadTokenUsage {
     pub total: TokenUsageBreakdown,
     pub last: TokenUsageBreakdown,
@@ -1325,7 +1266,7 @@ impl From<CoreTokenUsageInfo> for ThreadTokenUsage {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct TokenUsageBreakdown {
     pub total_tokens: i64,
     pub input_tokens: i64,
@@ -1348,45 +1289,45 @@ impl From<CoreTokenUsage> for TokenUsageBreakdown {
 
 // Thread/Turn lifecycle notifications and item progress events
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadStartedNotification {
     pub thread: Thread,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadStatusChangedNotification {
     pub thread_id: String,
     pub status: ThreadStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadArchivedNotification {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadUnarchivedNotification {
     pub thread_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadClosedNotification {
     pub thread_id: String,
 }
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadNameUpdatedNotification {
     pub thread_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub thread_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalUpdatedNotification {
     pub thread_id: String,
     pub turn_id: Option<String>,
@@ -1394,14 +1335,14 @@ pub struct ThreadGoalUpdatedNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalClearedNotification {
     pub thread_id: String,
 }
 
 /// Deprecated: Use `ContextCompaction` item type instead.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ContextCompactedNotification {
     pub thread_id: String,
     pub turn_id: String,

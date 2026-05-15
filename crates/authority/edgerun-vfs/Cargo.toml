@@ -14,8 +14,7 @@ std = []
 
 [dependencies]
 edgerun-encoding = { workspace = true, features = ["compression"] }
-edgerun-wire = { workspace = true }
-edgerun-work = { workspace = true }
+edgerun-work = { workspace = true, default-features = false }
 
 [lints]
 workspace = true

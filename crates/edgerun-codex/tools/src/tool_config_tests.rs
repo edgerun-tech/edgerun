@@ -120,16 +120,8 @@ fn shell_zsh_fork_prefers_shell_command_over_unified_exec() {
         tools_config
             .with_unified_exec_shell_mode_for_session(
                 ToolUserShellType::Zsh,
-                Some(&PathBuf::from(if cfg!(windows) {
-                    r"C:\opt\codex\zsh"
-                } else {
-                    "/opt/codex/zsh"
-                })),
-                Some(&PathBuf::from(if cfg!(windows) {
-                    r"C:\opt\codex\codex-execve-wrapper"
-                } else {
-                    "/opt/codex/codex-execve-wrapper"
-                })),
+                Some(&PathBuf::from("/opt/codex/zsh")),
+                Some(&PathBuf::from("/opt/codex/codex-execve-wrapper")),
             )
             .unified_exec_shell_mode,
         if cfg!(unix) {

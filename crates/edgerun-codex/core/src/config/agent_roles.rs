@@ -7,7 +7,6 @@ use codex_config::config_toml::ConfigToml;
 use codex_exec_server::ExecutorFileSystem;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
-use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::io::ErrorKind;
@@ -214,13 +213,13 @@ async fn agent_role_config_from_toml(
     })
 }
 
-#[derive(Deserialize, Debug, Clone, Default, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[derive(edgerun_json::FromJson, Debug, Clone, Default, PartialEq)]
+#[schemars(deny_unknown_fields)]
 struct RawAgentRoleFileToml {
     name: Option<String>,
     description: Option<String>,
     nickname_candidates: Option<Vec<String>>,
-    #[serde(flatten)]
+    #[schemars(flatten)]
     config: ConfigToml,
 }
 

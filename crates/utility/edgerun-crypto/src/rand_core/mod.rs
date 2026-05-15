@@ -83,7 +83,7 @@ mod os;
 /// - `Debug` with a custom implementation which *does not* print any internal
 ///   state (at least, [`CryptoRng`]s should not risk leaking state through
 ///   `Debug`).
-/// - `Serialize` and `Deserialize` (from Serde), preferably making Serde
+/// - `Serialize` and `Deserialize` (from JsonCompat), preferably making JsonCompat
 ///   support optional at the crate level in PRNG libs.
 /// - `Clone`, if possible.
 /// - *never* implement `Copy` (accidental copies may cause repeated values).

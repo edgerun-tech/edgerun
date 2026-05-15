@@ -3713,8 +3713,7 @@ fn third_party_decision(sdk: &str) -> ThirdPartyDecision {
         ThirdPartyDecision {
             default_action: "preserve_if_reachable",
             breakage_risk: "unknown",
-            rationale:
-                "module appears in the app; dynamic trace should decide whether it is required",
+            rationale: "module appears in the app; dynamic trace should decide whether it is required",
         }
     }
 }

@@ -5,10 +5,10 @@ use edgerun_crypto::Ed25519SigningKey;
 use crate::channel::{ChannelEndpoint, RouteBinding};
 use crate::identity::node_identity_from_key;
 use crate::protocol::{
-    DEPARTMENT_RETRIEVAL, DEPARTMENT_STORAGE, Hash, NODE_ROLE_STORAGE, NodeId, NodeIdentity,
-    WorkPacket,
+    Hash, NodeId, NodeIdentity, WorkPacket, DEPARTMENT_RETRIEVAL, DEPARTMENT_STORAGE,
+    NODE_ROLE_STORAGE,
 };
-use crate::roles::{WorkServiceResponse, execute_role_packet};
+use crate::roles::{execute_role_packet, WorkServiceResponse};
 use crate::route_builder::route_binding;
 use crate::storage_adapter::{InMemoryObjectStorage, ObjectStorageAdapter};
 use crate::typed_storage_role::TypedObjectStoreRole;

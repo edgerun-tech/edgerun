@@ -52,7 +52,7 @@ const VIEW_IMAGE_UNSUPPORTED_MESSAGE: &str =
 #[derive(FromJson)]
 struct ViewImageArgs {
     path: String,
-    #[json(default)]
+    #[schemars(default)]
     environment_id: Option<String>,
     detail: Option<String>,
 }

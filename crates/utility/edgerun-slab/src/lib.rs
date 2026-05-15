@@ -125,8 +125,8 @@ extern crate std;
 #[cfg(feature = "std")]
 extern crate std as alloc;
 
-#[cfg(feature = "serde")]
-mod serde;
+#[cfg(feature = "edgerun_json_compat")]
+mod json_compat;
 
 mod builder;
 

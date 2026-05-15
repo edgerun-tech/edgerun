@@ -1853,7 +1853,7 @@ async fn remote_compact_persists_replacement_history_in_rollout() -> Result<()> 
         .map(str::trim)
         .filter(|l| !l.is_empty())
     {
-        let Ok(entry) = edgerun_json::from_serde_str::<RolloutLine>(line) else {
+        let Ok(entry) = edgerun_json::from_json_str::<RolloutLine>(line) else {
             continue;
         };
         if let RolloutItem::Compacted(compacted) = entry.item

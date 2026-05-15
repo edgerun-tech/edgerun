@@ -55,7 +55,6 @@
 //! - `:display` will capture the value using `Display`.
 //! - `:err` will capture the value using `std::error::Error` (requires the `kv_std` feature).
 //! - `:sval` will capture the value using `sval::Value` (requires the `kv_sval` feature).
-//! - `:serde` will capture the value using `serde::Serialize` (requires the `kv_serde` feature).
 //!
 //! ## Working with key-values on log records
 //!
@@ -187,38 +186,27 @@
 //! # }
 //! ```
 //!
-//! To serialize a value to a format like JSON, you can also use either `serde` or `sval`:
+//! To serialize a value to a format like JSON, use the EdgeRun JSON traits directly:
 //!
 //! ```
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # #[cfg(feature = "kv_serde")]
-//! # {
 //! # use log::kv::Key;
-//! #[derive(serde::Serialize)]
-//! struct Data {
-//!     a: i32, b: bool,
-//!     c: &'static str,
-//! }
+//! let data = 1;
 //!
-//! let data = Data { a: 1, b: true, c: "Some data" };
-//!
-//! # let source = [("a", log::kv::Value::from_serde(&data))];
+//! # let source = [("a", log::kv::Value::from_debug(&data))];
 //! # let record = log::Record::builder().key_values(&source).build();
 //! // info!(a = data; "Something of interest");
 //!
 //! let a = record.key_values().get(Key::from("a")).unwrap();
 //!
-//! assert_eq!("{\"a\":1,\"b\":true,\"c\":\"Some data\"}", edgerun_json::to_string(&a)?);
-//! # }
+//! assert_eq!("1", a.to_string());
 //! # Ok(())
 //! # }
 //! ```
 //!
 //! The choice of serialization framework depends on the needs of the consumer.
-//! If you're in a no-std environment, you can use `sval`. In other cases, you can use `serde`.
+//! If you're in a no-std environment, you can use `sval`.
 //! Log producers and log consumers don't need to agree on the serialization framework.
-//! A value can be captured using its `serde::Serialize` implementation and still be serialized
-//! through `sval` without losing any structure or data.
 //!
 //! Values can also always be formatted using the standard `Debug` and `Display`
 //! traits:

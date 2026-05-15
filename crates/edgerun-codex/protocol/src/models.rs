@@ -102,26 +102,30 @@ impl FileSystemPermissions {
     }
 }
 
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(deny_unknown_fields)]
+#[derive(
+    Debug, Clone, Default, Eq, Hash, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(deny_unknown_fields)]
 struct LegacyFileSystemPermissions {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     read: Option<Vec<AbsolutePathBuf>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     write: Option<Vec<AbsolutePathBuf>>,
 }
 
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(deny_unknown_fields)]
+#[derive(
+    Debug, Clone, Default, Eq, Hash, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(deny_unknown_fields)]
 struct CanonicalFileSystemPermissions {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     entries: Vec<FileSystemSandboxEntry>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     glob_scan_max_depth: Option<NonZeroUsize>,
 }
 
 #[derive(Debug, Clone, edgerun_json::FromJson)]
-#[serde(untagged)]
+#[schemars(untagged)]
 enum FileSystemPermissionsDe {
     Canonical(CanonicalFileSystemPermissions),
     Legacy(LegacyFileSystemPermissions),
@@ -208,8 +212,19 @@ impl NetworkPermissions {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Eq, Hash, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Eq,
+    Hash,
+    PartialEq,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum SandboxEnforcement {
     /// Codex owns sandbox construction for this profile.
     #[default]
@@ -232,13 +247,13 @@ impl SandboxEnforcement {
 
 /// Filesystem permissions for profiles where Codex owns sandbox construction.
 #[derive(Debug, Clone, Eq, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ManagedFileSystemPermissions {
     /// Apply a managed filesystem sandbox from the listed entries.
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     Restricted {
         entries: Vec<FileSystemSandboxEntry>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         glob_scan_max_depth: Option<NonZeroUsize>,
     },
     /// Apply a managed sandbox that allows all filesystem access.
@@ -278,10 +293,10 @@ impl ManagedFileSystemPermissions {
 
 /// Canonical active runtime permissions for a conversation, turn, or command.
 #[derive(Debug, Clone, Eq, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum PermissionProfile {
     /// Codex owns sandbox construction for this profile.
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     Managed {
         file_system: ManagedFileSystemPermissions,
         network: NetworkSandboxPolicy,
@@ -289,7 +304,7 @@ pub enum PermissionProfile {
     /// Do not apply an outer sandbox.
     Disabled,
     /// Filesystem isolation is enforced by an external caller.
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     External { network: NetworkSandboxPolicy },
 }
 
@@ -465,15 +480,15 @@ impl PermissionProfile {
 }
 
 #[derive(Debug, Clone, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 enum TaggedPermissionProfile {
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     Managed {
         file_system: ManagedFileSystemPermissions,
         network: NetworkSandboxPolicy,
     },
     Disabled,
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     External {
         network: NetworkSandboxPolicy,
     },
@@ -498,7 +513,7 @@ impl From<TaggedPermissionProfile> for PermissionProfile {
 /// Pre-tagged shape written to rollout files before `PermissionProfile`
 /// represented enforcement explicitly.
 #[derive(Debug, Clone, Default, edgerun_json::FromJson)]
-#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 struct LegacyPermissionProfile {
     network: Option<NetworkPermissions>,
     file_system: Option<FileSystemPermissions>,
@@ -525,7 +540,7 @@ impl From<LegacyPermissionProfile> for PermissionProfile {
 }
 
 #[derive(Debug, Clone, edgerun_json::FromJson)]
-#[serde(untagged)]
+#[schemars(untagged)]
 enum PermissionProfileDe {
     Tagged(TaggedPermissionProfile),
     Legacy(LegacyPermissionProfile),
@@ -577,12 +592,12 @@ impl From<&FileSystemPermissions> for FileSystemSandboxPolicy {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ResponseInputItem {
     Message {
         role: String,
         content: Vec<ContentItem>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         phase: Option<MessagePhase>,
     },
     FunctionCallOutput {
@@ -596,7 +611,7 @@ pub enum ResponseInputItem {
     },
     CustomToolCallOutput {
         call_id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
         #[schemars(with = "FunctionCallOutputBody")]
         output: FunctionCallOutputPayload,
@@ -670,14 +685,14 @@ fn call_tool_result_to_json(output: &CallToolResult) -> Value {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ContentItem {
     InputText {
         text: String,
     },
     InputImage {
         image_url: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         detail: Option<ImageDetail>,
     },
     OutputText {
@@ -686,7 +701,7 @@ pub enum ContentItem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 pub enum ImageDetail {
     Auto,
     Low,
@@ -696,8 +711,8 @@ pub enum ImageDetail {
 
 pub const DEFAULT_IMAGE_DETAIL: ImageDetail = ImageDetail::High;
 
-#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "snake_case")]
 /// Classifies an assistant message as interim commentary or final answer text.
 ///
 /// Providers do not emit this consistently, so callers must treat `None` as
@@ -713,31 +728,31 @@ pub enum MessagePhase {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ResponseItem {
     Message {
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         role: String,
         content: Vec<ContentItem>,
         // Optional output-message phase (for example: "commentary", "final_answer").
         // Availability varies by provider/model, so downstream consumers must
         // preserve fallback behavior when this is absent.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         phase: Option<MessagePhase>,
     },
     Reasoning {
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         #[schemars(skip)]
         id: String,
         summary: Vec<ReasoningItemReasoningSummary>,
-        #[serde(default, skip_serializing_if = "should_serialize_reasoning_content")]
+        #[schemars(default, skip_serializing_if = "should_serialize_reasoning_content")]
         content: Option<Vec<ReasoningItemContent>>,
         encrypted_content: Option<String>,
     },
     LocalShellCall {
         /// Legacy id field retained for compatibility with older payloads.
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         /// Set when using the Responses API.
         call_id: Option<String>,
@@ -745,10 +760,10 @@ pub enum ResponseItem {
         action: LocalShellAction,
     },
     FunctionCall {
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         namespace: Option<String>,
         // The Responses API returns the function call arguments as a *string* that contains
         // JSON, not as an already‑parsed object. We keep it as a raw string here and let
@@ -757,10 +772,10 @@ pub enum ResponseItem {
         call_id: String,
     },
     ToolSearchCall {
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         call_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
         execution: String,
         arguments: edgerun_json::Value,
@@ -776,9 +791,9 @@ pub enum ResponseItem {
         output: FunctionCallOutputPayload,
     },
     CustomToolCall {
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
 
         call_id: String,
@@ -790,7 +805,7 @@ pub enum ResponseItem {
     // text or structured content items.
     CustomToolCallOutput {
         call_id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
         #[schemars(with = "FunctionCallOutputBody")]
         output: FunctionCallOutputPayload,
@@ -810,11 +825,11 @@ pub enum ResponseItem {
     //   "action": {"type":"search","query":"weather: San Francisco, CA"}
     // }
     WebSearchCall {
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         action: Option<WebSearchAction>,
     },
     // Emitted by the Responses API when the agent triggers image generation.
@@ -829,17 +844,17 @@ pub enum ResponseItem {
     ImageGenerationCall {
         id: String,
         status: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         revised_prompt: Option<String>,
         result: String,
     },
-    #[serde(alias = "compaction_summary")]
+    #[schemars(alias = "compaction_summary")]
     Compaction { encrypted_content: String },
     ContextCompaction {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         encrypted_content: Option<String>,
     },
-    #[serde(other)]
+    #[schemars(other)]
     Other,
 }
 
@@ -1338,7 +1353,7 @@ impl ToJson for ResponseItem {
             }
             Self::ContextCompaction { encrypted_content } => {
                 object.push_field("type", "context_compaction");
-                object.push_field("encrypted_content", encrypted_content.to_json());
+                object.push_opt_field("encrypted_content", encrypted_content.clone());
             }
             Self::Other => {
                 object.push_field("type", "other");
@@ -1432,7 +1447,7 @@ pub const BASE_INSTRUCTIONS_DEFAULT: &str = include_str!("prompts/base_instructi
 
 /// Base instructions for the model in a thread. Corresponds to the `instructions` field in the ResponsesAPI.
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename = "base_instructions", rename_all = "snake_case")]
+#[schemars(rename = "base_instructions", rename_all = "snake_case")]
 pub struct BaseInstructions {
     pub text: String,
 }
@@ -1675,7 +1690,7 @@ impl From<ResponseInputItem> for ResponseItem {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum LocalShellStatus {
     Completed,
     InProgress,
@@ -1683,7 +1698,7 @@ pub enum LocalShellStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum LocalShellAction {
     Exec(LocalShellExecAction),
 }
@@ -1698,38 +1713,38 @@ pub struct LocalShellExecAction {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 #[schemars(rename = "ResponsesApiWebSearchAction")]
 pub enum WebSearchAction {
     Search {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         query: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         queries: Option<Vec<String>>,
     },
     OpenPage {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         url: Option<String>,
     },
     FindInPage {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         url: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         pattern: Option<String>,
     },
 
-    #[serde(other)]
+    #[schemars(other)]
     Other,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ReasoningItemReasoningSummary {
     SummaryText { text: String },
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ReasoningItemContent {
     ReasoningText { text: String },
     Text { text: String },
@@ -1781,7 +1796,7 @@ impl From<Vec<UserInput>> for ResponseInputItem {
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SearchToolCallParams {
     pub query: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
 }
 
@@ -1793,10 +1808,10 @@ pub struct ShellToolCallParams {
     pub workdir: Option<String>,
 
     /// This is the maximum time in milliseconds that the command is allowed to run.
-    #[serde(alias = "timeout")]
+    #[schemars(alias = "timeout")]
     pub timeout_ms: Option<u64>,
     /// Suggests a command prefix to persist for future sessions
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub prefix_rule: Option<Vec<String>>,
 }
 
@@ -1824,12 +1839,12 @@ pub struct ShellCommandToolCallParams {
     pub workdir: Option<String>,
 
     /// Whether to run the shell with login shell semantics
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub login: Option<bool>,
     /// This is the maximum time in milliseconds that the command is allowed to run.
-    #[serde(alias = "timeout")]
+    #[schemars(alias = "timeout")]
     pub timeout_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub prefix_rule: Option<Vec<String>>,
 }
 
@@ -1853,7 +1868,7 @@ impl FromJson for ShellCommandToolCallParams {
 /// Responses API compatible content items that can be returned by a tool call.
 /// This is a subset of ContentItem with the types we support as function call outputs.
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum FunctionCallOutputContentItem {
     // Do not rename, these are serialized and used directly in the responses API.
     InputText {
@@ -1862,7 +1877,7 @@ pub enum FunctionCallOutputContentItem {
     // Do not rename, these are serialized and used directly in the responses API.
     InputImage {
         image_url: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         detail: Option<ImageDetail>,
     },
 }
@@ -1928,7 +1943,7 @@ pub struct FunctionCallOutputPayload {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(untagged)]
+#[schemars(untagged)]
 pub enum FunctionCallOutputBody {
     Text(String),
     ContentItems(Vec<FunctionCallOutputContentItem>),
@@ -2294,7 +2309,7 @@ mod tests {
             },
         });
 
-        let permission_profile: PermissionProfile = edgerun_json::from_serde_value(legacy)?;
+        let permission_profile: PermissionProfile = edgerun_json::from_json_value(legacy)?;
 
         assert_eq!(
             permission_profile,
@@ -2438,12 +2453,7 @@ mod tests {
 
     #[test]
     fn file_system_permissions_with_glob_scan_depth_uses_canonical_json() -> Result<()> {
-        let path = AbsolutePathBuf::try_from(PathBuf::from(if cfg!(windows) {
-            r"C:\tmp\allowed"
-        } else {
-            "/tmp/allowed"
-        }))
-        .expect("absolute path");
+        let path = AbsolutePathBuf::try_from(PathBuf::from("/tmp/allowed")).expect("absolute path");
         let file_system_permissions = FileSystemPermissions {
             entries: vec![FileSystemSandboxEntry {
                 path: FileSystemPath::Path { path },
@@ -2566,7 +2576,7 @@ mod tests {
 
     #[test]
     fn function_call_deserializes_optional_namespace() {
-        let item: ResponseItem = edgerun_json::from_serde_value(edgerun_json::json!({
+        let item: ResponseItem = edgerun_json::from_json_value(edgerun_json::json!({
             "type": "function_call",
             "name": "mcp__codex_apps__gmail_get_recent_emails",
             "namespace": "mcp__codex_apps__gmail",

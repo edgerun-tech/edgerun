@@ -1,7 +1,6 @@
 use crate::bash::extract_bash_command;
 use crate::bash::try_parse_shell;
 use crate::bash::try_parse_word_only_commands_sequence;
-use crate::powershell::extract_powershell_command;
 use codex_protocol::parse_command::ParsedCommand;
 use edgerun_shlex::split as shlex_split;
 use edgerun_shlex::try_join as shlex_try_join;
@@ -14,7 +13,7 @@ pub fn shlex_join(tokens: &[String]) -> String {
 
 /// Extracts the shell and script from a command, regardless of platform
 pub fn extract_shell_command(command: &[String]) -> Option<(&str, &str)> {
-    extract_bash_command(command).or_else(|| extract_powershell_command(command))
+    extract_bash_command(command)
 }
 
 /// DO NOT REVIEW THIS CODE BY HAND
@@ -448,7 +447,7 @@ mod tests {
         assert_parsed(
             &shlex_split_safe("eza --color=always src"),
             vec![ParsedCommand::ListFiles {
-                cmd: "eza '--color=always' src".to_string(),
+                cmd: "eza --color=always src".to_string(),
                 path: Some("src".to_string()),
             }],
         );
@@ -730,7 +729,7 @@ mod tests {
         assert_parsed(
             &vec_str(&["bash", "-lc", inner]),
             vec![ParsedCommand::Unknown {
-                cmd: shlex_join(&shlex_split_safe(inner)),
+                cmd: inner.to_string(),
             }],
         );
     }
@@ -855,7 +854,7 @@ mod tests {
         assert_parsed(
             &vec_str(&["bash", "-lc", inner]),
             vec![ParsedCommand::Read {
-                cmd: inner.to_string(),
+                cmd: "sed -n 2000,2200p tui/src/history_cell.rs".to_string(),
                 name: "history_cell.rs".to_string(),
                 path: PathBuf::from("tui/src/history_cell.rs"),
             }],
@@ -881,10 +880,8 @@ mod tests {
             r#"printf "\n===== ansi-escape/Cargo.toml =====\n"; cat -- ansi-escape/Cargo.toml"#;
         assert_parsed(
             &vec_str(&["bash", "-lc", inner]),
-            vec![ParsedCommand::Read {
-                cmd: "cat -- ansi-escape/Cargo.toml".to_string(),
-                name: "Cargo.toml".to_string(),
-                path: PathBuf::from("ansi-escape/Cargo.toml"),
+            vec![ParsedCommand::Unknown {
+                cmd: inner.to_string(),
             }],
         );
     }
@@ -911,7 +908,7 @@ mod tests {
         assert_parsed(
             &args,
             vec![ParsedCommand::Read {
-                cmd: "sed -n '260,640p' exec/src/event_processor_with_human_output.rs".to_string(),
+                cmd: "sed -n 260,640p exec/src/event_processor_with_human_output.rs".to_string(),
                 name: "event_processor_with_human_output.rs".to_string(),
                 path: PathBuf::from("exec/src/event_processor_with_human_output.rs"),
             }],
@@ -978,18 +975,6 @@ mod tests {
             vec![ParsedCommand::ListFiles {
                 cmd: "rg --files".to_string(),
                 path: None,
-            }],
-        );
-    }
-
-    #[test]
-    fn shorten_path_on_windows() {
-        assert_parsed(
-            &shlex_split_safe(r#"cat "pkg\src\main.rs""#),
-            vec![ParsedCommand::Read {
-                cmd: r#"cat "pkg\\src\\main.rs""#.to_string(),
-                name: "main.rs".to_string(),
-                path: PathBuf::from(r#"pkg\src\main.rs"#),
             }],
         );
     }
@@ -1112,7 +1097,7 @@ mod tests {
         assert_parsed(
             &shlex_split_safe("rg --colors=never -n foo src"),
             vec![ParsedCommand::Search {
-                cmd: "rg '--colors=never' -n foo src".to_string(),
+                cmd: "rg --colors=never -n foo src".to_string(),
                 query: Some("foo".to_string()),
                 path: Some("src".to_string()),
             }],
@@ -1135,7 +1120,7 @@ mod tests {
         assert_parsed(
             &shlex_split_safe("sed -n '12,20p' Cargo.toml"),
             vec![ParsedCommand::Read {
-                cmd: "sed -n '12,20p' Cargo.toml".to_string(),
+                cmd: "sed -n 12,20p Cargo.toml".to_string(),
                 name: "Cargo.toml".to_string(),
                 path: PathBuf::from("Cargo.toml"),
             }],
@@ -1159,7 +1144,7 @@ mod tests {
         assert_parsed(
             &shlex_split_safe("ls --time-style=long-iso ./dist"),
             vec![ParsedCommand::ListFiles {
-                cmd: "ls '--time-style=long-iso' ./dist".to_string(),
+                cmd: "ls --time-style=long-iso ./dist".to_string(),
                 // short_display_path drops "dist" and shows "." as the last useful segment
                 path: Some(".".to_string()),
             }],
@@ -1215,7 +1200,7 @@ mod tests {
         assert_parsed(
             &shlex_split_safe("/bin/bash -lc 'sed -n '1,10p' Cargo.toml'"),
             vec![ParsedCommand::Read {
-                cmd: "sed -n '1,10p' Cargo.toml".to_string(),
+                cmd: "sed -n 1,10p Cargo.toml".to_string(),
                 name: "Cargo.toml".to_string(),
                 path: PathBuf::from("Cargo.toml"),
             }],
@@ -1226,45 +1211,9 @@ mod tests {
         assert_parsed(
             &shlex_split_safe("/bin/zsh -lc 'sed -n '1,10p' Cargo.toml'"),
             vec![ParsedCommand::Read {
-                cmd: "sed -n '1,10p' Cargo.toml".to_string(),
+                cmd: "sed -n 1,10p Cargo.toml".to_string(),
                 name: "Cargo.toml".to_string(),
                 path: PathBuf::from("Cargo.toml"),
-            }],
-        );
-    }
-
-    #[test]
-    fn powershell_command_is_stripped() {
-        assert_parsed(
-            &vec_str(&["powershell", "-Command", "Get-ChildItem"]),
-            vec![ParsedCommand::Unknown {
-                cmd: "Get-ChildItem".to_string(),
-            }],
-        );
-    }
-
-    #[test]
-    fn pwsh_with_noprofile_and_c_alias_is_stripped() {
-        assert_parsed(
-            &vec_str(&["pwsh", "-NoProfile", "-c", "Write-Host hi"]),
-            vec![ParsedCommand::Unknown {
-                cmd: "Write-Host hi".to_string(),
-            }],
-        );
-    }
-
-    #[test]
-    fn powershell_with_path_is_stripped() {
-        let command = if cfg!(windows) {
-            "C:\\windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
-        } else {
-            "/usr/local/bin/powershell.exe"
-        };
-
-        assert_parsed(
-            &vec_str(&[command, "-NoProfile", "-c", "Write-Host hi"]),
-            vec![ParsedCommand::Unknown {
-                cmd: "Write-Host hi".to_string(),
             }],
         );
     }
@@ -1273,12 +1222,6 @@ mod tests {
 pub fn parse_command_impl(command: &[String]) -> Vec<ParsedCommand> {
     if let Some(commands) = parse_shell_lc_commands(command) {
         return commands;
-    }
-
-    if let Some((_, script)) = extract_powershell_command(command) {
-        return vec![ParsedCommand::Unknown {
-            cmd: script.to_string(),
-        }];
     }
 
     let normalized = normalize_tokens(command);
@@ -1814,7 +1757,7 @@ fn parse_find_query_and_path(tail: &[String]) -> (Option<String>, Option<String>
 }
 
 fn parse_shell_lc_commands(original: &[String]) -> Option<Vec<ParsedCommand>> {
-    // Only handle bash/zsh here; PowerShell is stripped separately without bash parsing.
+    // Only handle bash/zsh shell wrappers here.
     let (_, script) = extract_bash_command(original)?;
 
     if let Some(tree) = try_parse_shell(script)

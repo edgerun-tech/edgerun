@@ -92,7 +92,7 @@ impl Session {
                 message,
                 requested_schema,
             } => {
-                let requested_schema = match edgerun_json::to_serde_value(requested_schema) {
+                let requested_schema = match edgerun_json::to_value(&requested_schema) {
                     Ok(requested_schema) => requested_schema,
                     Err(err) => {
                         warn!(
@@ -369,14 +369,14 @@ impl Session {
         } = refresh_config;
 
         let mcp_servers =
-            match edgerun_json::from_serde_value::<HashMap<String, McpServerConfig>>(mcp_servers) {
+            match edgerun_json::from_json_value::<HashMap<String, McpServerConfig>>(mcp_servers) {
                 Ok(servers) => servers,
                 Err(err) => {
                     warn!("failed to parse MCP server refresh config: {err}");
                     return;
                 }
             };
-        let store_mode = match edgerun_json::from_serde_value::<OAuthCredentialsStoreMode>(
+        let store_mode = match edgerun_json::from_json_value::<OAuthCredentialsStoreMode>(
             mcp_oauth_credentials_store_mode,
         ) {
             Ok(mode) => mode,

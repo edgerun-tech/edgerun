@@ -1,8 +1,8 @@
 use core::fmt;
 use core::marker::PhantomData;
 
-use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
-use serde::ser::{Serialize, SerializeMap, Serializer};
+use edgerun_json_compat::de::{Deserialize, Deserializer, MapAccess, Visitor};
+use edgerun_json_compat::ser::{Serialize, SerializeMap, Serializer};
 
 use super::{builder::Builder, Slab};
 

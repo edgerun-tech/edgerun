@@ -37,7 +37,7 @@
 //! ## Other Features
 //! * `grab_spare_slice` lets you get access to the "inactive" portions of an
 //!   ArrayVec.
-//! * `serde` provides a `Serialize` and `Deserialize` implementation for
+//! * `edgerun_json_compat` provides a `Serialize` and `Deserialize` implementation for
 //!   [`TinyVec`] and [`ArrayVec`] types, provided the inner item also has an
 //!   implementation.
 //! * `borsh` provides a `BorshSerialize` and `BorshDeserialize` implementation

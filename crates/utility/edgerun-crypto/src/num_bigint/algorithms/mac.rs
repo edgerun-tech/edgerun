@@ -183,4 +183,3 @@ fn karatsuba(acc: &mut [BigDigit], x: &[BigDigit], y: &[BigDigit]) {
         Sign::NoSign => (),
     }
 }
-

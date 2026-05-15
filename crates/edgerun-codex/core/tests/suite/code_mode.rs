@@ -2369,7 +2369,7 @@ text(JSON.stringify(Object.getOwnPropertyNames(globalThis).sort()));
         Some(false),
         "exec global scope inspection failed unexpectedly: {output}"
     );
-    let globals = edgerun_json::from_serde_str::<Vec<String>>(&output)?;
+    let globals = edgerun_json::from_json_str::<Vec<String>>(&output)?;
     let globals = globals.into_iter().collect::<HashSet<_>>();
     let expected = [
         "AggregateError",

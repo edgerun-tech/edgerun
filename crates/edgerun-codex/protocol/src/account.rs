@@ -9,7 +9,7 @@ use crate::auth::KnownPlan;
 use crate::auth::PlanType as AuthPlanType;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, JsonSchema, Default)]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 pub enum PlanType {
     #[default]
     Free,
@@ -18,14 +18,14 @@ pub enum PlanType {
     Pro,
     ProLite,
     Team,
-    #[serde(rename = "self_serve_business_usage_based")]
+    #[schemars(rename = "self_serve_business_usage_based")]
     SelfServeBusinessUsageBased,
     Business,
-    #[serde(rename = "enterprise_cbp_usage_based")]
+    #[schemars(rename = "enterprise_cbp_usage_based")]
     EnterpriseCbpUsageBased,
     Enterprise,
     Edu,
-    #[serde(other)]
+    #[schemars(other)]
     Unknown,
 }
 

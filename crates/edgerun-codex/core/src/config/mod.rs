@@ -4,9 +4,6 @@ use crate::config::edit::ConfigEditsBuilder;
 use crate::path_utils::normalize_for_native_workdir;
 use crate::unified_exec::DEFAULT_MAX_BACKGROUND_TERMINAL_TIMEOUT_MS;
 use crate::unified_exec::MIN_EMPTY_YIELD_TIME_MS;
-use crate::windows_sandbox::WindowsSandboxLevelExt;
-use crate::windows_sandbox::resolve_windows_sandbox_mode;
-use crate::windows_sandbox::resolve_windows_sandbox_private_desktop;
 use codex_config::CloudRequirementsLoader;
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStack;
@@ -52,7 +49,6 @@ use codex_config::types::ToolSuggestDiscoverable;
 use codex_config::types::TuiKeymap;
 use codex_config::types::TuiNotificationSettings;
 use codex_config::types::UriBasedFileOpener;
-use codex_config::types::WindowsSandboxModeToml;
 use codex_core_plugins::PluginsConfigInput;
 use codex_exec_server::ExecutorFileSystem;
 use codex_exec_server::LOCAL_FS;
@@ -87,7 +83,6 @@ use codex_protocol::config_types::TrustLevel;
 use codex_protocol::config_types::Verbosity;
 use codex_protocol::config_types::WebSearchConfig;
 use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::openai_models::ModelsResponse;
@@ -98,8 +93,6 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -249,11 +242,6 @@ pub struct Permissions {
     pub allow_login_shell: bool,
     /// Policy used to build process environments for shell/unified exec.
     pub shell_environment_policy: ShellEnvironmentPolicy,
-    /// Effective Windows sandbox mode derived from `[windows].sandbox` or
-    /// legacy feature keys.
-    pub windows_sandbox_mode: Option<WindowsSandboxModeToml>,
-    /// Whether the final Windows sandboxed child should run on a private desktop.
-    pub windows_sandbox_private_desktop: bool,
 }
 
 impl Permissions {
@@ -761,9 +749,6 @@ pub struct Config {
     /// is (1) part of a git repo, (2) a git worktree, or (3) just using the cwd
     pub active_project: ProjectConfig,
 
-    /// Tracks whether the Windows onboarding screen has been acknowledged.
-    pub windows_wsl_setup_acknowledged: bool,
-
     /// Collection of various notices we show the user
     pub notices: Notice,
 
@@ -792,7 +777,7 @@ pub struct Config {
     pub otel: codex_config::types::OtelConfig,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, edgerun_json::ToJson)]
 pub struct MultiAgentV2Config {
     pub max_concurrent_threads_per_session: usize,
     pub min_wait_timeout_ms: i64,
@@ -1723,7 +1708,7 @@ enum PermissionConfigSyntax {
     Profiles,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, edgerun_json::FromJson, Default)]
 struct PermissionSelectionToml {
     default_permissions: Option<String>,
     sandbox_mode: Option<SandboxMode>,
@@ -2189,9 +2174,6 @@ impl Config {
             feature_requirements,
             &mut startup_warnings,
         )?;
-        let windows_sandbox_mode = resolve_windows_sandbox_mode(&cfg, &config_profile);
-        let windows_sandbox_private_desktop =
-            resolve_windows_sandbox_private_desktop(&cfg, &config_profile);
         let resolved_cwd = AbsolutePathBuf::try_from(normalize_for_native_workdir({
             use std::env;
 
@@ -2249,11 +2231,6 @@ impl Config {
             ));
         }
 
-        let windows_sandbox_level = match windows_sandbox_mode {
-            Some(WindowsSandboxModeToml::Elevated) => WindowsSandboxLevel::Elevated,
-            Some(WindowsSandboxModeToml::Unelevated) => WindowsSandboxLevel::RestrictedToken,
-            None => WindowsSandboxLevel::from_features(&features),
-        };
         let memories_root = memory_root(&codex_home);
         std::fs::create_dir_all(&memories_root)?;
         if !additional_writable_roots
@@ -2285,12 +2262,8 @@ impl Config {
                     // PermissionProfile carries the active network sandbox bit, not the configured
                     // proxy/allowlist policy. Keep that config so active profiles can round-trip
                     // without broadening network behavior.
-                    let default_permissions = default_permissions.unwrap_or_else(|| {
-                        default_builtin_permission_profile_name(
-                            &active_project,
-                            windows_sandbox_level,
-                        )
-                    });
+                    let default_permissions = default_permissions
+                        .unwrap_or_else(|| default_builtin_permission_profile_name(&active_project));
                     network_proxy_config_for_profile_selection(
                         cfg.permissions.as_ref(),
                         default_permissions,
@@ -2322,9 +2295,8 @@ impl Config {
                 file_system_sandbox_policy,
             )
         } else if profiles_are_active {
-            let default_permissions = default_permissions.unwrap_or_else(|| {
-                default_builtin_permission_profile_name(&active_project, windows_sandbox_level)
-            });
+            let default_permissions = default_permissions
+                .unwrap_or_else(|| default_builtin_permission_profile_name(&active_project));
             let builtin_workspace_write_settings = if using_implicit_builtin_profile {
                 cfg.sandbox_workspace_write.as_ref()
             } else {
@@ -2402,7 +2374,6 @@ impl Config {
                 .derive_permission_profile(
                     sandbox_mode,
                     config_profile.sandbox_mode,
-                    windows_sandbox_level,
                     Some(&active_project),
                     Some(&constrained_permission_profile),
                 )
@@ -2929,8 +2900,6 @@ impl Config {
                 network,
                 allow_login_shell,
                 shell_environment_policy,
-                windows_sandbox_mode,
-                windows_sandbox_private_desktop,
             },
             approvals_reviewer: constrained_approvals_reviewer.value(),
             enforce_residency: enforce_residency.value,
@@ -3074,7 +3043,6 @@ impl Config {
                 .unwrap_or(false),
             active_profile: active_profile_name,
             active_project,
-            windows_wsl_setup_acknowledged: cfg.windows_wsl_setup_acknowledged.unwrap_or(false),
             notices,
             check_for_update_on_startup,
             disable_paste_burst: cfg.disable_paste_burst.unwrap_or(false),
@@ -3174,32 +3142,6 @@ impl Config {
         } else {
             Ok(Some(s))
         }
-    }
-
-    pub fn set_windows_sandbox_enabled(&mut self, value: bool) {
-        self.permissions.windows_sandbox_mode = if value {
-            Some(WindowsSandboxModeToml::Unelevated)
-        } else if matches!(
-            self.permissions.windows_sandbox_mode,
-            Some(WindowsSandboxModeToml::Unelevated)
-        ) {
-            None
-        } else {
-            self.permissions.windows_sandbox_mode
-        };
-    }
-
-    pub fn set_windows_elevated_sandbox_enabled(&mut self, value: bool) {
-        self.permissions.windows_sandbox_mode = if value {
-            Some(WindowsSandboxModeToml::Elevated)
-        } else if matches!(
-            self.permissions.windows_sandbox_mode,
-            Some(WindowsSandboxModeToml::Elevated)
-        ) {
-            None
-        } else {
-            self.permissions.windows_sandbox_mode
-        };
     }
 
     pub fn managed_network_requirements_enabled(&self) -> bool {

@@ -11,13 +11,13 @@ use alloc::{
     string::String,
 };
 use edgerun_json::JsonValue;
-use serde::ser::{SerializeMap, Serializer as _};
+use edgerun_json_compat::ser::{SerializeMap, Serializer as _};
 use tracing_core::{
     field::{self, Field},
     span::Record,
     Event, Subscriber,
 };
-use tracing_serde::AsSerde;
+use tracing_edgerun_json_compat::AsJsonCompat;
 
 #[cfg(feature = "tracing-log")]
 use tracing_log::NormalizeEvent;
@@ -118,16 +118,16 @@ where
     Span: Subscriber + for<'lookup> crate::registry::LookupSpan<'lookup>,
     N: for<'writer> FormatFields<'writer> + 'static;
 
-impl<Span, N> serde::ser::Serialize for SerializableContext<'_, '_, Span, N>
+impl<Span, N> edgerun_json_compat::ser::Serialize for SerializableContext<'_, '_, Span, N>
 where
     Span: Subscriber + for<'lookup> crate::registry::LookupSpan<'lookup>,
     N: for<'writer> FormatFields<'writer> + 'static,
 {
     fn serialize<Ser>(&self, serializer_o: Ser) -> Result<Ser::Ok, Ser::Error>
     where
-        Ser: serde::ser::Serializer,
+        Ser: edgerun_json_compat::ser::Serializer,
     {
-        use serde::ser::SerializeSeq;
+        use edgerun_json_compat::ser::SerializeSeq;
         let mut serializer = serializer_o.serialize_seq(None)?;
 
         if let Some(leaf_span) = self.0.lookup_current() {
@@ -148,14 +148,14 @@ where
     Span: for<'lookup> crate::registry::LookupSpan<'lookup>,
     N: for<'writer> FormatFields<'writer> + 'static;
 
-impl<Span, N> serde::ser::Serialize for SerializableSpan<'_, '_, Span, N>
+impl<Span, N> edgerun_json_compat::ser::Serialize for SerializableSpan<'_, '_, Span, N>
 where
     Span: for<'lookup> crate::registry::LookupSpan<'lookup>,
     N: for<'writer> FormatFields<'writer> + 'static,
 {
     fn serialize<Ser>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error>
     where
-        Ser: serde::ser::Serializer,
+        Ser: edgerun_json_compat::ser::Serializer,
     {
         let mut serializer = serializer.serialize_map(None)?;
 
@@ -244,7 +244,7 @@ where
             }
 
             if self.display_level {
-                serializer.serialize_entry("level", &meta.level().as_serde())?;
+                serializer.serialize_entry("level", &meta.level().as_edgerun_json_compat())?;
             }
 
             let format_field_marker: std::marker::PhantomData<N> = std::marker::PhantomData;
@@ -260,12 +260,12 @@ where
             };
 
             if self.format.flatten_event {
-                let mut visitor = tracing_serde::SerdeMapVisitor::new(serializer);
+                let mut visitor = tracing_edgerun_json_compat::JsonCompatMapVisitor::new(serializer);
                 event.record(&mut visitor);
 
                 serializer = visitor.take_serializer()?;
             } else {
-                use tracing_serde::fields::AsMap;
+                use tracing_edgerun_json_compat::fields::AsMap;
                 serializer.serialize_entry("fields", &event.field_map())?;
             };
 
@@ -405,7 +405,7 @@ impl<'a> FormatFields<'a> for JsonFields {
         // without having to parse and re-serialize.
         let mut new = String::new();
         let map: BTreeMap<String, JsonValue> =
-            edgerun_json::from_serde_str(current).map_err(|_| fmt::Error)?;
+            edgerun_json::from_edgerun_json_compat_str(current).map_err(|_| fmt::Error)?;
         let mut v = JsonVisitor::new(&mut new);
         v.values = map;
         fields.record(&mut v);
@@ -462,7 +462,7 @@ impl crate::field::VisitOutput<fmt::Result> for JsonVisitor<'_> {
 impl field::Visit for JsonVisitor<'_> {
     #[cfg(all(tracing_unstable, feature = "valuable"))]
     fn record_value(&mut self, field: &Field, value: valuable_crate::Value<'_>) {
-        let value = match edgerun_json::to_serde_value(valuable_serde::Serializable::new(value)) {
+        let value = match edgerun_json::to_edgerun_json_compat_value(valuable_edgerun_json_compat::Serializable::new(value)) {
             Ok(value) => value,
             Err(_e) => {
                 #[cfg(debug_assertions)]
@@ -845,9 +845,9 @@ mod test {
         let buf = make_writer.buf();
         let actual = std::str::from_utf8(&buf[..]).unwrap();
         assert_eq!(
-            edgerun_json::from_serde_str::<std::collections::HashMap<String, JsonValue>>(expected)
+            edgerun_json::from_edgerun_json_compat_str::<std::collections::HashMap<String, JsonValue>>(expected)
                 .unwrap(),
-            edgerun_json::from_serde_str(actual).unwrap()
+            edgerun_json::from_edgerun_json_compat_str(actual).unwrap()
         );
     }
 
@@ -867,11 +867,11 @@ mod test {
         let buf = make_writer.buf();
         let actual = std::str::from_utf8(&buf[..]).unwrap();
         let mut expected: std::collections::HashMap<String, JsonValue> =
-            edgerun_json::from_serde_str(expected)
+            edgerun_json::from_edgerun_json_compat_str(expected)
                 .unwrap();
         let expect_line_number = expected.remove("line_number").is_some();
         let mut actual: std::collections::HashMap<String, JsonValue> =
-            edgerun_json::from_serde_str(actual).unwrap();
+            edgerun_json::from_edgerun_json_compat_str(actual).unwrap();
         let line_number = actual.remove("line_number");
         if expect_line_number {
             assert_eq!(line_number.map(|x| x.is_number()), Some(true));

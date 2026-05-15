@@ -23,7 +23,7 @@ use crate::openai_models::ReasoningEffort;
 /// debugging and understanding the model's reasoning process.
 /// See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ReasoningSummary {
     #[default]
@@ -36,8 +36,10 @@ pub enum ReasoningSummary {
 
 /// Controls output length/detail on GPT-5 models via the Responses API.
 /// Serialized with lowercase values to match the OpenAI API.
-#[derive(Hash, Debug, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Hash, Debug, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, ToJson, FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Verbosity {
     Low,
@@ -46,22 +48,32 @@ pub enum Verbosity {
     High,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Default,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum SandboxMode {
-    #[serde(rename = "read-only")]
+    #[schemars(rename = "read-only")]
     #[default]
     ReadOnly,
 
-    #[serde(rename = "workspace-write")]
+    #[schemars(rename = "workspace-write")]
     WorkspaceWrite,
 
-    #[serde(rename = "danger-full-access")]
+    #[schemars(rename = "danger-full-access")]
     DangerFullAccess,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Display, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Display)]
 #[strum(serialize_all = "snake_case")]
 /// Configures who approval requests are routed to for review. Examples
 /// include sandbox escapes, blocked network access, MCP approval prompts, and
@@ -70,9 +82,7 @@ pub enum SandboxMode {
 /// decision framework before approving or denying the request.
 pub enum ApprovalsReviewer {
     #[default]
-    #[serde(rename = "user")]
     User,
-    #[serde(rename = "guardian_subagent", alias = "auto_review")]
     #[strum(serialize = "guardian_subagent")]
     AutoReview,
 }
@@ -112,8 +122,10 @@ impl FromJson for ApprovalsReviewer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "kebab-case")]
 pub enum ShellEnvironmentPolicyInherit {
     /// "Core" environment variables for the platform. On UNIX, this would
     /// include HOME, LOGNAME, PATH, SHELL, and USER, among others.
@@ -127,7 +139,9 @@ pub enum ShellEnvironmentPolicyInherit {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Default, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct EnvironmentVariablePattern {
     pattern: Vec<char>,
     case_insensitive: bool,
@@ -290,8 +304,21 @@ fn string_enum_schema_with_description(values: &[&str], description: &str) -> Sc
     Schema::Object(schema)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, PartialOrd, Ord, EnumIter, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    PartialOrd,
+    Ord,
+    EnumIter,
+    ToJson,
+    FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Personality {
     None,
@@ -299,8 +326,19 @@ pub enum Personality {
     Pragmatic,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    Default,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WebSearchMode {
     Disabled,
@@ -309,8 +347,18 @@ pub enum WebSearchMode {
     Live,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WebSearchContextSize {
     Low,
@@ -318,7 +366,9 @@ pub enum WebSearchContextSize {
     High,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchLocation {
     pub country: Option<String>,
@@ -338,7 +388,9 @@ impl WebSearchLocation {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchToolConfig {
     pub context_size: Option<WebSearchContextSize>,
@@ -364,24 +416,39 @@ impl WebSearchToolConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchFilters {
     pub allowed_domains: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WebSearchUserLocationType {
     #[default]
     Approximate,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchUserLocation {
-    #[serde(default)]
+    #[schemars(default)]
     pub r#type: WebSearchUserLocationType,
     pub country: Option<String>,
     pub region: Option<String>,
@@ -389,7 +456,9 @@ pub struct WebSearchUserLocation {
     pub timezone: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchConfig {
     pub filters: Option<WebSearchFilters>,
@@ -423,8 +492,18 @@ impl From<WebSearchToolConfig> for WebSearchConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ServiceTier {
     Fast,
@@ -448,8 +527,18 @@ impl ServiceTier {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ForcedLoginMethod {
     Chatgpt,
@@ -467,20 +556,20 @@ pub struct ModelProviderAuthInfo {
     pub command: String,
 
     /// Command arguments.
-    #[serde(default)]
+    #[schemars(default)]
     pub args: Vec<String>,
 
     /// Maximum time to wait for the token command to exit successfully.
-    #[serde(default = "default_provider_auth_timeout_ms")]
+    #[schemars(default = "default_provider_auth_timeout_ms")]
     pub timeout_ms: NonZeroU64,
 
     /// Maximum age for the cached token before rerunning the command.
     /// Set to `0` to disable proactive refresh and only rerun after a 401 retry path.
-    #[serde(default = "default_provider_auth_refresh_interval_ms")]
+    #[schemars(default = "default_provider_auth_refresh_interval_ms")]
     pub refresh_interval_ms: u64,
 
     /// Working directory used when running the token command.
-    #[serde(default = "default_provider_auth_cwd")]
+    #[schemars(default = "default_provider_auth_cwd")]
     #[schemars(skip_serializing_if = "is_default_provider_auth_cwd")]
     pub cwd: AbsolutePathBuf,
 }
@@ -563,8 +652,18 @@ const _: fn(&AbsolutePathBuf) -> bool = is_default_provider_auth_cwd;
 
 /// Represents the trust level for a project directory.
 /// This determines the approval policy and sandbox mode applied.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum TrustLevel {
     Trusted,
@@ -591,8 +690,19 @@ pub enum TrustLevel {
 ///   in all multiplexers.
 ///
 /// The CLI flag `--no-alt-screen` can override this setting at runtime.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum AltScreenMode {
     /// Auto-detect: disable alternate screen in Zellij, enable elsewhere.
@@ -606,11 +716,11 @@ pub enum AltScreenMode {
 
 /// Initial collaboration mode to use when the TUI starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, JsonSchema, Default)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum ModeKind {
     Plan,
     #[default]
-    #[serde(
+    #[schemars(
         alias = "code",
         alias = "pair_programming",
         alias = "execute",
@@ -618,11 +728,11 @@ pub enum ModeKind {
     )]
     Default,
     #[doc(hidden)]
-    #[serde(skip_serializing, skip_deserializing)]
+    #[schemars(skip_serializing, skip_deserializing)]
     #[schemars(skip)]
     PairProgramming,
     #[doc(hidden)]
-    #[serde(skip_serializing, skip_deserializing)]
+    #[schemars(skip_serializing, skip_deserializing)]
     #[schemars(skip)]
     Execute,
 }
@@ -671,8 +781,10 @@ impl FromJson for ModeKind {
 }
 
 /// Collaboration mode for a Codex session.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub struct CollaborationMode {
     pub mode: ModeKind,
     pub settings: Settings,
@@ -741,7 +853,9 @@ impl CollaborationMode {
 }
 
 /// Settings for a collaboration mode.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct Settings {
     pub model: String,
     pub reasoning_effort: Option<ReasoningEffort>,
@@ -750,7 +864,9 @@ pub struct Settings {
 
 /// A mask for collaboration mode settings, allowing partial updates.
 /// All fields except `name` are optional, enabling selective updates.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct CollaborationModeMask {
     pub name: String,
     pub mode: Option<ModeKind>,

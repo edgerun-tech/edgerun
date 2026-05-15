@@ -2,8 +2,10 @@
 
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
-#[cfg(feature = "serde")]
-use serdect::serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compatct::edgerun_json_compat::{
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 /// Provides intentionally-checked arithmetic on `T`.
 ///
@@ -60,7 +62,7 @@ impl<T> From<Checked<T>> for Option<T> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de, T: Default + Deserialize<'de>> Deserialize<'de> for Checked<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -72,7 +74,7 @@ impl<'de, T: Default + Deserialize<'de>> Deserialize<'de> for Checked<T> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<T: Copy + Serialize> Serialize for Checked<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -82,7 +84,7 @@ impl<T: Copy + Serialize> Serialize for Checked<T> {
     }
 }
 
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, feature = "edgerun_json_compat"))]
 #[allow(clippy::unwrap_used)]
 mod tests {
 
@@ -90,7 +92,7 @@ mod tests {
     use crate::subtle::{Choice, ConstantTimeEq, CtOption};
 
     #[test]
-    fn serde() {
+    fn edgerun_json_compat() {
         let test = Checked::new(U64::from_u64(0x0011223344556677));
 
         let serialized = bincode::serialize(&test).unwrap();
@@ -110,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_owned() {
+    fn edgerun_json_compat_owned() {
         let test = Checked::new(U64::from_u64(0x0011223344556677));
 
         let serialized = bincode::serialize(&test).unwrap();

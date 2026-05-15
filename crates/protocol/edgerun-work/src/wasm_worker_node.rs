@@ -4,7 +4,7 @@ use crate::channel::{ChannelEnvelope, RouteBinding};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::frame_codec::channel_envelope_from_bytes;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket};
-use crate::roles::{RoleOutput, WorkRole, execute_role};
+use crate::roles::{execute_role, RoleOutput, WorkRole};
 use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
 use crate::ws_channel::{WsFrame, WsWorkChannel};
 

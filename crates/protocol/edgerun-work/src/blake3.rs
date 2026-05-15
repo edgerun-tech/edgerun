@@ -46,7 +46,11 @@ impl Hash {
 
 #[inline]
 const fn hex_digit(n: u8) -> u8 {
-    if n < 10 { b'0' + n } else { b'a' + n - 10 }
+    if n < 10 {
+        b'0' + n
+    } else {
+        b'a' + n - 10
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -368,7 +372,11 @@ fn g(state: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize, mx: u32, my:
 
 #[inline]
 const fn min_usize(a: usize, b: usize) -> usize {
-    if a < b { a } else { b }
+    if a < b {
+        a
+    } else {
+        b
+    }
 }
 
 #[cfg(test)]

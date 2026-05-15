@@ -105,7 +105,7 @@ pub struct TurnEnvironmentSelection {
 }
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(transparent)]
+#[schemars(transparent)]
 pub struct GitSha(pub String);
 
 impl GitSha {
@@ -122,15 +122,15 @@ pub struct Submission {
     /// Payload
     pub op: Op,
     /// Optional W3C trace carrier propagated across async submission handoffs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<W3cTraceContext>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
 pub struct W3cTraceContext {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub traceparent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub tracestate: Option<String>,
 }
 
@@ -145,37 +145,60 @@ pub struct McpServerRefreshConfig {
 pub struct ConversationStartParams {
     /// Selects whether the realtime session should produce text or audio output.
     pub output_modality: RealtimeOutputModality,
-    #[serde(
+    #[json(
         default,
-        deserialize_with = "conversation_start_prompt_serde::deserialize",
-        serialize_with = "conversation_start_prompt_serde::serialize",
+        deserialize_with = "conversation_start_prompt_json::deserialize",
+        serialize_with = "conversation_start_prompt_json::serialize",
         skip_serializing_if = "Option::is_none"
     )]
     pub prompt: Option<Option<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub realtime_session_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub transport: Option<ConversationStartTransport>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub voice: Option<RealtimeVoice>,
 }
 
+mod conversation_start_prompt_json {
+    use edgerun_json::FromJson;
+    use edgerun_json::JsonValueError;
+    use edgerun_json::ToJson;
+    use edgerun_json::Value;
+
+    pub fn serialize(value: &Option<Option<String>>) -> Value {
+        match value {
+            None | Some(None) => Value::Null,
+            Some(Some(value)) => value.to_json(),
+        }
+    }
+
+    pub fn deserialize(value: Value) -> Result<Option<Option<String>>, JsonValueError> {
+        match value {
+            Value::Null => Ok(Some(None)),
+            value => String::from_json(value).map(Some).map(Some),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ConversationStartTransport {
     Websocket,
     Webrtc { sdp: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum RealtimeOutputModality {
     Text,
     Audio,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Ord, PartialOrd, ToJson, FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Ord, PartialOrd, ToJson, FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum RealtimeVoice {
     Alloy,
     Arbor,
@@ -225,7 +248,7 @@ impl RealtimeVoice {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct RealtimeVoicesList {
     pub v1: Vec<RealtimeVoice>,
     pub v2: Vec<RealtimeVoice>,
@@ -270,9 +293,9 @@ pub struct RealtimeAudioFrame {
     pub data: String,
     pub sample_rate: u32,
     pub num_channels: u16,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub samples_per_channel: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub item_id: Option<String>,
 }
 
@@ -362,7 +385,7 @@ pub struct ConversationTextParams {
 
 /// Submission operation
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
 #[non_exhaustive]
 pub enum Op {
@@ -397,13 +420,13 @@ pub enum Op {
         /// User input items, see `InputItem`
         items: Vec<UserInput>,
         /// Optional turn-scoped environments.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         environments: Option<Vec<TurnEnvironmentSelection>>,
         /// Optional JSON Schema used to constrain the final assistant message for this turn.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         final_output_json_schema: Option<Value>,
         /// Optional turn-scoped Responses API `client_metadata`.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         responsesapi_client_metadata: Option<HashMap<String, String>>,
     },
 
@@ -414,53 +437,53 @@ pub enum Op {
         /// User input items, see `InputItem`
         items: Vec<UserInput>,
         /// Optional turn-scoped environment selections.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         environments: Option<Vec<TurnEnvironmentSelection>>,
         /// Optional JSON Schema used to constrain the final assistant message for this turn.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         final_output_json_schema: Option<Value>,
         /// Optional turn-scoped Responses API `client_metadata`.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         responsesapi_client_metadata: Option<HashMap<String, String>>,
 
         /// Updated `cwd` for sandbox/tool calls.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         cwd: Option<PathBuf>,
 
         /// Updated approval reviewer for future approval prompts.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         approvals_reviewer: Option<ApprovalsReviewer>,
 
         /// Updated model slug. When set, the model info is derived
         /// automatically.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         model: Option<String>,
 
         /// Updated reasoning effort (honored only for reasoning-capable models).
         ///
         /// Use `Some(Some(_))` to set a specific effort, `Some(None)` to clear
         /// the effort, or `None` to leave the existing value unchanged.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         effort: Option<Option<ReasoningEffortConfig>>,
 
         /// Updated reasoning summary preference (honored only for reasoning-capable models).
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         summary: Option<ReasoningSummaryConfig>,
 
         /// Updated service tier preference for future turns.
         ///
         /// Use `Some(Some(_))` to set a specific tier, `Some(None)` to clear the
         /// preference, or `None` to leave the existing value unchanged.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         service_tier: Option<Option<String>>,
 
         /// EXPERIMENTAL - set a pre-set collaboration mode.
         /// Takes precedence over model, effort, and developer instructions if set.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         collaboration_mode: Option<CollaborationMode>,
 
         /// Updated personality preference.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         personality: Option<Personality>,
     },
 
@@ -483,14 +506,14 @@ pub enum Op {
         model: String,
 
         /// Will only be honored if the model is configured to use reasoning.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         effort: Option<ReasoningEffortConfig>,
 
         /// Will only be honored if the model is configured to use reasoning.
         ///
         /// When omitted, the session keeps the current setting (which allows core to
         /// fall back to the selected model's default on new sessions).
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         summary: Option<ReasoningSummaryConfig>,
 
         /// Optional service tier override for this turn.
@@ -498,7 +521,7 @@ pub enum Op {
         /// Use `Some(Some(_))` to set a specific tier for this turn, `Some(None)` to
         /// explicitly clear the tier for this turn, or `None` to keep the existing
         /// session preference.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         service_tier: Option<Option<String>>,
 
         // The JSON schema to use for the final assistant message
@@ -506,15 +529,15 @@ pub enum Op {
 
         /// EXPERIMENTAL - set a pre-set collaboration mode.
         /// Takes precedence over model, effort, and developer instructions if set.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         collaboration_mode: Option<CollaborationMode>,
 
         /// Optional personality override for this turn.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         personality: Option<Personality>,
 
         /// Optional turn-scoped environments.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         environments: Option<Vec<TurnEnvironmentSelection>>,
     },
 
@@ -532,43 +555,43 @@ pub enum Op {
     /// [`Op::UserInput`]).
     OverrideTurnContext {
         /// Updated `cwd` for sandbox/tool calls.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         cwd: Option<PathBuf>,
 
         /// Updated approval reviewer for future approval prompts.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         approvals_reviewer: Option<ApprovalsReviewer>,
 
         /// Updated model slug. When set, the model info is derived
         /// automatically.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         model: Option<String>,
 
         /// Updated reasoning effort (honored only for reasoning-capable models).
         ///
         /// Use `Some(Some(_))` to set a specific effort, `Some(None)` to clear
         /// the effort, or `None` to leave the existing value unchanged.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         effort: Option<Option<ReasoningEffortConfig>>,
 
         /// Updated reasoning summary preference (honored only for reasoning-capable models).
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         summary: Option<ReasoningSummaryConfig>,
 
         /// Updated service tier preference for future turns.
         ///
         /// Use `Some(Some(_))` to set a specific tier, `Some(None)` to clear the
         /// preference, or `None` to leave the existing value unchanged.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         service_tier: Option<Option<String>>,
 
         /// EXPERIMENTAL - set a pre-set collaboration mode.
         /// Takes precedence over model, effort, and developer instructions if set.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         collaboration_mode: Option<CollaborationMode>,
 
         /// Updated personality preference.
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(skip_serializing_if = "Option::is_none")]
         personality: Option<Personality>,
     },
 
@@ -577,7 +600,7 @@ pub enum Op {
         /// The id of the submission we are approving
         id: String,
         /// Turn id associated with the approval event, when available.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         turn_id: Option<String>,
         /// The user's decision in response to the request.
         decision: ReviewDecision,
@@ -600,15 +623,15 @@ pub enum Op {
         /// User's decision for the request.
         decision: ElicitationAction,
         /// Structured user input supplied for accepted elicitations.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         content: Option<Value>,
         /// Optional client metadata associated with the elicitation response.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         meta: Option<Value>,
     },
 
     /// Resolve a request_user_input tool call.
-    #[serde(rename = "user_input_answer", alias = "request_user_input_response")]
+    #[schemars(rename = "user_input_answer", alias = "request_user_input_response")]
     UserInputAnswer {
         /// Turn id for the in-flight request.
         id: String,
@@ -670,8 +693,10 @@ pub enum Op {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub enum ThreadMemoryMode {
     Enabled,
     Disabled,
@@ -692,7 +717,7 @@ impl From<Vec<UserInput>> for Op {
 pub struct InterAgentCommunication {
     pub author: AgentPath,
     pub recipient: AgentPath,
-    #[serde(default)]
+    #[schemars(default)]
     pub other_recipients: Vec<AgentPath>,
     pub content: String,
     pub trigger_turn: bool,
@@ -801,14 +826,26 @@ impl Op {
 
 /// Determines the conditions under which the user is consulted to approve
 /// running the command proposed by Codex.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum AskForApproval {
     /// Under this policy, only "known safe" commands—as determined by
     /// `is_safe_command()`—that **only read files** are auto‑approved.
     /// Everything else will ask the user to approve.
-    #[serde(rename = "untrusted")]
+    #[schemars(rename = "untrusted")]
     #[strum(serialize = "untrusted")]
     UnlessTrusted,
 
@@ -842,7 +879,7 @@ pub struct GranularApprovalConfig {
     /// Whether to allow prompts triggered by execpolicy `prompt` rules.
     pub rules: bool,
     /// Whether to allow approval prompts triggered by skill script execution.
-    #[serde(default)]
+    #[schemars(default)]
     pub skill_approval: bool,
     /// Whether to allow MCP elicitation prompts.
     pub mcp_elicitations: bool,
@@ -885,7 +922,7 @@ impl FromJson for GranularApprovalConfig {
 
 /// Represents whether outbound network access is available to the agent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum NetworkAccess {
     #[default]
@@ -924,53 +961,53 @@ impl FromJson for NetworkAccess {
 /// Determines execution restrictions for model shell commands.
 #[derive(Debug, Clone, PartialEq, Eq, Display, JsonSchema)]
 #[strum(serialize_all = "kebab-case")]
-#[serde(tag = "type", rename_all = "kebab-case")]
+#[schemars(tag = "type", rename_all = "kebab-case")]
 pub enum SandboxPolicy {
     /// No restrictions whatsoever. Use with caution.
-    #[serde(rename = "danger-full-access")]
+    #[schemars(rename = "danger-full-access")]
     DangerFullAccess,
 
     /// Read-only access configuration.
-    #[serde(rename = "read-only")]
+    #[schemars(rename = "read-only")]
     ReadOnly {
         /// When set to `true`, outbound network access is allowed. `false` by
         /// default.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
         network_access: bool,
     },
 
     /// Indicates the process is already in an external sandbox. Allows full
     /// disk access while honoring the provided network setting.
-    #[serde(rename = "external-sandbox")]
+    #[schemars(rename = "external-sandbox")]
     ExternalSandbox {
         /// Whether the external sandbox permits outbound network traffic.
-        #[serde(default)]
+        #[schemars(default)]
         network_access: NetworkAccess,
     },
 
     /// Same as `ReadOnly` but additionally grants write access to the current
     /// working directory ("workspace").
-    #[serde(rename = "workspace-write")]
+    #[schemars(rename = "workspace-write")]
     WorkspaceWrite {
         /// Additional folders (beyond cwd and possibly TMPDIR) that should be
         /// writable from within the sandbox.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schemars(default, skip_serializing_if = "Vec::is_empty")]
         writable_roots: Vec<AbsolutePathBuf>,
 
         /// When set to `true`, outbound network access is allowed. `false` by
         /// default.
-        #[serde(default)]
+        #[schemars(default)]
         network_access: bool,
 
         /// When set to `true`, will NOT include the per-user `TMPDIR`
         /// environment variable among the default writable roots. Defaults to
         /// `false`.
-        #[serde(default)]
+        #[schemars(default)]
         exclude_tmpdir_env_var: bool,
 
         /// When set to `true`, will NOT include the `/tmp` among the default
         /// writable roots on UNIX. Defaults to `false`.
-        #[serde(default)]
+        #[schemars(default)]
         exclude_slash_tmp: bool,
     },
 }
@@ -1266,7 +1303,7 @@ pub struct Event {
 /// Response event from the agent
 /// NOTE: Make sure none of these values have optional types, as it will mess up the extension code-gen.
 #[derive(Debug, Clone, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum EventMsg {
     /// Error while executing a submission
@@ -1305,12 +1342,12 @@ pub enum EventMsg {
 
     /// Agent has started a turn.
     /// v1 wire format uses `task_started`; accept `turn_started` for v2 interop.
-    #[serde(rename = "task_started", alias = "turn_started")]
+    #[schemars(rename = "task_started", alias = "turn_started")]
     TurnStarted(TurnStartedEvent),
 
     /// Agent has completed all actions.
     /// v1 wire format uses `task_complete`; accept `turn_complete` for v2 interop.
-    #[serde(rename = "task_complete", alias = "turn_complete")]
+    #[schemars(rename = "task_complete", alias = "turn_complete")]
     TurnComplete(TurnCompleteEvent),
 
     /// Usage update for the current session, including totals and last turn.
@@ -1458,8 +1495,18 @@ pub enum EventMsg {
     CollabResumeEnd(CollabResumeEndEvent),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, EnumIter, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    JsonSchema,
+    EnumIter,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookEventName {
     PreToolUse,
     PostToolUse,
@@ -1470,30 +1517,46 @@ pub enum HookEventName {
     Stop,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookHandlerType {
     Command,
     Prompt,
     Agent,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookExecutionMode {
     Sync,
     Async,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookScope {
     Thread,
     Turn,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookSource {
     System,
     User,
@@ -1508,8 +1571,10 @@ pub enum HookSource {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookTrustStatus {
     Managed,
     Untrusted,
@@ -1517,8 +1582,10 @@ pub enum HookTrustStatus {
     Modified,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookRunStatus {
     Running,
     Completed,
@@ -1527,8 +1594,10 @@ pub enum HookRunStatus {
     Stopped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum HookOutputEntryKind {
     Warning,
     Stop,
@@ -1538,14 +1607,14 @@ pub enum HookOutputEntryKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct HookOutputEntry {
     pub kind: HookOutputEntryKind,
     pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct HookRunSummary {
     pub id: String,
     pub event_name: HookEventName,
@@ -1553,7 +1622,7 @@ pub struct HookRunSummary {
     pub execution_mode: HookExecutionMode,
     pub scope: HookScope,
     pub source_path: AbsolutePathBuf,
-    #[serde(default)]
+    #[schemars(default)]
     pub source: HookSource,
     pub display_order: i64,
     pub status: HookRunStatus,
@@ -1565,21 +1634,31 @@ pub struct HookRunSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct HookStartedEvent {
     pub turn_id: Option<String>,
     pub run: HookRunSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub struct HookCompletedEvent {
     pub turn_id: Option<String>,
     pub run: HookRunSummary,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum RealtimeConversationVersion {
     V1,
     #[default]
@@ -1599,7 +1678,7 @@ pub struct RealtimeConversationRealtimeEvent {
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeConversationClosedEvent {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
@@ -1670,7 +1749,7 @@ impl From<CollabResumeEndEvent> for EventMsg {
 
 /// Agent lifecycle status, derived from emitted events.
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, Default, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum AgentStatus {
     /// Agent is waiting for initialization.
     #[default]
@@ -1712,8 +1791,10 @@ impl ToJson for AgentStatus {
 }
 
 /// Turn kinds that reject same-turn steering.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum NonSteerableTurnKind {
     Review,
     Compact,
@@ -1721,7 +1802,7 @@ pub enum NonSteerableTurnKind {
 
 /// Codex errors that we expose to clients.
 #[derive(Clone, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum CodexErrorInfo {
     ContextWindowExceeded,
     UsageLimitExceeded,
@@ -1817,7 +1898,7 @@ pub struct ItemCompletedEvent {
     // Old rollout files may contain ItemCompleted events for PlanItem without
     // this field. Default to 0 so those persisted rollouts still deserialize
     // after tightening the core event contract.
-    #[serde(default = "default_item_completed_at_ms")]
+    #[schemars(default = "default_item_completed_at_ms")]
     pub completed_at_ms: i64,
 }
 
@@ -1870,7 +1951,7 @@ pub struct ReasoningContentDeltaEvent {
     pub item_id: String,
     pub delta: String,
     // load with default value so it's backward compatible with the old format.
-    #[serde(default)]
+    #[schemars(default)]
     pub summary_index: i64,
 }
 
@@ -1887,7 +1968,7 @@ pub struct ReasoningRawContentDeltaEvent {
     pub item_id: String,
     pub delta: String,
     // load with default value so it's backward compatible with the old format.
-    #[serde(default)]
+    #[schemars(default)]
     pub content_index: i64,
 }
 
@@ -1926,7 +2007,7 @@ pub struct ExitedReviewModeEvent {
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ErrorEvent {
     pub message: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub codex_error_info: Option<CodexErrorInfo>,
 }
 
@@ -1945,7 +2026,7 @@ pub struct WarningEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum ModelRerouteReason {
     HighRiskCyberActivity,
 }
@@ -1957,8 +2038,10 @@ pub struct ModelRerouteEvent {
     pub reason: ModelRerouteReason,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum ModelVerification {
     TrustedAccessForCyber,
 }
@@ -1976,13 +2059,13 @@ pub struct TurnCompleteEvent {
     pub turn_id: String,
     pub last_agent_message: Option<String>,
     /// Unix timestamp (in seconds) when the turn completed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<i64>,
     /// Duration between turn start and completion in milliseconds, if known.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<i64>,
     /// Duration between turn start and the first model token in milliseconds, if known.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub time_to_first_token_ms: Option<i64>,
 }
 
@@ -1990,15 +2073,17 @@ pub struct TurnCompleteEvent {
 pub struct TurnStartedEvent {
     pub turn_id: String,
     /// Unix timestamp (in seconds) when the turn started.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<i64>,
     // TODO(aibrahim): make this not optional
     pub model_context_window: Option<i64>,
-    #[serde(default)]
+    #[schemars(default)]
     pub collaboration_mode_kind: ModeKind,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct TokenUsage {
     pub input_tokens: i64,
     pub cached_input_tokens: i64,
@@ -2090,8 +2175,10 @@ pub struct RateLimitSnapshot {
     pub rate_limit_reached_type: Option<RateLimitReachedType>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum RateLimitReachedType {
     RateLimitReached,
     WorkspaceOwnerCreditsDepleted,
@@ -2219,9 +2306,9 @@ impl fmt::Display for FinalOutput {
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct AgentMessageEvent {
     pub message: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub phase: Option<MessagePhase>,
-    #[serde(default)]
+    #[schemars(default)]
     pub memory_citation: Option<MemoryCitation>,
 }
 
@@ -2231,15 +2318,15 @@ pub struct UserMessageEvent {
     /// Image URLs sourced from `UserInput::Image`. These are safe
     /// to replay in legacy UI history events and correspond to images sent to
     /// the model.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<String>>,
     /// Local file paths sourced from `UserInput::LocalImage`. These are kept so
     /// the UI can reattach images when editing history, and should not be sent
     /// to the model or treated as API-ready URLs.
-    #[serde(default)]
+    #[schemars(default)]
     pub local_images: Vec<std::path::PathBuf>,
     /// UI-defined spans within `message` used to render or persist special elements.
-    #[serde(default)]
+    #[schemars(default)]
     pub text_elements: Vec<crate::user_input::TextElement>,
 }
 
@@ -2256,9 +2343,9 @@ pub struct AgentReasoningRawContentEvent {
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct AgentReasoningSectionBreakEvent {
     // load with default value so it's backward compatible with the old format.
-    #[serde(default)]
+    #[schemars(default)]
     pub item_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub summary_index: i64,
 }
 
@@ -2277,7 +2364,7 @@ pub struct McpToolCallBeginEvent {
     /// Identifier so this can be paired with the McpToolCallEnd event.
     pub call_id: String,
     pub invocation: McpInvocation,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub mcp_app_resource_uri: Option<String>,
 }
 
@@ -2286,7 +2373,7 @@ pub struct McpToolCallEndEvent {
     /// Identifier for the corresponding McpToolCallBegin that finished.
     pub call_id: String,
     pub invocation: McpInvocation,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub mcp_app_resource_uri: Option<String>,
     pub duration: Duration,
     /// Result of the tool call. Note this could be an error.
@@ -2299,10 +2386,10 @@ pub struct DynamicToolCallResponseEvent {
     pub call_id: String,
     /// Turn ID that this dynamic tool call belongs to.
     pub turn_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub completed_at_ms: i64,
     /// Dynamic tool namespace, when one was provided.
-    #[serde(default)]
+    #[schemars(default)]
     pub namespace: Option<String>,
     /// Dynamic tool name.
     pub tool: String,
@@ -2348,10 +2435,10 @@ pub struct ImageGenerationBeginEvent {
 pub struct ImageGenerationEndEvent {
     pub call_id: String,
     pub status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub revised_prompt: Option<String>,
     pub result: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub saved_path: Option<AbsolutePathBuf>,
 }
 
@@ -2498,8 +2585,10 @@ fn session_cwd_from_items(items: &[RolloutItem]) -> Option<PathBuf> {
     })
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone, Debug, PartialEq, Eq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub enum SessionSource {
     Cli,
     #[default]
@@ -2509,12 +2598,14 @@ pub enum SessionSource {
     Custom(String),
     Internal(InternalSessionSource),
     SubAgent(SubAgentSource),
-    #[serde(other)]
+    #[schemars(other)]
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum ThreadSource {
     User,
     Subagent,
@@ -2551,24 +2642,24 @@ impl FromStr for ThreadSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum InternalSessionSource {
     MemoryConsolidation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum SubAgentSource {
     Review,
     Compact,
     ThreadSpawn {
         parent_thread_id: ThreadId,
         depth: i32,
-        #[serde(default)]
+        #[schemars(default)]
         agent_path: Option<AgentPath>,
-        #[serde(default)]
+        #[schemars(default)]
         agent_nickname: Option<String>,
-        #[serde(default, alias = "agent_type")]
+        #[schemars(default, alias = "agent_type")]
         agent_role: Option<String>,
     },
     MemoryConsolidation,
@@ -2700,34 +2791,34 @@ impl fmt::Display for InternalSessionSource {
 #[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SessionMeta {
     pub id: ThreadId,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub forked_from_id: Option<ThreadId>,
     pub timestamp: String,
     pub cwd: PathBuf,
     pub originator: String,
     pub cli_version: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub source: SessionSource,
     /// Optional analytics source classification for this thread.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub thread_source: Option<ThreadSource>,
     /// Optional random unique nickname assigned to an AgentControl-spawned sub-agent.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub agent_nickname: Option<String>,
     /// Optional role (agent_role) assigned to an AgentControl-spawned sub-agent.
-    #[serde(default, alias = "agent_type", skip_serializing_if = "Option::is_none")]
+    #[schemars(default, alias = "agent_type", skip_serializing_if = "Option::is_none")]
     pub agent_role: Option<String>,
     /// Optional canonical agent path assigned to an AgentControl-spawned sub-agent.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub agent_path: Option<String>,
     pub model_provider: Option<String>,
     /// base_instructions for the session. This *should* always be present when creating a new session,
     /// but may be missing for older sessions. If not present, fall back to rendering the base_instructions
     /// from ModelsManager.
     pub base_instructions: Option<BaseInstructions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub dynamic_tools: Option<Vec<DynamicToolSpec>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub memory_mode: Option<String>,
 }
 
@@ -2755,14 +2846,14 @@ impl Default for SessionMeta {
 
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SessionMetaLine {
-    #[serde(flatten)]
+    #[schemars(flatten)]
     pub meta: SessionMeta,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub git: Option<GitInfo>,
 }
 
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", content = "payload", rename_all = "snake_case")]
+#[schemars(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum RolloutItem {
     SessionMeta(SessionMetaLine),
     ResponseItem(ResponseItem),
@@ -2774,7 +2865,7 @@ pub enum RolloutItem {
 #[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CompactedItem {
     pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub replacement_history: Option<Vec<ResponseItem>>,
 }
 
@@ -2803,39 +2894,41 @@ pub struct TurnContextNetworkItem {
 /// latest durable baseline.
 #[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnContextItem {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub trace_id: Option<String>,
     pub cwd: PathBuf,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub current_date: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub network: Option<TurnContextNetworkItem>,
     pub model: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub personality: Option<Personality>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub collaboration_mode: Option<CollaborationMode>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub realtime_active: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub effort: Option<ReasoningEffortConfig>,
     pub summary: ReasoningSummaryConfig,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub user_instructions: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub developer_instructions: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub final_output_json_schema: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub truncation_policy: Option<TruncationPolicy>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "mode", content = "limit", rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(tag = "mode", content = "limit", rename_all = "snake_case")]
 pub enum TruncationPolicy {
     Bytes(usize),
     Tokens(usize),
@@ -2889,42 +2982,44 @@ impl Mul<f64> for TruncationPolicy {
 #[derive(Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RolloutLine {
     pub timestamp: String,
-    #[serde(flatten)]
+    #[schemars(flatten)]
     pub item: RolloutItem,
 }
 
 #[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct GitInfo {
     /// Current commit hash (SHA)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub commit_hash: Option<GitSha>,
     /// Current branch name
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
     /// Repository URL (if available from remote)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub repository_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum ReviewDelivery {
     Inline,
     Detached,
 }
 
 #[derive(Clone, Debug, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum ReviewTarget {
     /// Review the working tree: staged, unstaged, and untracked files.
     UncommittedChanges,
 
     /// Review changes between the current branch and the given base branch.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     BaseBranch { branch: String },
 
     /// Review the changes introduced by a specific commit.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Commit {
         sha: String,
         /// Optional human-readable label (e.g., commit subject) for UIs.
@@ -2932,7 +3027,7 @@ pub enum ReviewTarget {
     },
 
     /// Arbitrary instructions provided by the user.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Custom { instructions: String },
 }
 
@@ -2940,7 +3035,7 @@ pub enum ReviewTarget {
 /// Review request sent to the review session.
 pub struct ReviewRequest {
     pub target: ReviewTarget,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub user_facing_hint: Option<String>,
 }
 
@@ -2988,8 +3083,19 @@ pub struct ReviewLineRange {
     pub end: u32,
 }
 
-#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Display,
+    PartialEq,
+    Eq,
+    JsonSchema,
+    Default,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum ExecCommandSource {
     #[default]
     Agent,
@@ -2999,7 +3105,7 @@ pub enum ExecCommandSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum ExecCommandStatus {
     Completed,
     Failed,
@@ -3011,11 +3117,11 @@ pub struct ExecCommandBeginEvent {
     /// Identifier so this can be paired with the ExecCommandEnd event.
     pub call_id: String,
     /// Identifier for the underlying PTY process (when available).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub process_id: Option<String>,
     /// Turn ID that this command belongs to.
     pub turn_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
     /// The command to be executed.
     pub command: Vec<String>,
@@ -3023,10 +3129,10 @@ pub struct ExecCommandBeginEvent {
     pub cwd: AbsolutePathBuf,
     pub parsed_cmd: Vec<ParsedCommand>,
     /// Where the command originated. Defaults to Agent for backward compatibility.
-    #[serde(default)]
+    #[schemars(default)]
     pub source: ExecCommandSource,
     /// Raw input sent to a unified exec session (if this is an interaction event).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub interaction_input: Option<String>,
 }
 
@@ -3035,11 +3141,11 @@ pub struct ExecCommandEndEvent {
     /// Identifier for the ExecCommandBegin that finished.
     pub call_id: String,
     /// Identifier for the underlying PTY process (when available).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub process_id: Option<String>,
     /// Turn ID that this command belongs to.
     pub turn_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub completed_at_ms: i64,
     /// The command that was executed.
     pub command: Vec<String>,
@@ -3047,10 +3153,10 @@ pub struct ExecCommandEndEvent {
     pub cwd: AbsolutePathBuf,
     pub parsed_cmd: Vec<ParsedCommand>,
     /// Where the command originated. Defaults to Agent for backward compatibility.
-    #[serde(default)]
+    #[schemars(default)]
     pub source: ExecCommandSource,
     /// Raw input sent to a unified exec session (if this is an interaction event).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub interaction_input: Option<String>,
 
     /// Captured stdout
@@ -3058,7 +3164,7 @@ pub struct ExecCommandEndEvent {
     /// Captured stderr
     pub stderr: String,
     /// Captured aggregated output
-    #[serde(default)]
+    #[schemars(default)]
     pub aggregated_output: String,
     /// The command's exit code.
     pub exit_code: i32,
@@ -3079,7 +3185,7 @@ pub struct ViewImageToolCallEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum ExecOutputStream {
     Stdout,
     Stderr,
@@ -3092,12 +3198,31 @@ pub struct ExecCommandOutputDeltaEvent {
     /// Which stream produced this chunk.
     pub stream: ExecOutputStream,
     /// Raw bytes from the stream (may not be valid UTF-8).
-    #[serde(
-        deserialize_with = "exec_output_chunk_serde::deserialize",
-        serialize_with = "exec_output_chunk_serde::serialize"
+    #[json(
+        deserialize_with = "exec_output_chunk_json::deserialize",
+        serialize_with = "exec_output_chunk_json::serialize"
     )]
     #[schemars(with = "String")]
     pub chunk: Vec<u8>,
+}
+
+mod exec_output_chunk_json {
+    use edgerun_json::FromJson;
+    use edgerun_json::JsonValueError;
+    use edgerun_json::ToJson;
+    use edgerun_json::Value;
+
+    pub fn serialize(value: &Vec<u8>) -> Value {
+        edgerun_encoding::base64::standard_encode(value).to_json()
+    }
+
+    pub fn deserialize(value: Value) -> Result<Vec<u8>, JsonValueError> {
+        match value {
+            Value::String(value) => edgerun_encoding::base64::standard_decode(&value)
+                .map_err(|err| JsonValueError::WrongType(err.to_string())),
+            value => Vec::<u8>::from_json(value),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
@@ -3115,7 +3240,7 @@ pub struct DeprecationNoticeEvent {
     /// Concise summary of what is deprecated.
     pub summary: String,
     /// Optional extra guidance, such as migration steps or rationale.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
 }
 
@@ -3128,12 +3253,12 @@ pub struct ThreadRolledBackEvent {
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct StreamErrorEvent {
     pub message: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub codex_error_info: Option<CodexErrorInfo>,
     /// Optional details about the underlying stream failure (often the same
     /// human-readable message that is surfaced as the terminal error if retries
     /// are exhausted).
-    #[serde(default)]
+    #[schemars(default)]
     pub additional_details: Option<String>,
 }
 
@@ -3142,13 +3267,13 @@ pub struct StreamInfoEvent {
     pub message: String,
 }
 
-#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, JsonSchema)]
 pub struct PatchApplyBeginEvent {
     /// Identifier so this can be paired with the PatchApplyEnd event.
     pub call_id: String,
     /// Turn ID that this patch belongs to.
-    /// Uses `#[serde(default)]` for backwards compatibility.
-    #[serde(default)]
+    /// Uses `#[schemars(default)]` for backwards compatibility.
+    #[schemars(default)]
     pub turn_id: String,
     /// If true, there was no ApplyPatchApprovalRequest for this patch.
     pub auto_approved: bool,
@@ -3156,7 +3281,30 @@ pub struct PatchApplyBeginEvent {
     pub changes: HashMap<PathBuf, FileChange>,
 }
 
-#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+impl ToJson for PatchApplyBeginEvent {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("call_id", self.call_id.clone());
+        object.push_field("turn_id", self.turn_id.clone());
+        object.push_field("auto_approved", self.auto_approved);
+        object.push_field("changes", path_changes_to_json(&self.changes));
+        Value::Object(object)
+    }
+}
+
+impl FromJson for PatchApplyBeginEvent {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PatchApplyBeginEvent")?;
+        Ok(Self {
+            call_id: object.take_required("call_id")?,
+            turn_id: object.take_optional("turn_id")?.unwrap_or_default(),
+            auto_approved: object.take_required("auto_approved")?,
+            changes: path_changes_from_json(object.take_required("changes")?)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, JsonSchema)]
 pub struct PatchApplyUpdatedEvent {
     /// Identifier for the originating `apply_patch` tool call.
     pub call_id: String,
@@ -3164,13 +3312,32 @@ pub struct PatchApplyUpdatedEvent {
     pub changes: HashMap<PathBuf, FileChange>,
 }
 
-#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+impl ToJson for PatchApplyUpdatedEvent {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("call_id", self.call_id.clone());
+        object.push_field("changes", path_changes_to_json(&self.changes));
+        Value::Object(object)
+    }
+}
+
+impl FromJson for PatchApplyUpdatedEvent {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PatchApplyUpdatedEvent")?;
+        Ok(Self {
+            call_id: object.take_required("call_id")?,
+            changes: path_changes_from_json(object.take_required("changes")?)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, JsonSchema)]
 pub struct PatchApplyEndEvent {
     /// Identifier for the PatchApplyBegin that finished.
     pub call_id: String,
     /// Turn ID that this patch belongs to.
-    /// Uses `#[serde(default)]` for backwards compatibility.
-    #[serde(default)]
+    /// Uses `#[schemars(default)]` for backwards compatibility.
+    #[schemars(default)]
     pub turn_id: String,
     /// Captured stdout (summary printed by apply_patch).
     pub stdout: String,
@@ -3179,14 +3346,64 @@ pub struct PatchApplyEndEvent {
     /// Whether the patch was applied successfully.
     pub success: bool,
     /// The changes that were applied (mirrors PatchApplyBeginEvent::changes).
-    #[serde(default)]
+    #[schemars(default)]
     pub changes: HashMap<PathBuf, FileChange>,
     /// Completion status for this patch application.
     pub status: PatchApplyStatus,
 }
 
+impl ToJson for PatchApplyEndEvent {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("call_id", self.call_id.clone());
+        object.push_field("turn_id", self.turn_id.clone());
+        object.push_field("stdout", self.stdout.clone());
+        object.push_field("stderr", self.stderr.clone());
+        object.push_field("success", self.success);
+        object.push_field("changes", path_changes_to_json(&self.changes));
+        object.push_field("status", self.status.to_json());
+        Value::Object(object)
+    }
+}
+
+impl FromJson for PatchApplyEndEvent {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PatchApplyEndEvent")?;
+        Ok(Self {
+            call_id: object.take_required("call_id")?,
+            turn_id: object.take_optional("turn_id")?.unwrap_or_default(),
+            stdout: object.take_required("stdout")?,
+            stderr: object.take_required("stderr")?,
+            success: object.take_required("success")?,
+            changes: path_changes_from_json(
+                object
+                    .take_optional("changes")?
+                    .unwrap_or_else(|| Value::Object(Map::new())),
+            )?,
+            status: object.take_required("status")?,
+        })
+    }
+}
+
+fn path_changes_to_json(changes: &HashMap<PathBuf, FileChange>) -> Value {
+    let mut object = Map::new();
+    for (path, change) in changes {
+        object.push_field(path.to_string_lossy().to_string(), change.to_json());
+    }
+    Value::Object(object)
+}
+
+fn path_changes_from_json(value: Value) -> Result<HashMap<PathBuf, FileChange>, JsonValueError> {
+    let object = value.into_object("changes")?;
+    let mut changes = HashMap::new();
+    for (path, change) in object.into_vec() {
+        changes.insert(PathBuf::from(path), FileChange::from_json(change)?);
+    }
+    Ok(changes)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum PatchApplyStatus {
     Completed,
     Failed,
@@ -3207,7 +3424,7 @@ pub struct McpStartupUpdateEvent {
 }
 
 #[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case", tag = "state")]
+#[schemars(rename_all = "snake_case", tag = "state")]
 pub enum McpStartupStatus {
     Starting,
     Ready,
@@ -3228,8 +3445,10 @@ pub struct McpStartupFailure {
     pub error: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum McpAuthStatus {
     Unsupported,
     NotLoggedIn,
@@ -3254,14 +3473,24 @@ pub struct RealtimeConversationListVoicesResponseEvent {
     pub voices: RealtimeVoicesList,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub enum Product {
-    #[serde(alias = "CHATGPT")]
+    #[schemars(alias = "CHATGPT")]
     Chatgpt,
-    #[serde(alias = "CODEX")]
+    #[schemars(alias = "CODEX")]
     Codex,
-    #[serde(alias = "ATLAS")]
+    #[schemars(alias = "ATLAS")]
     Atlas,
 }
 impl Product {
@@ -3287,8 +3516,10 @@ impl Product {
         products.is_empty() || products.contains(self)
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum SkillScope {
     User,
     Repo,
@@ -3300,12 +3531,12 @@ pub enum SkillScope {
 pub struct SkillMetadata {
     pub name: String,
     pub description: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     /// Legacy short_description from SKILL.md. Prefer SKILL.json interface.short_description.
     pub short_description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<SkillInterface>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<SkillDependencies>,
     pub path: AbsolutePathBuf,
     pub scope: SkillScope,
@@ -3329,16 +3560,16 @@ pub struct SkillDependencies {
 
 #[derive(Debug, Clone, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SkillToolDependency {
-    #[serde(rename = "type")]
+    #[schemars(rename = "type")]
     pub r#type: String,
     pub value: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub transport: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
@@ -3352,14 +3583,14 @@ pub struct SessionNetworkProxyRuntime {
 pub struct SessionConfiguredEvent {
     pub session_id: SessionId,
     pub thread_id: ThreadId,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub forked_from_id: Option<ThreadId>,
     /// Optional analytics source classification for this thread.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub thread_source: Option<ThreadSource>,
 
     /// Optional user-facing thread name (may be unset).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub thread_name: Option<String>,
 
     /// Tell the client what model is being queried.
@@ -3367,13 +3598,13 @@ pub struct SessionConfiguredEvent {
 
     pub model_provider_id: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
 
     /// Configures who approval requests are routed to for review once they have
     /// been escalated. This does not disable separate safety checks such as
     /// ARC.
-    #[serde(default)]
+    #[schemars(default)]
     pub approvals_reviewer: ApprovalsReviewer,
 
     /// Working directory that should be treated as the *root* of the
@@ -3381,20 +3612,20 @@ pub struct SessionConfiguredEvent {
     pub cwd: AbsolutePathBuf,
 
     /// The effort the model is putting into reasoning about the user's request.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffortConfig>,
 
     /// Optional initial messages (as events) for resumed sessions.
     /// When present, UIs can use these to seed the history.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub initial_messages: Option<Vec<EventMsg>>,
 
     /// Runtime proxy bind addresses, when the managed proxy was started for this session.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub network_proxy: Option<SessionNetworkProxyRuntime>,
 
     /// Path in which the rollout is stored. Can be `None` for ephemeral threads
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub rollout_path: Option<PathBuf>,
 }
 
@@ -3403,17 +3634,17 @@ impl FromJson for SessionConfiguredEvent {
         #[derive(edgerun_json::FromJson)]
         struct Wire {
             session_id: SessionId,
-            #[serde(default)]
+            #[schemars(default)]
             thread_id: Option<ThreadId>,
             forked_from_id: Option<ThreadId>,
-            #[serde(default)]
+            #[schemars(default)]
             thread_source: Option<ThreadSource>,
-            #[serde(default)]
+            #[schemars(default)]
             thread_name: Option<String>,
             model: String,
             model_provider_id: String,
             service_tier: Option<String>,
-            #[serde(default)]
+            #[schemars(default)]
             approvals_reviewer: ApprovalsReviewer,
             cwd: AbsolutePathBuf,
             reasoning_effort: Option<ReasoningEffortConfig>,
@@ -3443,8 +3674,8 @@ impl FromJson for SessionConfiguredEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "camelCase")]
-#[json(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ThreadGoalStatus {
     Active,
     Paused,
@@ -3467,14 +3698,14 @@ pub fn validate_thread_goal_objective(value: &str) -> Result<(), String> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "camelCase")]
-#[json(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoal {
     pub thread_id: ThreadId,
     pub objective: String,
     pub status: ThreadGoalStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[json(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub token_budget: Option<i64>,
     pub tokens_used: i64,
     pub time_used_seconds: i64,
@@ -3483,17 +3714,27 @@ pub struct ThreadGoal {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ThreadGoalUpdatedEvent {
     pub thread_id: ThreadId,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
     pub goal: ThreadGoal,
 }
 
 /// User's decision in response to an ExecApprovalRequest.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum ReviewDecision {
     /// User has approved this command and the agent should execute it.
     Approved,
@@ -3530,7 +3771,7 @@ pub enum ReviewDecision {
 
 impl ReviewDecision {
     /// Returns an opaque version of the decision without PII. We can't use an ignored flag
-    /// on `serde` because the serialization is required by some surfaces.
+    /// on an ignored flag because the serialization is required by some surfaces.
     pub fn to_opaque_string(&self) -> &'static str {
         match self {
             ReviewDecision::Approved => "approved",
@@ -3550,7 +3791,7 @@ impl ReviewDecision {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum FileChange {
     Add {
         content: String,
@@ -3577,15 +3818,15 @@ pub struct TurnAbortedEvent {
     pub turn_id: Option<String>,
     pub reason: TurnAbortReason,
     /// Unix timestamp (in seconds) when the turn was aborted.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<i64>,
     /// Duration between turn start and abort in milliseconds, if known.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum TurnAbortReason {
     Interrupted,
     Replaced,
@@ -3597,7 +3838,7 @@ pub enum TurnAbortReason {
 pub struct CollabAgentSpawnBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
@@ -3613,10 +3854,10 @@ pub struct CollabAgentRef {
     /// Thread ID of the receiver/new agent.
     pub thread_id: ThreadId,
     /// Optional nickname assigned to an AgentControl-spawned sub-agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub agent_nickname: Option<String>,
     /// Optional role (agent_role) assigned to an AgentControl-spawned sub-agent.
-    #[serde(default, alias = "agent_type", skip_serializing_if = "Option::is_none")]
+    #[schemars(default, alias = "agent_type", skip_serializing_if = "Option::is_none")]
     pub agent_role: Option<String>,
 }
 
@@ -3625,10 +3866,10 @@ pub struct CollabAgentStatusEntry {
     /// Thread ID of the receiver/new agent.
     pub thread_id: ThreadId,
     /// Optional nickname assigned to an AgentControl-spawned sub-agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub agent_nickname: Option<String>,
     /// Optional role (agent_role) assigned to an AgentControl-spawned sub-agent.
-    #[serde(default, alias = "agent_type", skip_serializing_if = "Option::is_none")]
+    #[schemars(default, alias = "agent_type", skip_serializing_if = "Option::is_none")]
     pub agent_role: Option<String>,
     /// Last known status of the agent.
     pub status: AgentStatus,
@@ -3638,17 +3879,17 @@ pub struct CollabAgentStatusEntry {
 pub struct CollabAgentSpawnEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub completed_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
     /// Thread ID of the newly spawned agent, if it was created.
     pub new_thread_id: Option<ThreadId>,
     /// Optional nickname assigned to the new agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub new_agent_nickname: Option<String>,
     /// Optional role assigned to the new agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub new_agent_role: Option<String>,
     /// Initial prompt sent to the agent. Can be empty to prevent CoT leaking at the
     /// beginning.
@@ -3665,7 +3906,7 @@ pub struct CollabAgentSpawnEndEvent {
 pub struct CollabAgentInteractionBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
@@ -3680,17 +3921,17 @@ pub struct CollabAgentInteractionBeginEvent {
 pub struct CollabAgentInteractionEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub completed_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
     /// Thread ID of the receiver.
     pub receiver_thread_id: ThreadId,
     /// Optional nickname assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_nickname: Option<String>,
     /// Optional role assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_role: Option<String>,
     /// Prompt sent from the sender to the receiver. Can be empty to prevent CoT
     /// leaking at the beginning.
@@ -3701,14 +3942,14 @@ pub struct CollabAgentInteractionEndEvent {
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabWaitingBeginEvent {
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
     /// Thread ID of the receivers.
     pub receiver_thread_ids: Vec<ThreadId>,
     /// Optional nicknames/roles for receivers.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     pub receiver_agents: Vec<CollabAgentRef>,
     /// ID of the waiting call.
     pub call_id: String,
@@ -3720,10 +3961,10 @@ pub struct CollabWaitingEndEvent {
     pub sender_thread_id: ThreadId,
     /// ID of the waiting call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub completed_at_ms: i64,
     /// Optional receiver metadata paired with final statuses.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     pub agent_statuses: Vec<CollabAgentStatusEntry>,
     /// Last known status of the receiver agents reported to the sender agent.
     pub statuses: HashMap<ThreadId, AgentStatus>,
@@ -3733,7 +3974,7 @@ pub struct CollabWaitingEndEvent {
 pub struct CollabCloseBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
@@ -3745,17 +3986,17 @@ pub struct CollabCloseBeginEvent {
 pub struct CollabCloseEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub completed_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
     /// Thread ID of the receiver.
     pub receiver_thread_id: ThreadId,
     /// Optional nickname assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_nickname: Option<String>,
     /// Optional role assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_role: Option<String>,
     /// Last known status of the receiver agent reported to the sender agent before
     /// the close.
@@ -3766,17 +4007,17 @@ pub struct CollabCloseEndEvent {
 pub struct CollabResumeBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
     /// Thread ID of the receiver.
     pub receiver_thread_id: ThreadId,
     /// Optional nickname assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_nickname: Option<String>,
     /// Optional role assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_role: Option<String>,
 }
 
@@ -3784,17 +4025,17 @@ pub struct CollabResumeBeginEvent {
 pub struct CollabResumeEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub completed_at_ms: i64,
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
     /// Thread ID of the receiver.
     pub receiver_thread_id: ThreadId,
     /// Optional nickname assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_nickname: Option<String>,
     /// Optional role assigned to the receiver agent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub receiver_agent_role: Option<String>,
     /// Last known status of the receiver agent reported to the sender agent after
     /// resume.
@@ -4315,16 +4556,9 @@ mod tests {
 
     #[test]
     fn file_system_policy_rejects_legacy_bridge_for_non_workspace_writes() {
-        let cwd = if cfg!(windows) {
-            Path::new(r"C:\workspace")
-        } else {
-            Path::new("/tmp/workspace")
-        };
-        let external_write_path = if cfg!(windows) {
-            AbsolutePathBuf::from_absolute_path(r"C:\temp").expect("absolute windows temp path")
-        } else {
-            AbsolutePathBuf::from_absolute_path("/tmp").expect("absolute tmp path")
-        };
+        let cwd = Path::new("/tmp/workspace");
+        let external_write_path =
+            AbsolutePathBuf::from_absolute_path("/tmp").expect("absolute tmp path");
         let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
             path: FileSystemPath::Path {
                 path: external_write_path,
@@ -4630,30 +4864,28 @@ mod tests {
 
     #[test]
     fn item_started_event_requires_started_at_ms() {
-        let mut value = edgerun_json::to_serde_value(ItemStartedEvent {
+        let mut value = edgerun_json::to_value(&ItemStartedEvent {
             thread_id: ThreadId::new(),
             turn_id: "turn-1".into(),
             item: TurnItem::UserMessage(UserMessageItem::new(&[])),
             started_at_ms: 123,
-        })
-        .unwrap();
+        });
         value.as_object_mut().unwrap().remove("started_at_ms");
 
-        assert!(edgerun_json::from_serde_value::<ItemStartedEvent>(value).is_err());
+        assert!(edgerun_json::from_json_value::<ItemStartedEvent>(value).is_err());
     }
 
     #[test]
     fn item_completed_event_defaults_missing_completed_at_ms() {
-        let mut value = edgerun_json::to_serde_value(ItemCompletedEvent {
+        let mut value = edgerun_json::to_value(&ItemCompletedEvent {
             thread_id: ThreadId::new(),
             turn_id: "turn-1".into(),
             item: TurnItem::UserMessage(UserMessageItem::new(&[])),
             completed_at_ms: 123,
-        })
-        .unwrap();
+        });
         value.as_object_mut().unwrap().remove("completed_at_ms");
 
-        let event = edgerun_json::from_serde_value::<ItemCompletedEvent>(value).unwrap();
+        let event = edgerun_json::from_json_value::<ItemCompletedEvent>(value).unwrap();
         assert_eq!(event.completed_at_ms, 0);
     }
     #[test]
@@ -4733,7 +4965,7 @@ mod tests {
         let list_voices = Op::RealtimeConversationListVoices;
 
         assert_eq!(
-            edgerun_json::to_serde_value(&start).unwrap(),
+            edgerun_json::to_value(&start),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4742,14 +4974,14 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::to_serde_value(&default_prompt_start).unwrap(),
+            edgerun_json::to_value(&default_prompt_start),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio"
             })
         );
         assert_eq!(
-            edgerun_json::to_serde_value(&null_prompt_start).unwrap(),
+            edgerun_json::to_value(&null_prompt_start),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4757,7 +4989,7 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::from_serde_value::<Op>(json!({
+            edgerun_json::from_json_value::<Op>(json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio"
             }))
@@ -4765,7 +4997,7 @@ mod tests {
             default_prompt_start
         );
         assert_eq!(
-            edgerun_json::from_serde_value::<Op>(json!({
+            edgerun_json::from_json_value::<Op>(json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
                 "prompt": null
@@ -4774,7 +5006,7 @@ mod tests {
             null_prompt_start
         );
         assert_eq!(
-            edgerun_json::to_serde_value(&audio).unwrap(),
+            edgerun_json::to_value(&audio),
             json!({
                 "type": "realtime_conversation_audio",
                 "frame": {
@@ -4786,36 +5018,31 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::from_serde_value::<Op>(edgerun_json::to_serde_value(&text).unwrap())
-                .unwrap(),
+            edgerun_json::from_json_value::<Op>(edgerun_json::to_value(&text)).unwrap(),
             text
         );
         assert_eq!(
-            edgerun_json::to_serde_value(&close).unwrap(),
+            edgerun_json::to_value(&close),
             json!({
                 "type": "realtime_conversation_close"
             })
         );
         assert_eq!(
-            edgerun_json::from_serde_value::<Op>(edgerun_json::to_serde_value(&close).unwrap())
-                .unwrap(),
+            edgerun_json::from_json_value::<Op>(edgerun_json::to_value(&close)).unwrap(),
             close
         );
         assert_eq!(
-            edgerun_json::to_serde_value(&list_voices).unwrap(),
+            edgerun_json::to_value(&list_voices),
             json!({
                 "type": "realtime_conversation_list_voices"
             })
         );
         assert_eq!(
-            edgerun_json::from_serde_value::<Op>(
-                edgerun_json::to_serde_value(&list_voices).unwrap()
-            )
-            .unwrap(),
+            edgerun_json::from_json_value::<Op>(edgerun_json::to_value(&list_voices)).unwrap(),
             list_voices
         );
         assert_eq!(
-            edgerun_json::to_serde_value(&webrtc_start).unwrap(),
+            edgerun_json::to_value(&webrtc_start),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4838,7 +5065,7 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::to_serde_value(&event).unwrap(),
+            edgerun_json::to_value(&event),
             json!({
                 "realtime_session_id": "conv_1",
                 "version": "v2"
@@ -4889,7 +5116,7 @@ mod tests {
             responsesapi_client_metadata: None,
         };
 
-        let json_op = edgerun_json::to_serde_value(op)?;
+        let json_op = edgerun_json::to_value(&op);
         assert_eq!(json_op, json!({ "type": "user_input", "items": [] }));
 
         Ok(())
@@ -4897,7 +5124,7 @@ mod tests {
 
     #[test]
     fn user_input_deserializes_without_final_output_json_schema_field() -> Result<()> {
-        let op: Op = edgerun_json::from_serde_value(json!({ "type": "user_input", "items": [] }))?;
+        let op: Op = edgerun_json::from_json_value(json!({ "type": "user_input", "items": [] }))?;
 
         assert_eq!(
             op,
@@ -4929,7 +5156,7 @@ mod tests {
             responsesapi_client_metadata: None,
         };
 
-        let json_op = edgerun_json::to_serde_value(op)?;
+        let json_op = edgerun_json::to_value(&op);
         assert_eq!(
             json_op,
             json!({
@@ -4954,7 +5181,7 @@ mod tests {
             )])),
         };
 
-        let json_op = edgerun_json::to_serde_value(&op)?;
+        let json_op = edgerun_json::to_value(&op);
         assert_eq!(
             json_op,
             json!({
@@ -4965,7 +5192,7 @@ mod tests {
                 }
             })
         );
-        assert_eq!(edgerun_json::from_serde_value::<Op>(json_op)?, op);
+        assert_eq!(edgerun_json::from_json_value::<Op>(json_op)?, op);
 
         Ok(())
     }
@@ -4977,7 +5204,7 @@ mod tests {
             text_elements: Vec::new(),
         };
 
-        let json_input = edgerun_json::to_serde_value(input)?;
+        let json_input = edgerun_json::to_value(&input);
         assert_eq!(
             json_input,
             json!({
@@ -4999,7 +5226,7 @@ mod tests {
             text_elements: Vec::new(),
         };
 
-        let json_event = edgerun_json::to_serde_value(event)?;
+        let json_event = edgerun_json::to_value(&event);
         assert_eq!(
             json_event,
             json!({
@@ -5014,7 +5241,7 @@ mod tests {
 
     #[test]
     fn turn_aborted_event_deserializes_without_turn_id() -> Result<()> {
-        let event: EventMsg = edgerun_json::from_serde_value(json!({
+        let event: EventMsg = edgerun_json::from_json_value(json!({
             "type": "turn_aborted",
             "reason": "interrupted",
         }))?;
@@ -5034,7 +5261,7 @@ mod tests {
 
     #[test]
     fn turn_context_item_deserializes_without_network() -> Result<()> {
-        let item: TurnContextItem = edgerun_json::from_serde_value(json!({
+        let item: TurnContextItem = edgerun_json::from_json_value(json!({
             "cwd": test_path_buf("/tmp"),
             "model": "gpt-5",
             "summary": "auto",
@@ -5069,7 +5296,7 @@ mod tests {
             truncation_policy: None,
         };
 
-        let value = edgerun_json::to_serde_value(item)?;
+        let value = edgerun_json::to_value(&item);
         assert_eq!(
             value["network"],
             json!({
@@ -5121,7 +5348,7 @@ mod tests {
                 "rollout_path": format!("{}", rollout_file.path().display()),
             }
         });
-        assert_eq!(expected, edgerun_json::to_serde_value(&event)?);
+        assert_eq!(expected, edgerun_json::to_value(&event));
         Ok(())
     }
 
@@ -5138,7 +5365,7 @@ mod tests {
             serialized,
         );
 
-        let deserialized: ExecCommandOutputDeltaEvent = edgerun_json::from_serde_str(&serialized)?;
+        let deserialized: ExecCommandOutputDeltaEvent = edgerun_json::from_json_str(&serialized)?;
         assert_eq!(deserialized, event);
         Ok(())
     }
@@ -5155,7 +5382,7 @@ mod tests {
             }),
         };
 
-        let value = edgerun_json::to_serde_value(&event)?;
+        let value = edgerun_json::to_value(&event);
         assert_eq!(value["msg"]["type"], "mcp_startup_update");
         assert_eq!(value["msg"]["server"], "srv");
         assert_eq!(value["msg"]["status"]["state"], "failed");
@@ -5177,7 +5404,7 @@ mod tests {
             }),
         };
 
-        let value = edgerun_json::to_serde_value(&event)?;
+        let value = edgerun_json::to_value(&event);
         assert_eq!(value["msg"]["type"], "mcp_startup_complete");
         assert_eq!(value["msg"]["ready"][0], "a");
         assert_eq!(value["msg"]["failed"][0]["server"], "b");

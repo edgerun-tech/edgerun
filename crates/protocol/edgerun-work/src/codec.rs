@@ -1,17 +1,186 @@
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
 use edgerun_crypto::sha256;
-use edgerun_wire::api::high::{HighDeserializer, HighSerializer, HighValidator};
-use edgerun_wire::bytecheck::CheckBytes;
-use edgerun_wire::ser::allocator::ArenaHandle;
-use edgerun_wire::{Portable, Serialize, WireError, access, deserialize, to_bytes, util};
 
 use crate::channel::{ChannelEnvelope, ChannelId, RouteBinding};
+use crate::generated_wire::ArchivedWorkPacket;
 use crate::protocol::*;
 use crate::route_binding::route_hash;
 
-pub type AlignedWorkPacketBytes = util::AlignedVec<16>;
+pub type AlignedWorkPacketBytes = Vec<u8>;
+
+pub struct WireWriter {
+    bytes: Vec<u8>,
+}
+
+impl WireWriter {
+    pub fn new() -> Self {
+        Self { bytes: Vec::new() }
+    }
+
+    pub fn push(&mut self, bytes: &[u8]) {
+        self.bytes.extend_from_slice(bytes);
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+
+impl Default for WireWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct WireCursor<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> WireCursor<'a> {
+    pub const fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, pos: 0 }
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.bytes.len().saturating_sub(self.pos)
+    }
+
+    pub fn take(&mut self, len: usize) -> Result<&'a [u8], WorkProtocolError> {
+        if self.remaining() < len {
+            return Err(WorkProtocolError::InvalidPacket);
+        }
+        let start = self.pos;
+        self.pos += len;
+        Ok(&self.bytes[start..self.pos])
+    }
+
+    pub fn finish(self) -> Result<(), WorkProtocolError> {
+        if self.pos == self.bytes.len() {
+            Ok(())
+        } else {
+            Err(WorkProtocolError::InvalidShape)
+        }
+    }
+}
+
+pub trait EdgeWire: Sized {
+    fn encode_wire(&self, out: &mut WireWriter);
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError>;
+}
+
+macro_rules! impl_wire_int {
+    ($ty:ty) => {
+        impl EdgeWire for $ty {
+            fn encode_wire(&self, out: &mut WireWriter) {
+                out.push(&self.to_le_bytes());
+            }
+
+            fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+                let bytes = input.take(core::mem::size_of::<$ty>())?;
+                let mut array = [0u8; core::mem::size_of::<$ty>()];
+                array.copy_from_slice(bytes);
+                Ok(<$ty>::from_le_bytes(array))
+            }
+        }
+    };
+}
+
+impl_wire_int!(u16);
+impl_wire_int!(u32);
+impl_wire_int!(u64);
+impl_wire_int!(i32);
+
+impl EdgeWire for bool {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        out.push(&[*self as u8]);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        match input.take(1)?[0] {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(WorkProtocolError::InvalidShape),
+        }
+    }
+}
+
+impl<const N: usize> EdgeWire for [u8; N] {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        out.push(self);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        let mut out = [0u8; N];
+        out.copy_from_slice(input.take(N)?);
+        Ok(out)
+    }
+}
+
+impl<T: EdgeWire> EdgeWire for Option<T> {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        match self {
+            Some(value) => {
+                true.encode_wire(out);
+                value.encode_wire(out);
+            }
+            None => false.encode_wire(out),
+        }
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        if bool::decode_wire(input)? {
+            Ok(Some(T::decode_wire(input)?))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl<T: EdgeWire> EdgeWire for Vec<T> {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        (self.len() as u64).encode_wire(out);
+        for item in self {
+            item.encode_wire(out);
+        }
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        let len = u64::decode_wire(input)?;
+        if len as usize > input.remaining() {
+            return Err(WorkProtocolError::InvalidPacket);
+        }
+        let mut out = Vec::with_capacity(len as usize);
+        for _ in 0..len {
+            out.push(T::decode_wire(input)?);
+        }
+        Ok(out)
+    }
+}
+
+impl EdgeWire for u8 {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        out.push(&[*self]);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        Ok(input.take(1)?[0])
+    }
+}
+
+impl EdgeWire for String {
+    fn encode_wire(&self, out: &mut WireWriter) {
+        self.as_bytes().to_vec().encode_wire(out);
+    }
+
+    fn decode_wire(input: &mut WireCursor<'_>) -> Result<Self, WorkProtocolError> {
+        String::from_utf8(Vec::<u8>::decode_wire(input)?)
+            .map_err(|_| WorkProtocolError::InvalidShape)
+    }
+}
 
 pub struct EncodedWorkPacket {
     pub bytes: AlignedWorkPacketBytes,
@@ -57,7 +226,7 @@ impl ArchivedWorkPacketFrame {
         self.bytes.as_slice()
     }
 
-    pub fn archived(&self) -> Result<&ArchivedWorkPacket, WorkProtocolError> {
+    pub fn archived(&self) -> Result<ArchivedWorkPacket, WorkProtocolError> {
         archived_work_packet_from_aligned_bytes(self.bytes.as_slice())
     }
 
@@ -119,8 +288,7 @@ pub fn encode_channel_envelope(
 pub fn packet_aligned_bytes(
     packet: &WorkPacket,
 ) -> Result<AlignedWorkPacketBytes, WorkProtocolError> {
-    let bytes: AlignedWorkPacketBytes =
-        to_bytes::<WireError>(packet).map_err(|_| WorkProtocolError::InvalidPacket)?;
+    let bytes = wire_bytes(packet)?;
     if bytes.len() > MAX_WORK_FRAME_LEN {
         return Err(WorkProtocolError::PacketTooLarge);
     }
@@ -133,47 +301,34 @@ pub fn packet_bytes(packet: &WorkPacket) -> Result<Vec<u8>, WorkProtocolError> {
 
 pub fn wire_bytes<T>(value: &T) -> Result<Vec<u8>, WorkProtocolError>
 where
-    T: for<'a> Serialize<HighSerializer<AlignedWorkPacketBytes, ArenaHandle<'a>, WireError>>,
+    T: EdgeWire,
 {
-    to_bytes::<WireError>(value)
-        .map(|bytes| bytes.to_vec())
-        .map_err(|_| WorkProtocolError::InvalidPacket)
+    let mut out = WireWriter::new();
+    value.encode_wire(&mut out);
+    Ok(out.into_bytes())
 }
 
 pub fn aligned_copy(bytes: &[u8]) -> AlignedWorkPacketBytes {
-    let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
-    aligned.extend_from_slice(bytes);
-    aligned
-}
-
-pub fn aligned_copy_if_needed_for<T>(bytes: &[u8]) -> Option<AlignedWorkPacketBytes> {
-    if bytes.as_ptr().align_offset(core::mem::align_of::<T>()) != 0 {
-        Some(aligned_copy(bytes))
-    } else {
-        None
-    }
+    bytes.to_vec()
 }
 
 pub fn wire_from_bytes<T, A>(bytes: &[u8]) -> Result<T, WorkProtocolError>
 where
-    A: Portable
-        + for<'a> CheckBytes<HighValidator<'a, WireError>>
-        + edgerun_wire::Deserialize<T, HighDeserializer<WireError>>,
+    T: EdgeWire,
 {
-    if let Some(aligned) = aligned_copy_if_needed_for::<A>(bytes) {
-        return wire_from_aligned_bytes::<T, A>(aligned.as_slice());
-    }
+    let _ = core::marker::PhantomData::<A>;
     wire_from_aligned_bytes::<T, A>(bytes)
 }
 
 pub fn wire_from_aligned_bytes<T, A>(bytes: &[u8]) -> Result<T, WorkProtocolError>
 where
-    A: Portable
-        + for<'a> CheckBytes<HighValidator<'a, WireError>>
-        + edgerun_wire::Deserialize<T, HighDeserializer<WireError>>,
+    T: EdgeWire,
 {
-    let archived = access::<A, WireError>(bytes).map_err(|_| WorkProtocolError::InvalidPacket)?;
-    deserialize::<T, WireError>(archived).map_err(|_| WorkProtocolError::InvalidPacket)
+    let _ = core::marker::PhantomData::<A>;
+    let mut input = WireCursor::new(bytes);
+    let value = T::decode_wire(&mut input)?;
+    input.finish()?;
+    Ok(value)
 }
 
 pub fn archived_packet_frame_from_bytes(
@@ -196,14 +351,14 @@ pub fn archived_packet_frame_from_bytes(
 
 pub fn archived_work_packet_from_aligned_bytes(
     bytes: &[u8],
-) -> Result<&ArchivedWorkPacket, WorkProtocolError> {
+) -> Result<ArchivedWorkPacket, WorkProtocolError> {
     if bytes.is_empty() {
         return Err(WorkProtocolError::EmptyPacket);
     }
     if bytes.len() > MAX_WORK_FRAME_LEN {
         return Err(WorkProtocolError::PacketTooLarge);
     }
-    access::<ArchivedWorkPacket, WireError>(bytes).map_err(|_| WorkProtocolError::InvalidPacket)
+    packet_from_aligned_bytes(bytes)
 }
 
 pub fn packet_from_bytes(bytes: &[u8]) -> Result<WorkPacket, WorkProtocolError> {
@@ -213,13 +368,9 @@ pub fn packet_from_bytes(bytes: &[u8]) -> Result<WorkPacket, WorkProtocolError> 
     if bytes.len() > MAX_WORK_FRAME_LEN {
         return Err(WorkProtocolError::PacketTooLarge);
     }
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedWorkPacket>(bytes) {
-        return packet_from_aligned_bytes(aligned.as_slice());
-    }
     packet_from_aligned_bytes(bytes)
 }
 
 pub fn packet_from_aligned_bytes(bytes: &[u8]) -> Result<WorkPacket, WorkProtocolError> {
-    let archived = archived_work_packet_from_aligned_bytes(bytes)?;
-    deserialize::<WorkPacket, WireError>(archived).map_err(|_| WorkProtocolError::InvalidPacket)
+    wire_from_aligned_bytes::<WorkPacket, ArchivedWorkPacket>(bytes)
 }

@@ -210,8 +210,8 @@ impl ToolHandler for Handler {
 
 #[derive(Debug, FromJson)]
 struct WaitArgs {
-    #[serde(default)]
-    #[json(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     targets: Vec<String>,
     timeout_ms: Option<i64>,
 }

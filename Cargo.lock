@@ -933,6 +933,7 @@ dependencies = [
 name = "edgerun-ui-core"
 version = "0.1.1"
 dependencies = [
+ "edgerun-crypto",
  "edgerun-fontdue",
 ]
 
@@ -963,7 +964,6 @@ name = "edgerun-vfs"
 version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
- "edgerun-wire",
  "edgerun-work",
 ]
 
@@ -1008,8 +1008,6 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-protocols",
  "edgerun-virtual-disk",
- "edgerun-wire",
- "rkyv",
 ]
 
 [[package]]

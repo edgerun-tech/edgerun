@@ -2,7 +2,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteBinding};
-use crate::codec::{EncodedChannelEnvelope, encode_channel_envelope_for_route};
+use crate::codec::{encode_channel_envelope_for_route, EncodedChannelEnvelope};
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_binding::{route_hash, route_is_available, verify_live_route_binding};
 

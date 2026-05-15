@@ -31,7 +31,7 @@ impl MessageDeliveryMode {
 }
 
 #[derive(Debug, FromJson)]
-#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 /// Input for the MultiAgentV2 `send_message` tool.
 pub(crate) struct SendMessageArgs {
     pub(crate) target: String,
@@ -39,7 +39,7 @@ pub(crate) struct SendMessageArgs {
 }
 
 #[derive(Debug, FromJson)]
-#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 /// Input for the MultiAgentV2 `followup_task` tool.
 pub(crate) struct FollowupTaskArgs {
     pub(crate) target: String,

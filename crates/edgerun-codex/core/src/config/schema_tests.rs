@@ -16,7 +16,7 @@ fn config_schema_matches_fixture() {
         .expect("resolve config schema fixture path");
     let fixture = std::fs::read_to_string(fixture_path).expect("read config schema fixture");
     let fixture_value: edgerun_json::Value =
-        edgerun_json::from_serde_str(&fixture).expect("parse config schema fixture");
+        edgerun_json::from_json_str(&fixture).expect("parse config schema fixture");
     let schema_json = config_schema_json().expect("serialize config schema");
     let schema_value: edgerun_json::Value =
         edgerun_json::from_slice(&schema_json).expect("decode schema json");

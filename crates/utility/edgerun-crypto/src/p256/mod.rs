@@ -1,6 +1,6 @@
-//! ## `serde` support
+//! ## `edgerun_json_compat` support
 //!
-//! When the `serde` feature of this crate is enabled, `Serialize` and
+//! When the `edgerun_json_compat` feature of this crate is enabled, `Serialize` and
 //! `Deserialize` are impl'd for the following types:
 //!
 //! - [`AffinePoint`]

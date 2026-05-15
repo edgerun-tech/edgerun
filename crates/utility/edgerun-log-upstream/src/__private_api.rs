@@ -140,11 +140,6 @@ mod kv_support {
     pub fn capture_sval<'a, V: sval::Value + ?Sized>(v: &'a &'a V) -> Value<'a> {
         Value::from_sval(v)
     }
-
-    #[cfg(any())]
-    pub fn capture_serde<'a, V: serde_core::Serialize + ?Sized>(v: &'a &'a V) -> Value<'a> {
-        Value::from_serde(v)
-    }
 }
 
 #[cfg(feature = "kv")]

@@ -3,48 +3,48 @@ use edgerun_json::{FromJson, JsonValueError, ToJson};
 use schemars::JsonSchema;
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct DynamicToolSpec {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub namespace: Option<String>,
     pub name: String,
     pub description: String,
     pub input_schema: JsonValue,
-    #[serde(default)]
+    #[schemars(default)]
     pub defer_loading: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct DynamicToolCallRequest {
     pub call_id: String,
     pub turn_id: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub started_at_ms: i64,
-    #[serde(default)]
+    #[schemars(default)]
     pub namespace: Option<String>,
     pub tool: String,
     pub arguments: JsonValue,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct DynamicToolResponse {
     pub content_items: Vec<DynamicToolCallOutputContentItem>,
     pub success: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum DynamicToolCallOutputContentItem {
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     InputText { text: String },
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     InputImage { image_url: String },
 }
 
 #[derive(edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 struct DynamicToolSpecDe {
     namespace: Option<String>,
     name: String,

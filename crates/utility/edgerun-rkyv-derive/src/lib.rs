@@ -9,9 +9,9 @@
 mod archive;
 mod attributes;
 mod deserialize;
+mod edgerun_json_compat;
 mod portable;
 mod repr;
-mod serde;
 mod serialize;
 mod util;
 
@@ -23,7 +23,7 @@ use syn::{parse_macro_input, DeriveInput};
 #[proc_macro_derive(Portable, attributes(rkyv))]
 pub fn derive_portable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
-    serde::receiver::replace_receiver(&mut derive_input);
+    edgerun_json_compat::receiver::replace_receiver(&mut derive_input);
 
     match portable::derive(derive_input) {
         Ok(result) => result.into(),
@@ -94,7 +94,7 @@ pub fn derive_portable(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 #[proc_macro_derive(Archive, attributes(rkyv))]
 pub fn derive_archive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
-    serde::receiver::replace_receiver(&mut derive_input);
+    edgerun_json_compat::receiver::replace_receiver(&mut derive_input);
 
     match archive::derive(&mut derive_input) {
         Ok(result) => result.into(),
@@ -109,7 +109,7 @@ pub fn derive_archive(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 #[proc_macro_derive(Serialize, attributes(rkyv))]
 pub fn derive_serialize(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
-    serde::receiver::replace_receiver(&mut derive_input);
+    edgerun_json_compat::receiver::replace_receiver(&mut derive_input);
 
     match serialize::derive(derive_input) {
         Ok(result) => result.into(),
@@ -124,7 +124,7 @@ pub fn derive_serialize(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 #[proc_macro_derive(Deserialize, attributes(rkyv))]
 pub fn derive_deserialize(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
-    serde::receiver::replace_receiver(&mut derive_input);
+    edgerun_json_compat::receiver::replace_receiver(&mut derive_input);
 
     match deserialize::derive(derive_input) {
         Ok(result) => result.into(),

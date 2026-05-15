@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use crate::program_io::{
-    PROGRAM_STREAM_STDERR, PROGRAM_STREAM_STDOUT, ProgramClose, ProgramExit, ProgramIoAdapter,
-    ProgramIoError, ProgramIoEvent, ProgramOpen, ProgramOutput, ProgramPoll, ProgramStdin,
+    ProgramClose, ProgramExit, ProgramIoAdapter, ProgramIoError, ProgramIoEvent, ProgramOpen,
+    ProgramOutput, ProgramPoll, ProgramStdin, PROGRAM_STREAM_STDERR, PROGRAM_STREAM_STDOUT,
 };
 use crate::protocol::Hash;
 

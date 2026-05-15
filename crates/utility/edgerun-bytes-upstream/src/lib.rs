@@ -86,9 +86,9 @@ mod loom;
 pub use crate::bytes::Bytes;
 pub use crate::bytes_mut::BytesMut;
 
-// Optional Serde support
-#[cfg(feature = "serde")]
-mod serde;
+// Optional JsonCompat support
+#[cfg(feature = "edgerun_json_compat")]
+mod json_compat;
 
 #[inline(never)]
 #[cold]

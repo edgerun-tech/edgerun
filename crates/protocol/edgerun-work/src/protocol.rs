@@ -1,8 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::channel::ChannelEndpoint;
 pub use crate::node_control::{NodeAvailable, NodeHeartbeat, RelayAssignment, RelayEndpoint};
 
@@ -66,24 +64,21 @@ pub enum WorkProtocolError {
     Unsupported,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkSignature {
     pub algorithm: u16,
     pub public_key: Vec<u8>,
     pub signature: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NodeIdentity {
     pub node_id: NodeId,
     pub role: u16,
     pub public_key: PublicKey,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NetworkMessage {
     pub abi_version: u16,
     pub message_id: Hash,
@@ -99,8 +94,7 @@ pub struct NetworkMessage {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkRequest {
     pub abi_version: u16,
     pub request_id: Hash,
@@ -116,8 +110,7 @@ pub struct WorkRequest {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkAdmission {
     pub abi_version: u16,
     pub admission_id: Hash,
@@ -135,8 +128,7 @@ pub struct WorkAdmission {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkReceipt {
     pub abi_version: u16,
     pub receipt_id: Hash,
@@ -152,8 +144,7 @@ pub struct WorkReceipt {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkPacket {
     NodeAvailable(NodeAvailable),
     NodeHeartbeat(NodeHeartbeat),
@@ -165,8 +156,7 @@ pub enum WorkPacket {
     Ack(WorkAck),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkAck {
     pub ok: bool,
     pub code: u16,

@@ -43,7 +43,7 @@
 //! the syntax. See also the [`quote_spanned!`] macro which is important for
 //! implementing hygienic procedural macros.
 //!
-//! [a]: https://serde.rs/
+//! [a]: https://edgerun_json_compat.rs/
 //!
 //! ```
 //! # use quote::quote;
@@ -61,10 +61,10 @@
 //!         phantom: core::marker::PhantomData<#item_ty>,
 //!     }
 //!
-//!     impl #generics serde::Serialize for SerializeWith #generics #where_clause {
+//!     impl #generics edgerun_json_compat::Serialize for SerializeWith #generics #where_clause {
 //!         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 //!         where
-//!             S: serde::Serializer,
+//!             S: edgerun_json_compat::Serializer,
 //!         {
 //!             #path(self.value, serializer)
 //!         }

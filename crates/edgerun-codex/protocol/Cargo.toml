@@ -13,7 +13,7 @@ doctest = false
 workspace = true
 
 [dependencies]
-edgerun-encoding = { workspace = true, features = ["text-encoding"] }
+edgerun-encoding = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["derive", "schemars", "std"] }

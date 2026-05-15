@@ -30,9 +30,9 @@ use super::{CurveArithmetic, Scalar};
 /// which is always available for all curves, regardless of if they implement
 /// any arithmetic traits.
 ///
-/// # `serde` support
+/// # `edgerun_json_compat` support
 ///
-/// When the optional `serde` feature of this create is enabled, [`Serialize`]
+/// When the optional `edgerun_json_compat` feature of this create is enabled, [`Serialize`]
 /// and [`Deserialize`] impls are provided for this type.
 ///
 /// The serialization is a fixed-width big endian encoding. When used with

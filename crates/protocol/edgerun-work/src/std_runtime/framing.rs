@@ -3,10 +3,10 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::codec::{
-    ArchivedWorkPacketFrame, archived_packet_frame_from_bytes, packet_bytes, packet_from_bytes,
+    archived_packet_frame_from_bytes, packet_bytes, packet_from_bytes, ArchivedWorkPacketFrame,
 };
-use crate::protocol::{MAX_WORK_FRAME_LEN, WorkAck, WorkPacket};
-use crate::roles::{ROLE_STATUS_ACCEPTED, WorkServiceResponse};
+use crate::protocol::{WorkAck, WorkPacket, MAX_WORK_FRAME_LEN};
+use crate::roles::{WorkServiceResponse, ROLE_STATUS_ACCEPTED};
 
 const SERVICE_RESPONSE_KIND_NONE: u8 = 0;
 const SERVICE_RESPONSE_KIND_PACKET: u8 = 1;

@@ -1,8 +1,10 @@
 use schemars::JsonSchema;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ExperimentalFeatureListParams {
     /// Opaque pagination cursor returned by a previous call.
     pub cursor: Option<String>,
@@ -11,7 +13,7 @@ pub struct ExperimentalFeatureListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum ExperimentalFeatureStage {
     /// Feature is available for user testing and feedback.
     Beta,
@@ -26,7 +28,7 @@ pub enum ExperimentalFeatureStage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExperimentalFeature {
     /// Stable key used in config.toml and CLI flag toggles.
     pub name: String,
@@ -48,7 +50,7 @@ pub struct ExperimentalFeature {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExperimentalFeatureListResponse {
     pub data: Vec<ExperimentalFeature>,
     /// Opaque cursor to pass to the next call to continue after the last item.
@@ -56,8 +58,10 @@ pub struct ExperimentalFeatureListResponse {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ExperimentalFeatureEnablementSetParams {
     /// Process-wide runtime feature enablement keyed by canonical feature name.
     ///
@@ -67,7 +71,7 @@ pub struct ExperimentalFeatureEnablementSetParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ExperimentalFeatureEnablementSetResponse {
     /// Feature enablement entries updated by this request.
     pub enablement: BTreeMap<String, bool>,

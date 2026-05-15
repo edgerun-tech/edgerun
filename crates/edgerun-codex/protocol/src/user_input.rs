@@ -8,8 +8,8 @@ pub const MAX_USER_INPUT_TEXT_CHARS: usize = 1 << 20;
 /// User input
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, JsonSchema, ToJson, FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[json(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum UserInput {
     Text {
         text: String,
@@ -17,8 +17,8 @@ pub enum UserInput {
         /// These are byte ranges into the UTF-8 `text` buffer and are used to render
         /// or persist rich input markers (e.g., image placeholders) across history
         /// and resume without mutating the literal text.
-        #[serde(default)]
-        #[json(default)]
+        #[schemars(default)]
+        #[schemars(default)]
         text_elements: Vec<TextElement>,
     },
     /// Pre‑encoded data: URI image.

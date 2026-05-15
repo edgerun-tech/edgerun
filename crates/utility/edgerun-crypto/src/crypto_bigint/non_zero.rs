@@ -14,8 +14,8 @@ use crate::crypto_bigint::{ArrayEncoding, ByteArray};
 #[cfg(feature = "p256_arithmetic")]
 use {crate::crypto_bigint::Random, crate::rand_core::CryptoRngCore};
 
-#[cfg(feature = "serde")]
-use serdect::serde::{
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compatct::edgerun_json_compat::{
     Deserialize, Deserializer, Serialize, Serializer,
     de::{Error, Unexpected},
 };
@@ -322,7 +322,7 @@ impl<const LIMBS: usize> From<NonZeroU128> for NonZero<Uint<LIMBS>> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de, T: Deserialize<'de> + Zero> Deserialize<'de> for NonZero<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -341,7 +341,7 @@ impl<'de, T: Deserialize<'de> + Zero> Deserialize<'de> for NonZero<T> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<T: Serialize + Zero> Serialize for NonZero<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -351,14 +351,14 @@ impl<T: Serialize + Zero> Serialize for NonZero<T> {
     }
 }
 
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, feature = "edgerun_json_compat"))]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use crate::crypto_bigint::{NonZero, U64};
     use bincode::ErrorKind;
 
     #[test]
-    fn serde() {
+    fn edgerun_json_compat() {
         let test =
             Option::<NonZero<U64>>::from(NonZero::new(U64::from_u64(0x0011223344556677))).unwrap();
 
@@ -375,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_owned() {
+    fn edgerun_json_compat_owned() {
         let test =
             Option::<NonZero<U64>>::from(NonZero::new(U64::from_u64(0x0011223344556677))).unwrap();
 

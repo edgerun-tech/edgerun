@@ -63,31 +63,31 @@ pub(crate) enum GuardianApprovalRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, ToJson)]
-#[serde(rename_all = "camelCase")]
-#[json(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub(crate) struct GuardianNetworkAccessTrigger {
     pub(crate) call_id: String,
     pub(crate) tool_name: String,
     pub(crate) command: Vec<String>,
     pub(crate) cwd: AbsolutePathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[json(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub(crate) justification: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[json(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub(crate) tty: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ToJson)]
 pub(crate) struct GuardianMcpAnnotations {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[json(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub(crate) destructive_hint: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[json(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub(crate) open_world_hint: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[json(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub(crate) read_only_hint: Option<bool>,
 }
 

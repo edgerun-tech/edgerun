@@ -9,19 +9,19 @@ v2_enum_from_core!(
 );
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ReviewStartParams {
     pub thread_id: String,
     pub target: ReviewTarget,
 
     /// Where to run the review: inline (default) on the current thread or
     /// detached on a new thread (returned in `reviewThreadId`).
-    #[serde(default)]
+    #[schemars(default)]
     pub delivery: Option<ReviewDelivery>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ReviewStartResponse {
     pub turn: Turn,
     /// Identifies the thread where the review runs.
@@ -32,17 +32,17 @@ pub struct ReviewStartResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum ReviewTarget {
     /// Review the working tree: staged, unstaged, and untracked files.
     UncommittedChanges,
 
     /// Review changes between the current branch and the given base branch.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     BaseBranch { branch: String },
 
     /// Review the changes introduced by a specific commit.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Commit {
         sha: String,
         /// Optional human-readable label (e.g., commit subject) for UIs.
@@ -50,6 +50,6 @@ pub enum ReviewTarget {
     },
 
     /// Arbitrary instructions, equivalent to the old free-form prompt.
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Custom { instructions: String },
 }

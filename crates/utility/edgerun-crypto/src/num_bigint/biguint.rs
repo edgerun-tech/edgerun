@@ -14,8 +14,8 @@ use core::str::{self, FromStr};
 use core::{cmp, fmt, mem};
 use core::{u8, u32, u64};
 
-#[cfg(feature = "serde")]
-use serde;
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat;
 
 use crate::num_bigint::float::FloatCore;
 use crate::num_bigint::integer::{Integer, Roots};
@@ -2442,12 +2442,12 @@ fn u32_from_u128(n: u128) -> (u32, u32, u32, u32) {
     )
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 #[cfg(not(feature = "u64_digit"))]
-impl serde::Serialize for BigUint {
+impl edgerun_json_compat::Serialize for BigUint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: edgerun_json_compat::Serializer,
     {
         // Note: do not change the serialization format, or it may break forward
         // and backward compatibility of serialized data!  If we ever change the
@@ -2457,12 +2457,12 @@ impl serde::Serialize for BigUint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 #[cfg(feature = "u64_digit")]
-impl serde::Serialize for BigUint {
+impl edgerun_json_compat::Serialize for BigUint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: edgerun_json_compat::Serializer,
     {
         let last = if self.data.is_empty() {
             0
@@ -2485,11 +2485,11 @@ impl serde::Serialize for BigUint {
     }
 }
 
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for BigUint {
+#[cfg(feature = "edgerun_json_compat")]
+impl<'de> edgerun_json_compat::Deserialize<'de> for BigUint {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_json_compat::Deserializer<'de>,
     {
         let data: Vec<u32> = Vec::deserialize(deserializer)?;
         Ok(BigUint::new(data))

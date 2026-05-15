@@ -54,6 +54,7 @@ var/bin/
 var/ci/
 var/go-build-cache/
 var/coverage/
+.edgerun/
 /release/
 
 # Compiled binaries and archives

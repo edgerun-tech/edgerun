@@ -109,8 +109,8 @@ fn truncates_before_requested_user_message() {
         RolloutItem::ResponseItem(items[2].clone()),
     ];
     assert_eq!(
-        edgerun_json::to_serde_value(&got_items).unwrap(),
-        edgerun_json::to_serde_value(&expected_items).unwrap()
+        edgerun_json::to_value(&&got_items),
+        edgerun_json::to_value(&&expected_items)
     );
 
     let initial2: Vec<RolloutItem> = items
@@ -128,8 +128,8 @@ fn truncates_before_requested_user_message() {
         },
     );
     assert_eq!(
-        edgerun_json::to_serde_value(truncated2.get_rollout_items()).unwrap(),
-        edgerun_json::to_serde_value(initial2).unwrap()
+        edgerun_json::to_value(&truncated2.get_rollout_items()),
+        edgerun_json::to_value(&initial2)
     );
 }
 
@@ -153,8 +153,8 @@ fn out_of_range_truncation_drops_only_unfinished_suffix_mid_turn() {
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(truncated.get_rollout_items()).unwrap(),
-        edgerun_json::to_serde_value(items[..2].to_vec()).unwrap()
+        edgerun_json::to_value(&truncated.get_rollout_items()),
+        edgerun_json::to_value(&items[..2].to_vec())
     );
 }
 
@@ -210,8 +210,8 @@ fn out_of_range_truncation_drops_pre_user_active_turn_prefix() {
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(truncated.get_rollout_items()).unwrap(),
-        edgerun_json::to_serde_value(items[..2].to_vec()).unwrap()
+        edgerun_json::to_value(&truncated.get_rollout_items()),
+        edgerun_json::to_value(&items[..2].to_vec())
     );
 }
 
@@ -249,8 +249,8 @@ async fn ignores_session_prefix_messages_when_truncating() {
     ];
 
     assert_eq!(
-        edgerun_json::to_serde_value(&got_items).unwrap(),
-        edgerun_json::to_serde_value(&expected).unwrap()
+        edgerun_json::to_value(&&got_items),
+        edgerun_json::to_value(&&expected)
     );
 }
 
@@ -872,7 +872,7 @@ fn interrupted_fork_snapshot_appends_interrupt_boundary() {
         InitialHistory::Forked(vec![RolloutItem::ResponseItem(user_msg("hello"))]);
 
     assert_eq!(
-        edgerun_json::to_serde_value(
+        edgerun_json::to_value(
             append_interrupted_boundary(
                 committed_history,
                 /*turn_id*/ None,
@@ -881,7 +881,7 @@ fn interrupted_fork_snapshot_appends_interrupt_boundary() {
             .get_rollout_items()
         )
         .expect("serialize interrupted fork history"),
-        edgerun_json::to_serde_value(vec![
+        edgerun_json::to_value(&vec![
             RolloutItem::ResponseItem(user_msg("hello")),
             RolloutItem::ResponseItem(contextual_user_interrupted_marker()),
             RolloutItem::EventMsg(EventMsg::TurnAborted(TurnAbortedEvent {
@@ -894,7 +894,7 @@ fn interrupted_fork_snapshot_appends_interrupt_boundary() {
         .expect("serialize expected interrupted fork history"),
     );
     assert_eq!(
-        edgerun_json::to_serde_value(
+        edgerun_json::to_value(
             append_interrupted_boundary(
                 InitialHistory::New,
                 /*turn_id*/ None,
@@ -903,7 +903,7 @@ fn interrupted_fork_snapshot_appends_interrupt_boundary() {
             .get_rollout_items()
         )
         .expect("serialize interrupted empty fork history"),
-        edgerun_json::to_serde_value(vec![
+        edgerun_json::to_value(&vec![
             RolloutItem::ResponseItem(contextual_user_interrupted_marker()),
             RolloutItem::EventMsg(EventMsg::TurnAborted(TurnAbortedEvent {
                 turn_id: None,
@@ -922,7 +922,7 @@ fn disabled_interrupted_fork_snapshot_appends_only_interrupt_event() {
         InitialHistory::Forked(vec![RolloutItem::ResponseItem(user_msg("hello"))]);
 
     assert_eq!(
-        edgerun_json::to_serde_value(
+        edgerun_json::to_value(
             append_interrupted_boundary(
                 committed_history,
                 /*turn_id*/ None,
@@ -931,7 +931,7 @@ fn disabled_interrupted_fork_snapshot_appends_only_interrupt_event() {
             .get_rollout_items()
         )
         .expect("serialize disabled interrupted fork history"),
-        edgerun_json::to_serde_value(vec![
+        edgerun_json::to_value(&vec![
             RolloutItem::ResponseItem(user_msg("hello")),
             RolloutItem::EventMsg(EventMsg::TurnAborted(TurnAbortedEvent {
                 turn_id: None,
@@ -943,7 +943,7 @@ fn disabled_interrupted_fork_snapshot_appends_only_interrupt_event() {
         .expect("serialize expected disabled interrupted fork history"),
     );
     assert_eq!(
-        edgerun_json::to_serde_value(
+        edgerun_json::to_value(
             append_interrupted_boundary(
                 InitialHistory::New,
                 /*turn_id*/ None,
@@ -952,7 +952,7 @@ fn disabled_interrupted_fork_snapshot_appends_only_interrupt_event() {
             .get_rollout_items()
         )
         .expect("serialize disabled interrupted empty fork history"),
-        edgerun_json::to_serde_value(vec![RolloutItem::EventMsg(EventMsg::TurnAborted(
+        edgerun_json::to_value(&vec![RolloutItem::EventMsg(EventMsg::TurnAborted(
             TurnAbortedEvent {
                 turn_id: None,
                 reason: TurnAbortReason::Interrupted,
@@ -1125,11 +1125,11 @@ async fn interrupted_fork_snapshot_does_not_synthesize_turn_id_for_legacy_histor
         .into_iter()
         .filter(|item| !matches!(item, RolloutItem::SessionMeta(_)))
         .collect();
-    let interrupted_marker_json = edgerun_json::to_serde_value(RolloutItem::ResponseItem(
+    let interrupted_marker_json = edgerun_json::to_value(&RolloutItem::ResponseItem(
         contextual_user_interrupted_marker(),
     ))
     .expect("serialize interrupted marker");
-    let interrupted_abort_json = edgerun_json::to_serde_value(RolloutItem::EventMsg(
+    let interrupted_abort_json = edgerun_json::to_value(&RolloutItem::EventMsg(
         EventMsg::TurnAborted(TurnAbortedEvent {
             turn_id: expected_turn_id,
             reason: TurnAbortReason::Interrupted,
@@ -1142,7 +1142,7 @@ async fn interrupted_fork_snapshot_does_not_synthesize_turn_id_for_legacy_histor
         rollout_items
             .iter()
             .filter(|item| {
-                edgerun_json::to_serde_value(item).expect("serialize rollout item")
+                edgerun_json::to_value(&item)
                     == interrupted_marker_json
             })
             .count(),
@@ -1152,7 +1152,7 @@ async fn interrupted_fork_snapshot_does_not_synthesize_turn_id_for_legacy_histor
         rollout_items
             .iter()
             .filter(|item| {
-                edgerun_json::to_serde_value(item).expect("serialize rollout item")
+                edgerun_json::to_value(&item)
                     == interrupted_abort_json
             })
             .count(),
@@ -1325,7 +1325,7 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         .into_iter()
         .filter(|item| !matches!(item, RolloutItem::SessionMeta(_)))
         .collect();
-    let interrupted_marker_json = edgerun_json::to_serde_value(RolloutItem::ResponseItem(
+    let interrupted_marker_json = edgerun_json::to_value(&RolloutItem::ResponseItem(
         contextual_user_interrupted_marker(),
     ))
     .expect("serialize interrupted marker");
@@ -1333,7 +1333,7 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         forked_rollout_items
             .iter()
             .filter(|item| {
-                edgerun_json::to_serde_value(item).expect("serialize forked rollout item")
+                edgerun_json::to_value(&item)
                     == interrupted_marker_json
             })
             .count(),
@@ -1369,7 +1369,7 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
         reforked_rollout_items
             .iter()
             .filter(|item| {
-                edgerun_json::to_serde_value(item).expect("serialize re-forked rollout item")
+                edgerun_json::to_value(&item)
                     == interrupted_marker_json
             })
             .count(),

@@ -18,18 +18,18 @@ use schemars::JsonSchema;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillsListParams {
     /// When empty, defaults to the current session working directory.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     pub cwds: Vec<PathBuf>,
 
     /// When true, bypass the skills cache and re-scan skills from disk.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
     pub force_reload: bool,
 
     /// Optional per-cwd extra roots to scan as user-scoped skills.
-    #[serde(default)]
+    #[schemars(default)]
     pub per_cwd_extra_user_roots: Option<Vec<SkillsListExtraRootsForCwd>>,
 }
 
@@ -51,7 +51,7 @@ impl ToJson for SkillsListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillsListExtraRootsForCwd {
     pub cwd: PathBuf,
     pub extra_user_roots: Vec<PathBuf>,
@@ -67,27 +67,27 @@ impl ToJson for SkillsListExtraRootsForCwd {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillsListResponse {
     pub data: Vec<SkillsListEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HooksListParams {
     /// When empty, defaults to the current session working directory.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     pub cwds: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HooksListResponse {
     pub data: Vec<HooksListEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceAddParams {
     pub source: String,
     pub ref_name: Option<String>,
@@ -105,7 +105,7 @@ impl ToJson for MarketplaceAddParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceAddResponse {
     pub marketplace_name: String,
     pub installed_root: AbsolutePathBuf,
@@ -113,13 +113,13 @@ pub struct MarketplaceAddResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceRemoveParams {
     pub marketplace_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceRemoveResponse {
     pub marketplace_name: String,
     pub installed_root: Option<AbsolutePathBuf>,
@@ -142,7 +142,7 @@ impl ToJson for MarketplaceRemoveResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceUpgradeParams {
     pub marketplace_name: Option<String>,
 }
@@ -165,7 +165,7 @@ impl FromJson for MarketplaceUpgradeParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceUpgradeResponse {
     pub selected_marketplaces: Vec<String>,
     pub upgraded_roots: Vec<AbsolutePathBuf>,
@@ -191,7 +191,7 @@ impl ToJson for MarketplaceUpgradeResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceUpgradeErrorInfo {
     pub marketplace_name: String,
     pub message: String,
@@ -207,7 +207,7 @@ impl ToJson for MarketplaceUpgradeErrorInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginListParams {
     /// Optional working directories used to discover repo marketplaces. When omitted,
     /// only home-scoped marketplaces and the official curated marketplace are considered.
@@ -244,11 +244,11 @@ impl FromJson for PluginListParams {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginListMarketplaceKind {
-    #[serde(rename = "local")]
+    #[schemars(rename = "local")]
     Local,
-    #[serde(rename = "workspace-directory")]
+    #[schemars(rename = "workspace-directory")]
     WorkspaceDirectory,
-    #[serde(rename = "shared-with-me")]
+    #[schemars(rename = "shared-with-me")]
     SharedWithMe,
 }
 
@@ -276,24 +276,24 @@ impl FromJson for PluginListMarketplaceKind {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginListResponse {
     pub marketplaces: Vec<PluginMarketplaceEntry>,
-    #[serde(default)]
+    #[schemars(default)]
     pub marketplace_load_errors: Vec<MarketplaceLoadErrorInfo>,
-    #[serde(default)]
+    #[schemars(default)]
     pub featured_plugin_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceLoadErrorInfo {
     pub marketplace_path: AbsolutePathBuf,
     pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginReadParams {
     pub marketplace_path: Option<AbsolutePathBuf>,
     pub remote_marketplace_name: Option<String>,
@@ -331,13 +331,13 @@ impl FromJson for PluginReadParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginReadResponse {
     pub plugin: PluginDetail,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginSkillReadParams {
     pub remote_marketplace_name: String,
     pub remote_plugin_id: String,
@@ -358,13 +358,13 @@ impl ToJson for PluginSkillReadParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginSkillReadResponse {
     pub contents: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareSaveParams {
     pub plugin_path: AbsolutePathBuf,
     pub remote_plugin_id: Option<String>,
@@ -384,7 +384,7 @@ impl ToJson for PluginShareSaveParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareSaveResponse {
     pub remote_plugin_id: String,
     pub share_url: String,
@@ -400,7 +400,7 @@ impl ToJson for PluginShareSaveResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareUpdateTargetsParams {
     pub remote_plugin_id: String,
     pub share_targets: Vec<PluginShareTarget>,
@@ -416,7 +416,7 @@ impl ToJson for PluginShareUpdateTargetsParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareUpdateTargetsResponse {
     pub principals: Vec<PluginSharePrincipal>,
 }
@@ -430,7 +430,7 @@ impl ToJson for PluginShareUpdateTargetsResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareListParams {}
 
 impl FromJson for PluginShareListParams {
@@ -441,7 +441,7 @@ impl FromJson for PluginShareListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareListResponse {
     pub data: Vec<PluginShareListItem>,
 }
@@ -455,7 +455,7 @@ impl ToJson for PluginShareListResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareDeleteParams {
     pub remote_plugin_id: String,
 }
@@ -469,11 +469,11 @@ impl ToJson for PluginShareDeleteParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareDeleteResponse {}
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareListItem {
     pub plugin: PluginSummary,
     pub share_url: String,
@@ -498,11 +498,11 @@ impl ToJson for PluginShareListItem {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
 pub enum PluginShareDiscoverability {
-    #[serde(rename = "LISTED")]
+    #[schemars(rename = "LISTED")]
     Listed,
-    #[serde(rename = "UNLISTED")]
+    #[schemars(rename = "UNLISTED")]
     Unlisted,
-    #[serde(rename = "PRIVATE")]
+    #[schemars(rename = "PRIVATE")]
     Private,
 }
 
@@ -518,11 +518,11 @@ impl ToJson for PluginShareDiscoverability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginSharePrincipalType {
-    #[serde(rename = "user")]
+    #[schemars(rename = "user")]
     User,
-    #[serde(rename = "group")]
+    #[schemars(rename = "group")]
     Group,
-    #[serde(rename = "workspace")]
+    #[schemars(rename = "workspace")]
     Workspace,
 }
 
@@ -537,7 +537,7 @@ impl ToJson for PluginSharePrincipalType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareTarget {
     pub principal_type: PluginSharePrincipalType,
     pub principal_id: String,
@@ -553,7 +553,7 @@ impl ToJson for PluginShareTarget {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginSharePrincipal {
     pub principal_type: PluginSharePrincipalType,
     pub principal_id: String,
@@ -594,8 +594,10 @@ impl FromJson for PluginSharePrincipalType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum SkillScope {
     User,
     Repo,
@@ -604,16 +606,16 @@ pub enum SkillScope {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillMetadata {
     pub name: String,
     pub description: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     /// Legacy short_description from SKILL.md. Prefer SKILL.json interface.short_description.
     pub short_description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<SkillInterface>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<SkillDependencies>,
     pub path: AbsolutePathBuf,
     pub scope: SkillScope,
@@ -621,7 +623,7 @@ pub struct SkillMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillInterface {
     pub display_name: Option<String>,
     pub short_description: Option<String>,
@@ -632,36 +634,36 @@ pub struct SkillInterface {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillDependencies {
     pub tools: Vec<SkillToolDependency>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillToolDependency {
-    #[serde(rename = "type")]
+    #[schemars(rename = "type")]
     pub r#type: String,
     pub value: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub transport: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillErrorInfo {
     pub path: PathBuf,
     pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillsListEntry {
     pub cwd: PathBuf,
     pub skills: Vec<SkillMetadata>,
@@ -669,7 +671,7 @@ pub struct SkillsListEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HooksListEntry {
     pub cwd: PathBuf,
     pub hooks: Vec<HookMetadata>,
@@ -678,7 +680,7 @@ pub struct HooksListEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookMetadata {
     pub key: String,
     pub event_name: HookEventName,
@@ -698,14 +700,14 @@ pub struct HookMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct HookErrorInfo {
     pub path: PathBuf,
     pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginMarketplaceEntry {
     pub name: String,
     /// Local marketplace file path when the marketplace is backed by a local file.
@@ -733,7 +735,7 @@ impl ToJson for PluginMarketplaceEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct MarketplaceInterface {
     pub display_name: Option<String>,
 }
@@ -748,11 +750,11 @@ impl ToJson for MarketplaceInterface {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginInstallPolicy {
-    #[serde(rename = "NOT_AVAILABLE")]
+    #[schemars(rename = "NOT_AVAILABLE")]
     NotAvailable,
-    #[serde(rename = "AVAILABLE")]
+    #[schemars(rename = "AVAILABLE")]
     Available,
-    #[serde(rename = "INSTALLED_BY_DEFAULT")]
+    #[schemars(rename = "INSTALLED_BY_DEFAULT")]
     InstalledByDefault,
 }
 
@@ -781,9 +783,9 @@ impl FromJson for PluginInstallPolicy {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginAuthPolicy {
-    #[serde(rename = "ON_INSTALL")]
+    #[schemars(rename = "ON_INSTALL")]
     OnInstall,
-    #[serde(rename = "ON_USE")]
+    #[schemars(rename = "ON_USE")]
     OnUse,
 }
 
@@ -813,10 +815,10 @@ pub enum PluginAvailability {
     /// Plugin-service currently sends `"ENABLED"` for available remote plugins.
     /// Codex app-server exposes `"AVAILABLE"` in its API; the alias keeps
     /// decoding compatible with that upstream response.
-    #[serde(rename = "AVAILABLE", alias = "ENABLED")]
+    #[schemars(rename = "AVAILABLE", alias = "ENABLED")]
     #[default]
     Available,
-    #[serde(rename = "DISABLED_BY_ADMIN")]
+    #[schemars(rename = "DISABLED_BY_ADMIN")]
     DisabledByAdmin,
 }
 
@@ -842,7 +844,7 @@ impl FromJson for PluginAvailability {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginSummary {
     pub id: String,
     pub name: String,
@@ -854,10 +856,10 @@ pub struct PluginSummary {
     pub install_policy: PluginInstallPolicy,
     pub auth_policy: PluginAuthPolicy,
     /// Availability state for installing and using the plugin.
-    #[serde(default)]
+    #[schemars(default)]
     pub availability: PluginAvailability,
     pub interface: Option<PluginInterface>,
-    #[serde(default)]
+    #[schemars(default)]
     pub keywords: Vec<String>,
 }
 
@@ -901,7 +903,7 @@ impl FromJson for PluginSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginShareContext {
     pub remote_plugin_id: String,
     pub share_url: Option<String>,
@@ -939,7 +941,7 @@ impl FromJson for PluginShareContext {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginDetail {
     pub marketplace_name: String,
     pub marketplace_path: Option<AbsolutePathBuf>,
@@ -952,14 +954,14 @@ pub struct PluginDetail {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginHookSummary {
     pub key: String,
     pub event_name: HookEventName,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillSummary {
     pub name: String,
     pub description: String,
@@ -970,7 +972,7 @@ pub struct SkillSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginInterface {
     pub display_name: Option<String>,
     pub short_description: Option<String>,
@@ -1064,11 +1066,11 @@ impl FromJson for PluginInterface {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum PluginSource {
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Local { path: AbsolutePathBuf },
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Git {
         url: String,
         path: Option<String>,
@@ -1131,7 +1133,7 @@ impl FromJson for PluginSource {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillsConfigWriteParams {
     /// Path-based selector.
     pub path: Option<AbsolutePathBuf>,
@@ -1141,13 +1143,13 @@ pub struct SkillsConfigWriteParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct SkillsConfigWriteResponse {
     pub effective_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginInstallParams {
     pub marketplace_path: Option<AbsolutePathBuf>,
     pub remote_marketplace_name: Option<String>,
@@ -1185,14 +1187,14 @@ impl FromJson for PluginInstallParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginInstallResponse {
     pub auth_policy: PluginAuthPolicy,
     pub apps_needing_auth: Vec<AppSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginUninstallParams {
     pub plugin_id: String,
 }
@@ -1270,7 +1272,7 @@ fn optional_absolute_paths(
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct PluginUninstallResponse {}
 
 impl From<CoreSkillMetadata> for SkillMetadata {
@@ -1337,7 +1339,7 @@ impl From<CoreSkillScope> for SkillScope {
     }
 }
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 /// Notification emitted when watched local skill files change.
 ///
 /// Treat this as an invalidation signal and re-run `skills/list` with the

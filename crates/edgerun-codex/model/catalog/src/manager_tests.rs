@@ -32,7 +32,7 @@ fn remote_model_with_visibility(
     priority: i32,
     visibility: &str,
 ) -> ModelInfo {
-    edgerun_json::from_serde_value(json!({
+    edgerun_json::from_json_value(json!({
             "slug": slug,
             "display_name": display,
             "description": format!("{display} desc"),
@@ -756,12 +756,12 @@ fn bundled_models_json_roundtrips() {
 
     let serialized =
         edgerun_json::to_string(&response).expect("bundled models.json should serialize");
-    let roundtripped: ModelsResponse = edgerun_json::from_serde_str(&serialized)
+    let roundtripped: ModelsResponse = edgerun_json::from_json_str(&serialized)
         .expect("serialized models.json should deserialize");
 
     assert_eq!(
         response, roundtripped,
-        "bundled models.json should round trip through serde"
+        "bundled models.json should round trip through default_json"
     );
     assert!(
         !response.models.is_empty(),

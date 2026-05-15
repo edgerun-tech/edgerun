@@ -34,22 +34,22 @@ pub use read_mcp_resource::ReadMcpResourceHandler;
 #[derive(Debug, FromJson, Default)]
 struct ListResourcesArgs {
     /// Lists all resources from all servers if not specified.
-    #[serde(default)]
-    #[json(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     server: Option<String>,
-    #[serde(default)]
-    #[json(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     cursor: Option<String>,
 }
 
 #[derive(Debug, FromJson, Default)]
 struct ListResourceTemplatesArgs {
     /// Lists all resource templates from all servers if not specified.
-    #[serde(default)]
-    #[json(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     server: Option<String>,
-    #[serde(default)]
-    #[json(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     cursor: Option<String>,
 }
 

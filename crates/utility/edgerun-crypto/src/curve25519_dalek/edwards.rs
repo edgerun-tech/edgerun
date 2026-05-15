@@ -236,25 +236,25 @@ impl TryFrom<&[u8]> for CompressedEdwardsY {
 }
 
 // ------------------------------------------------------------------------
-// Serde support
+// JsonCompat support
 // ------------------------------------------------------------------------
 // Serializes to and from `EdwardsPoint` directly, doing compression
 // and decompression internally.  This means that users can create
-// structs containing `EdwardsPoint`s and use Serde's derived
+// structs containing `EdwardsPoint`s and use JsonCompat's derived
 // serializers to serialize those structures.
 
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::de::Visitor;
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for EdwardsPoint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.compress().as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -263,13 +263,13 @@ impl Serialize for EdwardsPoint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for CompressedEdwardsY {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -278,7 +278,7 @@ impl Serialize for CompressedEdwardsY {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de> Deserialize<'de> for EdwardsPoint {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -295,18 +295,18 @@ impl<'de> Deserialize<'de> for EdwardsPoint {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<EdwardsPoint, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
                 CompressedEdwardsY(bytes)
                     .decompress()
-                    .ok_or_else(|| serde::de::Error::custom("decompression failed"))
+                    .ok_or_else(|| edgerun_json_compat::de::Error::custom("decompression failed"))
             }
         }
 
@@ -314,7 +314,7 @@ impl<'de> Deserialize<'de> for EdwardsPoint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de> Deserialize<'de> for CompressedEdwardsY {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -331,14 +331,14 @@ impl<'de> Deserialize<'de> for CompressedEdwardsY {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<CompressedEdwardsY, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
                 Ok(CompressedEdwardsY(bytes))
             }
@@ -1754,8 +1754,8 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_bincode_basepoint_roundtrip() {
+    #[cfg(feature = "edgerun_json_compat")]
+    fn edgerun_json_compat_bincode_basepoint_roundtrip() {
         use bincode;
 
         let encoded = bincode::serialize(&constants::ED25519_BASEPOINT_POINT).unwrap();

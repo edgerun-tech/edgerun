@@ -22,8 +22,21 @@ const PERSONALITY_PLACEHOLDER: &str = "{{ personality }}";
 pub const SPEED_TIER_FAST: &str = "fast";
 
 /// See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, EnumIter, Hash, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    EnumIter,
+    Hash,
+    ToJson,
+    FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ReasoningEffort {
     None,
@@ -45,8 +58,10 @@ impl FromStr for ReasoningEffort {
 }
 
 /// Canonical user-input modality tags advertised by a model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, EnumIter, Hash, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, EnumIter, Hash, ToJson, FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum InputModality {
     /// Plain text turns and tool payloads.
@@ -110,13 +125,13 @@ pub struct ModelPreset {
     /// Supported reasoning effort options.
     pub supported_reasoning_efforts: Vec<ReasoningEffortPreset>,
     /// Whether this model supports personality-specific instructions.
-    #[serde(default)]
+    #[schemars(default)]
     pub supports_personality: bool,
     /// Deprecated: use `service_tiers` instead.
-    #[serde(default)]
+    #[schemars(default)]
     pub additional_speed_tiers: Vec<String>,
     /// Service tiers this model can run with.
-    #[serde(default)]
+    #[schemars(default)]
     pub service_tiers: Vec<ModelServiceTier>,
     /// Whether this is the default model for new users.
     pub is_default: bool,
@@ -129,13 +144,13 @@ pub struct ModelPreset {
     /// whether this model is supported in the api
     pub supported_in_api: bool,
     /// Input modalities accepted when composing user turns for this preset.
-    #[serde(default = "default_input_modalities")]
+    #[schemars(default = "default_input_modalities")]
     pub input_modalities: Vec<InputModality>,
 }
 
 /// Visibility of a model in the picker or APIs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, EnumIter, Display, ToJson, FromJson)]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ModelVisibility {
     List,
@@ -144,8 +159,10 @@ pub enum ModelVisibility {
 }
 
 /// Shell execution capability for a model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, EnumIter, Display, Hash, ToJson, FromJson)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, EnumIter, Display, Hash, ToJson, FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum ConfigShellToolType {
     Default,
@@ -156,14 +173,14 @@ pub enum ConfigShellToolType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum ApplyPatchToolType {
     Freeform,
     Function,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Default, ToJson, FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum WebSearchToolType {
     #[default]
     Text,
@@ -172,7 +189,7 @@ pub enum WebSearchToolType {
 
 /// Server-provided truncation policy metadata for a model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum TruncationMode {
     Bytes,
     Tokens,
@@ -201,7 +218,9 @@ impl TruncationPolicyConfig {
 }
 
 /// Semantic version triple encoded as an array in JSON (e.g. [0, 62, 0]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct ClientVersion(pub i32, pub i32, pub i32);
 
 const fn default_effective_context_window_percent() -> i64 {
@@ -214,57 +233,57 @@ pub struct ModelInfo {
     pub slug: String,
     pub display_name: String,
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub default_reasoning_level: Option<ReasoningEffort>,
     pub supported_reasoning_levels: Vec<ReasoningEffortPreset>,
     pub shell_type: ConfigShellToolType,
     pub visibility: ModelVisibility,
     pub supported_in_api: bool,
     pub priority: i32,
-    #[serde(default)]
+    #[schemars(default)]
     pub additional_speed_tiers: Vec<String>,
-    #[serde(default)]
+    #[schemars(default)]
     pub service_tiers: Vec<ModelServiceTier>,
     pub availability_nux: Option<ModelAvailabilityNux>,
     pub upgrade: Option<ModelInfoUpgrade>,
     pub base_instructions: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub model_messages: Option<ModelMessages>,
     pub supports_reasoning_summaries: bool,
-    #[serde(default)]
+    #[schemars(default)]
     pub default_reasoning_summary: ReasoningSummary,
     pub support_verbosity: bool,
     pub default_verbosity: Option<Verbosity>,
     pub apply_patch_tool_type: Option<ApplyPatchToolType>,
-    #[serde(default)]
+    #[schemars(default)]
     pub web_search_tool_type: WebSearchToolType,
     pub truncation_policy: TruncationPolicyConfig,
     pub supports_parallel_tool_calls: bool,
-    #[serde(default)]
+    #[schemars(default)]
     pub supports_image_detail_original: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<i64>,
     /// Maximum context window allowed for config overrides.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub max_context_window: Option<i64>,
     /// Token threshold for automatic compaction. When omitted, core derives it
     /// from `context_window` (90%). When provided, core clamps it to 90% of the
     /// context window when available.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub auto_compact_token_limit: Option<i64>,
     /// Percentage of the context window considered usable for inputs, after
     /// reserving headroom for system prompts, tool overhead, and model output.
-    #[serde(default = "default_effective_context_window_percent")]
+    #[schemars(default = "default_effective_context_window_percent")]
     pub effective_context_window_percent: i64,
     pub experimental_supported_tools: Vec<String>,
     /// Input modalities accepted by the backend for this model.
-    #[serde(default = "default_input_modalities")]
+    #[schemars(default = "default_input_modalities")]
     pub input_modalities: Vec<InputModality>,
     /// Internal-only marker set by core when a model slug resolved to fallback metadata.
-    #[serde(default, skip_serializing, skip_deserializing)]
+    #[schemars(default, skip_serializing, skip_deserializing)]
     #[schemars(skip)]
     pub used_fallback_model_metadata: bool,
-    #[serde(default)]
+    #[schemars(default)]
     pub supports_search_tool: bool,
 }
 

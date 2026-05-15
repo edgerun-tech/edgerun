@@ -236,12 +236,64 @@ pub(super) fn wrap_lines(
     max_lines: usize,
     #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
 ) -> Vec<String> {
+    if max_lines == 0 {
+        return Vec::new();
+    }
+
     let mut lines = Vec::new();
     let mut consumed_all = true;
+    let max_width = max_width.max(1.0);
 
-    'outer: for raw_line in text.lines() {
+    'outer: for raw_line in text.split('\n') {
+        if raw_line.is_empty() {
+            if lines.len() >= max_lines {
+                consumed_all = false;
+                break;
+            }
+            lines.push(String::new());
+            continue;
+        }
+
         let mut current = String::new();
         for word in raw_line.split_whitespace() {
+            if measure_label_width(
+                word,
+                2.0,
+                #[cfg(feature = "fontdue-text")]
+                atlas,
+            ) > max_width
+            {
+                if !current.is_empty() {
+                    if lines.len() >= max_lines {
+                        consumed_all = false;
+                        break 'outer;
+                    }
+                    lines.push(std::mem::take(&mut current));
+                }
+
+                for ch in word.chars() {
+                    let had_current = !current.is_empty();
+                    current.push(ch);
+                    if had_current
+                        && measure_label_width(
+                            &current,
+                            2.0,
+                            #[cfg(feature = "fontdue-text")]
+                            atlas,
+                        ) > max_width
+                    {
+                        current.pop();
+                        if lines.len() >= max_lines {
+                            consumed_all = false;
+                            break 'outer;
+                        }
+                        lines.push(std::mem::take(&mut current));
+                        current.push(ch);
+                    }
+                }
+                continue;
+            }
+
             let candidate = if current.is_empty() {
                 word.to_string()
             } else {
@@ -398,6 +450,19 @@ mod tests {
 
         assert_eq!(lines.len(), 2);
         assert!(lines[1].ends_with("..."));
+    }
+
+    #[test]
+    fn wrap_lines_breaks_unspaced_overflow() {
+        let lines = wrap_lines(
+            "abcdefgh",
+            24.0,
+            8,
+            #[cfg(feature = "fontdue-text")]
+            None,
+        );
+
+        assert_eq!(lines, vec!["ab", "cd", "ef", "gh"]);
     }
 }
 

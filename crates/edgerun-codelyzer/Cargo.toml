@@ -23,6 +23,10 @@ path = "src/bin/dead_code.rs"
 name = "edgerun-build"
 path = "src/bin/edgerun_build.rs"
 
+[[bin]]
+name = "edgerun-work-wire-gen"
+path = "src/bin/work_wire_gen.rs"
+
 [features]
 default = ["std", "lang-rust", "vfs"]
 std = ["edgerun-vfs?/std"]

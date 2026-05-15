@@ -21,20 +21,20 @@ pub use get_goal::GetGoalHandler;
 pub use update_goal::UpdateGoalHandler;
 
 #[derive(Debug, FromJson)]
-#[json(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 struct CreateGoalArgs {
     objective: String,
     token_budget: Option<i64>,
 }
 
 #[derive(Debug, FromJson)]
-#[json(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 struct UpdateGoalArgs {
     status: ThreadGoalStatus,
 }
 
 #[derive(Debug, PartialEq, ToJson)]
-#[json(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 struct GoalToolResponse {
     goal: Option<ThreadGoal>,
     remaining_tokens: Option<i64>,

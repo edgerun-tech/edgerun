@@ -1,9 +1,8 @@
 use alloc::vec::Vec;
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::codec::{wire_bytes, wire_from_bytes};
-use crate::erasure_storage::{ErasureManifest, ErasureShard, erasure_shard_hash};
+use crate::erasure_storage::{erasure_shard_hash, ErasureManifest, ErasureShard};
+use crate::generated_wire::ArchivedStoragePayload;
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, WorkProtocolError};
 
@@ -13,8 +12,7 @@ pub const STORAGE_PAYLOAD_KIND_RETRIEVE_RESPONSE: u16 = 3;
 
 const ERASURE_MANIFEST_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:erasure-manifest";
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectStoreRequest {
     pub manifest_hash: Hash,
     pub job_id: Hash,
@@ -24,8 +22,7 @@ pub struct ObjectStoreRequest {
     pub bytes: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectRetrieveRequest {
     pub manifest_hash: Hash,
     pub job_id: Hash,
@@ -33,8 +30,7 @@ pub struct ObjectRetrieveRequest {
     pub shard_hash: Hash,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectRetrieveResponse {
     pub manifest_hash: Hash,
     pub job_id: Hash,
@@ -43,8 +39,7 @@ pub struct ObjectRetrieveResponse {
     pub bytes: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StoragePayload {
     StoreRequest(ObjectStoreRequest),
     RetrieveRequest(ObjectRetrieveRequest),

@@ -53,9 +53,9 @@ use {
 /// See the [`p256` crate](https://docs.rs/p256/latest/p256/ecdsa/index.html)
 /// for examples of using this type with a concrete elliptic curve.
 ///
-/// # `serde` support
+/// # `edgerun_json_compat` support
 ///
-/// When the `serde` feature of this crate is enabled, it provides support for
+/// When the `edgerun_json_compat` feature of this crate is enabled, it provides support for
 /// serializing and deserializing ECDSA signatures using the `Serialize` and
 /// `Deserialize` traits.
 ///

@@ -1,7 +1,7 @@
 use core::fmt;
 use core::marker::PhantomData;
-use serde::de::{self, SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeTuple};
+use edgerun_json_compat::de::{self, SeqAccess, Visitor};
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeTuple};
 use {ArrayLength, GenericArray};
 
 impl<T, N> Serialize for GenericArray<T, N>

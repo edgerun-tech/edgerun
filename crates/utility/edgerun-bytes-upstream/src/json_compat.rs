@@ -2,9 +2,9 @@ use super::{Bytes, BytesMut};
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::{cmp, fmt};
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use edgerun_json_compat::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-macro_rules! serde_impl {
+macro_rules! edgerun_json_compat_impl {
     ($ty:ident, $visitor_ty:ident, $from_slice:ident, $from_vec:ident) => {
         impl Serialize for $ty {
             #[inline]
@@ -85,5 +85,5 @@ macro_rules! serde_impl {
     };
 }
 
-serde_impl!(Bytes, BytesVisitor, copy_from_slice, from);
-serde_impl!(BytesMut, BytesMutVisitor, from, from_vec);
+edgerun_json_compat_impl!(Bytes, BytesVisitor, copy_from_slice, from);
+edgerun_json_compat_impl!(BytesMut, BytesMutVisitor, from, from_vec);

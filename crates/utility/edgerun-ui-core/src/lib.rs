@@ -13,6 +13,8 @@ pub mod font;
 #[cfg(feature = "std")]
 pub mod gpu;
 pub mod icons;
+pub mod initial_setup;
+pub mod record_codec;
 #[cfg(feature = "tabler-icons")]
 pub mod tabler;
 #[cfg(feature = "fontdue-text")]

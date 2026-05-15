@@ -57,7 +57,7 @@ where
 /// no data is borrowed from the decoder, for example a PEM decoder which needs
 /// to first decode data from Base64.
 ///
-/// This trait is inspired by the [`DeserializeOwned` trait from `serde`](https://docs.rs/serde/latest/serde/de/trait.DeserializeOwned.html).
+/// This trait is inspired by the [`DeserializeOwned` trait from `edgerun_json_compat`](https://docs.rs/edgerun_json_compat/latest/edgerun_json_compat/de/trait.DeserializeOwned.html).
 pub trait DecodeOwned: for<'a> Decode<'a> {}
 
 impl<T> DecodeOwned for T where T: for<'a> Decode<'a> {}

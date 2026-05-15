@@ -97,15 +97,15 @@
 //!
 //! # Related Crates
 //!
-//! - [`valuable-serde`] provides a bridge between `valuable` and the [`serde`]
-//!   serialization ecosystem. Using [`valuable_serde::Serializable`] allows any
+//! - [`valuable-edgerun_json_compat`] provides a bridge between `valuable` and the [`edgerun_json_compat`]
+//!   serialization ecosystem. Using [`valuable_edgerun_json_compat::Serializable`] allows any
 //!   type that implements [`Valuable`] to be serialized by any
-//!   [`serde::ser::Serializer`].
+//!   [`edgerun_json_compat::ser::Serializer`].
 //!
-//! [`valuable-serde`]: https://crates.io/crates/valuable-serde
-//! [`serde`]: https://crates.io/crates/serde
-//! [`valuable_serde::Serializable`]: https://docs.rs/valuable-serde/latest/valuable_serde/struct.Serializable.html
-//! [`serde::ser::Serializer`]:  https://docs.rs/serde/latest/serde/ser/trait.Serializer.html
+//! [`valuable-edgerun_json_compat`]: https://crates.io/crates/valuable-edgerun_json_compat
+//! [`edgerun_json_compat`]: https://crates.io/crates/edgerun_json_compat
+//! [`valuable_edgerun_json_compat::Serializable`]: https://docs.rs/valuable-edgerun_json_compat/latest/valuable_edgerun_json_compat/struct.Serializable.html
+//! [`edgerun_json_compat::ser::Serializer`]:  https://docs.rs/edgerun_json_compat/latest/edgerun_json_compat/ser/trait.Serializer.html
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg, doc_cfg_hide))]
 #![cfg_attr(

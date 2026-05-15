@@ -7,12 +7,12 @@ use tinyvec_macros::impl_mirrored;
 #[cfg(feature = "rustc_1_57")]
 use alloc::collections::TryReserveError;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 use core::marker::PhantomData;
-#[cfg(feature = "serde")]
-use serde_core::de::{Deserialize, Deserializer, SeqAccess, Visitor};
-#[cfg(feature = "serde")]
-use serde_core::ser::{Serialize, SerializeSeq, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat_core::de::{Deserialize, Deserializer, SeqAccess, Visitor};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat_core::ser::{Serialize, SerializeSeq, Serializer};
 
 #[cfg(feature = "nightly_slice_partition_dedup")]
 fn stable_partition_dedup_by<T, F>(slice: &mut [T], mut same_bucket: F) -> usize
@@ -209,8 +209,8 @@ impl<A: Array<Item = u8>> std::io::Write for TinyVec<A> {
     }
 }
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docs_rs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "edgerun_json_compat")))]
 impl<A: Array> Serialize for TinyVec<A>
 where
     A::Item: Serialize,
@@ -227,8 +227,8 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docs_rs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docs_rs, doc(cfg(feature = "edgerun_json_compat")))]
 impl<'de, A: Array> Deserialize<'de> for TinyVec<A>
 where
     A::Item: Deserialize<'de>,
@@ -1869,11 +1869,11 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "alloc")))]
 struct TinyVecVisitor<A: Array>(PhantomData<A>);
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de, A: Array> Visitor<'de> for TinyVecVisitor<A>
 where
     A::Item: Deserialize<'de>,

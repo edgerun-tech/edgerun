@@ -82,7 +82,6 @@ use codex_utils_output_truncation::truncate_text;
 use codex_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
 use edgerun_json::Value as JsonValue;
 use rmcp::model::ToolAnnotations;
-use serde::Deserialize;
 use std::sync::Arc;
 use toml_edit::value;
 use tracing::Instrument;
@@ -718,7 +717,7 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
         return Ok(meta);
     }
 
-    let sandbox_state = edgerun_json::to_serde_value(SandboxState {
+    let sandbox_state = edgerun_json::to_value(&SandboxState {
         permission_profile: Some(turn_context.permission_profile()),
         sandbox_policy: turn_context.sandbox_policy(),
         codex_linux_sandbox_exe: turn_context.codex_linux_sandbox_exe.clone(),

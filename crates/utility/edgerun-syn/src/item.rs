@@ -36,7 +36,7 @@ ast_enum_of_structs! {
         /// An enum definition: `enum Foo<A, B> { A(A), B(B) }`.
         Enum(ItemEnum),
 
-        /// An `extern crate` item: `extern crate serde`.
+        /// An `extern crate` item: `extern crate edgerun_json_compat`.
         ExternCrate(ItemExternCrate),
 
         /// A free-standing function: `fn process(n: usize) -> Result<()> { ...
@@ -132,7 +132,7 @@ ast_struct! {
 }
 
 ast_struct! {
-    /// An `extern crate` item: `extern crate serde`.
+    /// An `extern crate` item: `extern crate edgerun_json_compat`.
     #[cfg_attr(docsrs, doc(cfg(feature = "full")))]
     pub struct ItemExternCrate {
         pub attrs: Vec<Attribute>,

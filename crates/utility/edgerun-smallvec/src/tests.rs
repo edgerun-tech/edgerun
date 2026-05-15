@@ -832,9 +832,9 @@ fn test_write() {
     assert_eq!(small_vec.as_ref(), data.as_ref());
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 #[test]
-fn test_serde() {
+fn test_edgerun_json_compat() {
     use bincode1::{config, deserialize};
     let mut small_vec: SmallVec<[i32; 2]> = SmallVec::new();
     small_vec.push(1);

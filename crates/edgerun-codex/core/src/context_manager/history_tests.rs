@@ -919,9 +919,9 @@ fn drop_last_n_user_turns_trims_context_updates_above_rolled_back_turn() {
         ]
     );
     assert_eq!(
-        edgerun_json::to_serde_value(history.reference_context_item())
+        edgerun_json::to_value(&history.reference_context_item())
             .expect("serialize retained reference context item"),
-        edgerun_json::to_serde_value(Some(reference_context_item))
+        edgerun_json::to_value(&Some(reference_context_item))
             .expect("serialize expected reference context item")
     );
 }

@@ -57,8 +57,8 @@ use crate::rand_core::impls::{fill_via_u32_chunks, fill_via_u64_chunks};
 use crate::rand_core::{CryptoRng, Error, RngCore, SeedableRng};
 use core::convert::AsRef;
 use core::fmt;
-#[cfg(feature = "serde1")]
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "edgerun_json_compat1")]
+use edgerun_json_compat::{Deserialize, Serialize};
 
 /// A trait for RNGs which do not generate random numbers individually, but in
 /// blocks (typically `[u32; N]`). This technique is commonly used by
@@ -113,10 +113,10 @@ pub trait BlockRngCore {
 /// [`fill_bytes`]: RngCore::fill_bytes
 /// [`try_fill_bytes`]: RngCore::try_fill_bytes
 #[derive(Clone)]
-#[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "edgerun_json_compat1", derive(Serialize, Deserialize))]
 #[cfg_attr(
-    feature = "serde1",
-    serde(
+    feature = "edgerun_json_compat1",
+    edgerun_json_compat(
         bound = "for<'x> R: Serialize + Deserialize<'x> + Sized, for<'x> R::Results: Serialize + Deserialize<'x>"
     )
 )]
@@ -282,7 +282,7 @@ impl<R: BlockRngCore + SeedableRng> SeedableRng for BlockRng<R> {
 /// [`fill_bytes`]: RngCore::fill_bytes
 /// [`try_fill_bytes`]: RngCore::try_fill_bytes
 #[derive(Clone)]
-#[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "edgerun_json_compat1", derive(Serialize, Deserialize))]
 pub struct BlockRng64<R: BlockRngCore + ?Sized> {
     results: R::Results,
     index: usize,

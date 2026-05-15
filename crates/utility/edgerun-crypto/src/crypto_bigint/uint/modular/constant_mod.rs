@@ -11,11 +11,13 @@ use crate::crypto_bigint::{NonZero, Random, RandomMod};
 #[cfg(feature = "p256_arithmetic")]
 use crate::rand_core::CryptoRngCore;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 use {
     crate::crypto_bigint::Encoding,
-    serdect::serde::de::Error,
-    serdect::serde::{Deserialize, Deserializer, Serialize, Serializer},
+    edgerun_json_compatct::edgerun_json_compat::de::Error,
+    edgerun_json_compatct::edgerun_json_compat::{
+        Deserialize, Deserializer, Serialize, Serializer,
+    },
 };
 
 /// Additions between residues with a constant modulus
@@ -218,7 +220,7 @@ impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> Retrieve for Residue<MOD, LI
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de, MOD, const LIMBS: usize> Deserialize<'de> for Residue<MOD, LIMBS>
 where
     MOD: ResidueParams<LIMBS>,
@@ -241,7 +243,7 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<MOD, const LIMBS: usize> Serialize for Residue<MOD, LIMBS>
 where
     MOD: ResidueParams<LIMBS>,

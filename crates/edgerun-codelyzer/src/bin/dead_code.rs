@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 
 use edgerun_codelyzer::dead_code::{
-    analyze_dead_code, apply_deletions, AnalyzeOptions, DeleteKind, DeleteOptions,
+    AnalyzeOptions, DeleteKind, DeleteOptions, analyze_dead_code, apply_deletions,
 };
 
 fn main() {

@@ -1,9 +1,9 @@
-//! ## `serde` support
+//! ## `edgerun_json_compat` support
 //!
-//! When the `serde` feature of this crate is enabled, the [`EncodedPoint`]
-//! type receives impls of [`serde::Serialize`] and [`serde::Deserialize`].
+//! When the `edgerun_json_compat` feature of this crate is enabled, the [`EncodedPoint`]
+//! type receives impls of [`edgerun_json_compat::Serialize`] and [`edgerun_json_compat::Deserialize`].
 //!
-//! Additionally, when both the `alloc` and `serde` features are enabled, the
+//! Additionally, when both the `alloc` and `edgerun_json_compat` features are enabled, the
 //! serializers/deserializers will autodetect if a "human friendly" textual
 //! encoding is being used, and if so encode the points as hexadecimal.
 

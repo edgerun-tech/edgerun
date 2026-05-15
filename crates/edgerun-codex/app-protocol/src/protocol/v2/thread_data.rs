@@ -16,18 +16,18 @@ use schemars::JsonSchema;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 #[derive(Default)]
 pub enum SessionSource {
     Cli,
-    #[serde(rename = "vscode")]
+    #[schemars(rename = "vscode")]
     #[default]
     VsCode,
     Exec,
     AppServer,
     Custom(String),
     SubAgent(CoreSubAgentSource),
-    #[serde(other)]
+    #[schemars(other)]
     Unknown,
 }
 
@@ -98,7 +98,7 @@ impl FromJson for SessionSource {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum ThreadSource {
     User,
     Subagent,
@@ -149,7 +149,7 @@ impl FromJson for ThreadSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct GitInfo {
     pub sha: Option<String>,
     pub branch: Option<String>,
@@ -178,7 +178,7 @@ impl FromJson for GitInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct Thread {
     pub id: String,
     /// Session id shared by threads that belong to the same session tree.
@@ -250,13 +250,13 @@ impl FromJson for Thread {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct Turn {
     pub id: String,
     /// Thread items currently included in this turn payload.
     pub items: Vec<ThreadItem>,
     /// Describes how much of `items` has been loaded for this turn.
-    #[serde(default)]
+    #[schemars(default)]
     pub items_view: TurnItemsView,
     pub status: TurnStatus,
     /// Only populated when the Turn's status is failed.
@@ -307,7 +307,7 @@ fn take_optional_path_buf(object: &mut Map, key: &str) -> Result<Option<PathBuf>
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub enum TurnItemsView {
     /// `items` was not loaded for this turn. The field is intentionally empty.
     NotLoaded,
@@ -342,12 +342,12 @@ impl FromJson for TurnItemsView {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, Error, edgerun_json::ToJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 #[error("{message}")]
 pub struct TurnError {
     pub message: String,
     pub codex_error_info: Option<CodexErrorInfo>,
-    #[serde(default)]
+    #[schemars(default)]
     pub additional_details: Option<String>,
 }
 

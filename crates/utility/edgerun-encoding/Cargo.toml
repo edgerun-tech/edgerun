@@ -13,7 +13,6 @@ default = []
 std = []
 hpack = ["dep:edgerun-hpack"]
 compression = ["dep:miniz_oxide"]
-text-encoding = []
 
 [dependencies]
 edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }

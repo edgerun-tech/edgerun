@@ -53,7 +53,7 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
     ]);
 
     let expected_schema: edgerun_json::Value =
-        edgerun_json::from_serde_str(SCHEMA)?;
+        edgerun_json::from_json_str(SCHEMA)?;
     let match_json_text_param = move |req: &wiremock::Request| {
         let body: edgerun_json::Value =
             edgerun_json::from_slice(&req.body).unwrap_or_default();
@@ -89,7 +89,7 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
                 text: "hello world".into(),
                 text_elements: Vec::new(),
             }],
-            final_output_json_schema: Some(edgerun_json::from_serde_str(SCHEMA)?),
+            final_output_json_schema: Some(edgerun_json::from_json_str(SCHEMA)?),
             cwd: cwd.path().to_path_buf(),
             approval_policy: AskForApproval::Never,
             approvals_reviewer: None,
@@ -107,7 +107,7 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
     let message = wait_for_event(&codex, |ev| matches!(ev, EventMsg::AgentMessage(_))).await;
     if let EventMsg::AgentMessage(message) = message {
         let json: edgerun_json::Value =
-            edgerun_json::from_serde_str(&message.message)?;
+            edgerun_json::from_json_str(&message.message)?;
         assert_eq!(
             json.get("explanation"),
             Some(&edgerun_json::Value::String(

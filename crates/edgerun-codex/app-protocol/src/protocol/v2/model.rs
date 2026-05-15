@@ -19,20 +19,24 @@ v2_enum_from_core!(
     }
 );
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelProviderCapabilitiesReadParams {}
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelProviderCapabilitiesReadResponse {
     pub namespace_tools: bool,
     pub image_generation: bool,
     pub web_search: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelListParams {
     /// Opaque pagination cursor returned by a previous call.
     pub cursor: Option<String>,
@@ -43,7 +47,7 @@ pub struct ModelListParams {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelAvailabilityNux {
     pub message: String,
 }
@@ -57,7 +61,7 @@ impl From<CoreModelAvailabilityNux> for ModelAvailabilityNux {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelServiceTier {
     pub id: String,
     pub name: String,
@@ -65,7 +69,7 @@ pub struct ModelServiceTier {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct Model {
     pub id: String,
     pub model: String,
@@ -77,21 +81,21 @@ pub struct Model {
     pub hidden: bool,
     pub supported_reasoning_efforts: Vec<ReasoningEffortOption>,
     pub default_reasoning_effort: ReasoningEffort,
-    #[serde(default = "default_input_modalities")]
+    #[schemars(default = "default_input_modalities")]
     pub input_modalities: Vec<InputModality>,
-    #[serde(default)]
+    #[schemars(default)]
     pub supports_personality: bool,
     /// Deprecated: use `serviceTiers` instead.
-    #[serde(default)]
+    #[schemars(default)]
     pub additional_speed_tiers: Vec<String>,
-    #[serde(default)]
+    #[schemars(default)]
     pub service_tiers: Vec<ModelServiceTier>,
     // Only one model should be marked as default.
     pub is_default: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelUpgradeInfo {
     pub model: String,
     pub upgrade_copy: Option<String>,
@@ -100,14 +104,14 @@ pub struct ModelUpgradeInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ReasoningEffortOption {
     pub reasoning_effort: ReasoningEffort,
     pub description: String,
 }
 
 #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelListResponse {
     pub data: Vec<Model>,
     /// Opaque cursor to pass to the next call to continue after the last item.
@@ -116,7 +120,7 @@ pub struct ModelListResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelReroutedNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -126,7 +130,7 @@ pub struct ModelReroutedNotification {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
-#[serde(rename_all = "camelCase")]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelVerificationNotification {
     pub thread_id: String,
     pub turn_id: String,

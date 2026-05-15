@@ -1,7 +1,7 @@
 /// Generate types based on proto
 /// ProbabilisticSamplingStrategy samples traces with a fixed probability.
-#[derive(serde::Serialize, serde::Deserialize, PartialOrd, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(edgerun_json::ToJson, edgerun_json::FromJson, PartialOrd, PartialEq)]
+#[json(rename_all = "camelCase")]
 pub(crate) struct ProbabilisticSamplingStrategy {
     /// samplingRate is the sampling probability in the range [0.0, 1.0].
     pub(crate) sampling_rate: f64,
@@ -9,8 +9,8 @@ pub(crate) struct ProbabilisticSamplingStrategy {
 
 /// RateLimitingSamplingStrategy samples a fixed number of traces per time interval.
 /// The typical implementations use the leaky bucket algorithm.
-#[derive(serde::Serialize, serde::Deserialize, PartialOrd, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(edgerun_json::ToJson, edgerun_json::FromJson, PartialOrd, PartialEq)]
+#[json(rename_all = "camelCase")]
 pub(crate) struct RateLimitingSamplingStrategy {
     /// TODO this field type should be changed to double, to support rates like 1 per minute.
     pub(crate) max_traces_per_second: i32,
@@ -18,8 +18,8 @@ pub(crate) struct RateLimitingSamplingStrategy {
 
 /// OperationSamplingStrategy is a sampling strategy for a given operation
 /// (aka endpoint, span name). Only probabilistic sampling is currently supported.
-#[derive(serde::Serialize, serde::Deserialize, PartialOrd, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(edgerun_json::ToJson, edgerun_json::FromJson, PartialOrd, PartialEq)]
+#[json(rename_all = "camelCase")]
 pub(crate) struct OperationSamplingStrategy {
     pub(crate) operation: String,
     pub(crate) probabilistic_sampling: ProbabilisticSamplingStrategy,
@@ -29,8 +29,8 @@ pub(crate) struct OperationSamplingStrategy {
 /// as well as some service-wide defaults. It is particularly useful for services whose
 /// endpoints receive vastly different traffic, so that any single rate of sampling would
 /// result in either too much data for some endpoints or almost no data for other endpoints.
-#[derive(serde::Serialize, serde::Deserialize, PartialOrd, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(edgerun_json::ToJson, edgerun_json::FromJson, PartialOrd, PartialEq)]
+#[json(rename_all = "camelCase")]
 pub(crate) struct PerOperationSamplingStrategies {
     /// defaultSamplingProbability is the sampling probability for spans that do not match
     /// any of the perOperationStrategies.
@@ -52,8 +52,8 @@ pub(crate) struct PerOperationSamplingStrategies {
 
 /// SamplingStrategyResponse contains an overall sampling strategy for a given service.
 /// This type should be treated as a union where only one of the strategy field is present.
-#[derive(serde::Serialize, serde::Deserialize, PartialOrd, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(edgerun_json::ToJson, edgerun_json::FromJson, PartialOrd, PartialEq)]
+#[json(rename_all = "camelCase")]
 pub(crate) struct SamplingStrategyResponse {
     /// Legacy field that was meant to indicate which one of the strategy fields
     /// below is present. This enum was not extended when per-operation strategy
@@ -70,16 +70,16 @@ pub(crate) struct SamplingStrategyResponse {
 }
 
 /// SamplingStrategyParameters defines request parameters for remote sampler.
-#[derive(serde::Serialize, serde::Deserialize, PartialOrd, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(edgerun_json::ToJson, edgerun_json::FromJson, PartialOrd, PartialEq)]
+#[json(rename_all = "camelCase")]
 pub(crate) struct SamplingStrategyParameters {
     /// serviceName is a required argument.
     pub(crate) service_name: String,
 }
 
 /// See description of the SamplingStrategyResponse.strategyType field.
-#[derive(serde::Serialize, serde::Deserialize, PartialOrd, PartialEq)]
-#[serde(rename_all = "UPPERCASE")]
+#[derive(edgerun_json::ToJson, edgerun_json::FromJson, PartialOrd, PartialEq)]
+#[json(rename_all = "UPPERCASE")]
 pub(crate) enum SamplingStrategyType {
     Probabilistic,
     RateLimiting,

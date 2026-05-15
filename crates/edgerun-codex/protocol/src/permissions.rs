@@ -190,7 +190,7 @@ pub fn forbidden_agent_metadata_write(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default, JsonSchema, edgerun_json::ToJson)]
-#[serde(rename_all = "kebab-case")]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum NetworkSandboxPolicy {
     #[default]
@@ -222,7 +222,7 @@ impl FromJson for NetworkSandboxPolicy {
 /// conflict precedence rather than by capability breadth: `none` beats
 /// `write`, and `write` beats `read`.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Display, JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum FileSystemAccessMode {
     Read,
@@ -265,13 +265,13 @@ impl FromJson for FileSystemAccessMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[schemars(tag = "kind", rename_all = "snake_case")]
 pub enum FileSystemSpecialPath {
     Root,
     Minimal,
-    #[serde(alias = "current_working_directory")]
+    #[schemars(alias = "current_working_directory")]
     ProjectRoots {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         subpath: Option<PathBuf>,
     },
     Tmpdir,
@@ -286,7 +286,7 @@ pub enum FileSystemSpecialPath {
     /// without rejecting config authored by a newer release.
     Unknown {
         path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         subpath: Option<PathBuf>,
     },
 }
@@ -370,7 +370,7 @@ pub struct FileSystemSandboxEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum FileSystemSandboxKind {
     #[default]
@@ -406,9 +406,9 @@ impl ToJson for FileSystemSandboxKind {
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 pub struct FileSystemSandboxPolicy {
     pub kind: FileSystemSandboxKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub glob_scan_max_depth: Option<usize>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<FileSystemSandboxEntry>,
 }
 
@@ -563,7 +563,7 @@ impl ReadDenyMatcher {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum FileSystemPath {
     Path {
         path: AbsolutePathBuf,
@@ -847,10 +847,16 @@ impl FileSystemSandboxPolicy {
     pub fn from_legacy_sandbox_policy_for_cwd(sandbox_policy: &SandboxPolicy, cwd: &Path) -> Self {
         let mut file_system_policy = Self::from(sandbox_policy);
         if let SandboxPolicy::WorkspaceWrite { writable_roots, .. } = sandbox_policy {
-            if let Ok(cwd_root) = AbsolutePathBuf::from_absolute_path(cwd) {
-                for protected_path in default_read_only_subpaths_for_writable_root(
-                    &cwd_root, /*protect_missing_dot_codex*/ true,
-                ) {
+            let cwd_root = if cwd.is_absolute() {
+                AbsolutePathBuf::from_absolute_path(cwd)
+            } else {
+                std::env::current_dir()
+                    .map(|current_dir| current_dir.join(cwd))
+                    .and_then(AbsolutePathBuf::from_absolute_path)
+            };
+            if let Ok(cwd_root) = cwd_root {
+                for protected_path in default_read_only_subpaths_for_writable_root(&cwd_root, true)
+                {
                     append_default_read_only_path_if_no_explicit_rule(
                         &mut file_system_policy.entries,
                         protected_path,
@@ -1392,7 +1398,7 @@ impl FileSystemSandboxPolicy {
     }
 
     fn resolved_entries_with_cwd(&self, cwd: &Path) -> Vec<ResolvedFileSystemEntry> {
-        let cwd_absolute = AbsolutePathBuf::from_absolute_path(cwd).ok();
+        let cwd_absolute = absolute_cwd(cwd);
         self.entries
             .iter()
             .filter_map(|entry| {
@@ -1483,7 +1489,15 @@ fn resolve_candidate_path(path: &Path, cwd: &Path) -> Option<AbsolutePathBuf> {
     if path.is_absolute() {
         AbsolutePathBuf::from_absolute_path(path).ok()
     } else {
-        Some(AbsolutePathBuf::from_absolute_path(cwd).ok()?.join(path))
+        Some(absolute_cwd(cwd)?.join(path))
+    }
+}
+
+fn absolute_cwd(cwd: &Path) -> Option<AbsolutePathBuf> {
+    if cwd.is_absolute() {
+        AbsolutePathBuf::from_absolute_path(cwd).ok()
+    } else {
+        AbsolutePathBuf::from_absolute_path(std::env::current_dir().ok()?.join(cwd)).ok()
     }
 }
 

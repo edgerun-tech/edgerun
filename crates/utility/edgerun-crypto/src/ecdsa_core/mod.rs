@@ -15,9 +15,9 @@
     unused_qualifications
 )]
 
-//! ## `serde` support
+//! ## `edgerun_json_compat` support
 //!
-//! When the `serde` feature of this crate is enabled, `Serialize` and
+//! When the `edgerun_json_compat` feature of this crate is enabled, `Serialize` and
 //! `Deserialize` impls are provided for the [`Signature`] and [`VerifyingKey`]
 //! types.
 //!
@@ -179,9 +179,9 @@ pub type SignatureBytes<C> = GenericArray<u8, SignatureSize<C>>;
 /// ASN.1 DER-encoded signatures also supported via the
 /// [`Signature::from_der`] and [`Signature::to_der`] methods.
 ///
-/// # `serde` support
+/// # `edgerun_json_compat` support
 ///
-/// When the `serde` feature of this crate is enabled, it provides support for
+/// When the `edgerun_json_compat` feature of this crate is enabled, it provides support for
 /// serializing and deserializing ECDSA signatures using the `Serialize` and
 /// `Deserialize` traits.
 ///

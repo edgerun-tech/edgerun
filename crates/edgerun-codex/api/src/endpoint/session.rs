@@ -54,7 +54,7 @@ impl<T: HttpTransport> EndpointSession<T> {
         let mut req = self.provider.build_request(method.clone(), path);
         req.headers.extend(extra_headers.clone());
         if let Some(body) = body {
-            req.body = serde_value_to_edgerun_json(body).map(RequestBody::Json);
+            req.body = value_to_edgerun_json(body).map(RequestBody::Json);
         }
         req
     }
@@ -209,7 +209,7 @@ impl<T: HttpTransport> EndpointSession<T> {
     }
 }
 
-fn serde_value_to_edgerun_json(value: &Value) -> Option<edgerun_json::JsonValue> {
+fn value_to_edgerun_json(value: &Value) -> Option<edgerun_json::JsonValue> {
     let input = value.to_string();
     let tape = edgerun_json::parse_json_tape(&input).ok()?;
     tape.root(&input)?.to_json_value()

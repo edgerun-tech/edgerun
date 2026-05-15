@@ -95,16 +95,14 @@
 //! some additional context besides what's in the formatted message:
 //!
 //! ```
-//! # use serde::Serialize;
-//! # #[derive(Debug, Serialize)] pub struct Yak(String);
+//! # #[derive(Debug)] pub struct Yak(String);
 //! # impl Yak { fn shave(&mut self, _: u32) {} }
 //! # fn find_a_razor() -> Result<u32, std::io::Error> { Ok(1) }
-//! # #[cfg(feature = "kv_serde")]
 //! # fn main() {
 //! use log::{info, warn};
 //!
 //! pub fn shave_the_yak(yak: &mut Yak) {
-//!     info!(target: "yak_events", yak:serde; "Commencing yak shaving");
+//!     info!(target: "yak_events", yak:?; "Commencing yak shaving");
 //!
 //!     loop {
 //!         match find_a_razor() {
@@ -120,8 +118,6 @@
 //!     }
 //! }
 //! # }
-//! # #[cfg(not(feature = "kv_serde"))]
-//! # fn main() {}
 //! ```
 //!
 //! See the [`kv`] module documentation for more details.
@@ -295,13 +291,6 @@
 //!
 //! * `std` allows use of `std` crate instead of the default `core`. Enables using `std::error` and
 //!   `set_boxed_logger` functionality.
-//! * `serde` enables support for serialization and deserialization of `Level` and `LevelFilter`.
-//!
-//! ```toml
-//! [dependencies]
-//! log = { version = "0.4", features = ["std", "serde"] }
-//! ```
-//!
 //! # Version compatibility
 //!
 //! The 0.3 and 0.4 versions of the `log` crate are almost entirely compatible. Log messages
@@ -367,7 +356,6 @@ use std::{cmp, fmt, mem};
 
 #[macro_use]
 mod macros;
-mod serde;
 
 #[cfg(feature = "kv")]
 pub mod kv;
