@@ -38,7 +38,7 @@ opentelemetry_sdk = { workspace = true }
 regex-lite = { workspace = true }
 tempfile = { workspace = true }
 edgerun-tokio = { workspace = true, features = ["net", "time"] }
-edgerun-tokio-tungstenite = { workspace = true }
+edgerun-tungstenite = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }

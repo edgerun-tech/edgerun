@@ -9,19 +9,19 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelsResponse;
 use edgerun_error::Result;
+use edgerun_futures::SinkExt;
+use edgerun_futures::StreamExt;
 use edgerun_json::Value;
-use edgerun_tokio_tungstenite::Message;
-use edgerun_tokio_tungstenite::accept_hdr_async_with_config;
+use edgerun_tokio::net::TcpListener;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tungstenite::Message;
+use edgerun_tungstenite::accept_hdr_async_with_config;
 use edgerun_tungstenite::extensions::ExtensionsConfig;
 use edgerun_tungstenite::extensions::compression::deflate::DeflateConfig;
 use edgerun_tungstenite::handshake::server::Request;
 use edgerun_tungstenite::handshake::server::Response;
 use edgerun_tungstenite::protocol::WebSocketConfig;
-use edgerun_futures::SinkExt;
-use edgerun_futures::StreamExt;
-use edgerun_tokio::net::TcpListener;
-use edgerun_tokio::sync::Notify;
-use edgerun_tokio::sync::oneshot;
 use wiremock::BodyPrintLimit;
 use wiremock::Match;
 use wiremock::Mock;
@@ -353,10 +353,8 @@ mod tests {
                 .expect("valid request url"),
             method: Method::POST,
             headers: HeaderMap::new(),
-            body: edgerun_json::to_vec(
-                &edgerun_json::json!({ "input": input }),
-            )
-            .expect("serialize request body"),
+            body: edgerun_json::to_vec(&edgerun_json::json!({ "input": input }))
+                .expect("serialize request body"),
         })
     }
 
@@ -918,8 +916,7 @@ pub fn ev_apply_patch_custom_tool_call(call_id: &str, patch: &str) -> Value {
 /// the same structure so downstream code exercises the full parsing path.
 pub fn ev_apply_patch_function_call(call_id: &str, patch: &str) -> Value {
     let arguments = edgerun_json::json!({ "input": patch });
-    let arguments =
-        edgerun_json::to_string(&arguments).expect("serialize apply_patch arguments");
+    let arguments = edgerun_json::to_string(&arguments).expect("serialize apply_patch arguments");
 
     edgerun_json::json!({
         "type": "response.output_item.done",
@@ -937,19 +934,14 @@ pub fn ev_shell_command_call(call_id: &str, command: &str) -> Value {
     ev_shell_command_call_with_args(call_id, &args)
 }
 
-pub fn ev_shell_command_call_with_args(
-    call_id: &str,
-    args: &edgerun_json::Value,
-) -> Value {
-    let arguments =
-        edgerun_json::to_string(args).expect("serialize shell command arguments");
+pub fn ev_shell_command_call_with_args(call_id: &str, args: &edgerun_json::Value) -> Value {
+    let arguments = edgerun_json::to_string(args).expect("serialize shell command arguments");
     ev_function_call(call_id, "shell_command", &arguments)
 }
 
 pub fn ev_apply_patch_shell_call(call_id: &str, patch: &str) -> Value {
     let args = edgerun_json::json!({ "command": ["apply_patch", patch] });
-    let arguments =
-        edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
+    let arguments = edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
 
     ev_function_call(call_id, "shell", &arguments)
 }
@@ -957,16 +949,14 @@ pub fn ev_apply_patch_shell_call(call_id: &str, patch: &str) -> Value {
 pub fn ev_apply_patch_shell_call_via_heredoc(call_id: &str, patch: &str) -> Value {
     let script = format!("apply_patch <<'EOF'\n{patch}\nEOF\n");
     let args = edgerun_json::json!({ "command": ["bash", "-lc", script] });
-    let arguments =
-        edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
+    let arguments = edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
 
     ev_function_call(call_id, "shell", &arguments)
 }
 
 pub fn ev_apply_patch_shell_command_call_via_heredoc(call_id: &str, patch: &str) -> Value {
     let args = edgerun_json::json!({ "command": format!("apply_patch <<'EOF'\n{patch}\nEOF\n") });
-    let arguments =
-        edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
+    let arguments = edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
 
     ev_function_call(call_id, "shell_command", &arguments)
 }

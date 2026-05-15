@@ -24,7 +24,7 @@ time = []
 [dependencies]
 edgerun-bytes = { workspace = true }
 edgerun-futures = { workspace = true }
-edgerun-tokio = { version = "0.1", path = "../edgerun-tokio", default-features = false, features = ["edgerun-runtime"], optional = true }
+edgerun-tokio = { workspace = true, features = ["edgerun-runtime"], optional = true }
 
 [lints]
 workspace = true

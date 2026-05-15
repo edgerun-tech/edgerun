@@ -24,12 +24,12 @@ use edgerun_tokio::sync::Mutex;
 use edgerun_tokio::sync::mpsc;
 use edgerun_tokio::sync::oneshot;
 use edgerun_tokio::time::Instant;
-use edgerun_tokio_tungstenite::Error as WsError;
-use edgerun_tokio_tungstenite::MaybeTlsStream;
-use edgerun_tokio_tungstenite::Message;
-use edgerun_tokio_tungstenite::WebSocketStream;
-use edgerun_tokio_tungstenite::connect_async_with_config;
+use edgerun_tungstenite::Error as WsError;
+use edgerun_tungstenite::MaybeTlsStream;
+use edgerun_tungstenite::Message;
+use edgerun_tungstenite::WebSocketStream;
 use edgerun_tungstenite::client::IntoClientRequest;
+use edgerun_tungstenite::connect_async_with_config;
 use edgerun_tungstenite::extensions::ExtensionsConfig;
 use edgerun_tungstenite::extensions::compression::deflate::DeflateConfig;
 use edgerun_tungstenite::protocol::WebSocketConfig;
@@ -446,21 +446,20 @@ fn websocket_config() -> WebSocketConfig {
 }
 
 fn extend_ws_headers(
-    target: &mut edgerun_tokio_tungstenite::http::HeaderMap,
+    target: &mut edgerun_tungstenite::http::HeaderMap,
     headers: &HeaderMap,
 ) -> Result<(), ApiError> {
     for (name, value) in headers {
-        let name =
-            edgerun_tokio_tungstenite::http::HeaderName::from_bytes(name.as_str().as_bytes())
-                .map_err(|err| ApiError::Stream(format!("invalid websocket header name: {err}")))?;
-        let value = edgerun_tokio_tungstenite::http::HeaderValue::from_bytes(value.as_bytes())
+        let name = edgerun_tungstenite::http::HeaderName::from_bytes(name.as_str().as_bytes())
+            .map_err(|err| ApiError::Stream(format!("invalid websocket header name: {err}")))?;
+        let value = edgerun_tungstenite::http::HeaderValue::from_bytes(value.as_bytes())
             .map_err(|err| ApiError::Stream(format!("invalid websocket header value: {err}")))?;
         target.insert(name, value);
     }
     Ok(())
 }
 
-fn ws_headers_to_api_headers(headers: &edgerun_tokio_tungstenite::http::HeaderMap) -> HeaderMap {
+fn ws_headers_to_api_headers(headers: &edgerun_tungstenite::http::HeaderMap) -> HeaderMap {
     let mut out = HeaderMap::new();
     for (name, value) in headers {
         let Ok(name) = edgerun_http::HeaderName::from_bytes(name.as_str().as_bytes()) else {

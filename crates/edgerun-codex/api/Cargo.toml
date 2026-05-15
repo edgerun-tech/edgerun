@@ -9,7 +9,6 @@ default = ["native-transport"]
 native-transport = [
     "codex-client/native-transport",
     "dep:edgerun-reqwest",
-    "dep:edgerun-tokio-tungstenite",
     "dep:edgerun-tungstenite",
     "dep:edgerun-tokio-util",
     "edgerun-tokio/fs",
@@ -29,7 +28,6 @@ edgerun-error = { workspace = true }
 edgerun-eventsource-stream = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["derive"] }
-edgerun-tokio-tungstenite = { workspace = true, optional = true }
 edgerun-tungstenite = { workspace = true, optional = true }
 edgerun-time = { workspace = true }
 edgerun-url = { workspace = true }

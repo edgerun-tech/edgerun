@@ -10,15 +10,19 @@ description = "Edgerun compatibility surface for tungstenite-style WebSocket API
 
 [features]
 default = ["deflate", "proxy"]
+connect = ["stream", "handshake", "dep:edgerun-tokio"]
 deflate = []
 handshake = []
 proxy = ["handshake"]
+stream = ["dep:edgerun-futures"]
 
 [dependencies]
 bytes = { package = "edgerun-bytes", version = "0.1", path = "../edgerun-bytes" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-encoding = { workspace = true, default-features = false }
+edgerun-futures = { workspace = true, optional = true }
 edgerun-http = { workspace = true }
+edgerun-tokio = { workspace = true, optional = true, features = ["edgerun-runtime", "net"] }
 
 [lints]
 workspace = true

@@ -33,8 +33,6 @@ members = [
   "crates/edgerun-codex/shell",
   "crates/edgerun-codex/tools",
   "crates/edgerun-codex/tui",
-  "crates/edgerun-codex/ui-native",
-  "crates/edgerun-codex/ui-web",
   "crates/edgerun-codelyzer",
   "crates/edgerun-compositor",
   "crates/edgerun-exchange",
@@ -59,6 +57,8 @@ members = [
   "crates/mesh/edgerun-mesh",
   "crates/node/edgerun-machine-report",
   "crates/node/edgerun-node",
+  "crates/node/edgerun-node-ui-native",
+  "crates/node/edgerun-node-ui-web",
   "crates/protocol/edgerun-core",
   "crates/protocol/edgerun-protocols",
   "crates/protocol/edgerun-wire",
@@ -157,7 +157,6 @@ members = [
   "crates/utility/edgerun-tinyvec-macros",
   "crates/utility/edgerun-tokio",
   "crates/utility/edgerun-tokio-test",
-  "crates/utility/edgerun-tokio-tungstenite",
   "crates/utility/edgerun-tokio-util",
   "crates/utility/edgerun-tracing",
   "crates/utility/edgerun-tracing-attributes",
@@ -272,14 +271,13 @@ edgerun-locale = { version = "0.1", path = "crates/utility/edgerun-locale", feat
 edgerun-emoji = { version = "0.1", path = "crates/utility/edgerun-emoji" }
 edgerun-sixel = { version = "0.1", path = "crates/utility/edgerun-sixel" }
 edgerun-terminal-parser = { version = "0.1", path = "crates/utility/edgerun-terminal-parser" }
+edgerun-unicode = { version = "0.1", path = "crates/utility/edgerun-unicode" }
 edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
 edgerun-network-driver = { version = "0.1", path = "crates/edgerun-network-driver", default-features = false }
-edgerun-unicode = { version = "0.1", path = "crates/utility/edgerun-unicode" }
 edgerun-similar = { version = "0.1", path = "crates/utility/edgerun-similar" }
 edgerun-tokio = { version = "0.1", path = "crates/utility/edgerun-tokio" }
-edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tokio-tungstenite", default-features = false, features = ["connect", "handshake", "proxy", "stream"] }
 edgerun-tokio-util = { version = "0.1", path = "crates/utility/edgerun-tokio-util" }
-edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite", default-features = false, features = ["deflate", "proxy"] }
+edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite", default-features = false, features = ["connect", "deflate", "proxy", "stream"] }
 landlock = { package = "edgerun-landlock", version = "0.1", path = "crates/utility/edgerun-landlock" }
 opentelemetry = { path = "crates/utility/edgerun-opentelemetry-upstream" }
 opentelemetry_sdk = { path = "crates/utility/edgerun-opentelemetry-sdk-upstream" }

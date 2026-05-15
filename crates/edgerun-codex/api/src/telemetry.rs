@@ -10,9 +10,9 @@ use codex_client::run_with_retry;
 use edgerun_http::StatusCode;
 use edgerun_tokio::time::Instant;
 #[cfg(feature = "native-transport")]
-use edgerun_tokio_tungstenite::Error;
+use edgerun_tungstenite::Error;
 #[cfg(feature = "native-transport")]
-use edgerun_tokio_tungstenite::Message;
+use edgerun_tungstenite::Message;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;

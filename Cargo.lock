@@ -58,7 +58,6 @@ dependencies = [
  "edgerun-time",
  "edgerun-tokio",
  "edgerun-tokio-test",
- "edgerun-tokio-tungstenite",
  "edgerun-tokio-util",
  "edgerun-tungstenite",
  "edgerun-url",
@@ -452,20 +451,6 @@ name = "edgerun-fontdue"
 version = "0.1.1"
 
 [[package]]
-name = "edgerun-frontend-native"
-version = "0.1.1"
-dependencies = [
- "edgerun-ui-core",
-]
-
-[[package]]
-name = "edgerun-frontend-web"
-version = "0.1.1"
-dependencies = [
- "edgerun-ui-core",
-]
-
-[[package]]
 name = "edgerun-futures"
 version = "0.1.1"
 
@@ -645,6 +630,20 @@ dependencies = [
  "edgerun-work",
  "edgerun-yubikey",
  "rkyv",
+]
+
+[[package]]
+name = "edgerun-node-ui-native"
+version = "0.1.1"
+dependencies = [
+ "edgerun-ui-core",
+]
+
+[[package]]
+name = "edgerun-node-ui-web"
+version = "0.1.1"
+dependencies = [
+ "edgerun-ui-core",
 ]
 
 [[package]]
@@ -852,15 +851,6 @@ name = "edgerun-tokio-test"
 version = "0.1.1"
 
 [[package]]
-name = "edgerun-tokio-tungstenite"
-version = "0.1.1"
-dependencies = [
- "edgerun-futures",
- "edgerun-tokio",
- "edgerun-tungstenite",
-]
-
-[[package]]
 name = "edgerun-tokio-util"
 version = "0.1.1"
 dependencies = [
@@ -884,7 +874,9 @@ dependencies = [
  "edgerun-bytes",
  "edgerun-crypto",
  "edgerun-encoding",
+ "edgerun-futures",
  "edgerun-http",
+ "edgerun-tokio",
 ]
 
 [[package]]

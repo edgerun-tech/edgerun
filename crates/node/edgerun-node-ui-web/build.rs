@@ -9,7 +9,7 @@ fn main() {
     ];
     for path in candidates {
         if Path::new(path).exists() {
-            println!("cargo:rustc-env=CODEX_GL_INTER_FONT={path}");
+            println!("cargo:rustc-env=EDGERUN_GL_INTER_FONT={path}");
             return;
         }
     }

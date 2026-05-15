@@ -21,10 +21,10 @@ use edgerun_http::HeaderMap;
 use edgerun_json::Value;
 use edgerun_json::json;
 use edgerun_tokio::net::TcpListener;
-use edgerun_tokio_tungstenite::Message;
-use edgerun_tokio_tungstenite::accept_async;
+use edgerun_tungstenite::Message;
+use edgerun_tungstenite::accept_async;
 
-type RealtimeWsStream = edgerun_tokio_tungstenite::WebSocketStream<edgerun_tokio::net::TcpStream>;
+type RealtimeWsStream = edgerun_tungstenite::WebSocketStream<edgerun_tokio::net::TcpStream>;
 
 async fn spawn_realtime_ws_server<Handler, Fut>(
     handler: Handler,

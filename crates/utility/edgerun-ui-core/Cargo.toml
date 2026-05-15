@@ -7,6 +7,7 @@ publish = false
 repository = "https://github.com/Sylchi/edgerun_reference_core"
 homepage = "https://github.com/Sylchi/edgerun_reference_core"
 rust-version.workspace = true
+autobins = false
 
 [features]
 default = ["tabler-icons"]

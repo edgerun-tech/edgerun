@@ -11,7 +11,8 @@ use edgerun_ui_core::gpu::{
 thread_local! {
     static SESSION: RefCell<UiHostSession> = RefCell::new(UiHostSession::default());
     static INPUT_BYTES: RefCell<Vec<u8>> = RefCell::new(vec![0; 4096]);
-    static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
+    static FONT: FontAtlas =
+        FontAtlas::from_font_bytes(include_bytes!(env!("EDGERUN_GL_INTER_FONT")), 18.0)
         .expect("embedded Inter font should parse");
 }
 

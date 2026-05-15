@@ -14,8 +14,17 @@ use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 use std::ops::Deref;
+#[cfg(feature = "stream")]
+use std::pin::Pin;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
+#[cfg(feature = "stream")]
+use std::task::{Context, Poll};
+
+#[cfg(feature = "stream")]
+use edgerun_futures::Sink;
+#[cfg(feature = "stream")]
+use edgerun_futures::Stream as FuturesStream;
 
 #[cfg(feature = "handshake")]
 pub mod http {
@@ -284,6 +293,24 @@ pub mod stream {
         {
             match stream {
                 crate::backend::stream::MaybeTlsStream::Plain(stream) => Self::Plain(stream),
+            }
+        }
+
+        pub fn get_ref(&self) -> &S {
+            match self {
+                Self::Plain(stream) => stream,
+                Self::Tls(_) => {
+                    panic!("TLS stream does not expose an Edgerun plain stream reference")
+                }
+            }
+        }
+
+        pub fn get_mut(&mut self) -> &mut S {
+            match self {
+                Self::Plain(stream) => stream,
+                Self::Tls(_) => {
+                    panic!("TLS stream does not expose an Edgerun plain stream reference")
+                }
             }
         }
     }
@@ -1579,6 +1606,226 @@ pub fn uri_mode(uri: &http::Uri) -> Result<Mode> {
     crate::backend::uri_mode(uri)
         .map(Mode::from)
         .map_err(Error::from)
+}
+
+#[cfg(feature = "stream")]
+#[derive(Debug)]
+pub struct WebSocketStream<S>
+where
+    S: Read + Write,
+{
+    inner: WebSocket<S>,
+}
+
+#[cfg(feature = "stream")]
+impl<S> WebSocketStream<S>
+where
+    S: Read + Write,
+{
+    fn direct(inner: WebSocket<S>) -> Self {
+        Self { inner }
+    }
+
+    pub fn into_inner(self) -> S {
+        self.inner.into_inner()
+    }
+
+    pub fn get_ref(&self) -> &S {
+        self.inner.get_ref()
+    }
+
+    pub fn get_mut(&mut self) -> &mut S {
+        self.inner.get_mut()
+    }
+
+    pub fn get_config(&self) -> protocol::WebSocketConfig {
+        self.inner.get_config()
+    }
+
+    pub async fn close(&mut self, frame: Option<CloseFrame>) -> Result<()> {
+        self.inner.close(frame)
+    }
+
+    pub async fn from_raw_socket(
+        stream: S,
+        role: protocol::Role,
+        config: Option<protocol::WebSocketConfig>,
+    ) -> Self {
+        Self::direct(WebSocket::from_raw_socket(stream, role, config))
+    }
+
+    pub async fn from_partially_read(
+        stream: S,
+        part: Vec<u8>,
+        role: protocol::Role,
+        config: Option<protocol::WebSocketConfig>,
+    ) -> Self {
+        Self::direct(WebSocket::from_partially_read(stream, part, role, config))
+    }
+
+    pub async fn send(&mut self, message: Message) -> Result<()> {
+        self.inner.send(message)
+    }
+}
+
+#[cfg(feature = "stream")]
+impl<S> FuturesStream for WebSocketStream<S>
+where
+    S: Read + Write + Unpin,
+{
+    type Item = Result<Message>;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Poll::Ready(Some(self.inner.read()))
+    }
+}
+
+#[cfg(feature = "stream")]
+impl<S> Sink<Message> for WebSocketStream<S>
+where
+    S: Read + Write + Unpin,
+{
+    type Error = Error;
+
+    fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
+        self.inner.send(item)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(self.inner.flush())
+    }
+
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(self.inner.close(None))
+    }
+}
+
+#[cfg(feature = "connect")]
+fn request_addr(request: &http::Request<()>) -> Result<String> {
+    let uri = request.uri();
+    let host = uri
+        .host()
+        .ok_or_else(|| Error::Other("websocket URI has no host".to_string()))?;
+    let port = uri.port_u16().unwrap_or_else(|| {
+        if uri.scheme_str() == Some("wss") {
+            443
+        } else {
+            80
+        }
+    });
+    Ok(format!("{host}:{port}"))
+}
+
+#[cfg(feature = "connect")]
+pub async fn connect_async<R>(
+    request: R,
+) -> Result<(
+    WebSocketStream<MaybeTlsStream<edgerun_tokio::net::TcpStream>>,
+    http::Response<Option<Vec<u8>>>,
+)>
+where
+    R: client::IntoClientRequest + Unpin,
+{
+    connect_async_with_config(request, None, false).await
+}
+
+#[cfg(feature = "connect")]
+pub async fn connect_async_with_config<R>(
+    request: R,
+    config: Option<protocol::WebSocketConfig>,
+    disable_nagle: bool,
+) -> Result<(
+    WebSocketStream<MaybeTlsStream<edgerun_tokio::net::TcpStream>>,
+    http::Response<Option<Vec<u8>>>,
+)>
+where
+    R: client::IntoClientRequest + Unpin,
+{
+    let _ = disable_nagle;
+    let request = request.into_client_request()?;
+    let stream = edgerun_tokio::net::TcpStream::connect(request_addr(&request)?)
+        .await
+        .map_err(|error| Error::Io(std::io::Error::other(error.to_string())))?;
+    let stream = MaybeTlsStream::Plain(stream);
+    let (ws, response) = client_with_config(request, stream, config)?;
+    Ok((WebSocketStream::direct(ws), response))
+}
+
+#[cfg(all(feature = "handshake", feature = "stream"))]
+pub async fn client_async<R, S>(
+    request: R,
+    stream: S,
+) -> Result<(WebSocketStream<S>, http::Response<Option<Vec<u8>>>)>
+where
+    R: client::IntoClientRequest + Unpin,
+    S: Read + Write,
+{
+    client_async_with_config(request, stream, None).await
+}
+
+#[cfg(all(feature = "handshake", feature = "stream"))]
+pub async fn client_async_with_config<R, S>(
+    request: R,
+    stream: S,
+    config: Option<protocol::WebSocketConfig>,
+) -> Result<(WebSocketStream<S>, http::Response<Option<Vec<u8>>>)>
+where
+    R: client::IntoClientRequest + Unpin,
+    S: Read + Write,
+{
+    client_with_config(request, stream, config)
+        .map(|(ws, response)| (WebSocketStream::direct(ws), response))
+}
+
+#[cfg(all(feature = "handshake", feature = "stream"))]
+pub async fn accept_async<S>(stream: S) -> Result<WebSocketStream<S>>
+where
+    S: Read + Write,
+{
+    accept(stream).map(WebSocketStream::direct)
+}
+
+#[cfg(all(feature = "handshake", feature = "stream"))]
+pub async fn accept_async_with_config<S>(
+    stream: S,
+    config: Option<protocol::WebSocketConfig>,
+) -> Result<WebSocketStream<S>>
+where
+    S: Read + Write,
+{
+    accept_with_config(stream, config).map(WebSocketStream::direct)
+}
+
+#[cfg(all(feature = "handshake", feature = "stream"))]
+pub async fn accept_hdr_async<S, C>(stream: S, callback: C) -> Result<WebSocketStream<S>>
+where
+    S: Read + Write,
+    C: handshake::server::Callback,
+{
+    accept_hdr_async_with_config(stream, callback, None).await
+}
+
+#[cfg(all(feature = "handshake", feature = "stream"))]
+pub async fn accept_hdr_async_with_config<S, C>(
+    stream: S,
+    callback: C,
+    config: Option<protocol::WebSocketConfig>,
+) -> Result<WebSocketStream<S>>
+where
+    S: Read + Write,
+    C: handshake::server::Callback,
+{
+    accept_hdr_with_config(stream, callback, config).map(WebSocketStream::direct)
 }
 
 mod backend {

@@ -22,7 +22,7 @@ FORBIDDEN_ANYWHERE = {
 
 NATIVE_ONLY_DEPS = {
     "edgerun-reqwest",
-    "edgerun-tokio-tungstenite",
+    "edgerun-tungstenite",
     "edgerun-tungstenite",
     "edgerun-tokio-util",
     "rustls",
