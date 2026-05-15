@@ -148,11 +148,24 @@ impl FontAtlas {
     pub(super) fn layout_text(
         &self,
         scene: &mut GpuScene,
-        mut x: f32,
+        x: f32,
         y: f32,
         text: &str,
         color: Color4,
     ) {
+        for quad in self.layout_text_quads(x, y, text, color) {
+            scene.push_text_quad(quad);
+        }
+    }
+
+    pub fn layout_text_quads(
+        &self,
+        mut x: f32,
+        y: f32,
+        text: &str,
+        color: Color4,
+    ) -> Vec<TextQuad> {
+        let mut quads = Vec::new();
         let origin_x = x;
         let mut baseline = y + self.px * 0.82;
         for ch in text.chars() {
@@ -166,7 +179,7 @@ impl FontAtlas {
                 continue;
             };
             if glyph.size[0] > 0.0 && glyph.size[1] > 0.0 {
-                scene.push_text_quad(TextQuad {
+                quads.push(TextQuad {
                     x: (x + glyph.bearing[0]).round(),
                     y: (baseline - glyph.bearing[1] - glyph.size[1]).round(),
                     w: glyph.size[0],
@@ -180,6 +193,7 @@ impl FontAtlas {
             }
             x += glyph.advance.max(self.px * 0.28);
         }
+        quads
     }
 
     pub fn text_width(&self, text: &str) -> f32 {

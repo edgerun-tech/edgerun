@@ -1,12 +1,11 @@
-//! GPU UI preview: shapes + Inter text + real Tabler SVG atlas icons.
+//! GPU UI preview: shapes + shared UI text atlas + real Tabler SVG atlas icons.
 
-use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use edgerun_ui_core::font::FontFace;
+use edgerun_ui_core::gpu::{Color4 as UiColor4, FontAtlas, TextQuad};
 use edgerun_ui_core::tabler_svg_atlas_generated::{
     TABLER_SVG_ATLAS_ALPHA, TABLER_SVG_ATLAS_H, TABLER_SVG_ATLAS_W, TABLER_SVG_ICONS,
 };
@@ -253,6 +252,12 @@ void main() {
 #[derive(Clone, Copy)]
 struct Color4([f32; 4]);
 
+impl From<Color4> for UiColor4 {
+    fn from(color: Color4) -> Self {
+        Self::rgba(color.0[0], color.0[1], color.0[2], color.0[3])
+    }
+}
+
 const BG: Color4 = Color4([0.008, 0.024, 0.090, 1.0]);
 const PANEL: Color4 = Color4([0.059, 0.090, 0.165, 0.94]);
 const PANEL_2: Color4 = Color4([0.118, 0.161, 0.231, 0.90]);
@@ -458,81 +463,20 @@ impl Drop for ShapeRenderer {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Glyph {
-    uv: [f32; 4],
-    size: [f32; 2],
-    bearing: [f32; 2],
-    advance: f32,
-}
-
-struct FontAtlas {
+struct UploadedFontAtlas {
     tex: u32,
-    glyphs: HashMap<char, Glyph>,
+    atlas: FontAtlas,
 }
 
-impl FontAtlas {
-    fn build(font: &FontFace, chars: &[char], px: f32) -> Self {
-        let w = 1024u32;
-        let h = 1024u32;
-        let mut bitmap = vec![0u8; (w * h) as usize];
-        let mut glyphs = HashMap::new();
-        let mut x = 2u32;
-        let mut y = 2u32;
-        let mut row_h = 0u32;
-
-        for &ch in chars {
-            let (m, data) = font.rasterize(ch, px);
-            if m.width == 0 || m.height == 0 {
-                glyphs.insert(
-                    ch,
-                    Glyph {
-                        uv: [0.0; 4],
-                        size: [0.0, 0.0],
-                        bearing: [m.xmin as f32, m.ymin as f32],
-                        advance: m.advance_width,
-                    },
-                );
-                continue;
-            }
-            if x + m.width as u32 + 2 >= w {
-                x = 2;
-                y += row_h + 2;
-                row_h = 0;
-            }
-            if y + m.height as u32 + 2 >= h {
-                break;
-            }
-            for gy in 0..m.height as u32 {
-                for gx in 0..m.width as u32 {
-                    bitmap[((y + gy) * w + x + gx) as usize] =
-                        data[(gy * m.width as u32 + gx) as usize];
-                }
-            }
-            glyphs.insert(
-                ch,
-                Glyph {
-                    uv: [
-                        x as f32 / w as f32,
-                        y as f32 / h as f32,
-                        (x + m.width as u32) as f32 / w as f32,
-                        (y + m.height as u32) as f32 / h as f32,
-                    ],
-                    size: [m.width as f32, m.height as f32],
-                    bearing: [m.xmin as f32, m.ymin as f32],
-                    advance: m.advance_width,
-                },
-            );
-            x += m.width as u32 + 2;
-            row_h = row_h.max(m.height as u32);
-        }
-
-        let tex = upload_alpha_texture(w, h, &bitmap);
-        Self { tex, glyphs }
+impl UploadedFontAtlas {
+    fn load(px: f32) -> Result<Self, String> {
+        let atlas = FontAtlas::load_inter(px)?;
+        let tex = upload_alpha_texture(atlas.width, atlas.height, &atlas.alpha);
+        Ok(Self { tex, atlas })
     }
 }
 
-impl Drop for FontAtlas {
+impl Drop for UploadedFontAtlas {
     fn drop(&mut self) {
         unsafe {
             glDeleteTextures(1, &self.tex);
@@ -655,31 +599,28 @@ impl TextureRenderer {
 
     fn text(
         &self,
-        atlas: &FontAtlas,
+        atlas: &UploadedFontAtlas,
         width: i32,
         height: i32,
-        mut x: f32,
+        x: f32,
         y: f32,
         text: &str,
         color: Color4,
-        px: f32,
     ) {
         self.begin(atlas.tex, width, height, color);
-        let baseline = y + px * 0.84;
-        for ch in text.chars() {
-            if let Some(g) = atlas.glyphs.get(&ch) {
-                if g.size[0] > 0.0 {
-                    self.draw_quad(
-                        x + g.bearing[0],
-                        baseline - g.bearing[1] - g.size[1],
-                        g.size[0],
-                        g.size[1],
-                        g.uv,
-                    );
-                }
-                x += g.advance.max(px * 0.32);
-            }
+        for quad in atlas.atlas.layout_text_quads(x, y, text, color.into()) {
+            self.draw_text_quad(quad);
         }
+    }
+
+    fn draw_text_quad(&self, quad: TextQuad) {
+        self.draw_quad(
+            quad.x,
+            quad.y,
+            quad.w,
+            quad.h,
+            [quad.u0, quad.v0, quad.u1, quad.v1],
+        );
     }
 
     fn icon(
@@ -759,8 +700,7 @@ fn run() -> Result<(), String> {
     let shapes = ShapeRenderer::new()?;
     let textures = TextureRenderer::new()?;
 
-    let ui_font = FontFace::load_best_ui_font().map_err(|e| format!("font: {e}"))?;
-    let ui_atlas = FontAtlas::build(&ui_font, &ascii_chars(), 38.0);
+    let ui_atlas = UploadedFontAtlas::load(38.0).map_err(|e| format!("font: {e}"))?;
     let svg_atlas = SvgAtlas::new();
 
     let started = Instant::now();
@@ -816,7 +756,7 @@ fn render_frame(
     accent_i: usize,
     shapes: &ShapeRenderer,
     tex: &TextureRenderer,
-    ui_atlas: &FontAtlas,
+    ui_atlas: &UploadedFontAtlas,
     svg_atlas: &SvgAtlas,
 ) {
     let accent = PALETTE[accent_i.min(PALETTE.len() - 1)];
@@ -929,7 +869,7 @@ fn render_frame(
         svg_atlas, width, height, "network", 606.0, 270.0, 30.0, EMERALD,
     );
 
-    tex.text(ui_atlas, width, height, 122.0, 52.0, "EdgeRun", TEXT, 38.0);
+    tex.text(ui_atlas, width, height, 122.0, 52.0, "EdgeRun", TEXT);
     tex.text(
         ui_atlas,
         width,
@@ -938,11 +878,10 @@ fn render_frame(
         98.0,
         "GPU text / real Tabler SVG atlas / accent picker",
         MUTED,
-        38.0,
     );
-    tex.text(ui_atlas, width, height, 96.0, 276.0, "CPU", MUTED, 38.0);
-    tex.text(ui_atlas, width, height, 374.0, 276.0, "RAM", MUTED, 38.0);
-    tex.text(ui_atlas, width, height, 652.0, 276.0, "NET", MUTED, 38.0);
+    tex.text(ui_atlas, width, height, 96.0, 276.0, "CPU", MUTED);
+    tex.text(ui_atlas, width, height, 374.0, 276.0, "RAM", MUTED);
+    tex.text(ui_atlas, width, height, 652.0, 276.0, "NET", MUTED);
     tex.text(
         ui_atlas,
         width,
@@ -951,7 +890,6 @@ fn render_frame(
         height as f32 - 74.0,
         "accent",
         MUTED,
-        38.0,
     );
 }
 
@@ -966,10 +904,6 @@ fn pick_accent(state: &mut State, x: i32, y: i32, height: i32) {
             state.accent = i;
         }
     }
-}
-
-fn ascii_chars() -> Vec<char> {
-    (32u8..=126).map(char::from).collect()
 }
 
 fn upload_alpha_texture(w: u32, h: u32, data: &[u8]) -> u32 {

@@ -24,6 +24,7 @@ use edgerun_codelyzer::generated::codeanalyzer::{
     GraphData, GraphEdge, GraphNode, WsMessage, WsMessageEnum,
 };
 use edgerun_codelyzer::xray_wire::{ConnectionsEnvelope, LocalConnection};
+use edgerun_encoding::percent;
 use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 
 use crate::http::{Handler, Request, Response, StatusCode};
@@ -472,31 +473,8 @@ fn query_param(query: &str, key: &str) -> Option<String> {
     for pair in query.split('&') {
         let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
         if k == key {
-            return Some(percent_decode(v));
+            return Some(percent::percent_decode(v));
         }
     }
     None
-}
-
-fn percent_decode(value: &str) -> String {
-    let mut bytes = Vec::with_capacity(value.len());
-    let mut chars = value.as_bytes().iter().copied();
-    while let Some(byte) = chars.next() {
-        if byte == b'%' {
-            let hi = chars.next().unwrap_or(b'0');
-            let lo = chars.next().unwrap_or(b'0');
-            if let Ok(hex) = core::str::from_utf8(&[hi, lo]) {
-                if let Ok(decoded) = u8::from_str_radix(hex, 16) {
-                    bytes.push(decoded);
-                    continue;
-                }
-            }
-        }
-        if byte == b'+' {
-            bytes.push(b' ');
-        } else {
-            bytes.push(byte);
-        }
-    }
-    String::from_utf8_lossy(&bytes).to_string()
 }

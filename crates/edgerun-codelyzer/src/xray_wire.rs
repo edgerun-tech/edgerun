@@ -1,6 +1,7 @@
-use crate::graph_types::{
+pub use crate::graph_types::{
     ArchivedConnectionsEnvelope, ArchivedSourceSnapshot, ConnectionsEnvelope, SourceSnapshot,
 };
+pub use crate::graph_types::LocalConnection;
 
 impl SourceSnapshot {
     pub fn encode_rkyv(&self) -> Result<Vec<u8>, rkyv::rancor::Error> {
