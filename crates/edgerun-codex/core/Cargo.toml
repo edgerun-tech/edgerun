@@ -41,11 +41,8 @@ codex-shell-command = { workspace = true }
 codex-tools = { path = "../tools", default-features = false }
 edgerun-json = { workspace = true, features = ["derive"] }
 edgerun-http = { workspace = true }
-edgerun-crypto = { workspace = true, default-features = false }
 
 [dev-dependencies]
-edgerun-async-trait = { workspace = true }
 edgerun-bytes = { workspace = true }
 edgerun-futures = { workspace = true }
-edgerun-http = { workspace = true }
 edgerun-tokio = { workspace = true, features = ["rt", "sync"] }

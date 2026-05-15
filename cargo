@@ -165,6 +165,7 @@ esac
 
 workspace="$ROOT"
 edge_args=("$edge_cmd")
+app_args=()
 
 while [[ $# -gt 0 ]]; do
     arg="$1"
@@ -301,8 +302,7 @@ while [[ $# -gt 0 ]]; do
             fail_missing "$arg"
             ;;
         --)
-            edge_args+=("--")
-            edge_args+=("$@")
+            app_args=("$@")
             break
             ;;
         -*)
@@ -320,5 +320,9 @@ done
 
 [[ "$workspace" = /* ]] || workspace="$PWD/$workspace"
 edge_args+=("--workspace" "$workspace")
+if [[ ${#app_args[@]} -gt 0 ]]; then
+    edge_args+=("--")
+    edge_args+=("${app_args[@]}")
+fi
 
 exec "$(find_edgerun_build)" "${edge_args[@]}"
