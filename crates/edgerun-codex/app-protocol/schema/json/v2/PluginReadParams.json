@@ -1,0 +1,19 @@
+{
+  "title": "PluginReadParams",
+  "type": "object",
+  "properties": {
+    "marketplacePath": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "pluginName": {
+      "type": "string"
+    },
+    "remoteMarketplaceName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "pluginName"
+  ]
+}

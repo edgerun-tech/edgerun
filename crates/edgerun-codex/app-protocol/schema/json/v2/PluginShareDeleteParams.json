@@ -1,0 +1,12 @@
+{
+  "title": "PluginShareDeleteParams",
+  "type": "object",
+  "properties": {
+    "remotePluginId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "remotePluginId"
+  ]
+}

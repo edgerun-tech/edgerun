@@ -1,0 +1,116 @@
+{
+  "title": "ThreadStartParams",
+  "type": "object",
+  "properties": {
+    "approvalsReviewer": {
+      "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+      "type": "string",
+      "enum": [
+        "user",
+        "auto_review",
+        "guardian_subagent"
+      ]
+    },
+    "baseInstructions": {
+      "type": "string"
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "developerInstructions": {
+      "type": "string"
+    },
+    "dynamicTools": {
+      "type": "array",
+      "items": {
+        "title": "DynamicToolSpec",
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "inputSchema": true,
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "inputSchema"
+        ]
+      }
+    },
+    "environments": {
+      "type": "array",
+      "items": {
+        "title": "TurnEnvironmentParams",
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "title": "AbsolutePathBuf",
+            "type": "object"
+          },
+          "environmentId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "environmentId",
+          "cwd"
+        ]
+      }
+    },
+    "ephemeral": {
+      "type": "boolean"
+    },
+    "experimentalRawEvents": {
+      "type": "boolean"
+    },
+    "model": {
+      "type": "string"
+    },
+    "modelProvider": {
+      "type": "string"
+    },
+    "persistExtendedHistory": {
+      "type": "boolean"
+    },
+    "personality": {
+      "title": "Personality",
+      "type": "string",
+      "enum": [
+        "none",
+        "friendly",
+        "pragmatic"
+      ]
+    },
+    "serviceName": {
+      "type": "string"
+    },
+    "sessionStartSource": {
+      "title": "ThreadStartSource",
+      "type": "string",
+      "enum": [
+        "Startup",
+        "Clear"
+      ]
+    },
+    "threadSource": {
+      "title": "ThreadSource",
+      "type": "string",
+      "enum": [
+        "User",
+        "Subagent",
+        "MemoryConsolidation"
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "FsUnwatchParams",
+  "type": "object",
+  "properties": {
+    "watchId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "watchId"
+  ]
+}

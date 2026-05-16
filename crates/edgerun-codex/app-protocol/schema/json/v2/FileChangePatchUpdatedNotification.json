@@ -1,0 +1,94 @@
+{
+  "title": "FileChangePatchUpdatedNotification",
+  "type": "object",
+  "properties": {
+    "changes": {
+      "type": "array",
+      "items": {
+        "title": "FileUpdateChange",
+        "type": "object",
+        "properties": {
+          "diff": {
+            "type": "string"
+          },
+          "kind": {
+            "title": "PatchChangeKind",
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "Add",
+                    "title": "Addv2::FileChangePatchUpdatedNotificationType"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false,
+                "title": "Addv2::FileChangePatchUpdatedNotification"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "Delete",
+                    "title": "Deletev2::FileChangePatchUpdatedNotificationType"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false,
+                "title": "Deletev2::FileChangePatchUpdatedNotification"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "movePath": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "Update",
+                    "title": "Updatev2::FileChangePatchUpdatedNotificationType"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false,
+                "title": "Updatev2::FileChangePatchUpdatedNotification"
+              }
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "diff"
+        ]
+      }
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "itemId",
+    "changes"
+  ]
+}

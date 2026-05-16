@@ -1,0 +1,18 @@
+[package]
+name = "edgerun-url"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Zero-dependency URL parsing for edgerun (RFC 3986 subset)"
+
+[features]
+default = []
+
+[dependencies]
+edgerun-json.workspace = true
+
+[lints]
+workspace = true

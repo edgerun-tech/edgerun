@@ -1,0 +1,32 @@
+{
+  "title": "FsReadDirectoryResponse",
+  "type": "object",
+  "properties": {
+    "entries": {
+      "type": "array",
+      "items": {
+        "title": "FsReadDirectoryEntry",
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string"
+          },
+          "isDirectory": {
+            "type": "boolean"
+          },
+          "isFile": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fileName",
+          "isDirectory",
+          "isFile"
+        ]
+      }
+    }
+  },
+  "required": [
+    "entries"
+  ]
+}

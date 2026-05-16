@@ -1,0 +1,28 @@
+{
+  "title": "FsGetMetadataResponse",
+  "type": "object",
+  "properties": {
+    "createdAtMs": {
+      "type": "integer"
+    },
+    "isDirectory": {
+      "type": "boolean"
+    },
+    "isFile": {
+      "type": "boolean"
+    },
+    "isSymlink": {
+      "type": "boolean"
+    },
+    "modifiedAtMs": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "isDirectory",
+    "isFile",
+    "isSymlink",
+    "createdAtMs",
+    "modifiedAtMs"
+  ]
+}

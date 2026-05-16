@@ -1,0 +1,50 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build EdgeRun UI docs WASM
+        env:
+          CARGO_TARGET_DIR: target
+        run: |
+          rustup run stable cargo build -p edgerun-docs-ui-web --target wasm32-unknown-unknown --release
+          mkdir -p _site
+          cp docs/pages/index.html docs/pages/app.js _site/
+          cp target/wasm32-unknown-unknown/release/edgerun_docs_ui_web.wasm _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

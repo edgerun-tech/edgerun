@@ -1,0 +1,30 @@
+[package]
+name = "edgerun-secret-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Secret storage and retrieval service for Edgerun"
+autobins = false
+
+[lib]
+name = "edgerun_secret_service"
+path = "src/lib.rs"
+
+[dependencies]
+edgerun-devices.workspace = true
+edgerun-storage = { workspace = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["core", "wire", "dbus"] }
+edgerun-encoding = { workspace = true, default-features = false }
+edgerun-json = { workspace = true, default-features = false }
+edgerun-log = { workspace = true }
+edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
+edgerun-time = { workspace = true }
+
+[features]
+std = []
+
+[lints]
+workspace = true

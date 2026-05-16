@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-error-derive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Derive macro for edgerun-error"
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true

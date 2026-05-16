@@ -1,0 +1,9 @@
+{
+  "title": "PluginSkillReadResponse",
+  "type": "object",
+  "properties": {
+    "contents": {
+      "type": "string"
+    }
+  }
+}

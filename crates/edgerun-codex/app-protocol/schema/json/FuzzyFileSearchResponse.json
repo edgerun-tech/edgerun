@@ -1,0 +1,51 @@
+{
+  "title": "FuzzyFileSearchResponse",
+  "type": "object",
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "title": "FuzzyFileSearchResult",
+        "type": "object",
+        "properties": {
+          "file_name": {
+            "type": "string"
+          },
+          "indices": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "match_type": {
+            "title": "FuzzyFileSearchMatchType",
+            "type": "string",
+            "enum": [
+              "File",
+              "Directory"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "root": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root",
+          "path",
+          "match_type",
+          "file_name",
+          "score"
+        ]
+      }
+    }
+  },
+  "required": [
+    "files"
+  ]
+}

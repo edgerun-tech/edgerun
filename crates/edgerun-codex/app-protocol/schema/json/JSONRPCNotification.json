@@ -1,0 +1,12 @@
+{
+  "title": "JSONRPCNotification",
+  "type": "object",
+  "properties": {
+    "method": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "method"
+  ]
+}

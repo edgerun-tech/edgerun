@@ -1,0 +1,1208 @@
+{
+  "title": "ServerRequest",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "item/commandExecution/requestApproval",
+          "title": "Item/commandExecution/requestApprovalRequestMethod"
+        },
+        "params": {
+          "title": "CommandExecutionRequestApprovalParams",
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "startedAtMs": {
+              "type": "integer"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId",
+            "turnId",
+            "itemId",
+            "startedAtMs"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "Item/commandExecution/requestApprovalRequest"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "item/fileChange/requestApproval",
+          "title": "Item/fileChange/requestApprovalRequestMethod"
+        },
+        "params": {
+          "title": "FileChangeRequestApprovalParams",
+          "type": "object",
+          "properties": {
+            "grantRoot": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "startedAtMs": {
+              "type": "integer"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId",
+            "turnId",
+            "itemId",
+            "startedAtMs"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "Item/fileChange/requestApprovalRequest"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "item/tool/requestUserInput",
+          "title": "Item/tool/requestUserInputRequestMethod"
+        },
+        "params": {
+          "title": "ToolRequestUserInputParams",
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "questions": {
+              "type": "array",
+              "items": {
+                "title": "ToolRequestUserInputQuestion",
+                "type": "object",
+                "properties": {
+                  "header": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "isOther": {
+                    "type": "boolean"
+                  },
+                  "isSecret": {
+                    "type": "boolean"
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "title": "ToolRequestUserInputOption",
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "description"
+                      ]
+                    }
+                  },
+                  "question": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "header",
+                  "question"
+                ]
+              }
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId",
+            "turnId",
+            "itemId",
+            "questions"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "Item/tool/requestUserInputRequest"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "mcpServer/elicitation/request",
+          "title": "McpServer/elicitation/requestRequestMethod"
+        },
+        "params": {
+          "title": "McpServerElicitationRequestParams",
+          "type": "object",
+          "properties": {
+            "request": {
+              "title": "McpServerElicitationRequest",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_meta": true,
+                    "message": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "const": "Form"
+                    },
+                    "requestedSchema": {
+                      "title": "McpElicitationSchema",
+                      "type": "object",
+                      "properties": {
+                        "properties": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "title": "McpElicitationPrimitiveSchema",
+                            "oneOf": [
+                              {
+                                "title": "Enum",
+                                "type": "object",
+                                "properties": {
+                                  "field0": {
+                                    "title": "McpElicitationEnumSchema",
+                                    "oneOf": [
+                                      {
+                                        "title": "SingleSelect",
+                                        "type": "object",
+                                        "properties": {
+                                          "field0": {
+                                            "title": "McpElicitationSingleSelectEnumSchema",
+                                            "oneOf": [
+                                              {
+                                                "title": "Untitled",
+                                                "type": "object",
+                                                "properties": {
+                                                  "field0": {
+                                                    "title": "McpElicitationUntitledSingleSelectEnumSchema",
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "enum": {
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "type": {
+                                                        "title": "McpElicitationStringType",
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "string"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "enum"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "field0"
+                                                ]
+                                              },
+                                              {
+                                                "title": "Titled",
+                                                "type": "object",
+                                                "properties": {
+                                                  "field0": {
+                                                    "title": "McpElicitationTitledSingleSelectEnumSchema",
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "oneOf": {
+                                                        "type": "array",
+                                                        "items": {
+                                                          "title": "McpElicitationConstOption",
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "const": {
+                                                              "type": "string"
+                                                            },
+                                                            "title": {
+                                                              "type": "string"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "const",
+                                                            "title"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        }
+                                                      },
+                                                      "type": {
+                                                        "title": "McpElicitationStringType",
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "string"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "oneOf"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "field0"
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "field0"
+                                        ]
+                                      },
+                                      {
+                                        "title": "MultiSelect",
+                                        "type": "object",
+                                        "properties": {
+                                          "field0": {
+                                            "title": "McpElicitationMultiSelectEnumSchema",
+                                            "oneOf": [
+                                              {
+                                                "title": "Untitled",
+                                                "type": "object",
+                                                "properties": {
+                                                  "field0": {
+                                                    "title": "McpElicitationUntitledMultiSelectEnumSchema",
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "items": {
+                                                        "title": "McpElicitationUntitledEnumItems",
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "enum": {
+                                                            "type": "array",
+                                                            "items": {
+                                                              "type": "string"
+                                                            }
+                                                          },
+                                                          "type": {
+                                                            "title": "McpElicitationStringType",
+                                                            "type": "string",
+                                                            "enum": [
+                                                              "string"
+                                                            ]
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "type",
+                                                          "enum"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "type": {
+                                                        "title": "McpElicitationArrayType",
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "array"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "items"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "field0"
+                                                ]
+                                              },
+                                              {
+                                                "title": "Titled",
+                                                "type": "object",
+                                                "properties": {
+                                                  "field0": {
+                                                    "title": "McpElicitationTitledMultiSelectEnumSchema",
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "items": {
+                                                        "title": "McpElicitationTitledEnumItems",
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "anyOf": {
+                                                            "type": "array",
+                                                            "items": {
+                                                              "title": "McpElicitationConstOption",
+                                                              "type": "object",
+                                                              "properties": {
+                                                                "const": {
+                                                                  "type": "string"
+                                                                },
+                                                                "title": {
+                                                                  "type": "string"
+                                                                }
+                                                              },
+                                                              "required": [
+                                                                "const",
+                                                                "title"
+                                                              ],
+                                                              "additionalProperties": false
+                                                            }
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "anyOf"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "type": {
+                                                        "title": "McpElicitationArrayType",
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "array"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "items"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "field0"
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "field0"
+                                        ]
+                                      },
+                                      {
+                                        "title": "Legacy",
+                                        "type": "object",
+                                        "properties": {
+                                          "field0": {
+                                            "title": "McpElicitationLegacyTitledEnumSchema",
+                                            "type": "object",
+                                            "properties": {
+                                              "enum": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": {
+                                                "title": "McpElicitationStringType",
+                                                "type": "string",
+                                                "enum": [
+                                                  "string"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "type",
+                                              "enum"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "field0"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "field0"
+                                ]
+                              },
+                              {
+                                "title": "String",
+                                "type": "object",
+                                "properties": {
+                                  "field0": {
+                                    "title": "McpElicitationStringSchema",
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "title": "McpElicitationStringType",
+                                        "type": "string",
+                                        "enum": [
+                                          "string"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "field0"
+                                ]
+                              },
+                              {
+                                "title": "Number",
+                                "type": "object",
+                                "properties": {
+                                  "field0": {
+                                    "title": "McpElicitationNumberSchema",
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "title": "McpElicitationNumberType",
+                                        "type": "string",
+                                        "enum": [
+                                          "number",
+                                          "integer"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "field0"
+                                ]
+                              },
+                              {
+                                "title": "Boolean",
+                                "type": "object",
+                                "properties": {
+                                  "field0": {
+                                    "title": "McpElicitationBooleanSchema",
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "title": "McpElicitationBooleanType",
+                                        "type": "string",
+                                        "enum": [
+                                          "boolean"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "field0"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "type": {
+                          "title": "McpElicitationObjectType",
+                          "type": "string",
+                          "enum": [
+                            "object"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "properties"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "message",
+                    "requestedSchema"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_meta": true,
+                    "elicitationId": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "const": "Url"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "message",
+                    "url",
+                    "elicitationId"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "serverName": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId",
+            "serverName",
+            "request"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "McpServer/elicitation/requestRequest"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "item/tool/call",
+          "title": "Item/tool/callRequestMethod"
+        },
+        "params": {
+          "title": "DynamicToolCallParams",
+          "type": "object",
+          "properties": {
+            "arguments": true,
+            "callId": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "turnId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId",
+            "turnId",
+            "callId",
+            "tool",
+            "arguments"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "Item/tool/callRequest"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "account/chatgptAuthTokens/refresh",
+          "title": "Account/chatgptAuthTokens/refreshRequestMethod"
+        },
+        "params": {
+          "title": "ChatgptAuthTokensRefreshParams",
+          "type": "object",
+          "properties": {
+            "previousAccountId": {
+              "type": "string"
+            },
+            "reason": {
+              "title": "ChatgptAuthTokensRefreshReason",
+              "type": "string",
+              "enum": [
+                "Unauthorized"
+              ]
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "Account/chatgptAuthTokens/refreshRequest"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "ApplyPatchApproval",
+          "title": "ApplyPatchApprovalRequestMethod"
+        },
+        "params": {
+          "title": "ApplyPatchApprovalParams",
+          "type": "object",
+          "properties": {
+            "callId": {
+              "type": "string"
+            },
+            "conversationId": {
+              "type": "string"
+            },
+            "fileChanges": {
+              "type": "object",
+              "additionalProperties": {
+                "title": "FileChange",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "Add",
+                        "title": "AddServerRequestType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "content"
+                    ],
+                    "additionalProperties": false,
+                    "title": "AddServerRequest"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "content": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "Delete",
+                        "title": "DeleteServerRequestType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "content"
+                    ],
+                    "additionalProperties": false,
+                    "title": "DeleteServerRequest"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "movePath": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "Update",
+                        "title": "UpdateServerRequestType"
+                      },
+                      "unifiedDiff": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "unifiedDiff"
+                    ],
+                    "additionalProperties": false,
+                    "title": "UpdateServerRequest"
+                  }
+                ]
+              }
+            },
+            "grantRoot": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "conversationId",
+            "callId",
+            "fileChanges"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "ApplyPatchApprovalRequest"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "title": "RequestId",
+          "oneOf": [
+            {
+              "title": "String",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            },
+            {
+              "title": "Integer",
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "field0"
+              ]
+            }
+          ]
+        },
+        "method": {
+          "type": "string",
+          "const": "ExecCommandApproval",
+          "title": "ExecCommandApprovalRequestMethod"
+        },
+        "params": {
+          "title": "ExecCommandApprovalParams",
+          "type": "object",
+          "properties": {
+            "approvalId": {
+              "type": "string"
+            },
+            "callId": {
+              "type": "string"
+            },
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "conversationId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "parsedCmd": {
+              "type": "array",
+              "items": {
+                "title": "ParsedCommand",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "cmd": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "Read",
+                        "title": "ReadServerRequestType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "cmd",
+                      "name",
+                      "path"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ReadServerRequest"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "cmd": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "ListFiles",
+                        "title": "ListFilesServerRequestType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "cmd"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ListFilesServerRequest"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "cmd": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "query": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "Search",
+                        "title": "SearchServerRequestType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "cmd"
+                    ],
+                    "additionalProperties": false,
+                    "title": "SearchServerRequest"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "cmd": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "Unknown",
+                        "title": "UnknownServerRequestType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "cmd"
+                    ],
+                    "additionalProperties": false,
+                    "title": "UnknownServerRequest"
+                  }
+                ]
+              }
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "conversationId",
+            "callId",
+            "command",
+            "cwd",
+            "parsedCmd"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "id",
+        "params"
+      ],
+      "additionalProperties": false,
+      "title": "ExecCommandApprovalRequest"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "title": "ListMcpServerStatusResponse",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "array",
+      "items": {
+        "title": "McpServerStatus",
+        "type": "object",
+        "properties": {
+          "authStatus": {
+            "title": "McpAuthStatus",
+            "type": "string",
+            "enum": [
+              "Unsupported",
+              "NotLoggedIn",
+              "BearerToken",
+              "OAuth"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "resourceTemplates": {
+            "type": "array",
+            "items": {
+              "title": "ResourceTemplate",
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uriTemplate": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uriTemplate",
+                "name"
+              ]
+            }
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "title": "Resource",
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "uri": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "uri"
+              ]
+            }
+          },
+          "tools": {
+            "type": "object",
+            "additionalProperties": {
+              "title": "Tool",
+              "type": "object",
+              "properties": {
+                "inputSchema": true,
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "inputSchema"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name",
+          "tools",
+          "resources",
+          "resourceTemplates",
+          "authStatus"
+        ]
+      }
+    },
+    "nextCursor": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "data"
+  ]
+}

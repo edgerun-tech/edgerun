@@ -1,0 +1,30 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-protocol"
+version.workspace = true
+
+[lib]
+name = "codex_protocol"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+edgerun-encoding = { workspace = true }
+edgerun-error = { workspace = true }
+edgerun-http = { workspace = true }
+edgerun-json = { workspace = true, features = ["derive", "schemars", "std"] }
+edgerun-locale = { workspace = true }
+edgerun-time = { workspace = true }
+schemars = { workspace = true }
+edgerun-strum = { workspace = true }
+edgerun-strum-macros = { workspace = true }
+edgerun-tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+edgerun-http = { workspace = true }
+tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }

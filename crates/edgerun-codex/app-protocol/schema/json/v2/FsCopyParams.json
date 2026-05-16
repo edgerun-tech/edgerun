@@ -1,0 +1,18 @@
+{
+  "title": "FsCopyParams",
+  "type": "object",
+  "properties": {
+    "destinationPath": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "sourcePath": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    }
+  },
+  "required": [
+    "sourcePath",
+    "destinationPath"
+  ]
+}

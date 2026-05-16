@@ -1,0 +1,18 @@
+{
+  "title": "ThreadUnsubscribeResponse",
+  "type": "object",
+  "properties": {
+    "status": {
+      "title": "ThreadUnsubscribeStatus",
+      "type": "string",
+      "enum": [
+        "NotLoaded",
+        "NotSubscribed",
+        "Unsubscribed"
+      ]
+    }
+  },
+  "required": [
+    "status"
+  ]
+}

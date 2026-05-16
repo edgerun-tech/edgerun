@@ -1,0 +1,20 @@
+[package]
+name = "thiserror-impl"
+version = "2.0.18"
+edition = "2021"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned implementation detail of thiserror"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true, features = ["proc-macro"] }
+quote = { workspace = true, features = ["proc-macro"] }
+syn = { workspace = true, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+
+[lints]
+workspace = true

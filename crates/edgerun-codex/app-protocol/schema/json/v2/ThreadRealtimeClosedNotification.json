@@ -1,0 +1,15 @@
+{
+  "title": "ThreadRealtimeClosedNotification",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ]
+}

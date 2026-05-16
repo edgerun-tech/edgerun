@@ -1,0 +1,18 @@
+{
+  "title": "ThreadLoadedListResponse",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nextCursor": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "data"
+  ]
+}

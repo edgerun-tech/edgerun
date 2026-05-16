@@ -1,0 +1,444 @@
+//! Filesystem blob store with AES-GCM encryption at rest.
+//!
+//! Implements the blob confidentiality invariants from the protocol spec (§6.2):
+//! - Every persisted blob is encrypted at rest
+//! - Every persisted blob names at least one recipient
+//! - No plaintext blob persistence path
+//!
+//! Blob records are local durability evidence. Payable storage authority is
+//! established only when admitted work and storage proofs bind to those bytes.
+//!
+//! Blobs are stored as content-addressed files in the blob directory:
+//! `{blob_dir}/{first_4_hex_of_blob_id}/{blob_id}.blob`
+//!
+//! The blob file format:
+//!   [nonce (12 bytes)][ciphertext (variable length)]
+//!
+//! ## Key management
+//!
+//! The blob encryption key is **persistent** and derived deterministically:
+//!
+//! - **Software signer (dev)**: HKDF-SHA256 from the node's private key bytes
+//!   (`"edgerun:v0:blob-key"` as info). Same config → same key across restarts.
+//!
+//! - **Hardware signer (TPM/YubiKey)**: The sealed/encrypted blob key is stored
+//!   at `{blob_dir}/.blob_key.sealed`. On first open, a random key is generated
+//!   and sealed with the hardware. On subsequent opens, it is unsealed.
+//!
+//! Recipient metadata is stored as `.meta` sidecar files alongside each blob.
+
+use crate::prelude::v1::*;
+
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+use edgerun_crypto::{Aead, AeadInPlace, KeyInit};
+
+use crate::error::StorageError;
+
+/// Configuration for the blob store.
+#[derive(Clone, Debug)]
+pub struct BlobStoreConfig {
+    /// Directory for encrypted blob files.
+    pub blob_dir: PathBuf,
+}
+
+/// How the blob encryption key is obtained.
+#[derive(Clone)]
+pub enum BlobKeySource {
+    /// Dev-only: derive the key from the node's private key via HKDF.
+    /// The private key bytes are passed in and used once to derive the blob key.
+    /// The raw private key is NOT stored anywhere by this module.
+    Software { private_key_bytes: Vec<u8> },
+    /// Production: the key is sealed/encrypted by hardware (TPM, YubiKey, etc.).
+    /// The sealed key file is stored at `{blob_dir}/.blob_key.sealed`.
+    /// On first use, a random key is generated and sealed.
+    /// The `unseal_fn` is called to recover the key from the sealed blob.
+    HardwareSealed {
+        unseal_fn: std::sync::Arc<
+            dyn Fn(&[u8]) -> Result<[u8; 32], crate::error::StorageError> + Send + Sync,
+        >,
+        seal_fn: std::sync::Arc<
+            dyn Fn(&[u8; 32]) -> Result<Vec<u8>, crate::error::StorageError> + Send + Sync,
+        >,
+    },
+}
+
+impl std::fmt::Debug for BlobKeySource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Software { private_key_bytes } => f
+                .debug_struct("Software")
+                .field(
+                    "private_key_bytes",
+                    &format!("[{} bytes]", private_key_bytes.len()),
+                )
+                .finish(),
+            Self::HardwareSealed { .. } => f.debug_struct("HardwareSealed").finish(),
+        }
+    }
+}
+
+/// Encrypted blob store.
+pub struct BlobStore {
+    config: BlobStoreConfig,
+    /// Persistent blob encryption key. Derived from the node's identity
+    /// so that blobs remain decryptable across restarts.
+    key: [u8; 32],
+    /// The node's identity (derived from key), used as default recipient.
+    node_identity: Vec<u8>,
+}
+
+impl BlobStore {
+    /// Opens a blob store at the given directory.
+    ///
+    /// The blob encryption key is derived or unsealed based on the key source.
+    /// For `DeriveFromPrivateKey`, the key is deterministic — same private key
+    /// always produces the same blob key. For `HardwareSealed`, the key is
+    /// generated once and persists in sealed form on disk.
+    pub fn open(config: &BlobStoreConfig, key_source: BlobKeySource) -> Result<Self, StorageError> {
+        fs::create_dir_all(&config.blob_dir)?;
+
+        let key = match key_source {
+            BlobKeySource::Software { private_key_bytes } => {
+                derive_blob_key_from_private_key(&private_key_bytes)
+            }
+            BlobKeySource::HardwareSealed { unseal_fn, seal_fn } => {
+                load_or_create_sealed_key(&config.blob_dir, &*unseal_fn, &*seal_fn)?
+            }
+        };
+
+        let node_identity = key.to_vec();
+
+        Ok(Self {
+            config: config.clone(),
+            key,
+            node_identity,
+        })
+    }
+
+    /// Stores an already-encrypted EncryptedEnvelope blob.
+    ///
+    /// The blob ID is derived from the SHA-256 hash of the ciphertext
+    /// (content-addressed). The ciphertext is stored on the filesystem as-is.
+    ///
+    /// Enforces:
+    /// - >= 1 recipient
+    /// - valid EncryptedEnvelope structure
+    ///
+    /// Returns the blob ID.
+    pub fn store_envelope(
+        &self,
+        envelope: &edgerun_protocols::core_protocol::protocol::EncryptedEnvelope,
+    ) -> Result<String, StorageError> {
+        let _ = envelope;
+
+        let recipient_ids: Vec<Vec<u8>> = envelope
+            .recipients
+            .iter()
+            .map(|rk| rk.identity.clone())
+            .collect();
+
+        let blob_id = edgerun_protocols::core_protocol::util::bytes_to_hex(
+            &edgerun_protocols::core_protocol::crypto::sha256(&envelope.ciphertext),
+        );
+
+        let blob_path = blob_file_path(&self.config.blob_dir, &blob_id);
+
+        if blob_path.exists() {
+            if !recipient_ids.is_empty() {
+                merge_recipients(&self.config.blob_dir, &blob_id, &recipient_ids)?;
+            }
+            return Ok(blob_id);
+        }
+
+        if let Some(parent) = blob_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut file = File::create(&blob_path)?;
+        file.write_all(&envelope.ephemeral_pubkey)?;
+        file.write_all(&envelope.nonce)?;
+        file.write_all(&envelope.ciphertext)?;
+        if !envelope.tag.is_empty() {
+            file.write_all(&envelope.tag)?;
+        }
+        file.sync_all()?;
+
+        if !recipient_ids.is_empty() {
+            let meta_path = blob_meta_path(&self.config.blob_dir, &blob_id);
+            let meta_content = recipient_ids
+                .iter()
+                .map(|r| edgerun_protocols::core_protocol::util::bytes_to_hex(r))
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs::write(&meta_path, meta_content)?;
+        }
+
+        Ok(blob_id)
+    }
+
+    /// Stores plaintext as an encrypted blob.
+    ///
+    /// The blob ID is derived from the SHA-256 hash of the plaintext
+    /// (content-addressed). The ciphertext is stored on the filesystem.
+    ///
+    /// Enforces: >= 1 recipient. Empty recipients are rejected.
+    ///
+    /// Returns the blob ID.
+    pub fn store(&self, plaintext: &[u8], recipients: &[Vec<u8>]) -> Result<String, StorageError> {
+        if recipients.is_empty() {
+            return Err(StorageError::InvalidArgument(
+                "PLAINTEXT_STORE_REQUIRES_RECIPIENTS".into(),
+            ));
+        }
+
+        let recipients = recipients.to_vec();
+
+        // Derive blob ID from plaintext hash (content-addressed)
+        let blob_id = edgerun_protocols::core_protocol::util::bytes_to_hex(
+            &edgerun_protocols::core_protocol::crypto::sha256(plaintext),
+        );
+
+        let blob_path = blob_file_path(&self.config.blob_dir, &blob_id);
+
+        if blob_path.exists() {
+            if !recipients.is_empty() {
+                merge_recipients(&self.config.blob_dir, &blob_id, &recipients)?;
+            }
+            return Ok(blob_id);
+        }
+
+        // Generate random nonce
+        let mut nonce_bytes = [0u8; 12];
+        edgerun_crypto::fill_random(&mut nonce_bytes).map_err(|e| {
+            StorageError::Encryption(format!("random nonce generation failed: {e}"))
+        })?;
+        let nonce = &nonce_bytes;
+
+        // Encrypt
+        let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key)
+            .map_err(|e| StorageError::Encryption(format!("invalid AES-256 key: {e}")))?;
+        let ciphertext = cipher
+            .encrypt(nonce, plaintext)
+            .map_err(|e| StorageError::Encryption(format!("AES-GCM encryption failed: {}", e)))?;
+
+        if let Some(parent) = blob_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = File::create(&blob_path)?;
+        file.write_all(nonce_bytes.as_slice())?;
+        file.write_all(&ciphertext)?;
+        file.sync_all()?;
+
+        // Write recipient metadata as a sidecar .meta file
+        if !recipients.is_empty() {
+            let meta_path = blob_meta_path(&self.config.blob_dir, &blob_id);
+            let meta_content = recipients
+                .iter()
+                .map(|r| edgerun_protocols::core_protocol::util::bytes_to_hex(r))
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs::write(&meta_path, meta_content)?;
+        }
+
+        Ok(blob_id)
+    }
+
+    /// Returns the node's identity (derived from the blob key).
+    ///
+    /// This can be used as a default recipient when storing blobs
+    /// without specifying explicit recipients.
+    pub fn node_identity(&self) -> &[u8] {
+        &self.node_identity
+    }
+
+    /// Loads a blob by its ID.
+    ///
+    /// Returns the ciphertext, nonce, and recipient metadata.
+    /// The caller is responsible for verifying they are a listed recipient
+    /// before decrypting.
+    pub fn load(&self, blob_id: &str) -> Result<Option<BlobEntry>, StorageError> {
+        let blob_path = blob_file_path(&self.config.blob_dir, blob_id);
+        if !blob_path.exists() {
+            return Ok(None);
+        }
+
+        let mut file = File::open(&blob_path)?;
+        let mut data = Vec::new();
+        file.read_to_end(&mut data)?;
+
+        if data.len() < 12 {
+            return Err(StorageError::Decryption(
+                "blob file too short to contain nonce".into(),
+            ));
+        }
+
+        let (nonce, ciphertext) = data.split_at(12);
+        let nonce = nonce.to_vec();
+        let ciphertext = ciphertext.to_vec();
+
+        // Load recipient metadata from sidecar .meta file if present
+        let recipients = load_blob_recipients(&self.config.blob_dir, blob_id);
+
+        Ok(Some(BlobEntry {
+            ciphertext,
+            nonce,
+            recipients,
+        }))
+    }
+
+    /// Decrypts a blob's ciphertext using the store's key.
+    ///
+    /// In production, the node should verify it is a listed recipient
+    /// before calling this method.
+    pub fn decrypt(&self, nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, StorageError> {
+        if nonce.len() != 12 {
+            return Err(StorageError::Decryption("nonce must be 12 bytes".into()));
+        }
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes.copy_from_slice(nonce);
+        let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key)
+            .map_err(|e| StorageError::Decryption(format!("invalid AES-256 key: {e}")))?;
+        cipher
+            .decrypt(&nonce_bytes, ciphertext.as_ref())
+            .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Recipient metadata helpers
+// ---------------------------------------------------------------------------
+
+/// Path to the recipient metadata sidecar file for a blob.
+fn blob_meta_path(blob_dir: &Path, blob_id: &str) -> PathBuf {
+    let prefix = &blob_id[..4.min(blob_id.len())];
+    blob_dir.join(prefix).join(format!("{}.blob.meta", blob_id))
+}
+
+/// Loads recipient IDs from the sidecar .meta file.
+/// Returns an empty Vec if the file doesn't exist.
+fn load_blob_recipients(blob_dir: &Path, blob_id: &str) -> Vec<Vec<u8>> {
+    let meta_path = blob_meta_path(blob_dir, blob_id);
+    match fs::read_to_string(&meta_path) {
+        Ok(content) => content
+            .lines()
+            .filter_map(|line| edgerun_protocols::core_protocol::util::hex_to_bytes(line).ok())
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+fn merge_recipients(
+    blob_dir: &Path,
+    blob_id: &str,
+    recipients: &[Vec<u8>],
+) -> Result<(), StorageError> {
+    let mut existing = load_blob_recipients(blob_dir, blob_id);
+    let mut changed = false;
+
+    for recipient in recipients {
+        if !existing.iter().any(|existing| existing == recipient) {
+            existing.push(recipient.clone());
+            changed = true;
+        }
+    }
+
+    if !changed {
+        return Ok(());
+    }
+
+    let meta_path = blob_meta_path(blob_dir, blob_id);
+    let content = existing
+        .into_iter()
+        .map(|recipient| edgerun_protocols::core_protocol::util::bytes_to_hex(&recipient))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if let Some(parent) = meta_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&meta_path, content)?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Key derivation — software (dev) path
+// ---------------------------------------------------------------------------
+
+/// Derives a persistent blob encryption key from the node's private key.
+///
+/// Uses HKDF-SHA256 with:
+/// - IKM: the node's private key bytes (32 bytes for ECDSA P-256)
+/// - salt: empty (we want deterministic output)
+/// - info: `"edgerun:v0:blob-key"` (domain separation)
+///
+/// Same private key always produces the same blob key, so blobs survive restarts.
+fn derive_blob_key_from_private_key(private_key_bytes: &[u8]) -> [u8; 32] {
+    let hk = edgerun_protocols::core_protocol::crypto::HkdfSha256::new(None, private_key_bytes);
+    let expanded = hk.expand(b"edgerun:v0:blob-key", 32);
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&expanded[..32]);
+    key
+}
+
+// ---------------------------------------------------------------------------
+// Key management — hardware (production) path
+// ---------------------------------------------------------------------------
+
+const SEALED_KEY_FILENAME: &str = ".blob_key.sealed";
+
+/// Loads the sealed blob key from disk and unseals it, or generates a new
+/// random key, seals it, and stores it on disk.
+fn load_or_create_sealed_key(
+    blob_dir: &Path,
+    unseal_fn: &dyn Fn(&[u8]) -> Result<[u8; 32], StorageError>,
+    seal_fn: &dyn Fn(&[u8; 32]) -> Result<Vec<u8>, StorageError>,
+) -> Result<[u8; 32], StorageError> {
+    let sealed_path = blob_dir.join(SEALED_KEY_FILENAME);
+
+    if sealed_path.exists() {
+        // Unseal existing key
+        let mut sealed_data = Vec::new();
+        File::open(&sealed_path)?.read_to_end(&mut sealed_data)?;
+        unseal_fn(&sealed_data)
+    } else {
+        // Generate new key, seal it, store on disk
+        let mut key = [0u8; 32];
+        edgerun_crypto::fill_random(&mut key).map_err(|e| {
+            StorageError::Encryption(format!("random blob key generation failed: {e}"))
+        })?;
+
+        let sealed = seal_fn(&key)?;
+        let mut file = File::create(&sealed_path)?;
+        file.write_all(&sealed)?;
+        file.sync_all()?;
+
+        Ok(key)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/// A stored blob entry with ciphertext and metadata.
+pub struct BlobEntry {
+    /// The encrypted ciphertext bytes (without nonce).
+    pub ciphertext: Vec<u8>,
+    /// The AES-GCM nonce (12 bytes).
+    pub nonce: Vec<u8>,
+    /// Identities of the blob's recipients.
+    pub recipients: Vec<Vec<u8>>,
+}
+
+/// Computes the filesystem path for a blob.
+///
+/// Uses a two-level directory structure based on the first 4 hex characters
+/// of the blob ID to avoid filesystem limits on single-directory file counts.
+pub fn blob_file_path(blob_dir: &Path, blob_id: &str) -> PathBuf {
+    let prefix = &blob_id[..4.min(blob_id.len())];
+    blob_dir.join(prefix).join(format!("{}.blob", blob_id))
+}

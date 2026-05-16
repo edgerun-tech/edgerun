@@ -1,0 +1,25 @@
+[package]
+name = "edgerun-email"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Complete email server: SMTP (RFC 5321), IMAP (RFC 3501), LMTP (RFC 2033)"
+autobins = false
+
+[features]
+default = ["dkim"]
+tls = ["edgerun-node/tls"]
+dkim = ["edgerun-protocols/email-auth"]
+std = []
+
+[lints]
+workspace = true
+
+[dependencies]
+edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
+edgerun-log = { workspace = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["imap", "lmtp", "smtp"] }
+edgerun-encoding = { workspace = true }

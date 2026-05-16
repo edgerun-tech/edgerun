@@ -1,0 +1,20 @@
+{
+  "title": "ThreadRealtimeTranscriptDeltaNotification",
+  "type": "object",
+  "properties": {
+    "delta": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "role",
+    "delta"
+  ]
+}

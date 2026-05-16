@@ -1,0 +1,70 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Format check (if available)
+        run: |
+          if [ -f package.json ] && node -e "const s=require('./package.json').scripts||{}; process.exit(s['format:check'] ? 0 : 1)"; then
+            bun run format:check
+          else
+            echo "format:check script not configured. Skipping formatting check."
+          fi
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Test (if configured)
+        run: |
+          if node -e "const s=require('./package.json').scripts||{}; process.exit(s['test:run'] ? 0 : 1)"; then
+            bun run test:run
+          else
+            echo "No tests configured for frontend."
+          fi
+
+      - name: Coverage
+        run: bun run test:coverage
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+
+      - name: Lighthouse CI (if configured)
+        run: |
+          if node -e "const s=require('./package.json').scripts||{}; process.exit(s.preview ? 0 : 1)"; then
+            npx -y @lhci/cli@0.12.0 autorun --config ../.lighthouserc.json
+          else
+            echo "preview script not configured. Skipping Lighthouse CI."
+          fi

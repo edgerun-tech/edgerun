@@ -1,0 +1,15 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "edgerun-docs-ui-web"
+version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+edgerun-ui-core = { workspace = true }
+
+[lints]
+workspace = true

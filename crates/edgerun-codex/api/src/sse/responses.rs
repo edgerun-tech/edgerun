@@ -1,0 +1,1460 @@
+use crate::common::ResponseEvent;
+use crate::common::ResponseStream;
+use crate::error::ApiError;
+use crate::rate_limits::parse_all_rate_limits;
+use crate::telemetry::SseTelemetry;
+use codex_client::ByteStream;
+use codex_client::StreamResponse;
+#[cfg(any(feature = "native-transport", test))]
+use codex_client::TransportError;
+use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::ModelVerification;
+use codex_protocol::protocol::TokenUsage;
+use edgerun_eventsource_stream::Eventsource;
+use edgerun_futures::StreamExt;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Value;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::timeout;
+#[cfg(any(feature = "native-transport", test))]
+use edgerun_tokio_util::io::ReaderStream;
+#[cfg(feature = "native-transport")]
+use std::io::BufRead;
+#[cfg(feature = "native-transport")]
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::OnceLock;
+use std::time::Duration;
+use tracing::debug;
+use tracing::trace;
+
+const X_REASONING_INCLUDED_HEADER: &str = "x-reasoning-included";
+const OPENAI_MODEL_HEADER: &str = "openai-model";
+const REQUEST_ID_HEADER: &str = "x-request-id";
+const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION: &str = "trusted_access_for_cyber";
+
+/// Streams SSE events from an on-disk fixture for tests.
+#[cfg(feature = "native-transport")]
+pub fn stream_from_fixture(
+    path: impl AsRef<Path>,
+    idle_timeout: Duration,
+) -> Result<ResponseStream, ApiError> {
+    let file =
+        std::fs::File::open(path.as_ref()).map_err(|err| ApiError::Stream(err.to_string()))?;
+    let mut content = String::new();
+    for line in std::io::BufReader::new(file).lines() {
+        let line = line.map_err(|err| ApiError::Stream(err.to_string()))?;
+        content.push_str(&line);
+        content.push_str("\n\n");
+    }
+
+    let reader = std::io::Cursor::new(content);
+    let stream = ReaderStream::new(reader).map_err(|err| TransportError::Network(err.to_string()));
+    let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
+    edgerun_tokio::spawn(process_sse(
+        Box::pin(stream),
+        tx_event,
+        idle_timeout,
+        /*telemetry*/ None,
+    ));
+    Ok(ResponseStream {
+        rx_event,
+        upstream_request_id: None,
+    })
+}
+
+pub fn spawn_response_stream(
+    stream_response: StreamResponse,
+    idle_timeout: Duration,
+    telemetry: Option<Arc<dyn SseTelemetry>>,
+    turn_state: Option<Arc<OnceLock<String>>>,
+) -> ResponseStream {
+    let rate_limit_snapshots = parse_all_rate_limits(&stream_response.headers);
+    let models_etag = stream_response
+        .headers
+        .get("X-Models-Etag")
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
+    let server_model = stream_response
+        .headers
+        .get(OPENAI_MODEL_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(ToString::to_string);
+    let reasoning_included = stream_response
+        .headers
+        .get(X_REASONING_INCLUDED_HEADER)
+        .is_some();
+    let upstream_request_id = stream_response
+        .headers
+        .get(REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    if let Some(turn_state) = turn_state.as_ref()
+        && let Some(header_value) = stream_response
+            .headers
+            .get("x-codex-turn-state")
+            .and_then(|v| v.to_str().ok())
+    {
+        let _ = turn_state.set(header_value.to_string());
+    }
+    let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
+    edgerun_tokio::spawn(async move {
+        if let Some(model) = server_model {
+            let _ = tx_event.send(Ok(ResponseEvent::ServerModel(model))).await;
+        }
+        for snapshot in rate_limit_snapshots {
+            let _ = tx_event.send(Ok(ResponseEvent::RateLimits(snapshot))).await;
+        }
+        if let Some(etag) = models_etag {
+            let _ = tx_event.send(Ok(ResponseEvent::ModelsEtag(etag))).await;
+        }
+        if reasoning_included {
+            let _ = tx_event
+                .send(Ok(ResponseEvent::ServerReasoningIncluded(true)))
+                .await;
+        }
+        process_sse(stream_response.bytes, tx_event, idle_timeout, telemetry).await;
+    });
+
+    ResponseStream {
+        rx_event,
+        upstream_request_id,
+    }
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+struct Error {
+    r#type: Option<String>,
+    code: Option<String>,
+    message: Option<String>,
+    plan_type: Option<String>,
+    resets_at: Option<i64>,
+}
+
+impl FromJson for Error {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("Error")?;
+        Ok(Self {
+            r#type: object.take_optional("type")?,
+            code: object.take_optional("code")?,
+            message: object.take_optional("message")?,
+            plan_type: object.take_optional("plan_type")?,
+            resets_at: object.take_optional("resets_at")?,
+        })
+    }
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+struct ResponseCompleted {
+    id: String,
+    usage: Option<ResponseCompletedUsage>,
+    end_turn: Option<bool>,
+}
+
+impl FromJson for ResponseCompleted {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ResponseCompleted")?;
+        Ok(Self {
+            id: object.take_required("id")?,
+            usage: object.take_optional("usage")?,
+            end_turn: object.take_optional("end_turn")?,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ResponseCompletedUsage {
+    input_tokens: i64,
+    input_tokens_details: Option<ResponseCompletedInputTokensDetails>,
+    output_tokens: i64,
+    output_tokens_details: Option<ResponseCompletedOutputTokensDetails>,
+    total_tokens: i64,
+}
+
+impl FromJson for ResponseCompletedUsage {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ResponseCompletedUsage")?;
+        Ok(Self {
+            input_tokens: object.take_required("input_tokens")?,
+            input_tokens_details: object.take_optional("input_tokens_details")?,
+            output_tokens: object.take_required("output_tokens")?,
+            output_tokens_details: object.take_optional("output_tokens_details")?,
+            total_tokens: object.take_required("total_tokens")?,
+        })
+    }
+}
+
+impl From<ResponseCompletedUsage> for TokenUsage {
+    fn from(val: ResponseCompletedUsage) -> Self {
+        TokenUsage {
+            input_tokens: val.input_tokens,
+            cached_input_tokens: val
+                .input_tokens_details
+                .map(|d| d.cached_tokens)
+                .unwrap_or(0),
+            output_tokens: val.output_tokens,
+            reasoning_output_tokens: val
+                .output_tokens_details
+                .map(|d| d.reasoning_tokens)
+                .unwrap_or(0),
+            total_tokens: val.total_tokens,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ResponseCompletedInputTokensDetails {
+    cached_tokens: i64,
+}
+
+impl FromJson for ResponseCompletedInputTokensDetails {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ResponseCompletedInputTokensDetails")?;
+        Ok(Self {
+            cached_tokens: object.take_required("cached_tokens")?,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ResponseCompletedOutputTokensDetails {
+    reasoning_tokens: i64,
+}
+
+impl FromJson for ResponseCompletedOutputTokensDetails {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ResponseCompletedOutputTokensDetails")?;
+        Ok(Self {
+            reasoning_tokens: object.take_required("reasoning_tokens")?,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ResponsesStreamEvent {
+    pub(crate) kind: String,
+    headers: Option<Value>,
+    metadata: Option<Value>,
+    response: Option<Value>,
+    item: Option<Value>,
+    item_id: Option<String>,
+    call_id: Option<String>,
+    delta: Option<String>,
+    summary_index: Option<i64>,
+    content_index: Option<i64>,
+}
+
+impl FromJson for ResponsesStreamEvent {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ResponsesStreamEvent")?;
+        Ok(Self {
+            kind: object.take_required("type")?,
+            headers: object.take_optional("headers")?,
+            metadata: object.take_optional("metadata")?,
+            response: object.take_optional("response")?,
+            item: object.take_optional("item")?,
+            item_id: object.take_optional("item_id")?,
+            call_id: object.take_optional("call_id")?,
+            delta: object.take_optional("delta")?,
+            summary_index: object.take_optional("summary_index")?,
+            content_index: object.take_optional("content_index")?,
+        })
+    }
+}
+
+impl ResponsesStreamEvent {
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    /// Returns the effective model reported by the server, if present.
+    ///
+    /// Precedence:
+    /// 1. `response.headers` for standard Responses stream events.
+    /// 2. top-level `headers` for websocket metadata events.
+    pub fn response_model(&self) -> Option<String> {
+        let response_headers_model = self
+            .response
+            .as_ref()
+            .and_then(|response| response.get("headers"))
+            .and_then(header_openai_model_value_from_json);
+
+        match response_headers_model {
+            Some(model) => Some(model),
+            None => self
+                .headers
+                .as_ref()
+                .and_then(header_openai_model_value_from_json),
+        }
+    }
+
+    pub(crate) fn model_verifications(&self) -> Option<Vec<ModelVerification>> {
+        if self.kind() != "response.metadata" {
+            return None;
+        }
+
+        self.metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("openai_verification_recommendation"))
+            .and_then(model_verifications_from_json_value)
+    }
+}
+
+fn header_openai_model_value_from_json(value: &Value) -> Option<String> {
+    let headers = value.as_object()?;
+    headers.iter().find_map(|(name, value)| {
+        if name.eq_ignore_ascii_case("openai-model") || name.eq_ignore_ascii_case("x-openai-model")
+        {
+            json_value_as_string(value)
+        } else {
+            None
+        }
+    })
+}
+
+fn model_verifications_from_json_value(value: &Value) -> Option<Vec<ModelVerification>> {
+    let verifications = value
+        .as_array()
+        .map(|items| {
+            let mut verifications = Vec::new();
+            for verification in items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter_map(parse_model_verification)
+            {
+                if !verifications.contains(&verification) {
+                    verifications.push(verification);
+                }
+            }
+            verifications
+        })
+        .unwrap_or_default();
+
+    if verifications.is_empty() {
+        None
+    } else {
+        Some(verifications)
+    }
+}
+
+fn parse_model_verification(value: &str) -> Option<ModelVerification> {
+    match value {
+        TRUSTED_ACCESS_FOR_CYBER_VERIFICATION => Some(ModelVerification::TrustedAccessForCyber),
+        _ => None,
+    }
+}
+
+fn json_value_as_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(value) => Some(value.clone()),
+        Value::Array(items) => items.first().and_then(json_value_as_string),
+        _ => None,
+    }
+}
+
+#[derive(Debug)]
+pub enum ResponsesEventError {
+    Api(ApiError),
+}
+
+impl ResponsesEventError {
+    pub fn into_api_error(self) -> ApiError {
+        match self {
+            Self::Api(error) => error,
+        }
+    }
+}
+
+pub fn process_responses_event(
+    event: ResponsesStreamEvent,
+) -> std::result::Result<Option<ResponseEvent>, ResponsesEventError> {
+    match event.kind.as_str() {
+        "response.output_item.done" => {
+            if let Some(item_val) = event.item {
+                if let Ok(item) = edgerun_json::from_json_value::<ResponseItem>(item_val) {
+                    return Ok(Some(ResponseEvent::OutputItemDone(item)));
+                }
+                debug!("failed to parse ResponseItem from output_item.done");
+            }
+        }
+        "response.output_text.delta" => {
+            if let Some(delta) = event.delta {
+                return Ok(Some(ResponseEvent::OutputTextDelta(delta)));
+            }
+        }
+        "response.custom_tool_call_input.delta" => {
+            if let (Some(delta), Some(item_id)) =
+                (event.delta, event.item_id.clone().or(event.call_id.clone()))
+            {
+                return Ok(Some(ResponseEvent::ToolCallInputDelta {
+                    item_id,
+                    call_id: event.call_id,
+                    delta,
+                }));
+            }
+        }
+        "response.reasoning_summary_text.delta" => {
+            if let (Some(delta), Some(summary_index)) = (event.delta, event.summary_index) {
+                return Ok(Some(ResponseEvent::ReasoningSummaryDelta {
+                    delta,
+                    summary_index,
+                }));
+            }
+        }
+        "response.reasoning_text.delta" => {
+            if let (Some(delta), Some(content_index)) = (event.delta, event.content_index) {
+                return Ok(Some(ResponseEvent::ReasoningContentDelta {
+                    delta,
+                    content_index,
+                }));
+            }
+        }
+        "response.created" => {
+            if event.response.is_some() {
+                return Ok(Some(ResponseEvent::Created {}));
+            }
+        }
+        "response.failed" => {
+            if let Some(resp_val) = event.response {
+                let mut response_error = ApiError::Stream("response.failed event received".into());
+                if let Some(error) = resp_val.get("error")
+                    && let Ok(error) = edgerun_json::from_json_value::<Error>(error.clone())
+                {
+                    if is_context_window_error(&error) {
+                        response_error = ApiError::ContextWindowExceeded;
+                    } else if is_quota_exceeded_error(&error) {
+                        response_error = ApiError::QuotaExceeded;
+                    } else if is_usage_not_included(&error) {
+                        response_error = ApiError::UsageNotIncluded;
+                    } else if is_cyber_policy_error(&error) {
+                        let message = cyber_policy_message(error.message);
+                        response_error = ApiError::CyberPolicy { message };
+                    } else if is_invalid_prompt_error(&error) {
+                        let message = error
+                            .message
+                            .unwrap_or_else(|| "Invalid request.".to_string());
+                        response_error = ApiError::InvalidRequest { message };
+                    } else if is_server_overloaded_error(&error) {
+                        response_error = ApiError::ServerOverloaded;
+                    } else {
+                        let delay = try_parse_retry_after(&error);
+                        let message = error.message.unwrap_or_default();
+                        response_error = ApiError::Retryable { message, delay };
+                    }
+                }
+                return Err(ResponsesEventError::Api(response_error));
+            }
+
+            return Err(ResponsesEventError::Api(ApiError::Stream(
+                "response.failed event received".into(),
+            )));
+        }
+        "response.incomplete" => {
+            let reason = event.response.as_ref().and_then(|response| {
+                response
+                    .get("incomplete_details")
+                    .and_then(|details| details.get("reason"))
+                    .and_then(Value::as_str)
+            });
+            let reason = reason.unwrap_or("unknown");
+            let message = format!("Incomplete response returned, reason: {reason}");
+            return Err(ResponsesEventError::Api(ApiError::Stream(message)));
+        }
+        "response.completed" => {
+            if let Some(resp_val) = event.response {
+                match edgerun_json::from_json_value::<ResponseCompleted>(resp_val) {
+                    Ok(resp) => {
+                        return Ok(Some(ResponseEvent::Completed {
+                            response_id: resp.id,
+                            token_usage: resp.usage.map(Into::into),
+                            end_turn: resp.end_turn,
+                        }));
+                    }
+                    Err(err) => {
+                        let error = format!("failed to parse ResponseCompleted: {err}");
+                        debug!("{error}");
+                        return Err(ResponsesEventError::Api(ApiError::Stream(error)));
+                    }
+                }
+            }
+        }
+        "response.output_item.added" => {
+            if let Some(item_val) = event.item {
+                if let Ok(item) = edgerun_json::from_json_value::<ResponseItem>(item_val) {
+                    return Ok(Some(ResponseEvent::OutputItemAdded(item)));
+                }
+                debug!("failed to parse ResponseItem from output_item.added");
+            }
+        }
+        "response.reasoning_summary_part.added" => {
+            if let Some(summary_index) = event.summary_index {
+                return Ok(Some(ResponseEvent::ReasoningSummaryPartAdded {
+                    summary_index,
+                }));
+            }
+        }
+        _ => {
+            trace!("unhandled responses event: {}", event.kind);
+        }
+    }
+
+    Ok(None)
+}
+
+pub async fn process_sse(
+    stream: ByteStream,
+    tx_event: mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    idle_timeout: Duration,
+    telemetry: Option<Arc<dyn SseTelemetry>>,
+) {
+    let mut stream = stream.eventsource();
+    let mut response_error: Option<ApiError> = None;
+    let mut last_server_model: Option<String> = None;
+
+    loop {
+        let start = Instant::now();
+        let response = timeout(idle_timeout, stream.next()).await;
+        if let Some(t) = telemetry.as_ref() {
+            t.on_sse_poll(&response, start.elapsed());
+        }
+        let sse = match response {
+            Ok(Some(Ok(sse))) => sse,
+            Ok(Some(Err(e))) => {
+                debug!("SSE Error: {e:#}");
+                let _ = tx_event.send(Err(ApiError::Stream(e.to_string()))).await;
+                return;
+            }
+            Ok(None) => {
+                let error = response_error.unwrap_or(ApiError::Stream(
+                    "stream closed before response.completed".into(),
+                ));
+                let _ = tx_event.send(Err(error)).await;
+                return;
+            }
+            Err(_) => {
+                let _ = tx_event
+                    .send(Err(ApiError::Stream("idle timeout waiting for SSE".into())))
+                    .await;
+                return;
+            }
+        };
+
+        trace!("SSE event: {}", &sse.data);
+
+        let event: ResponsesStreamEvent = match edgerun_json::from_json_str(&sse.data) {
+            Ok(event) => event,
+            Err(_e) => {
+                debug!("Failed to parse SSE event: {_e}, data: {}", &sse.data);
+                continue;
+            }
+        };
+        let model_verifications = event.model_verifications();
+
+        if let Some(model) = event.response_model()
+            && last_server_model.as_deref() != Some(model.as_str())
+        {
+            if tx_event
+                .send(Ok(ResponseEvent::ServerModel(model.clone())))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            last_server_model = Some(model);
+        }
+        if let Some(verifications) = model_verifications
+            && tx_event
+                .send(Ok(ResponseEvent::ModelVerifications(verifications)))
+                .await
+                .is_err()
+        {
+            return;
+        }
+
+        match process_responses_event(event) {
+            Ok(Some(event)) => {
+                let is_completed = matches!(event, ResponseEvent::Completed { .. });
+                if tx_event.send(Ok(event)).await.is_err() {
+                    return;
+                }
+                if is_completed {
+                    return;
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                response_error = Some(error.into_api_error());
+            }
+        };
+    }
+}
+
+fn try_parse_retry_after(err: &Error) -> Option<Duration> {
+    if err.code.as_deref() != Some("rate_limit_exceeded") {
+        return None;
+    }
+
+    if let Some(message) = &err.message
+        && let Some((value, unit)) = parse_retry_after_message(message)
+    {
+        if unit == "s" || unit.starts_with("second") {
+            return Some(Duration::from_secs_f64(value));
+        } else if unit == "ms" {
+            return Some(Duration::from_millis(value as u64));
+        }
+    }
+    None
+}
+
+fn parse_retry_after_message(message: &str) -> Option<(f64, String)> {
+    let lower = message.to_ascii_lowercase();
+    let marker = "try again in";
+    let start = lower.find(marker)? + marker.len();
+    let rest = &message[start..];
+    let rest = rest.trim_start();
+
+    let value_end = rest
+        .char_indices()
+        .find_map(|(idx, ch)| (!(ch.is_ascii_digit() || ch == '.')).then_some(idx))
+        .unwrap_or(rest.len());
+    if value_end == 0 {
+        return None;
+    }
+    let value = rest[..value_end].parse::<f64>().ok()?;
+    let unit = rest[value_end..].trim_start();
+    let unit_end = unit
+        .char_indices()
+        .find_map(|(idx, ch)| (!ch.is_ascii_alphabetic()).then_some(idx))
+        .unwrap_or(unit.len());
+    let unit = unit[..unit_end].to_ascii_lowercase();
+    if unit == "s" || unit == "ms" || unit.starts_with("second") {
+        Some((value, unit))
+    } else {
+        None
+    }
+}
+
+fn is_context_window_error(error: &Error) -> bool {
+    error.code.as_deref() == Some("context_length_exceeded")
+}
+
+fn is_quota_exceeded_error(error: &Error) -> bool {
+    error.code.as_deref() == Some("insufficient_quota")
+}
+
+fn is_usage_not_included(error: &Error) -> bool {
+    error.code.as_deref() == Some("usage_not_included")
+}
+
+fn is_invalid_prompt_error(error: &Error) -> bool {
+    error.code.as_deref() == Some("invalid_prompt")
+}
+
+fn is_cyber_policy_error(error: &Error) -> bool {
+    error.code.as_deref() == Some("cyber_policy")
+}
+
+fn is_server_overloaded_error(error: &Error) -> bool {
+    error.code.as_deref() == Some("server_is_overloaded")
+        || error.code.as_deref() == Some("slow_down")
+}
+
+fn cyber_policy_fallback_message() -> String {
+    "This request has been flagged for possible cybersecurity risk.".to_string()
+}
+
+fn cyber_policy_message(message: Option<String>) -> String {
+    message
+        .filter(|message| !message.trim().is_empty())
+        .unwrap_or_else(cyber_policy_fallback_message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use codex_client::StreamResponse;
+    use codex_protocol::models::MessagePhase;
+    use codex_protocol::models::ResponseItem;
+    use edgerun_bytes::Bytes;
+    use edgerun_futures::stream;
+    use edgerun_http::HeaderMap;
+    use edgerun_http::HeaderValue;
+    use edgerun_http::StatusCode;
+    use edgerun_json::json;
+    use edgerun_tokio::sync::mpsc;
+    use tokio_test::io::Builder as IoBuilder;
+
+    async fn collect_events(chunks: &[&[u8]]) -> Vec<Result<ResponseEvent, ApiError>> {
+        let mut builder = IoBuilder::new();
+        for chunk in chunks {
+            builder.read(chunk);
+        }
+
+        let reader = builder.build();
+        let stream =
+            ReaderStream::new(reader).map_err(|err| TransportError::Network(err.to_string()));
+        let (tx, mut rx) = mpsc::channel::<Result<ResponseEvent, ApiError>>(16);
+        edgerun_tokio::spawn(process_sse(
+            Box::pin(stream),
+            tx,
+            idle_timeout(),
+            /*telemetry*/ None,
+        ));
+
+        let mut events = Vec::new();
+        while let Some(ev) = rx.recv().await {
+            events.push(ev);
+        }
+        events
+    }
+
+    async fn run_sse(events: Vec<edgerun_json::Value>) -> Vec<ResponseEvent> {
+        let mut body = String::new();
+        for e in events {
+            let kind = e
+                .get("type")
+                .and_then(|v| v.as_str())
+                .expect("fixture event missing type");
+            if e.as_object().map(|o| o.len() == 1).unwrap_or(false) {
+                body.push_str(&format!("event: {kind}\n\n"));
+            } else {
+                body.push_str(&format!("event: {kind}\ndata: {e}\n\n"));
+            }
+        }
+
+        let (tx, mut rx) = mpsc::channel::<Result<ResponseEvent, ApiError>>(8);
+        let stream = ReaderStream::new(std::io::Cursor::new(body))
+            .map_err(|err| TransportError::Network(err.to_string()));
+        edgerun_tokio::spawn(process_sse(
+            Box::pin(stream),
+            tx,
+            idle_timeout(),
+            /*telemetry*/ None,
+        ));
+
+        let mut out = Vec::new();
+        while let Some(ev) = rx.recv().await {
+            out.push(ev.expect("channel closed"));
+        }
+        out
+    }
+
+    fn idle_timeout() -> Duration {
+        Duration::from_millis(1000)
+    }
+
+    #[edgerun_tokio::test]
+    async fn parses_items_and_completed() {
+        let item1 = json!({
+            "type": "response.output_item.done",
+            "item": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Hello"}],
+                "phase": "commentary"
+            }
+        })
+        .to_string();
+
+        let item2 = json!({
+            "type": "response.output_item.done",
+            "item": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "World"}]
+            }
+        })
+        .to_string();
+
+        let completed = json!({
+            "type": "response.completed",
+            "response": { "id": "resp1" }
+        })
+        .to_string();
+
+        let sse1 = format!("event: response.output_item.done\ndata: {item1}\n\n");
+        let sse2 = format!("event: response.output_item.done\ndata: {item2}\n\n");
+        let sse3 = format!("event: response.completed\ndata: {completed}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes(), sse2.as_bytes(), sse3.as_bytes()]).await;
+
+        assert_eq!(events.len(), 3);
+
+        assert_matches!(
+            &events[0],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Message {
+                role,
+                phase: Some(MessagePhase::Commentary),
+                ..
+            })) if role == "assistant"
+        );
+
+        assert_matches!(
+            &events[1],
+            Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { role, .. }))
+                if role == "assistant"
+        );
+
+        match &events[2] {
+            Ok(ResponseEvent::Completed {
+                response_id,
+                token_usage,
+                end_turn,
+            }) => {
+                assert_eq!(response_id, "resp1");
+                assert!(token_usage.is_none());
+                assert!(end_turn.is_none());
+            }
+            other => panic!("unexpected third event: {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn error_when_missing_completed() {
+        let item1 = json!({
+            "type": "response.output_item.done",
+            "item": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Hello"}]
+            }
+        })
+        .to_string();
+
+        let sse1 = format!("event: response.output_item.done\ndata: {item1}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 2);
+
+        assert_matches!(events[0], Ok(ResponseEvent::OutputItemDone(_)));
+
+        match &events[1] {
+            Err(ApiError::Stream(msg)) => {
+                assert_eq!(msg, "stream closed before response.completed")
+            }
+            other => panic!("unexpected second event: {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn parses_tool_search_call_items() {
+        let events = run_sse(vec![
+            json!({
+                "type": "response.output_item.done",
+                "item": {
+                    "type": "tool_search_call",
+                    "call_id": "search-1",
+                    "execution": "client",
+                    "arguments": {
+                        "query": "calendar create",
+                        "limit": 1
+                    }
+                }
+            }),
+            json!({
+                "type": "response.completed",
+                "response": { "id": "resp1" }
+            }),
+        ])
+        .await;
+
+        assert_eq!(events.len(), 2);
+        assert_matches!(
+            &events[0],
+            ResponseEvent::OutputItemDone(ResponseItem::ToolSearchCall {
+                call_id,
+                execution,
+                arguments,
+                ..
+            }) if call_id.as_deref() == Some("search-1")
+                && execution == "client"
+                && arguments == &json!({"query": "calendar create", "limit": 1})
+        );
+    }
+
+    #[edgerun_tokio::test]
+    async fn parses_tool_call_input_deltas() {
+        let events = run_sse(vec![
+            json!({
+                "type": "response.custom_tool_call_input.delta",
+                "item_id": "ctc_1",
+                "call_id": "call_1",
+                "delta": "*** Begin",
+            }),
+            json!({
+                "type": "response.function_call_arguments.delta",
+                "item_id": "fc_1",
+                "delta": "{\"input\":\"",
+            }),
+            json!({
+                "type": "response.completed",
+                "response": { "id": "resp1" }
+            }),
+        ])
+        .await;
+
+        assert_matches!(
+            &events[0],
+            ResponseEvent::ToolCallInputDelta {
+                item_id,
+                call_id: Some(call_id),
+                delta,
+            } if item_id == "ctc_1" && call_id == "call_1" && delta == "*** Begin"
+        );
+        assert_matches!(&events[1], ResponseEvent::Completed { .. });
+    }
+
+    #[edgerun_tokio::test]
+    async fn emits_completed_without_stream_end() {
+        let completed = json!({
+            "type": "response.completed",
+            "response": { "id": "resp1" }
+        })
+        .to_string();
+
+        let sse1 = format!("event: response.completed\ndata: {completed}\n\n");
+        let stream = stream::iter(vec![Ok(Bytes::from(sse1))]).chain(stream::pending());
+        let stream: ByteStream = Box::pin(stream);
+
+        let (tx, mut rx) = mpsc::channel::<Result<ResponseEvent, ApiError>>(8);
+        edgerun_tokio::spawn(process_sse(
+            stream,
+            tx,
+            idle_timeout(),
+            /*telemetry*/ None,
+        ));
+
+        let events = edgerun_tokio::time::timeout(Duration::from_millis(1000), async {
+            let mut events = Vec::new();
+            while let Some(ev) = rx.recv().await {
+                events.push(ev);
+            }
+            events
+        })
+        .await
+        .expect("timed out collecting events");
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            Ok(ResponseEvent::Completed {
+                response_id,
+                token_usage,
+                end_turn,
+            }) => {
+                assert_eq!(response_id, "resp1");
+                assert!(token_usage.is_none());
+                assert!(end_turn.is_none());
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn error_when_error_event() {
+        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_689bcf18d7f08194bf3440ba62fe05d803fee0cdac429894","object":"response","created_at":1755041560,"status":"failed","background":false,"error":{"code":"rate_limit_exceeded","message":"Rate limit reached for gpt-5.1 in organization org-AAA on tokens per min (TPM): Limit 30000, Used 22999, Requested 12528. Please try again in 11.054s. Visit https://platform.openai.com/account/rate-limits to learn more."}, "usage":null,"user":null,"metadata":{}}}"#;
+
+        let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 1);
+
+        match &events[0] {
+            Err(ApiError::Retryable { message, delay }) => {
+                assert_eq!(
+                    message,
+                    "Rate limit reached for gpt-5.1 in organization org-AAA on tokens per min (TPM): Limit 30000, Used 22999, Requested 12528. Please try again in 11.054s. Visit https://platform.openai.com/account/rate-limits to learn more."
+                );
+                assert_eq!(*delay, Some(Duration::from_secs_f64(11.054)));
+            }
+            other => panic!("unexpected second event: {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn context_window_error_is_fatal() {
+        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_5c66275b97b9baef1ed95550adb3b7ec13b17aafd1d2f11b","object":"response","created_at":1759510079,"status":"failed","background":false,"error":{"code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try again."},"usage":null,"user":null,"metadata":{}}}"#;
+
+        let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 1);
+
+        assert_matches!(events[0], Err(ApiError::ContextWindowExceeded));
+    }
+
+    #[edgerun_tokio::test]
+    async fn context_window_error_with_newline_is_fatal() {
+        let raw_error = r#"{"type":"response.failed","sequence_number":4,"response":{"id":"resp_fatal_newline","object":"response","created_at":1759510080,"status":"failed","background":false,"error":{"code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try\nagain."},"usage":null,"user":null,"metadata":{}}}"#;
+
+        let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 1);
+
+        assert_matches!(events[0], Err(ApiError::ContextWindowExceeded));
+    }
+
+    #[edgerun_tokio::test]
+    async fn quota_exceeded_error_is_fatal() {
+        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_fatal_quota","object":"response","created_at":1759771626,"status":"failed","background":false,"error":{"code":"insufficient_quota","message":"You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors."},"incomplete_details":null}}"#;
+
+        let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 1);
+
+        assert_matches!(events[0], Err(ApiError::QuotaExceeded));
+    }
+
+    #[edgerun_tokio::test]
+    async fn cyber_policy_error_is_fatal() {
+        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_fatal_cyber","object":"response","created_at":1759771626,"status":"failed","background":false,"error":{"code":"cyber_policy","message":"This request was flagged for cyber policy."},"incomplete_details":null}}"#;
+
+        let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 1);
+
+        match &events[0] {
+            Err(ApiError::CyberPolicy { message }) => {
+                assert_eq!(message, "This request was flagged for cyber policy.");
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn cyber_policy_error_uses_fallback_for_empty_message() {
+        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_fatal_cyber","object":"response","created_at":1759771626,"status":"failed","background":false,"error":{"code":"cyber_policy","message":"   "},"incomplete_details":null}}"#;
+
+        let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 1);
+
+        match &events[0] {
+            Err(ApiError::CyberPolicy { message }) => {
+                assert_eq!(
+                    message,
+                    "This request has been flagged for possible cybersecurity risk."
+                );
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn invalid_prompt_without_type_is_invalid_request() {
+        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_invalid_prompt_no_type","object":"response","created_at":1759771628,"status":"failed","background":false,"error":{"code":"invalid_prompt","message":"Invalid prompt: we've limited access to this content for safety reasons."},"incomplete_details":null}}"#;
+
+        let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
+
+        let events = collect_events(&[sse1.as_bytes()]).await;
+
+        assert_eq!(events.len(), 1);
+
+        match &events[0] {
+            Err(ApiError::InvalidRequest { message }) => {
+                assert_eq!(
+                    message,
+                    "Invalid prompt: we've limited access to this content for safety reasons."
+                );
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn table_driven_event_kinds() {
+        struct TestCase {
+            name: &'static str,
+            event: edgerun_json::Value,
+            expect_first: fn(&ResponseEvent) -> bool,
+            expected_len: usize,
+        }
+
+        fn is_created(ev: &ResponseEvent) -> bool {
+            matches!(ev, ResponseEvent::Created)
+        }
+        fn is_output(ev: &ResponseEvent) -> bool {
+            matches!(ev, ResponseEvent::OutputItemDone(_))
+        }
+        fn is_completed(ev: &ResponseEvent) -> bool {
+            matches!(ev, ResponseEvent::Completed { .. })
+        }
+
+        let completed = json!({
+            "type": "response.completed",
+            "response": {
+                "id": "c",
+                "usage": {
+                    "input_tokens": 0,
+                    "input_tokens_details": null,
+                    "output_tokens": 0,
+                    "output_tokens_details": null,
+                    "total_tokens": 0
+                },
+                "output": []
+            }
+        });
+
+        let cases = vec![
+            TestCase {
+                name: "created",
+                event: json!({"type": "response.created", "response": {}}),
+                expect_first: is_created,
+                expected_len: 2,
+            },
+            TestCase {
+                name: "output_item.done",
+                event: json!({
+                    "type": "response.output_item.done",
+                    "item": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "output_text", "text": "hi"}
+                        ]
+                    }
+                }),
+                expect_first: is_output,
+                expected_len: 2,
+            },
+            TestCase {
+                name: "unknown",
+                event: json!({"type": "response.new_tool_event"}),
+                expect_first: is_completed,
+                expected_len: 1,
+            },
+        ];
+
+        for case in cases {
+            let mut evs = vec![case.event];
+            evs.push(completed.clone());
+
+            let out = run_sse(evs).await;
+            assert_eq!(out.len(), case.expected_len, "case {}", case.name);
+            assert!(
+                (case.expect_first)(&out[0]),
+                "first event mismatch in case {}",
+                case.name
+            );
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn spawn_response_stream_emits_header_events() {
+        let mut headers = HeaderMap::new();
+        headers.insert(REQUEST_ID_HEADER, HeaderValue::from_static("req-1"));
+        headers.insert(
+            OPENAI_MODEL_HEADER,
+            HeaderValue::from_static(CYBER_RESTRICTED_MODEL_FOR_TESTS),
+        );
+        let bytes = stream::iter(Vec::<Result<Bytes, TransportError>>::new());
+        let stream_response = StreamResponse {
+            status: StatusCode::OK,
+            headers,
+            bytes: Box::pin(bytes),
+        };
+
+        let mut stream = spawn_response_stream(
+            stream_response,
+            idle_timeout(),
+            /*telemetry*/ None,
+            /*turn_state*/ None,
+        );
+        assert_eq!(stream.upstream_request_id.as_deref(), Some("req-1"));
+        let event = stream
+            .rx_event
+            .recv()
+            .await
+            .expect("expected server model event")
+            .expect("expected ok event");
+        match event {
+            ResponseEvent::ServerModel(model) => {
+                assert_eq!(model, CYBER_RESTRICTED_MODEL_FOR_TESTS);
+            }
+            other => panic!("expected server model event, got {other:?}"),
+        }
+    }
+
+    #[edgerun_tokio::test]
+    async fn spawn_response_stream_ignores_model_verification_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "openai-verification-recommendation",
+            HeaderValue::from_static(TRUSTED_ACCESS_FOR_CYBER_VERIFICATION),
+        );
+        let completed = json!({
+            "type": "response.completed",
+            "response": { "id": "resp-1" }
+        });
+        let sse = format!("event: response.completed\ndata: {completed}\n\n");
+        let bytes = stream::iter(vec![Ok(Bytes::from(sse))]);
+        let stream_response = StreamResponse {
+            status: StatusCode::OK,
+            headers,
+            bytes: Box::pin(bytes),
+        };
+
+        let mut stream = spawn_response_stream(
+            stream_response,
+            idle_timeout(),
+            /*telemetry*/ None,
+            /*turn_state*/ None,
+        );
+        let mut events = Vec::new();
+        while let Some(event) = stream.rx_event.recv().await {
+            events.push(event.expect("expected ok event"));
+        }
+
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, ResponseEvent::ModelVerifications(_)))
+        );
+    }
+
+    #[edgerun_tokio::test]
+    async fn process_sse_ignores_response_model_field_in_payload() {
+        let events = run_sse(vec![
+            json!({
+                "type": "response.created",
+                "response": {
+                    "id": "resp-1",
+                    "model": CYBER_RESTRICTED_MODEL_FOR_TESTS
+                }
+            }),
+            json!({
+                "type": "response.completed",
+                "response": {
+                    "id": "resp-1",
+                    "model": CYBER_RESTRICTED_MODEL_FOR_TESTS
+                }
+            }),
+        ])
+        .await;
+
+        assert_eq!(events.len(), 2);
+        assert_matches!(&events[0], ResponseEvent::Created);
+        assert_matches!(
+            &events[1],
+            ResponseEvent::Completed {
+                response_id,
+                token_usage: None,
+                end_turn: None,
+            } if response_id == "resp-1"
+        );
+    }
+
+    #[edgerun_tokio::test]
+    async fn process_sse_emits_server_model_from_response_headers_payload() {
+        let events = run_sse(vec![
+            json!({
+                "type": "response.created",
+                "response": {
+                    "id": "resp-1",
+                    "headers": {
+                        "OpenAI-Model": CYBER_RESTRICTED_MODEL_FOR_TESTS
+                    }
+                }
+            }),
+            json!({
+                "type": "response.completed",
+                "response": {
+                    "id": "resp-1"
+                }
+            }),
+        ])
+        .await;
+
+        assert_eq!(events.len(), 3);
+        assert_matches!(
+            &events[0],
+            ResponseEvent::ServerModel(model) if model == CYBER_RESTRICTED_MODEL_FOR_TESTS
+        );
+        assert_matches!(&events[1], ResponseEvent::Created);
+        assert_matches!(
+            &events[2],
+            ResponseEvent::Completed {
+                response_id,
+                token_usage: None,
+                end_turn: None,
+            } if response_id == "resp-1"
+        );
+    }
+
+    #[edgerun_tokio::test]
+    async fn process_sse_emits_model_verification_field() {
+        let events = run_sse(vec![
+            json!({
+                "type": "response.metadata",
+                "sequence_number": 1,
+                "response_id": "resp-1",
+                "metadata": {
+                    "openai_verification_recommendation": [TRUSTED_ACCESS_FOR_CYBER_VERIFICATION]
+                }
+            }),
+            json!({
+                "type": "response.completed",
+                "response": {
+                    "id": "resp-1"
+                }
+            }),
+        ])
+        .await;
+
+        assert_matches!(
+            &events[0],
+            ResponseEvent::ModelVerifications(verifications)
+                if verifications == &vec![ModelVerification::TrustedAccessForCyber]
+        );
+        assert_matches!(
+            &events[1],
+            ResponseEvent::Completed {
+                response_id,
+                token_usage: None,
+                end_turn: None,
+            } if response_id == "resp-1"
+        );
+    }
+
+    #[test]
+    fn responses_stream_event_response_model_reads_top_level_headers() {
+        let ev: ResponsesStreamEvent = edgerun_json::from_json_value(json!({
+            "type": "response.metadata",
+            "headers": {
+                "openai-model": CYBER_RESTRICTED_MODEL_FOR_TESTS,
+            }
+        }))
+        .expect("expected event to deserialize");
+
+        assert_eq!(
+            ev.response_model().as_deref(),
+            Some(CYBER_RESTRICTED_MODEL_FOR_TESTS)
+        );
+    }
+
+    #[test]
+    fn responses_stream_event_response_model_prefers_response_headers() {
+        let ev: ResponsesStreamEvent = edgerun_json::from_json_value(json!({
+            "type": "response.created",
+            "headers": {
+                "openai-model": "top-level-model"
+            },
+            "response": {
+                "id": "resp-1",
+                "headers": {
+                    "openai-model": CYBER_RESTRICTED_MODEL_FOR_TESTS
+                }
+            }
+        }))
+        .expect("expected event to deserialize");
+
+        assert_eq!(
+            ev.response_model().as_deref(),
+            Some(CYBER_RESTRICTED_MODEL_FOR_TESTS)
+        );
+    }
+
+    #[test]
+    fn responses_stream_event_model_verification_reads_metadata_field() {
+        let event = json!({
+            "type": "response.metadata",
+            "sequence_number": 1,
+            "response_id": "resp-1",
+            "metadata": {
+                "openai_verification_recommendation": [TRUSTED_ACCESS_FOR_CYBER_VERIFICATION]
+            }
+        });
+        let event: ResponsesStreamEvent =
+            edgerun_json::from_json_value(event).expect("expected event to deserialize");
+
+        assert_eq!(
+            event.model_verifications(),
+            Some(vec![ModelVerification::TrustedAccessForCyber])
+        );
+    }
+
+    #[test]
+    fn responses_stream_event_model_verification_ignores_unknown_field() {
+        let event = json!({
+            "type": "response.metadata",
+            "metadata": {
+                "openai_verification_recommendation": ["unknown"]
+            }
+        });
+        let event: ResponsesStreamEvent =
+            edgerun_json::from_json_value(event).expect("expected event to deserialize");
+
+        assert_eq!(event.model_verifications(), None);
+    }
+
+    #[test]
+    fn responses_stream_event_model_verification_ignores_non_array_field() {
+        let event = json!({
+            "type": "response.metadata",
+            "metadata": {
+                "openai_verification_recommendation": TRUSTED_ACCESS_FOR_CYBER_VERIFICATION
+            }
+        });
+        let event: ResponsesStreamEvent =
+            edgerun_json::from_json_value(event).expect("expected event to deserialize");
+
+        assert_eq!(event.model_verifications(), None);
+    }
+
+    #[test]
+    fn test_try_parse_retry_after() {
+        let err = Error {
+            r#type: None,
+            message: Some("Rate limit reached for gpt-5.1 in organization org- on tokens per min (TPM): Limit 1, Used 1, Requested 19304. Please try again in 28ms. Visit https://platform.openai.com/account/rate-limits to learn more.".to_string()),
+            code: Some("rate_limit_exceeded".to_string()),
+            plan_type: None,
+            resets_at: None,
+        };
+
+        let delay = try_parse_retry_after(&err);
+        assert_eq!(delay, Some(Duration::from_millis(28)));
+    }
+
+    #[test]
+    fn test_try_parse_retry_after_no_delay() {
+        let err = Error {
+            r#type: None,
+            message: Some("Rate limit reached for gpt-5.1 in organization <ORG> on tokens per min (TPM): Limit 30000, Used 6899, Requested 24050. Please try again in 1.898s. Visit https://platform.openai.com/account/rate-limits to learn more.".to_string()),
+            code: Some("rate_limit_exceeded".to_string()),
+            plan_type: None,
+            resets_at: None,
+        };
+        let delay = try_parse_retry_after(&err);
+        assert_eq!(delay, Some(Duration::from_secs_f64(1.898)));
+    }
+
+    #[test]
+    fn test_try_parse_retry_after_azure() {
+        let err = Error {
+            r#type: None,
+            message: Some("Rate limit exceeded. Try again in 35 seconds.".to_string()),
+            code: Some("rate_limit_exceeded".to_string()),
+            plan_type: None,
+            resets_at: None,
+        };
+        let delay = try_parse_retry_after(&err);
+        assert_eq!(delay, Some(Duration::from_secs(35)));
+    }
+
+    const CYBER_RESTRICTED_MODEL_FOR_TESTS: &str = "gpt-5.3-codex";
+}

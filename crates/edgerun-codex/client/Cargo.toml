@@ -1,0 +1,49 @@
+[package]
+autobins = false
+edition.workspace = true
+license.workspace = true
+name = "codex-client"
+version.workspace = true
+
+[[bin]]
+name = "custom_ca_probe"
+path = "src/bin/custom_ca_probe.rs"
+required-features = ["native-transport"]
+
+[features]
+default = ["native-transport"]
+reqwest-transport = [
+    "dep:edgerun-reqwest",
+    "edgerun-reqwest/cookies",
+    "edgerun-reqwest/http1",
+    "edgerun-reqwest/http2",
+    "edgerun-reqwest/http3",
+    "edgerun-reqwest/native-root",
+    "edgerun-reqwest/tls",
+    "edgerun-reqwest/stream",
+]
+native-transport = [
+    "reqwest-transport",
+]
+
+[dependencies]
+edgerun-async-trait = { workspace = true }
+edgerun-bytes = { workspace = true }
+edgerun-crypto = { workspace = true, default-features = false }
+edgerun-encoding = { workspace = true }
+edgerun-error = { workspace = true }
+edgerun-eventsource-stream = { workspace = true }
+edgerun-http = { workspace = true }
+edgerun-json = { workspace = true }
+edgerun-futures = { workspace = true }
+edgerun-reqwest = { workspace = true, default-features = false, optional = true }
+edgerun-tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+codex_utils_cargo_bin = { package = "edgerun-codex-utils-cargo-bin", path = "../../utility/edgerun-codex-utils-cargo-bin" }
+edgerun-http-client = { path = "../../utility/edgerun-http-client", default-features = false, features = ["std", "tls"] }
+tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }
+
+[lints]
+workspace = true

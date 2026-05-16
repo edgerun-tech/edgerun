@@ -1,0 +1,253 @@
+{
+  "title": "TurnStartParams",
+  "type": "object",
+  "properties": {
+    "approvalsReviewer": {
+      "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+      "type": "string",
+      "enum": [
+        "user",
+        "auto_review",
+        "guardian_subagent"
+      ]
+    },
+    "collaborationMode": {
+      "title": "CollaborationMode",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "title": "ModeKind",
+          "type": "string",
+          "enum": [
+            "Plan",
+            "Default"
+          ]
+        },
+        "settings": {
+          "title": "Settings",
+          "type": "object",
+          "properties": {
+            "developer_instructions": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "reasoning_effort": {
+              "title": "ReasoningEffort",
+              "type": "string",
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+              ]
+            }
+          },
+          "required": [
+            "model"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "settings"
+      ]
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "effort": {
+      "title": "ReasoningEffort",
+      "type": "string",
+      "enum": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    "input": {
+      "type": "array",
+      "items": {
+        "title": "UserInput",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "textElements": {
+                "type": "array",
+                "items": {
+                  "title": "TextElement",
+                  "type": "object",
+                  "properties": {
+                    "byteRange": {
+                      "title": "ByteRange",
+                      "type": "object",
+                      "properties": {
+                        "end": {
+                          "type": "integer"
+                        },
+                        "start": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ]
+                    },
+                    "placeholder": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "byteRange"
+                  ]
+                }
+              },
+              "type": {
+                "type": "string",
+                "const": "Text",
+                "title": "Textv2::TurnStartParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "additionalProperties": false,
+            "title": "Textv2::TurnStartParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "Image",
+                "title": "Imagev2::TurnStartParamsType"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "url"
+            ],
+            "additionalProperties": false,
+            "title": "Imagev2::TurnStartParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "LocalImage",
+                "title": "LocalImagev2::TurnStartParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "path"
+            ],
+            "additionalProperties": false,
+            "title": "LocalImagev2::TurnStartParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Skill",
+                "title": "Skillv2::TurnStartParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "path"
+            ],
+            "additionalProperties": false,
+            "title": "Skillv2::TurnStartParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Mention",
+                "title": "Mentionv2::TurnStartParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "path"
+            ],
+            "additionalProperties": false,
+            "title": "Mentionv2::TurnStartParams"
+          }
+        ]
+      }
+    },
+    "model": {
+      "type": "string"
+    },
+    "outputSchema": true,
+    "personality": {
+      "title": "Personality",
+      "type": "string",
+      "enum": [
+        "none",
+        "friendly",
+        "pragmatic"
+      ]
+    },
+    "responsesapiClientMetadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "title": "ReasoningSummary",
+      "type": "string",
+      "enum": [
+        "auto",
+        "concise",
+        "detailed",
+        "none"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "input"
+  ]
+}

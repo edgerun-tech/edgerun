@@ -1,0 +1,12 @@
+{
+  "title": "ThreadDecrementElicitationParams",
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ]
+}

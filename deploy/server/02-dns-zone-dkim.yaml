@@ -1,0 +1,21 @@
+---
+apiVersion: edgerun.io/v1alpha1
+kind: DnsZone
+metadata:
+  name: example.edgerun.local.dkim
+  namespace: edgerun-dns
+spec:
+  origin: example.edgerun.local
+  soa:
+    mname: ns1.example.edgerun.local
+    rname: admin.example.edgerun.local
+    serial: 2025041801
+    refresh: 3600
+    retry: 900
+    expire: 604800
+    minimum: 86400
+  records:
+    - name: mail._domainkey
+      type: TXT
+      value: "v=DKIM1; k=rsa; p=REPLACE_WITH_DKIM_PUBLIC_KEY"
+      ttl: 86400

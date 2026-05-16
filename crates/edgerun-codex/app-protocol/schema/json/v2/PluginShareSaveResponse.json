@@ -1,0 +1,16 @@
+{
+  "title": "PluginShareSaveResponse",
+  "type": "object",
+  "properties": {
+    "remotePluginId": {
+      "type": "string"
+    },
+    "shareUrl": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "remotePluginId",
+    "shareUrl"
+  ]
+}

@@ -1,0 +1,20 @@
+[package]
+name = "munge_macro"
+version = "0.4.7"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned proc macro for custom destructuring"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["clone-impls", "full", "parsing", "printing", "proc-macro"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+{
+  "title": "FsGetMetadataParams",
+  "type": "object",
+  "properties": {
+    "path": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    }
+  },
+  "required": [
+    "path"
+  ]
+}

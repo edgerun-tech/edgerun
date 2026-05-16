@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-unit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "source annotations for deterministic Edgerun wasm units"
+
+[dependencies]
+edgerun-unit-macros = { version = "0.1.1", path = "../utility/edgerun-unit-macros" }
+
+[lints]
+workspace = true

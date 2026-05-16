@@ -1,0 +1,15 @@
+*.rs text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.proto text eol=lf
+*.go text eol=lf
+*.sh text eol=lf
+
+**/src/gen/** linguist-generated=true
+gen/go/** linguist-generated=true
+proto/go/** linguist-generated=true
+
+crates/edgerun-crypto/vendor/** linguist-vendored=true
+vendor/cargo/** -text -eol linguist-vendored=true

@@ -1,0 +1,38 @@
+{
+  "title": "PluginShareUpdateTargetsParams",
+  "type": "object",
+  "properties": {
+    "remotePluginId": {
+      "type": "string"
+    },
+    "shareTargets": {
+      "type": "array",
+      "items": {
+        "title": "PluginShareTarget",
+        "type": "object",
+        "properties": {
+          "principalId": {
+            "type": "string"
+          },
+          "principalType": {
+            "title": "PluginSharePrincipalType",
+            "type": "string",
+            "enum": [
+              "user",
+              "group",
+              "workspace"
+            ]
+          }
+        },
+        "required": [
+          "principalType",
+          "principalId"
+        ]
+      }
+    }
+  },
+  "required": [
+    "remotePluginId",
+    "shareTargets"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "title": "MarketplaceRemoveParams",
+  "type": "object",
+  "properties": {
+    "marketplaceName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "marketplaceName"
+  ]
+}

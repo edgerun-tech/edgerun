@@ -1,0 +1,15 @@
+{
+  "title": "AppsListParams",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  }
+}

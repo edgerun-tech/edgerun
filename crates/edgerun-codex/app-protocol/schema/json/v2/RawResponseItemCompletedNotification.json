@@ -1,0 +1,617 @@
+{
+  "title": "RawResponseItemCompletedNotification",
+  "type": "object",
+  "properties": {
+    "item": {
+      "title": "ResponseItem",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "array",
+              "items": {
+                "title": "ContentItem",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "InputText",
+                        "title": "InputTextv2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "title": "InputTextv2::RawResponseItemCompletedNotification"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "imageUrl": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "InputImage",
+                        "title": "InputImagev2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "imageUrl"
+                    ],
+                    "additionalProperties": false,
+                    "title": "InputImagev2::RawResponseItemCompletedNotification"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "OutputText",
+                        "title": "OutputTextv2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "title": "OutputTextv2::RawResponseItemCompletedNotification"
+                  }
+                ]
+              }
+            },
+            "role": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Message",
+              "title": "Messagev2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "role",
+            "content"
+          ],
+          "additionalProperties": false,
+          "title": "Messagev2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "encryptedContent": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "array",
+              "items": {
+                "title": "ReasoningItemReasoningSummary",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "SummaryText",
+                        "title": "SummaryTextv2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "title": "SummaryTextv2::RawResponseItemCompletedNotification"
+                  }
+                ]
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "Reasoning",
+              "title": "Reasoningv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "summary"
+          ],
+          "additionalProperties": false,
+          "title": "Reasoningv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "title": "LocalShellAction",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "title": "LocalShellExecAction",
+                      "type": "object",
+                      "properties": {
+                        "command": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "env": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "timeout_ms": {
+                          "type": "integer"
+                        },
+                        "user": {
+                          "type": "string"
+                        },
+                        "working_directory": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "Exec",
+                      "title": "Execv2::RawResponseItemCompletedNotificationType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "field0"
+                  ],
+                  "additionalProperties": false,
+                  "title": "Execv2::RawResponseItemCompletedNotification"
+                }
+              ]
+            },
+            "callId": {
+              "type": "string"
+            },
+            "status": {
+              "title": "LocalShellStatus",
+              "type": "string",
+              "enum": [
+                "Completed",
+                "InProgress",
+                "Incomplete"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "LocalShellCall",
+              "title": "LocalShellCallv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "status",
+            "action"
+          ],
+          "additionalProperties": false,
+          "title": "LocalShellCallv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "arguments": {
+              "type": "string"
+            },
+            "callId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "FunctionCall",
+              "title": "FunctionCallv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "name",
+            "arguments",
+            "callId"
+          ],
+          "additionalProperties": false,
+          "title": "FunctionCallv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "arguments": true,
+            "callId": {
+              "type": "string"
+            },
+            "execution": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ToolSearchCall",
+              "title": "ToolSearchCallv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "execution",
+            "arguments"
+          ],
+          "additionalProperties": false,
+          "title": "ToolSearchCallv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "callId": {
+              "type": "string"
+            },
+            "output": {
+              "title": "FunctionCallOutputBody",
+              "oneOf": [
+                {
+                  "title": "Text",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                },
+                {
+                  "title": "ContentItems",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "array",
+                      "items": {
+                        "title": "FunctionCallOutputContentItem",
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputText",
+                                "title": "InputTextv2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputTextv2::RawResponseItemCompletedNotification"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "imageUrl": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputImage",
+                                "title": "InputImagev2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "imageUrl"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputImagev2::RawResponseItemCompletedNotification"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "FunctionCallOutput",
+              "title": "FunctionCallOutputv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "callId",
+            "output"
+          ],
+          "additionalProperties": false,
+          "title": "FunctionCallOutputv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "callId": {
+              "type": "string"
+            },
+            "input": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "CustomToolCall",
+              "title": "CustomToolCallv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "callId",
+            "name",
+            "input"
+          ],
+          "additionalProperties": false,
+          "title": "CustomToolCallv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "callId": {
+              "type": "string"
+            },
+            "output": {
+              "title": "FunctionCallOutputBody",
+              "oneOf": [
+                {
+                  "title": "Text",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                },
+                {
+                  "title": "ContentItems",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "array",
+                      "items": {
+                        "title": "FunctionCallOutputContentItem",
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputText",
+                                "title": "InputTextv2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputTextv2::RawResponseItemCompletedNotification"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "imageUrl": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputImage",
+                                "title": "InputImagev2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "imageUrl"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputImagev2::RawResponseItemCompletedNotification"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "CustomToolCallOutput",
+              "title": "CustomToolCallOutputv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "callId",
+            "output"
+          ],
+          "additionalProperties": false,
+          "title": "CustomToolCallOutputv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "callId": {
+              "type": "string"
+            },
+            "execution": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "tools": {
+              "type": "array",
+              "items": true
+            },
+            "type": {
+              "type": "string",
+              "const": "ToolSearchOutput",
+              "title": "ToolSearchOutputv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "status",
+            "execution",
+            "tools"
+          ],
+          "additionalProperties": false,
+          "title": "ToolSearchOutputv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "WebSearchCall",
+              "title": "WebSearchCallv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "WebSearchCallv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "ImageGenerationCall",
+              "title": "ImageGenerationCallv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "status",
+            "result"
+          ],
+          "additionalProperties": false,
+          "title": "ImageGenerationCallv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "encryptedContent": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Compaction",
+              "title": "Compactionv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "encryptedContent"
+          ],
+          "additionalProperties": false,
+          "title": "Compactionv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ContextCompaction",
+              "title": "ContextCompactionv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "ContextCompactionv2::RawResponseItemCompletedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Other",
+              "title": "Otherv2::RawResponseItemCompletedNotificationType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "Otherv2::RawResponseItemCompletedNotification"
+        }
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "item"
+  ]
+}

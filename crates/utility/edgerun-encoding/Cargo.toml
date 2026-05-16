@@ -1,0 +1,22 @@
+[package]
+name = "edgerun-encoding"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Consolidated encoding utilities for the edgerun workspace"
+
+[features]
+default = []
+std = []
+hpack = ["dep:edgerun-hpack"]
+compression = ["dep:miniz_oxide"]
+
+[dependencies]
+edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
+miniz_oxide = { workspace = true, features = ["with-alloc"], optional = true }
+
+[lints]
+workspace = true

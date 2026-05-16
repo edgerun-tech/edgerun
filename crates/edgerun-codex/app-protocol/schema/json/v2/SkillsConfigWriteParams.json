@@ -1,0 +1,19 @@
+{
+  "title": "SkillsConfigWriteParams",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "name": {
+      "type": "string"
+    },
+    "path": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    }
+  },
+  "required": [
+    "enabled"
+  ]
+}

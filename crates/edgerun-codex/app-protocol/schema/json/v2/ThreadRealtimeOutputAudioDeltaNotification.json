@@ -1,0 +1,39 @@
+{
+  "title": "ThreadRealtimeOutputAudioDeltaNotification",
+  "type": "object",
+  "properties": {
+    "audio": {
+      "title": "ThreadRealtimeAudioChunk",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string"
+        },
+        "itemId": {
+          "type": "string"
+        },
+        "numChannels": {
+          "type": "integer"
+        },
+        "sampleRate": {
+          "type": "integer"
+        },
+        "samplesPerChannel": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "data",
+        "sampleRate",
+        "numChannels"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "audio"
+  ]
+}

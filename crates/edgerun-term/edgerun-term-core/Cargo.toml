@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-term-core"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+embedded-emoji = ["dep:edgerun-emoji"]
+
+[dependencies]
+edgerun-encoding = { workspace = true, features = ["std"] }
+edgerun-emoji = { workspace = true, optional = true }
+edgerun-error.workspace = true
+edgerun-log.workspace = true
+edgerun-sixel.workspace = true
+edgerun-terminal-parser.workspace = true
+edgerun-unicode.workspace = true

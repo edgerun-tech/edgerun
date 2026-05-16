@@ -1,0 +1,24 @@
+id = "must-only"
+name = "Definitions Plus MUST/MUST NOT"
+description = "Strict profile that selects definitions plus mandatory and forbidden normative clauses."
+
+[selection]
+include_keywords = ["MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT"]
+include_kinds = ["definition", "constraint", "state-machine", "registry"]
+exclude_keywords = ["SHOULD", "SHOULD NOT", "MAY", "OPTIONAL"]
+
+standards = []
+clauses = []
+registries = []
+
+[composition]
+inputs = []
+outputs = []
+depends_on_programs = []
+
+[identity]
+compiler = ""
+compiler_sha256 = ""
+profile_sha256 = ""
+program_sha256 = ""
+

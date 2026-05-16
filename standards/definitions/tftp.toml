@@ -1,0 +1,46 @@
+id = "tftp-message"
+kind = "sum-frame"
+standard = "RFC1350"
+section = "5"
+
+[[variant]]
+name = "rrq"
+tag_field = "opcode"
+tag = 1
+
+[[variant]]
+name = "wrq"
+tag_field = "opcode"
+tag = 2
+
+[[variant]]
+name = "data"
+tag_field = "opcode"
+tag = 3
+
+[[variant]]
+name = "ack"
+tag_field = "opcode"
+tag = 4
+
+[[variant]]
+name = "error"
+tag_field = "opcode"
+tag = 5
+
+[[field]]
+name = "opcode"
+type = "u16be"
+
+[consumes]
+type = "udp-payload"
+when = "udp.destination_port == 69 || udp.source_port == 69"
+
+[emits]
+type = "tftp-message"
+when = "opcode in [1, 2, 3, 4, 5, 6]"
+
+[wasm]
+manifest = "standards/components/manifests/tftp-message-definition.toml"
+sha256 = ""
+

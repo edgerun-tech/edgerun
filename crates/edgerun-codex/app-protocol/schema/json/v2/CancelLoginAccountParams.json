@@ -1,0 +1,12 @@
+{
+  "title": "CancelLoginAccountParams",
+  "type": "object",
+  "properties": {
+    "loginId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "loginId"
+  ]
+}

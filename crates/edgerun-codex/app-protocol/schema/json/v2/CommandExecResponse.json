@@ -1,0 +1,20 @@
+{
+  "title": "CommandExecResponse",
+  "type": "object",
+  "properties": {
+    "exitCode": {
+      "type": "integer"
+    },
+    "stderr": {
+      "type": "string"
+    },
+    "stdout": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "exitCode",
+    "stdout",
+    "stderr"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "title": "ServerRequestResolvedNotification",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "title": "RequestId",
+      "oneOf": [
+        {
+          "title": "String",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        },
+        {
+          "title": "Integer",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        }
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "requestId"
+  ]
+}

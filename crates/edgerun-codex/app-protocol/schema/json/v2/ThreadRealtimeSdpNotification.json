@@ -1,0 +1,16 @@
+{
+  "title": "ThreadRealtimeSdpNotification",
+  "type": "object",
+  "properties": {
+    "sdp": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "sdp"
+  ]
+}

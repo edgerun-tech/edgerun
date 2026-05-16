@@ -1,0 +1,30 @@
+[package]
+name = "edgerun-ui-core"
+version = "0.1.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/edgerun-tech/edgerun"
+homepage = "https://github.com/edgerun-tech/edgerun"
+rust-version.workspace = true
+autobins = false
+
+[features]
+# Canonical UI rendering assets are opt-out. Consumers that need only the
+# no_std setup/record helpers must use `default-features = false` explicitly.
+default = ["fontdue-text", "tabler-svg-atlas", "lucide-svg-atlas"]
+std = []
+gpu-gl = ["std"]
+sdl = ["gpu-gl", "fontdue-text"]
+fontdue-text = ["std", "dep:fontdue"]
+tabler-svg-atlas = []
+lucide-svg-atlas = []
+
+[dependencies]
+edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "alloc", "sha2"] }
+fontdue = { package = "edgerun-fontdue", path = "../edgerun-fontdue", optional = true }
+
+[[bin]]
+name = "ui-preview-sdl-shadcn"
+path = "src/bin/ui-preview-sdl-shadcn.rs"
+required-features = ["sdl"]

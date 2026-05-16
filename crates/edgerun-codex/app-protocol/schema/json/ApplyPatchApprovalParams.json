@@ -1,0 +1,91 @@
+{
+  "title": "ApplyPatchApprovalParams",
+  "type": "object",
+  "properties": {
+    "callId": {
+      "type": "string"
+    },
+    "conversationId": {
+      "type": "string"
+    },
+    "fileChanges": {
+      "type": "object",
+      "additionalProperties": {
+        "title": "FileChange",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Add",
+                "title": "AddApplyPatchApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "additionalProperties": false,
+            "title": "AddApplyPatchApprovalParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Delete",
+                "title": "DeleteApplyPatchApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "additionalProperties": false,
+            "title": "DeleteApplyPatchApprovalParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "movePath": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Update",
+                "title": "UpdateApplyPatchApprovalParamsType"
+              },
+              "unifiedDiff": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "unifiedDiff"
+            ],
+            "additionalProperties": false,
+            "title": "UpdateApplyPatchApprovalParams"
+          }
+        ]
+      }
+    },
+    "grantRoot": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "conversationId",
+    "callId",
+    "fileChanges"
+  ]
+}

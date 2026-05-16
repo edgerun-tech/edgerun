@@ -1,0 +1,18 @@
+[package]
+name = "edgerun-bluetooth-gatt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Bluetooth GATT support for Edgerun device capabilities"
+
+[dependencies]
+edgerun-capabilities = { workspace = true }
+edgerun-encoding = { workspace = true }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["bluetooth-gatt"] }
+
+[lints]
+workspace = true

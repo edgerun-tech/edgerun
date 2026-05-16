@@ -1,0 +1,24 @@
+{
+  "title": "McpToolCallProgressNotification",
+  "type": "object",
+  "properties": {
+    "itemId": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "itemId",
+    "message"
+  ]
+}

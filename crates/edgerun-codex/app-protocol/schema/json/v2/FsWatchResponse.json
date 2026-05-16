@@ -1,0 +1,13 @@
+{
+  "title": "FsWatchResponse",
+  "type": "object",
+  "properties": {
+    "path": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    }
+  },
+  "required": [
+    "path"
+  ]
+}

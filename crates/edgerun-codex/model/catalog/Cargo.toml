@@ -1,0 +1,25 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-models-manager"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "codex_models_manager"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+edgerun-async-trait = { workspace = true }
+codex-app-server-protocol = { workspace = true }
+codex-protocol = { workspace = true }
+edgerun-json = { workspace = true }
+edgerun-time = { workspace = true }
+edgerun-tokio = { workspace = true, features = ["fs", "macros", "sync", "time"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { package = "edgerun-tempfile", path = "../../../utility/edgerun-tempfile" }

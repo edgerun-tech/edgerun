@@ -1,0 +1,12 @@
+{
+  "title": "FsReadFileResponse",
+  "type": "object",
+  "properties": {
+    "dataBase64": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "dataBase64"
+  ]
+}

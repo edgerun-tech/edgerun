@@ -1,0 +1,21 @@
+{
+  "title": "MarketplaceAddParams",
+  "type": "object",
+  "properties": {
+    "refName": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "sparsePaths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "source"
+  ]
+}

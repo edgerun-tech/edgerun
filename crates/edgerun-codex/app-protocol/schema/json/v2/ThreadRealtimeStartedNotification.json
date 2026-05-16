@@ -1,0 +1,24 @@
+{
+  "title": "ThreadRealtimeStartedNotification",
+  "type": "object",
+  "properties": {
+    "realtimeSessionId": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "version": {
+      "title": "RealtimeConversationVersion",
+      "type": "string",
+      "enum": [
+        "V1",
+        "V2"
+      ]
+    }
+  },
+  "required": [
+    "threadId",
+    "version"
+  ]
+}

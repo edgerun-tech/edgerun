@@ -1,0 +1,12 @@
+{
+  "title": "ExperimentalFeatureListParams",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer"
+    }
+  }
+}

@@ -1,0 +1,50 @@
+id = "arp"
+name = "Address Resolution Protocol"
+summary = "Maps protocol addresses to hardware addresses on broadcast link layers."
+layer = "link"
+runs_over = ["Ethernet"]
+depends_on = ["Ethernet"]
+implementation_crates = []
+profiles = ["arp-ipv4-ethernet", "bare-metal-candidate"]
+standards_bodies = ["IETF"]
+
+[environment]
+requires_clock = true
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = true
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = false
+requires_crypto = false
+no_std_viability = "plausible"
+bare_metal_viability = "plausible-with-link-io"
+
+[[standard]]
+id = "RFC826"
+title = "An Ethernet Address Resolution Protocol"
+url = "https://www.rfc-editor.org/rfc/rfc826.html"
+xml = "https://www.rfc-editor.org/rfc/rfc826.xml"
+status = "Internet Standard"
+published = "1982-11"
+role = "base"
+
+[[registry]]
+name = "Address Resolution Protocol (ARP) Parameters"
+url = "https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml"
+owner = "IANA"
+
+[[behavior]]
+id = "arp-packet-format"
+kind = "packet-format"
+standards = ["RFC826"]
+implementation = []
+status = "unknown"
+
+[composition]
+accepts = ["ethernet-frame"]
+emits = ["arp-packet"]
+lower = ["ethernet"]
+upper = []
+

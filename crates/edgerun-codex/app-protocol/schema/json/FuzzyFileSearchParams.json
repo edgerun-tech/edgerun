@@ -1,0 +1,22 @@
+{
+  "title": "FuzzyFileSearchParams",
+  "type": "object",
+  "properties": {
+    "cancellationToken": {
+      "type": "string"
+    },
+    "query": {
+      "type": "string"
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "query",
+    "roots"
+  ]
+}

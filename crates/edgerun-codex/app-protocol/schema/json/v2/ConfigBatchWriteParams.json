@@ -1,0 +1,41 @@
+{
+  "title": "ConfigBatchWriteParams",
+  "type": "object",
+  "properties": {
+    "edits": {
+      "type": "array",
+      "items": {
+        "title": "ConfigEdit",
+        "type": "object",
+        "properties": {
+          "keyPath": {
+            "type": "string"
+          },
+          "mergeStrategy": {
+            "title": "MergeStrategy",
+            "type": "string",
+            "enum": [
+              "Replace",
+              "Upsert"
+            ]
+          },
+          "value": true
+        },
+        "required": [
+          "keyPath",
+          "value",
+          "mergeStrategy"
+        ]
+      }
+    },
+    "expectedVersion": {
+      "type": "string"
+    },
+    "filePath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "edits"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "title": "ThreadShellCommandParams",
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "command"
+  ]
+}

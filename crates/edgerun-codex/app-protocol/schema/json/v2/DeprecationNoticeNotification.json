@@ -1,0 +1,15 @@
+{
+  "title": "DeprecationNoticeNotification",
+  "type": "object",
+  "properties": {
+    "details": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "summary"
+  ]
+}

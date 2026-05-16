@@ -1,0 +1,12 @@
+{
+  "title": "FuzzyFileSearchSessionCompletedNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId"
+  ]
+}

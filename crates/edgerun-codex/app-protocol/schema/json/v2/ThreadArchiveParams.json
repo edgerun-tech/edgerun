@@ -1,0 +1,12 @@
+{
+  "title": "ThreadArchiveParams",
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ]
+}

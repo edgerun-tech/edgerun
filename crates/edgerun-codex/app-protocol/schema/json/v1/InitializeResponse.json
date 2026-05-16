@@ -1,0 +1,25 @@
+{
+  "title": "InitializeResponse",
+  "type": "object",
+  "properties": {
+    "codexHome": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "platformFamily": {
+      "type": "string"
+    },
+    "platformOs": {
+      "type": "string"
+    },
+    "userAgent": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "userAgent",
+    "codexHome",
+    "platformFamily",
+    "platformOs"
+  ]
+}

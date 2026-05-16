@@ -1,0 +1,28 @@
+{
+  "title": "InitializeParams",
+  "type": "object",
+  "properties": {
+    "clientInfo": {
+      "title": "ClientInfo",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    }
+  },
+  "required": [
+    "clientInfo"
+  ]
+}

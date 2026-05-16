@@ -1,0 +1,12 @@
+{
+  "title": "PluginUninstallParams",
+  "type": "object",
+  "properties": {
+    "pluginId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "pluginId"
+  ]
+}

@@ -1,0 +1,121 @@
+[package]
+name = "edgerun-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "no_std cryptographic primitives and algorithm adapters for Edgerun"
+build = "build.rs"
+
+[dependencies]
+
+edgerun-encoding = { workspace = true, default-features = false }
+
+[features]
+default = []
+std = []
+alloc = []
+oid = []
+pem = ["alloc"]
+zeroize = []
+i128 = []
+compiler-builtins = []
+unstable-public-internals = []
+full = [
+    "aead",
+    "aes",
+    "ed25519",
+    "hmac",
+    "p256",
+    "rsa",
+    "sha1",
+    "x25519",
+]
+aead = ["aes"]
+aes = []
+ed25519 = ["curve25519", "digest", "sha2", "signature_alloc", "signature_digest"]
+hmac = []
+p256 = ["p256_arithmetic", "p256_ecdh", "p256_ecdsa", "p256_pkcs8"]
+p256_arithmetic = [
+    "zeroize",
+    "alloc",
+    "oid",
+    "elliptic_curve_arithmetic",
+    "elliptic_curve_group",
+    "elliptic_curve_hazmat",
+    "elliptic_curve_sec1",
+]
+p256_ecdh = ["p256_arithmetic", "elliptic_curve_ecdh"]
+p256_ecdsa_core = []
+p256_ecdsa = [
+    "p256_arithmetic",
+    "p256_ecdsa_core",
+    "p256_ecdsa_signing",
+    "p256_ecdsa_verifying",
+    "p256_sha256",
+]
+p256_ecdsa_alloc = ["signature_alloc", "elliptic_curve_alloc"]
+p256_ecdsa_arithmetic = ["elliptic_curve_arithmetic"]
+p256_ecdsa_der = ["alloc", "oid"]
+p256_ecdsa_digest = ["digest", "signature_digest"]
+p256_ecdsa_hazmat = []
+p256_ecdsa_pkcs8 = ["p256_ecdsa_der", "p256_ecdsa_digest", "elliptic_curve_pkcs8"]
+p256_ecdsa_rfc6979 = []
+p256_ecdsa_signing = [
+    "p256_ecdsa_arithmetic",
+    "p256_ecdsa_digest",
+    "p256_ecdsa_hazmat",
+    "p256_ecdsa_rfc6979",
+    "signature_rand_core",
+]
+p256_ecdsa_verifying = [
+    "p256_ecdsa_arithmetic",
+    "p256_ecdsa_digest",
+    "p256_ecdsa_hazmat",
+]
+p256_pkcs8 = ["p256_ecdsa_core", "p256_ecdsa_pkcs8", "elliptic_curve_pkcs8"]
+p256_sha256 = ["p256_ecdsa_digest", "p256_ecdsa_hazmat", "sha2"]
+rsa = [
+    "digest",
+    "i128",
+    "zeroize",
+    "alloc",
+    "oid",
+    "rsa_pem",
+    "rsa_sha2",
+    "signature_alloc",
+    "signature_digest",
+    "signature_rand_core",
+]
+rsa_pem = ["pem"]
+rsa_sha2 = ["sha2"]
+sha2 = ["sha2_impl"]
+sha2_impl = ["digest"]
+curve25519 = []
+digest = ["zeroize", "alloc", "oid"]
+signature_alloc = []
+signature_digest = ["digest"]
+signature_rand_core = []
+signature_std = ["signature_alloc", "rng_core_std"]
+rng_core_alloc = []
+rng_core_std = ["rng_core_alloc"]
+rng_core_getrandom = []
+elliptic_curve_alloc = ["zeroize"]
+elliptic_curve_arithmetic = ["elliptic_curve_group"]
+elliptic_curve_ecdh = ["elliptic_curve_arithmetic", "digest"]
+elliptic_curve_group = []
+elliptic_curve_hash2curve = ["elliptic_curve_arithmetic", "digest"]
+elliptic_curve_hazmat = []
+elliptic_curve_pkcs8 = ["elliptic_curve_sec1"]
+elliptic_curve_sec1 = []
+elliptic_curve_std = ["elliptic_curve_alloc", "std", "rng_core_std"]
+elliptic_curve_voprf = []
+primeorder_alloc = ["elliptic_curve_alloc"]
+primeorder_std = ["primeorder_alloc", "elliptic_curve_std"]
+sha1 = []
+x25519 = ["curve25519"]
+
+[lints]
+workspace = true

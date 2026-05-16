@@ -1,0 +1,80 @@
+{
+  "title": "LoginAccountParams",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "apiKey": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "apiKey",
+          "title": "ApiKeyv2::LoginAccountParamsType"
+        }
+      },
+      "required": [
+        "type",
+        "apiKey"
+      ],
+      "additionalProperties": false,
+      "title": "ApiKeyv2::LoginAccountParams"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chatgpt",
+          "title": "Chatgptv2::LoginAccountParamsType"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "title": "Chatgptv2::LoginAccountParams"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chatgptDeviceCode",
+          "title": "ChatgptDeviceCodev2::LoginAccountParamsType"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "title": "ChatgptDeviceCodev2::LoginAccountParams"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "accessToken": {
+          "type": "string"
+        },
+        "chatgptAccountId": {
+          "type": "string"
+        },
+        "chatgptPlanType": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "chatgptAuthTokens",
+          "title": "ChatgptAuthTokensv2::LoginAccountParamsType"
+        }
+      },
+      "required": [
+        "type",
+        "accessToken",
+        "chatgptAccountId"
+      ],
+      "additionalProperties": false,
+      "title": "ChatgptAuthTokensv2::LoginAccountParams"
+    }
+  ]
+}

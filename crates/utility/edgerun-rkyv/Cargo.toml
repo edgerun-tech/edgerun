@@ -1,0 +1,36 @@
+[package]
+name = "rkyv"
+version = "0.8.16"
+edition = "2021"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned zero-copy deserialization framework"
+
+[features]
+default = ["std", "bytecheck"]
+aligned = []
+alloc = ["hashbrown", "tinyvec", "tinyvec/alloc", "rancor/alloc"]
+big_endian = []
+bytecheck = ["dep:bytecheck", "rend/bytecheck", "rkyv_derive/bytecheck"]
+hashbrown-0_17 = ["hashbrown"]
+little_endian = []
+pointer_width_16 = []
+pointer_width_32 = []
+pointer_width_64 = []
+std = ["alloc", "ptr_meta/std"]
+unaligned = []
+
+[dependencies]
+bytecheck = { workspace = true, features = ["simdutf8"], optional = true }
+hashbrown = { workspace = true, optional = true }
+munge = { workspace = true }
+ptr_meta = { workspace = true }
+rancor = { workspace = true }
+rend = { workspace = true }
+rkyv_derive = { workspace = true }
+tinyvec = { workspace = true, optional = true }
+
+[lints]
+workspace = true

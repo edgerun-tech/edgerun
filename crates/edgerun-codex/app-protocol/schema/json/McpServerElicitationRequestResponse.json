@@ -1,0 +1,20 @@
+{
+  "title": "McpServerElicitationRequestResponse",
+  "type": "object",
+  "properties": {
+    "_meta": true,
+    "action": {
+      "title": "McpServerElicitationAction",
+      "type": "string",
+      "enum": [
+        "Accept",
+        "Decline",
+        "Cancel"
+      ]
+    },
+    "content": true
+  },
+  "required": [
+    "action"
+  ]
+}

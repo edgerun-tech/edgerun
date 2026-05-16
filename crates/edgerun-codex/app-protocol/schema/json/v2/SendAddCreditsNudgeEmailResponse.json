@@ -1,0 +1,17 @@
+{
+  "title": "SendAddCreditsNudgeEmailResponse",
+  "type": "object",
+  "properties": {
+    "status": {
+      "title": "AddCreditsNudgeEmailStatus",
+      "type": "string",
+      "enum": [
+        "Sent",
+        "CooldownActive"
+      ]
+    }
+  },
+  "required": [
+    "status"
+  ]
+}

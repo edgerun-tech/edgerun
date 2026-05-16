@@ -1,0 +1,20 @@
+{
+  "title": "ListMcpServerStatusParams",
+  "type": "object",
+  "properties": {
+    "cursor": {
+      "type": "string"
+    },
+    "detail": {
+      "title": "McpServerStatusDetail",
+      "type": "string",
+      "enum": [
+        "Full",
+        "ToolsAndAuthOnly"
+      ]
+    },
+    "limit": {
+      "type": "integer"
+    }
+  }
+}

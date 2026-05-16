@@ -1,0 +1,21 @@
+[package]
+name = "edgerun-error"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun error handling facade and derive"
+
+[features]
+default = ["std", "derive"]
+std = []
+derive = ["dep:edgerun-error-derive"]
+anyhow-compat = ["std"]
+
+[dependencies]
+edgerun-error-derive = { version = "0.1", path = "../edgerun-error-derive", optional = true }
+
+[lints]
+workspace = true

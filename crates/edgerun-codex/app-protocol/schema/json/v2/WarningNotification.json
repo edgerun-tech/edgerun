@@ -1,0 +1,15 @@
+{
+  "title": "WarningNotification",
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "message"
+  ]
+}

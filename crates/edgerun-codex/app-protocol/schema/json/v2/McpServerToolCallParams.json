@@ -1,0 +1,20 @@
+{
+  "title": "McpServerToolCallParams",
+  "type": "object",
+  "properties": {
+    "server": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "tool": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "server",
+    "tool"
+  ]
+}

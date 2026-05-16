@@ -1,0 +1,29 @@
+{
+  "title": "CommandExecOutputDeltaNotification",
+  "type": "object",
+  "properties": {
+    "capReached": {
+      "type": "boolean"
+    },
+    "deltaBase64": {
+      "type": "string"
+    },
+    "processId": {
+      "type": "string"
+    },
+    "stream": {
+      "title": "CommandExecOutputStream",
+      "type": "string",
+      "enum": [
+        "Stdout",
+        "Stderr"
+      ]
+    }
+  },
+  "required": [
+    "processId",
+    "stream",
+    "deltaBase64",
+    "capReached"
+  ]
+}

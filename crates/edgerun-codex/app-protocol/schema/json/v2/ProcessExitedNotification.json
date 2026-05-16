@@ -1,0 +1,32 @@
+{
+  "title": "ProcessExitedNotification",
+  "type": "object",
+  "properties": {
+    "exitCode": {
+      "type": "integer"
+    },
+    "processHandle": {
+      "type": "string"
+    },
+    "stderr": {
+      "type": "string"
+    },
+    "stderrCapReached": {
+      "type": "boolean"
+    },
+    "stdout": {
+      "type": "string"
+    },
+    "stdoutCapReached": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "processHandle",
+    "exitCode",
+    "stdout",
+    "stdoutCapReached",
+    "stderr",
+    "stderrCapReached"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "title": "FileChangeRequestApprovalParams",
+  "type": "object",
+  "properties": {
+    "grantRoot": {
+      "type": "string"
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "startedAtMs": {
+      "type": "integer"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "itemId",
+    "startedAtMs"
+  ]
+}

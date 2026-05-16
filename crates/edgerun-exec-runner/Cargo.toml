@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-exec-runner"
+version = "0.1.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/edgerun-tech/edgerun"
+homepage = "https://github.com/edgerun-tech/edgerun"
+description = "Boot-time ELF receiver/executor for EdgeRun development"
+
+[[bin]]
+name = "edgerun-exec-runner"
+path = "src/main.rs"
+
+[dependencies]
+
+# Keep this crate independently buildable while the protocol is evolving.
+# It is intended to be copied into an initramfs or run as init/PID1.
+[workspace]

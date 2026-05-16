@@ -1,0 +1,16 @@
+{
+  "title": "ContextCompactedNotification",
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId"
+  ]
+}

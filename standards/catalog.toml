@@ -1,0 +1,155 @@
+[catalog]
+name = "edgerun-sdk standards seed"
+purpose = "Protocol discovery and conformance tracking for detached Edgerun implementations."
+internal_wire_protocol = "rkyv"
+internal_wire_rule = "External standards keep their own encodings; Edgerun internal protocol boundaries use rkyv only."
+
+[[protocol]]
+id = "ethernet"
+name = "Ethernet"
+file = "protocols/ethernet.toml"
+layer = "link"
+runs_over = []
+implementation_crates = [
+  "crates/device-types/edgerun-network-interface",
+  "crates/edgerun-network-driver",
+]
+
+[[protocol]]
+id = "arp"
+name = "Address Resolution Protocol"
+file = "protocols/arp.toml"
+layer = "link"
+runs_over = ["Ethernet"]
+implementation_crates = []
+
+[[protocol]]
+id = "ipv4"
+name = "Internet Protocol Version 4"
+file = "protocols/ipv4.toml"
+layer = "network"
+runs_over = ["Ethernet"]
+implementation_crates = []
+
+[[protocol]]
+id = "ipv6"
+name = "Internet Protocol Version 6"
+file = "protocols/ipv6.toml"
+layer = "network"
+runs_over = ["Ethernet"]
+implementation_crates = []
+
+[[protocol]]
+id = "icmpv4"
+name = "Internet Control Message Protocol for IPv4"
+file = "protocols/icmpv4.toml"
+layer = "network"
+runs_over = ["IPv4"]
+implementation_crates = []
+
+[[protocol]]
+id = "icmpv6"
+name = "Internet Control Message Protocol for IPv6"
+file = "protocols/icmpv6.toml"
+layer = "network"
+runs_over = ["IPv6"]
+implementation_crates = []
+
+[[protocol]]
+id = "udp"
+name = "User Datagram Protocol"
+file = "protocols/udp.toml"
+layer = "transport"
+runs_over = ["IPv4", "IPv6"]
+implementation_crates = []
+
+[[protocol]]
+id = "tcp"
+name = "Transmission Control Protocol"
+file = "protocols/tcp.toml"
+layer = "transport"
+runs_over = ["IPv4", "IPv6"]
+implementation_crates = []
+
+[[protocol]]
+id = "dns"
+name = "Domain Name System"
+file = "protocols/dns.toml"
+layer = "application"
+runs_over = ["UDP", "TCP", "TLS", "HTTPS", "QUIC"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
+
+[[protocol]]
+id = "dhcpv4"
+name = "Dynamic Host Configuration Protocol for IPv4"
+file = "protocols/dhcpv4.toml"
+layer = "application"
+runs_over = ["UDP", "IPv4"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
+
+[[protocol]]
+id = "dhcpv6"
+name = "Dynamic Host Configuration Protocol for IPv6"
+file = "protocols/dhcpv6.toml"
+layer = "application"
+runs_over = ["UDP", "IPv6"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
+
+[[protocol]]
+id = "hpack"
+name = "HPACK"
+file = "protocols/hpack.toml"
+layer = "presentation"
+runs_over = ["HTTP/2"]
+implementation_crates = ["crates/utility/edgerun-hpack"]
+
+[[protocol]]
+id = "http"
+name = "HTTP"
+file = "protocols/http.toml"
+layer = "application"
+runs_over = ["TCP", "TLS", "QUIC"]
+implementation_crates = ["crates/edgerun-http"]
+
+[[protocol]]
+id = "nfc"
+name = "Near Field Communication"
+file = "protocols/nfc.toml"
+layer = "link"
+runs_over = []
+implementation_crates = [
+  "crates/device-types/edgerun-nfc",
+  "crates/node/edgerun-node/src/hardware/linux_nfc.rs",
+]
+
+[[protocol]]
+id = "qpack"
+name = "QPACK"
+file = "protocols/qpack.toml"
+layer = "presentation"
+runs_over = ["HTTP/3", "QUIC"]
+implementation_crates = ["crates/protocol/edgerun-protocols/src/http/http3/qpack"]
+
+[[protocol]]
+id = "quic"
+name = "QUIC"
+file = "protocols/quic.toml"
+layer = "transport"
+runs_over = ["UDP"]
+implementation_crates = ["crates/edgerun-quic"]
+
+[[protocol]]
+id = "tftp"
+name = "Trivial File Transfer Protocol"
+file = "protocols/tftp.toml"
+layer = "application"
+runs_over = ["UDP"]
+implementation_crates = ["crates/protocol/edgerun-protocols"]
+
+[[protocol]]
+id = "tls"
+name = "Transport Layer Security"
+file = "protocols/tls.toml"
+layer = "security"
+runs_over = ["TCP", "QUIC"]
+implementation_crates = ["crates/edgerun-tls"]

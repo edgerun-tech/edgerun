@@ -1,0 +1,29 @@
+[package]
+name = "edgerun-machine-report"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Machine inventory reporting across Edgerun hardware adapters"
+
+[dependencies]
+edgerun-devices.workspace = true
+edgerun-encoding = { workspace = true }
+edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif" }
+edgerun-linux-pci = { version = "0.1", path = "../../linux-adapters/edgerun-linux-pci" }
+edgerun-linux-usb = { version = "0.1", path = "../../linux-adapters/edgerun-linux-usb" }
+edgerun-linux-wifi = { workspace = true }
+
+[[bin]]
+name = "edgerun-machine-report"
+path = "src/main.rs"
+required-features = ["linux-bin"]
+
+[features]
+std = []
+linux-bin = []
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "jni-sys"
+version = "0.4.1"
+edition = "2021"
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned Rust definitions corresponding to jni.h"
+
+[dependencies]
+jni-sys-macros = { path = "../edgerun-jni-sys-macros" }
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+{
+  "title": "ThreadRealtimeErrorNotification",
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "message"
+  ]
+}

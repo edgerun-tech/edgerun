@@ -1,0 +1,21 @@
+{
+  "title": "MarketplaceAddResponse",
+  "type": "object",
+  "properties": {
+    "alreadyAdded": {
+      "type": "boolean"
+    },
+    "installedRoot": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "marketplaceName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "marketplaceName",
+    "installedRoot",
+    "alreadyAdded"
+  ]
+}

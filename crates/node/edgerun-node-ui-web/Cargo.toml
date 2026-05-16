@@ -1,0 +1,14 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "edgerun-node-ui-web"
+version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+edgerun-ui-core = { workspace = true }
+
+[lints]
+workspace = true

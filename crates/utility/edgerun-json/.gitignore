@@ -1,0 +1,32 @@
+# Generated
+/target/
+**/*.rs.bk
+*.pdb
+
+# Test artifacts
+/tests/json_test_suite/
+*.json.test
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Coverage
+*.gcno
+*.gcda
+coverage/
+tarpaulin-report.html
+
+# Benchmarks
+criterion/
+*.pb
+
+# Release artifacts
+
+# Local configuration
+.env
+.env.local

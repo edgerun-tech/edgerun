@@ -1,0 +1,14 @@
+id = "tftp-rfc1350-ack-length-0001"
+name = "tftp-rfc1350-ack-length-0001"
+kind = "clause"
+version = "0.1.0"
+contract_unit = "tftp-rfc1350-ack-length-0001"
+contract_unit_sha256 = "8c7d3af271ad937735a0a4ebd3c1da44b1be6353b869bac11277ee9050d169c6"
+wat = "standards/build/wasm/tftp-must-program/tftp-rfc1350-ack-length-0001.wat"
+wasm = "standards/build/wasm/tftp-must-program/tftp-rfc1350-ack-length-0001.wasm"
+sha256 = "c449976ee4d4f8977838fe81267791cd6a6569e056fbe7c8ee8157596c1d6629"
+entrypoint = "check"
+deterministic = true
+inputs = ["byte_len", "opcode"]
+outputs = ["i32"]
+depends_on = []

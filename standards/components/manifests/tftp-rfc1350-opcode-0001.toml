@@ -1,0 +1,14 @@
+id = "tftp-rfc1350-opcode-0001"
+name = "tftp-rfc1350-opcode-0001"
+kind = "clause"
+version = "0.1.0"
+contract_unit = "tftp-rfc1350-opcode-0001"
+contract_unit_sha256 = "e61625bb543e15e33cf2d2cad6f129f2c4077be6aef4ef99b015e3ceab1279f0"
+wat = "standards/build/wasm/tftp-must-program/tftp-rfc1350-opcode-0001.wat"
+wasm = "standards/build/wasm/tftp-must-program/tftp-rfc1350-opcode-0001.wasm"
+sha256 = "333c237e9097f2ee629c7c1089e9c5c12e6c8e7374185eb117de283b66d342ab"
+entrypoint = "check"
+deterministic = true
+inputs = ["byte_len", "opcode"]
+outputs = ["i32"]
+depends_on = []

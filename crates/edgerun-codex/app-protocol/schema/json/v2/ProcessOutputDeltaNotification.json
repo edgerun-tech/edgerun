@@ -1,0 +1,29 @@
+{
+  "title": "ProcessOutputDeltaNotification",
+  "type": "object",
+  "properties": {
+    "capReached": {
+      "type": "boolean"
+    },
+    "deltaBase64": {
+      "type": "string"
+    },
+    "processHandle": {
+      "type": "string"
+    },
+    "stream": {
+      "title": "ProcessOutputStream",
+      "type": "string",
+      "enum": [
+        "Stdout",
+        "Stderr"
+      ]
+    }
+  },
+  "required": [
+    "processHandle",
+    "stream",
+    "deltaBase64",
+    "capReached"
+  ]
+}

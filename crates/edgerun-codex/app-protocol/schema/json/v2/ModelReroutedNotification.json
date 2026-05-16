@@ -1,0 +1,32 @@
+{
+  "title": "ModelReroutedNotification",
+  "type": "object",
+  "properties": {
+    "fromModel": {
+      "type": "string"
+    },
+    "reason": {
+      "title": "ModelRerouteReason",
+      "type": "string",
+      "enum": [
+        "HighRiskCyberActivity"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "toModel": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "fromModel",
+    "toModel",
+    "reason"
+  ]
+}

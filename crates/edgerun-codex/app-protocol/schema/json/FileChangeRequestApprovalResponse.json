@@ -1,0 +1,19 @@
+{
+  "title": "FileChangeRequestApprovalResponse",
+  "type": "object",
+  "properties": {
+    "decision": {
+      "title": "FileChangeApprovalDecision",
+      "type": "string",
+      "enum": [
+        "Accept",
+        "AcceptForSession",
+        "Decline",
+        "Cancel"
+      ]
+    }
+  },
+  "required": [
+    "decision"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "title": "ThreadApproveGuardianDeniedActionParams",
+  "type": "object",
+  "properties": {
+    "event": true,
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "event"
+  ]
+}

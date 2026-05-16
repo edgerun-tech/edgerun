@@ -1,0 +1,16 @@
+{
+  "title": "MarketplaceRemoveResponse",
+  "type": "object",
+  "properties": {
+    "installedRoot": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "marketplaceName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "marketplaceName"
+  ]
+}

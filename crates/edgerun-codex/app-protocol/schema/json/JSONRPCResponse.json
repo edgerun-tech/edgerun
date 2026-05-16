@@ -1,0 +1,40 @@
+{
+  "title": "JSONRPCResponse",
+  "type": "object",
+  "properties": {
+    "id": {
+      "title": "RequestId",
+      "oneOf": [
+        {
+          "title": "String",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        },
+        {
+          "title": "Integer",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        }
+      ]
+    },
+    "result": true
+  },
+  "required": [
+    "id",
+    "result"
+  ]
+}

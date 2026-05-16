@@ -1,0 +1,14 @@
+id = "udp-datagram-definition"
+name = "udp-datagram-definition"
+kind = "definition"
+version = "0.1.0"
+contract_unit = "udp-datagram-definition"
+contract_unit_sha256 = "3793f41ea8e9938ca7ee6e18ca8742a99549b6ae04448da8e1c1cba3abcf253b"
+wat = "standards/build/wasm/udp-tftp-must-program/udp-datagram-definition.wat"
+wasm = "standards/build/wasm/udp-tftp-must-program/udp-datagram-definition.wasm"
+sha256 = "ca7712ffc3369ebf0fb6ffe9599ca8b485aa9733f1cfcff9b44d423f9ef7bf52"
+entrypoint = "minimum_length"
+deterministic = true
+inputs = []
+outputs = ["i32"]
+depends_on = []

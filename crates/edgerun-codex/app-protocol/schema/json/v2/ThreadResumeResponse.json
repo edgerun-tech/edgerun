@@ -1,0 +1,1834 @@
+{
+  "title": "ThreadResumeResponse",
+  "type": "object",
+  "properties": {
+    "approvalsReviewer": {
+      "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+      "type": "string",
+      "enum": [
+        "user",
+        "auto_review",
+        "guardian_subagent"
+      ]
+    },
+    "cwd": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "instructionSources": {
+      "type": "array",
+      "items": {
+        "title": "AbsolutePathBuf",
+        "type": "object"
+      }
+    },
+    "model": {
+      "type": "string"
+    },
+    "modelProvider": {
+      "type": "string"
+    },
+    "reasoningEffort": {
+      "title": "ReasoningEffort",
+      "type": "string",
+      "enum": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    "serviceTier": {
+      "type": "string"
+    },
+    "thread": {
+      "title": "Thread",
+      "type": "object",
+      "properties": {
+        "agentNickname": {
+          "type": "string"
+        },
+        "agentRole": {
+          "type": "string"
+        },
+        "cliVersion": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "integer"
+        },
+        "cwd": {
+          "title": "AbsolutePathBuf",
+          "type": "object"
+        },
+        "ephemeral": {
+          "type": "boolean"
+        },
+        "forkedFromId": {
+          "type": "string"
+        },
+        "gitInfo": {
+          "title": "GitInfo",
+          "type": "object",
+          "properties": {
+            "branch": {
+              "type": "string"
+            },
+            "originUrl": {
+              "type": "string"
+            },
+            "sha": {
+              "type": "string"
+            }
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "modelProvider": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "preview": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "source": {
+          "title": "SessionSource",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Cli",
+                  "title": "Cliv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Cliv2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "vscode",
+                  "title": "Vscodev2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Vscodev2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Exec",
+                  "title": "Execv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Execv2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "AppServer",
+                  "title": "AppServerv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "AppServerv2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "Custom",
+                  "title": "Customv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type",
+                "field0"
+              ],
+              "additionalProperties": false,
+              "title": "Customv2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "title": "SubAgentSource",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "Review",
+                          "title": "Reviewv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Reviewv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "Compact",
+                          "title": "Compactv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Compactv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "agentNickname": {
+                          "type": "string"
+                        },
+                        "agentPath": {
+                          "title": "AgentPath",
+                          "type": "object"
+                        },
+                        "agentRole": {
+                          "type": "string"
+                        },
+                        "depth": {
+                          "type": "integer"
+                        },
+                        "parentThreadId": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ThreadSpawn",
+                          "title": "ThreadSpawnv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "parentThreadId",
+                        "depth"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ThreadSpawnv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "MemoryConsolidation",
+                          "title": "MemoryConsolidationv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false,
+                      "title": "MemoryConsolidationv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "field0": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "Other",
+                          "title": "Otherv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "field0"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Otherv2::ThreadResumeResponse"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "SubAgent",
+                  "title": "SubAgentv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type",
+                "field0"
+              ],
+              "additionalProperties": false,
+              "title": "SubAgentv2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Unknown",
+                  "title": "Unknownv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Unknownv2::ThreadResumeResponse"
+            }
+          ]
+        },
+        "status": {
+          "title": "ThreadStatus",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "NotLoaded",
+                  "title": "NotLoadedv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "NotLoadedv2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Idle",
+                  "title": "Idlev2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Idlev2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "SystemError",
+                  "title": "SystemErrorv2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "SystemErrorv2::ThreadResumeResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "activeFlags": {
+                  "type": "array",
+                  "items": {
+                    "title": "ThreadActiveFlag",
+                    "type": "string",
+                    "enum": [
+                      "WaitingOnApproval",
+                      "WaitingOnUserInput"
+                    ]
+                  }
+                },
+                "type": {
+                  "type": "string",
+                  "const": "Active",
+                  "title": "Activev2::ThreadResumeResponseType"
+                }
+              },
+              "required": [
+                "type",
+                "activeFlags"
+              ],
+              "additionalProperties": false,
+              "title": "Activev2::ThreadResumeResponse"
+            }
+          ]
+        },
+        "threadSource": {
+          "title": "ThreadSource",
+          "type": "string",
+          "enum": [
+            "User",
+            "Subagent",
+            "MemoryConsolidation"
+          ]
+        },
+        "turns": {
+          "type": "array",
+          "items": {
+            "title": "Turn",
+            "type": "object",
+            "properties": {
+              "completedAt": {
+                "type": "integer"
+              },
+              "durationMs": {
+                "type": "integer"
+              },
+              "error": {
+                "title": "TurnError",
+                "type": "object",
+                "properties": {
+                  "additionalDetails": {
+                    "type": "string"
+                  },
+                  "codexErrorInfo": {
+                    "title": "CodexErrorInfo",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "ContextWindowExceeded",
+                            "title": "ContextWindowExceededv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ContextWindowExceededv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "UsageLimitExceeded",
+                            "title": "UsageLimitExceededv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "UsageLimitExceededv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "ServerOverloaded",
+                            "title": "ServerOverloadedv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ServerOverloadedv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "CyberPolicy",
+                            "title": "CyberPolicyv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "CyberPolicyv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "HttpConnectionFailed",
+                            "title": "HttpConnectionFailedv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "HttpConnectionFailedv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ResponseStreamConnectionFailed",
+                            "title": "ResponseStreamConnectionFailedv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ResponseStreamConnectionFailedv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "InternalServerError",
+                            "title": "InternalServerErrorv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "InternalServerErrorv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "Unauthorized",
+                            "title": "Unauthorizedv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "Unauthorizedv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "BadRequest",
+                            "title": "BadRequestv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "BadRequestv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "ThreadRollbackFailed",
+                            "title": "ThreadRollbackFailedv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ThreadRollbackFailedv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "SandboxError",
+                            "title": "SandboxErrorv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "SandboxErrorv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ResponseStreamDisconnected",
+                            "title": "ResponseStreamDisconnectedv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ResponseStreamDisconnectedv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ResponseTooManyFailedAttempts",
+                            "title": "ResponseTooManyFailedAttemptsv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ResponseTooManyFailedAttemptsv2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "turnKind": {
+                            "title": "NonSteerableTurnKind",
+                            "type": "string",
+                            "enum": [
+                              "Review",
+                              "Compact"
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ActiveTurnNotSteerable",
+                            "title": "ActiveTurnNotSteerablev2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "turnKind"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ActiveTurnNotSteerablev2::ThreadResumeResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "Other",
+                            "title": "Otherv2::ThreadResumeResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "Otherv2::ThreadResumeResponse"
+                      }
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "title": "ThreadItem",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "array",
+                          "items": {
+                            "title": "UserInput",
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "textElements": {
+                                    "type": "array",
+                                    "items": {
+                                      "title": "TextElement",
+                                      "type": "object",
+                                      "properties": {
+                                        "byteRange": {
+                                          "title": "ByteRange",
+                                          "type": "object",
+                                          "properties": {
+                                            "end": {
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ]
+                                        },
+                                        "placeholder": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "byteRange"
+                                      ]
+                                    }
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Text",
+                                    "title": "Textv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Textv2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Image",
+                                    "title": "Imagev2::ThreadResumeResponseType"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "url"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Imagev2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "LocalImage",
+                                    "title": "LocalImagev2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "LocalImagev2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Skill",
+                                    "title": "Skillv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "name",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Skillv2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Mention",
+                                    "title": "Mentionv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "name",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Mentionv2::ThreadResumeResponse"
+                              }
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "UserMessage",
+                          "title": "UserMessagev2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "content"
+                      ],
+                      "additionalProperties": false,
+                      "title": "UserMessagev2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "fragments": {
+                          "type": "array",
+                          "items": {
+                            "title": "HookPromptFragment",
+                            "type": "object",
+                            "properties": {
+                              "hookRunId": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "hookRunId"
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "HookPrompt",
+                          "title": "HookPromptv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "fragments"
+                      ],
+                      "additionalProperties": false,
+                      "title": "HookPromptv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "memoryCitation": {
+                          "title": "MemoryCitation",
+                          "type": "object",
+                          "properties": {
+                            "entries": {
+                              "type": "array",
+                              "items": {
+                                "title": "MemoryCitationEntry",
+                                "type": "object",
+                                "properties": {
+                                  "lineEnd": {
+                                    "type": "integer"
+                                  },
+                                  "lineStart": {
+                                    "type": "integer"
+                                  },
+                                  "note": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "lineStart",
+                                  "lineEnd",
+                                  "note"
+                                ]
+                              }
+                            },
+                            "threadIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "entries",
+                            "threadIds"
+                          ]
+                        },
+                        "phase": {
+                          "title": "MessagePhase",
+                          "type": "string",
+                          "enum": [
+                            "Commentary",
+                            "FinalAnswer"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "AgentMessage",
+                          "title": "AgentMessagev2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "text"
+                      ],
+                      "additionalProperties": false,
+                      "title": "AgentMessagev2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "Plan",
+                          "title": "Planv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "text"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Planv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "Reasoning",
+                          "title": "Reasoningv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Reasoningv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "aggregatedOutput": {
+                          "type": "string"
+                        },
+                        "command": {
+                          "type": "string"
+                        },
+                        "commandActions": {
+                          "type": "array",
+                          "items": {
+                            "title": "CommandAction",
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "title": "AbsolutePathBuf",
+                                    "type": "object"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Read",
+                                    "title": "Readv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command",
+                                  "name",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Readv2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "ListFiles",
+                                    "title": "ListFilesv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command"
+                                ],
+                                "additionalProperties": false,
+                                "title": "ListFilesv2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "query": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Search",
+                                    "title": "Searchv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Searchv2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Unknown",
+                                    "title": "Unknownv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Unknownv2::ThreadResumeResponse"
+                              }
+                            ]
+                          }
+                        },
+                        "cwd": {
+                          "title": "AbsolutePathBuf",
+                          "type": "object"
+                        },
+                        "durationMs": {
+                          "type": "integer"
+                        },
+                        "exitCode": {
+                          "type": "integer"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "processId": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "title": "CommandExecutionSource",
+                          "type": "string",
+                          "enum": [
+                            "Agent",
+                            "UserShell",
+                            "UnifiedExecStartup",
+                            "UnifiedExecInteraction"
+                          ]
+                        },
+                        "status": {
+                          "title": "CommandExecutionStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed",
+                            "Declined"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "CommandExecution",
+                          "title": "CommandExecutionv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "command",
+                        "cwd",
+                        "status",
+                        "commandActions"
+                      ],
+                      "additionalProperties": false,
+                      "title": "CommandExecutionv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "changes": {
+                          "type": "array",
+                          "items": {
+                            "title": "FileUpdateChange",
+                            "type": "object",
+                            "properties": {
+                              "diff": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "title": "PatchChangeKind",
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "const": "Add",
+                                        "title": "Addv2::ThreadResumeResponseType"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false,
+                                    "title": "Addv2::ThreadResumeResponse"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "const": "Delete",
+                                        "title": "Deletev2::ThreadResumeResponseType"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false,
+                                    "title": "Deletev2::ThreadResumeResponse"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "movePath": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string",
+                                        "const": "Update",
+                                        "title": "Updatev2::ThreadResumeResponseType"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false,
+                                    "title": "Updatev2::ThreadResumeResponse"
+                                  }
+                                ]
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "kind",
+                              "diff"
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "PatchApplyStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed",
+                            "Declined"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "FileChange",
+                          "title": "FileChangev2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "changes",
+                        "status"
+                      ],
+                      "additionalProperties": false,
+                      "title": "FileChangev2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "arguments": true,
+                        "durationMs": {
+                          "type": "integer"
+                        },
+                        "error": {
+                          "title": "McpToolCallError",
+                          "type": "object",
+                          "properties": {
+                            "message": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "message"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "result": {
+                          "title": "McpToolCallResult",
+                          "type": "object",
+                          "properties": {
+                            "_meta": true,
+                            "content": {
+                              "type": "array",
+                              "items": true
+                            },
+                            "structuredContent": true
+                          },
+                          "required": [
+                            "content"
+                          ]
+                        },
+                        "server": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "McpToolCallStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed"
+                          ]
+                        },
+                        "tool": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "McpToolCall",
+                          "title": "McpToolCallv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "server",
+                        "tool",
+                        "status",
+                        "arguments"
+                      ],
+                      "additionalProperties": false,
+                      "title": "McpToolCallv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "arguments": true,
+                        "contentItems": {
+                          "type": "array",
+                          "items": {
+                            "title": "DynamicToolCallOutputContentItem",
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "InputText",
+                                    "title": "InputTextv2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "title": "InputTextv2::ThreadResumeResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "imageUrl": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "InputImage",
+                                    "title": "InputImagev2::ThreadResumeResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "imageUrl"
+                                ],
+                                "additionalProperties": false,
+                                "title": "InputImagev2::ThreadResumeResponse"
+                              }
+                            ]
+                          }
+                        },
+                        "durationMs": {
+                          "type": "integer"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "DynamicToolCallStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed"
+                          ]
+                        },
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "tool": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "DynamicToolCall",
+                          "title": "DynamicToolCallv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "tool",
+                        "arguments",
+                        "status"
+                      ],
+                      "additionalProperties": false,
+                      "title": "DynamicToolCallv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "agentsStates": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "title": "CollabAgentState",
+                            "type": "object",
+                            "properties": {
+                              "message": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "title": "CollabAgentStatus",
+                                "type": "string",
+                                "enum": [
+                                  "PendingInit",
+                                  "Running",
+                                  "Interrupted",
+                                  "Completed",
+                                  "Errored",
+                                  "Shutdown",
+                                  "NotFound"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "prompt": {
+                          "type": "string"
+                        },
+                        "reasoningEffort": {
+                          "title": "ReasoningEffort",
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "minimal",
+                            "low",
+                            "medium",
+                            "high",
+                            "xhigh"
+                          ]
+                        },
+                        "receiverThreadIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "senderThreadId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "CollabAgentToolCallStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed"
+                          ]
+                        },
+                        "tool": {
+                          "title": "CollabAgentTool",
+                          "type": "string",
+                          "enum": [
+                            "SpawnAgent",
+                            "SendInput",
+                            "ResumeAgent",
+                            "Wait",
+                            "CloseAgent"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "CollabAgentToolCall",
+                          "title": "CollabAgentToolCallv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "tool",
+                        "status",
+                        "senderThreadId",
+                        "receiverThreadIds",
+                        "agentsStates"
+                      ],
+                      "additionalProperties": false,
+                      "title": "CollabAgentToolCallv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "title": "WebSearchAction",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "queries": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "query": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "const": "Search",
+                                  "title": "Searchv2::ThreadResumeResponseType"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "Searchv2::ThreadResumeResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "OpenPage",
+                                  "title": "OpenPagev2::ThreadResumeResponseType"
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "OpenPagev2::ThreadResumeResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "pattern": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "const": "FindInPage",
+                                  "title": "FindInPagev2::ThreadResumeResponseType"
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "FindInPagev2::ThreadResumeResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "Other",
+                                  "title": "Otherv2::ThreadResumeResponseType"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "Otherv2::ThreadResumeResponse"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "query": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "WebSearch",
+                          "title": "WebSearchv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "query"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WebSearchv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "title": "AbsolutePathBuf",
+                          "type": "object"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ImageView",
+                          "title": "ImageViewv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "path"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ImageViewv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "result": {
+                          "type": "string"
+                        },
+                        "revisedPrompt": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ImageGeneration",
+                          "title": "ImageGenerationv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "status",
+                        "result"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ImageGenerationv2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "review": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "EnteredReviewMode",
+                          "title": "EnteredReviewModev2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "review"
+                      ],
+                      "additionalProperties": false,
+                      "title": "EnteredReviewModev2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "review": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ExitedReviewMode",
+                          "title": "ExitedReviewModev2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "review"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ExitedReviewModev2::ThreadResumeResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ContextCompaction",
+                          "title": "ContextCompactionv2::ThreadResumeResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ContextCompactionv2::ThreadResumeResponse"
+                    }
+                  ]
+                }
+              },
+              "itemsView": {
+                "title": "TurnItemsView",
+                "type": "string",
+                "enum": [
+                  "NotLoaded",
+                  "Summary",
+                  "Full"
+                ]
+              },
+              "startedAt": {
+                "type": "integer"
+              },
+              "status": {
+                "title": "TurnStatus",
+                "type": "string",
+                "enum": [
+                  "Completed",
+                  "Interrupted",
+                  "Failed",
+                  "InProgress"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "items",
+              "status"
+            ]
+          }
+        },
+        "updatedAt": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "sessionId",
+        "preview",
+        "ephemeral",
+        "modelProvider",
+        "createdAt",
+        "updatedAt",
+        "status",
+        "cwd",
+        "cliVersion",
+        "source",
+        "turns"
+      ]
+    }
+  },
+  "required": [
+    "thread",
+    "model",
+    "modelProvider",
+    "cwd",
+    "approvalsReviewer"
+  ]
+}

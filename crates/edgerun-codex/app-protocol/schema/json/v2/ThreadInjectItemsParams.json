@@ -1,0 +1,17 @@
+{
+  "title": "ThreadInjectItemsParams",
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": true
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "items"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "title": "CommandExecTerminateParams",
+  "type": "object",
+  "properties": {
+    "processId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "processId"
+  ]
+}

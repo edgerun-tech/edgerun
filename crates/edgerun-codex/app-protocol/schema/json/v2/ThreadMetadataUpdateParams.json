@@ -1,0 +1,16 @@
+{
+  "title": "ThreadMetadataUpdateParams",
+  "type": "object",
+  "properties": {
+    "gitInfo": {
+      "title": "ThreadMetadataGitInfoUpdateParams",
+      "type": "object"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ]
+}

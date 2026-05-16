@@ -1,0 +1,20 @@
+{
+  "title": "ThreadRealtimeTranscriptDoneNotification",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "role",
+    "text"
+  ]
+}

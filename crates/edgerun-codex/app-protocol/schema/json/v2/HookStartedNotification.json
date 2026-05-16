@@ -1,0 +1,148 @@
+{
+  "title": "HookStartedNotification",
+  "type": "object",
+  "properties": {
+    "run": {
+      "title": "HookRunSummary",
+      "type": "object",
+      "properties": {
+        "completedAt": {
+          "type": "integer"
+        },
+        "displayOrder": {
+          "type": "integer"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "title": "HookOutputEntry",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "title": "HookOutputEntryKind",
+                "type": "string",
+                "enum": [
+                  "Warning",
+                  "Stop",
+                  "Feedback",
+                  "Context",
+                  "Error"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "text"
+            ]
+          }
+        },
+        "eventName": {
+          "title": "HookEventName",
+          "type": "string",
+          "enum": [
+            "PreToolUse",
+            "PostToolUse",
+            "PreCompact",
+            "PostCompact",
+            "SessionStart",
+            "UserPromptSubmit",
+            "Stop"
+          ]
+        },
+        "executionMode": {
+          "title": "HookExecutionMode",
+          "type": "string",
+          "enum": [
+            "Sync",
+            "Async"
+          ]
+        },
+        "handlerType": {
+          "title": "HookHandlerType",
+          "type": "string",
+          "enum": [
+            "Command",
+            "Prompt",
+            "Agent"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "scope": {
+          "title": "HookScope",
+          "type": "string",
+          "enum": [
+            "Thread",
+            "Turn"
+          ]
+        },
+        "source": {
+          "title": "HookSource",
+          "type": "string",
+          "enum": [
+            "System",
+            "User",
+            "Project",
+            "Mdm",
+            "SessionFlags",
+            "Plugin",
+            "CloudRequirements",
+            "LegacyManagedConfigFile",
+            "LegacyManagedConfigMdm",
+            "Unknown"
+          ]
+        },
+        "sourcePath": {
+          "title": "AbsolutePathBuf",
+          "type": "object"
+        },
+        "startedAt": {
+          "type": "integer"
+        },
+        "status": {
+          "title": "HookRunStatus",
+          "type": "string",
+          "enum": [
+            "Running",
+            "Completed",
+            "Failed",
+            "Blocked",
+            "Stopped"
+          ]
+        },
+        "statusMessage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "eventName",
+        "handlerType",
+        "executionMode",
+        "scope",
+        "sourcePath",
+        "displayOrder",
+        "status",
+        "startedAt",
+        "entries"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "run"
+  ]
+}

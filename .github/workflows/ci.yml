@@ -1,0 +1,200 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Vendored crate checksums
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          missing = []
+          for checksum_path in Path("vendor/cargo").glob("*/.cargo-checksum.json"):
+              files = json.loads(checksum_path.read_text(encoding="utf-8")).get("files", {})
+              for relative_path in files:
+                  path = checksum_path.parent / relative_path
+                  if not path.exists():
+                      missing.append(str(path))
+
+          if missing:
+              print("Vendored crates are incomplete. Missing files:")
+              print("\n".join(missing))
+              raise SystemExit(1)
+          PY
+
+      - name: Vendor flattening inventory
+        run: python3 scripts/vendor-flattening-inventory.py
+
+      - name: Dependency sovereignty inventory
+        run: python3 scripts/dependency-sovereignty.py
+
+  check:
+    needs: repository-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --workspace
+
+      - name: Workspace metadata
+        run: cargo metadata --no-deps --format-version 1 >/tmp/edgerun_metadata.json
+
+      - name: License policy
+        run: cargo deny check licenses
+
+      - name: Internal path dependency versions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          bad = []
+          line_re = re.compile(
+              r'^\s*edgerun-[A-Za-z0-9_-]+\s*=\s*\{'
+              r'(?=[^}\n]*\bpath\s*=)(?![^}\n]*\bversion\s*=)'
+          )
+          roots = [Path('Cargo.toml'), Path('crates'), Path('devices'), Path('programs'), Path('scripts')]
+          for root in roots:
+              files = [root] if root.is_file() else root.rglob('Cargo.toml')
+              for path in files:
+                  text_path = str(path)
+                  if '/.embuild/' in text_path or '/tests/runc/src/' in text_path:
+                      continue
+                  for line_no, line in enumerate(path.read_text().splitlines(), 1):
+                      if line_re.search(line):
+                          bad.append(f'{path}:{line_no}:{line}')
+          if bad:
+              print('Internal edgerun path dependencies need version requirements:')
+              print('\n'.join(bad))
+              raise SystemExit(1)
+          PY
+
+      - name: Package previews
+        run: |
+          cargo package -p edgerun-log --list --allow-dirty
+          cargo package -p edgerun-wire --list --allow-dirty
+          cargo package -p edgerun-core --list --allow-dirty
+
+      - name: Release binary check
+        run: cargo check -p edgerun-node
+
+      - name: Docker build check
+        run: docker build --target builder --file Dockerfile .
+
+  edgerun-work-protocol:
+    needs: repository-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: edgerun-work std tests
+        run: cargo test -p edgerun-work
+
+      - name: edgerun-work no-std tests
+        run: cargo test -p edgerun-work --no-default-features
+
+      - name: edgerun-work wasm build
+        run: cargo build -p edgerun-work --target wasm32-unknown-unknown --release --no-default-features
+
+  edgerun-ui-shell:
+    needs: repository-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: UI core tests
+        run: cargo test --manifest-path crates/utility/edgerun-ui-core/Cargo.toml --features fontdue-text --lib
+
+      - name: EdgeRun frontend web host tests
+        run: cargo test --manifest-path crates/edgerun-codex/Cargo.toml -p edgerun-frontend-web
+
+      - name: EdgeRun frontend wasm build
+        run: cargo build --manifest-path crates/edgerun-codex/Cargo.toml -p edgerun-frontend-web --target wasm32-unknown-unknown --release
+
+  quality:
+    needs: repository-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Integration targets
+        run: ./scripts/integration-tests.py --list
+
+      - name: Integration tests
+        run: ./scripts/integration-tests.py
+
+      - name: Benchmark entry points
+        run: ./scripts/benchmark-report.py --list
+
+      - name: Benchmark smoke
+        run: ./scripts/benchmark-report.py
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Rust coverage report
+        env:
+          RUST_COVERAGE_PACKAGES: edgerun-core edgerun-stream edgerun-storage edgerun-node
+        run: ./scripts/coverage-report.sh --rust-only --require-rust-tool
+
+      - name: Upload Rust coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-coverage
+          path: target/coverage/rust
+
+      - name: Upload benchmark reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-reports
+          path: target/benchmarks

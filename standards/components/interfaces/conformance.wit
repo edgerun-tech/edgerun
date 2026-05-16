@@ -1,0 +1,50 @@
+package edgerun:conformance;
+
+interface protocol-check {
+  record kv {
+    key: string,
+    value: string,
+  }
+
+  record input {
+    protocol: string,
+    bytes: list<u8>,
+    metadata: list<kv>,
+  }
+
+  record trace-event {
+    seq: u64,
+    time-ns: u64,
+    kind: string,
+    protocol: string,
+    bytes: list<u8>,
+    name: string,
+    value: string,
+    metadata: list<kv>,
+  }
+
+  record finding {
+    requirement: string,
+    severity: string,
+    message: string,
+    metadata: list<kv>,
+  }
+
+  record test-case {
+    id: string,
+    requirement: string,
+    protocol: string,
+    bytes: list<u8>,
+    expected: string,
+    metadata: list<kv>,
+  }
+
+  check-bytes: func(input: input) -> list<finding>;
+  check-trace: func(events: list<trace-event>) -> list<finding>;
+  generate: func(requirement: string, profile: string) -> list<test-case>;
+}
+
+world conformance-component {
+  export protocol-check;
+}
+

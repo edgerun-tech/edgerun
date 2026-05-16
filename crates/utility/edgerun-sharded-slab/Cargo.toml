@@ -1,0 +1,15 @@
+[package]
+name = "sharded-slab"
+version = "0.1.7"
+edition = "2018"
+license = "MIT"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned lock-free concurrent slab compatibility crate"
+
+[dependencies]
+lazy_static = { path = "../edgerun-lazy_static" }
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "edgerun-arrayref"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Edgerun-owned array reference macros (array_ref!, array_mut_ref!, array_refs!, mut_array_refs!)"
+
+[lib]
+path = "src/lib.rs"

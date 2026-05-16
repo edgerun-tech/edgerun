@@ -1,0 +1,28 @@
+{
+  "title": "TerminalInteractionNotification",
+  "type": "object",
+  "properties": {
+    "itemId": {
+      "type": "string"
+    },
+    "processId": {
+      "type": "string"
+    },
+    "stdin": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "itemId",
+    "processId",
+    "stdin"
+  ]
+}

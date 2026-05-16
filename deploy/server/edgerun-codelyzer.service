@@ -1,0 +1,19 @@
+[Unit]
+Description=EdgeRun Codelyzer Xray Bridge
+Documentation=https://github.com/edgerun-tech/edgerun
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=EDGERUN_CODELYZER_REPO=%h/edgerun
+Environment=EDGERUN_CODELYZER_LISTEN=127.0.0.1:13337
+EnvironmentFile=-%h/.config/edgerun/codelyzer.env
+ExecStart=%h/.cargo/bin/xray-server ${EDGERUN_CODELYZER_REPO} --listen ${EDGERUN_CODELYZER_LISTEN}
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

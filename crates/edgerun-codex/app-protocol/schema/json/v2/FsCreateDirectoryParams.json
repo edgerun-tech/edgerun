@@ -1,0 +1,16 @@
+{
+  "title": "FsCreateDirectoryParams",
+  "type": "object",
+  "properties": {
+    "path": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "recursive": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "path"
+  ]
+}

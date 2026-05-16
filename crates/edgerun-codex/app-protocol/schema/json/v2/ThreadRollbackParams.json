@@ -1,0 +1,16 @@
+{
+  "title": "ThreadRollbackParams",
+  "type": "object",
+  "properties": {
+    "numTurns": {
+      "type": "integer"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "numTurns"
+  ]
+}

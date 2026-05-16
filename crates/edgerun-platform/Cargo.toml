@@ -1,0 +1,31 @@
+[package]
+name = "edgerun-platform"
+version = "0.1.0"
+edition.workspace = true
+license = "MIT OR Apache-2.0"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Bare-metal and host platform primitives for Edgerun runtimes"
+
+[dependencies]
+edgerun-protocols = { workspace = true, default-features = false, features = ["wifi"], optional = true }
+
+[features]
+default = []
+esp32s3-wifi-mmio = ["dep:edgerun-protocols"]
+esp32s3-wifi-blob = ["dep:edgerun-protocols"]
+esp32s3-ble = []
+esp32s3-ble-blob = ["esp32s3-ble"]
+esp32s3-ble-stub = ["esp32s3-ble"]
+esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob"]
+esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob"]
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+
+[lints]
+workspace = true

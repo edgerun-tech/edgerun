@@ -1,0 +1,14 @@
+id = "tftp-message-definition"
+name = "tftp-message-definition"
+kind = "definition"
+version = "0.1.0"
+contract_unit = "tftp-message-definition"
+contract_unit_sha256 = "2b64f75cfe1d621ee830e57ab9fddd66b308fe2a7c1d96c027e3ae50fc33b6b3"
+wat = "standards/build/wasm/tftp-must-program/tftp-message-definition.wat"
+wasm = "standards/build/wasm/tftp-must-program/tftp-message-definition.wasm"
+sha256 = "cba364bcd6eb6cef9e781adc26d85fb84f4c1a1f40b4e9afdc1cade012afc117"
+entrypoint = "minimum_length"
+deterministic = true
+inputs = []
+outputs = ["i32"]
+depends_on = []

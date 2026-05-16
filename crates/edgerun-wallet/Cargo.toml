@@ -1,0 +1,20 @@
+[package]
+name = "edgerun-wallet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun Wallet Instant Settlement — core types and logic"
+
+[dependencies]
+edgerun-protocols = { workspace = true, default-features = false, features = ["core"] }
+edgerun-wire = { workspace = true, default-features = false }
+edgerun-work = { workspace = true, default-features = false }
+
+[dev-dependencies]
+edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
+
+[lints]
+workspace = true

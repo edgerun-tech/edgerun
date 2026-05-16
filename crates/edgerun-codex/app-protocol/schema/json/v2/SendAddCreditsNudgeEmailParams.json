@@ -1,0 +1,17 @@
+{
+  "title": "SendAddCreditsNudgeEmailParams",
+  "type": "object",
+  "properties": {
+    "creditType": {
+      "title": "AddCreditsNudgeCreditType",
+      "type": "string",
+      "enum": [
+        "Credits",
+        "UsageLimit"
+      ]
+    }
+  },
+  "required": [
+    "creditType"
+  ]
+}

@@ -1,0 +1,51 @@
+id = "nfc"
+name = "Near Field Communication"
+summary = "Short-range radio and tag/card interaction protocol family."
+layer = "link"
+runs_over = []
+depends_on = []
+implementation_crates = [
+  "crates/device-types/edgerun-nfc",
+  "crates/node/edgerun-node/src/hardware/linux_nfc.rs",
+]
+profiles = ["reader", "tag", "passport"]
+standards_bodies = ["ISO", "IEC", "NFC Forum", "ICAO"]
+
+[environment]
+requires_clock = true
+requires_entropy = false
+requires_network_io = false
+requires_packet_io = true
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = true
+requires_crypto = true
+no_std_viability = "profile-dependent"
+bare_metal_viability = "plausible-with-radio-driver"
+
+[[standard]]
+id = "ISO/IEC 14443"
+title = "Cards and security devices for personal identification - Contactless proximity objects"
+url = "https://www.iso.org/standard/73596.html"
+status = "external-paywalled"
+published = ""
+role = "proximity-card"
+
+[[standard]]
+id = "ICAO Doc 9303"
+title = "Machine Readable Travel Documents"
+url = "https://www.icao.int/publications/pages/publication.aspx?docnum=9303"
+status = "external"
+published = ""
+role = "passport"
+
+[[behavior]]
+id = "nfc-tag-activation"
+kind = "state-machine"
+standards = ["ISO/IEC 14443"]
+implementation = [
+  "crates/device-types/edgerun-nfc",
+  "crates/node/edgerun-node/src/hardware/linux_nfc.rs",
+]
+status = "unknown"

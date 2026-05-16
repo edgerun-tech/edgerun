@@ -1,0 +1,56 @@
+{
+  "title": "ExperimentalFeatureListResponse",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "array",
+      "items": {
+        "title": "ExperimentalFeature",
+        "type": "object",
+        "properties": {
+          "announcement": {
+            "type": "string"
+          },
+          "defaultEnabled": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "stage": {
+            "title": "ExperimentalFeatureStage",
+            "type": "string",
+            "enum": [
+              "Beta",
+              "UnderDevelopment",
+              "Stable",
+              "Deprecated",
+              "Removed"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "stage",
+          "enabled",
+          "defaultEnabled"
+        ]
+      }
+    },
+    "nextCursor": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "data"
+  ]
+}

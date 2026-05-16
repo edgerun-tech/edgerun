@@ -1,0 +1,20 @@
+{
+  "title": "PluginSkillReadParams",
+  "type": "object",
+  "properties": {
+    "remoteMarketplaceName": {
+      "type": "string"
+    },
+    "remotePluginId": {
+      "type": "string"
+    },
+    "skillName": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "remoteMarketplaceName",
+    "remotePluginId",
+    "skillName"
+  ]
+}

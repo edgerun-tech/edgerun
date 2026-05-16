@@ -1,0 +1,29 @@
+{
+  "title": "CommandExecResizeParams",
+  "type": "object",
+  "properties": {
+    "processId": {
+      "type": "string"
+    },
+    "size": {
+      "title": "CommandExecTerminalSize",
+      "type": "object",
+      "properties": {
+        "cols": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rows",
+        "cols"
+      ]
+    }
+  },
+  "required": [
+    "processId",
+    "size"
+  ]
+}

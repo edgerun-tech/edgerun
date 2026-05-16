@@ -1,0 +1,15 @@
+{
+  "title": "CommandExecWriteParams",
+  "type": "object",
+  "properties": {
+    "deltaBase64": {
+      "type": "string"
+    },
+    "processId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "processId"
+  ]
+}

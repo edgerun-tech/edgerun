@@ -1,0 +1,22 @@
+{
+  "title": "RemoteControlStatusChangedNotification",
+  "type": "object",
+  "properties": {
+    "environmentId": {
+      "type": "string"
+    },
+    "status": {
+      "title": "RemoteControlConnectionStatus",
+      "type": "string",
+      "enum": [
+        "Disabled",
+        "Connecting",
+        "Connected",
+        "Errored"
+      ]
+    }
+  },
+  "required": [
+    "status"
+  ]
+}

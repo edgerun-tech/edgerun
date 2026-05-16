@@ -1,0 +1,12 @@
+{
+  "title": "ThreadUnsubscribeParams",
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ]
+}

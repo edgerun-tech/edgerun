@@ -1,0 +1,14 @@
+{
+  "title": "ThreadRealtimeItemAddedNotification",
+  "type": "object",
+  "properties": {
+    "item": true,
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "item"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "title": "McpResourceReadResponse",
+  "type": "object",
+  "properties": {
+    "contents": {
+      "type": "array",
+      "items": {
+        "title": "ResourceContent",
+        "oneOf": [
+          {
+            "title": "Text",
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "uri": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uri",
+              "text"
+            ]
+          },
+          {
+            "title": "Blob",
+            "type": "object",
+            "properties": {
+              "blob": {
+                "type": "string"
+              },
+              "uri": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "uri",
+              "blob"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "contents"
+  ]
+}

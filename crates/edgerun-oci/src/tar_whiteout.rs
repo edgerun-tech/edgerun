@@ -1,0 +1,3 @@
+//! OCI whiteout compatibility re-exports.
+
+pub use edgerun_protocols::oci::layer::{OciWhiteout, parse_oci_whiteout};

@@ -1,0 +1,135 @@
+{
+  "title": "ExecCommandApprovalParams",
+  "type": "object",
+  "properties": {
+    "approvalId": {
+      "type": "string"
+    },
+    "callId": {
+      "type": "string"
+    },
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "conversationId": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "parsedCmd": {
+      "type": "array",
+      "items": {
+        "title": "ParsedCommand",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Read",
+                "title": "ReadExecCommandApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "cmd",
+              "name",
+              "path"
+            ],
+            "additionalProperties": false,
+            "title": "ReadExecCommandApprovalParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "ListFiles",
+                "title": "ListFilesExecCommandApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "cmd"
+            ],
+            "additionalProperties": false,
+            "title": "ListFilesExecCommandApprovalParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "query": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Search",
+                "title": "SearchExecCommandApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "cmd"
+            ],
+            "additionalProperties": false,
+            "title": "SearchExecCommandApprovalParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cmd": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Unknown",
+                "title": "UnknownExecCommandApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "cmd"
+            ],
+            "additionalProperties": false,
+            "title": "UnknownExecCommandApprovalParams"
+          }
+        ]
+      }
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "conversationId",
+    "callId",
+    "command",
+    "cwd",
+    "parsedCmd"
+  ]
+}

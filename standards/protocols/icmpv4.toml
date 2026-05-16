@@ -1,0 +1,50 @@
+id = "icmpv4"
+name = "Internet Control Message Protocol for IPv4"
+summary = "Control and error messages for IPv4."
+layer = "network"
+runs_over = ["IPv4"]
+depends_on = ["IPv4"]
+implementation_crates = []
+profiles = ["icmpv4-minimal-host", "bare-metal-candidate"]
+standards_bodies = ["IETF"]
+
+[environment]
+requires_clock = true
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = true
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = false
+requires_crypto = false
+no_std_viability = "plausible"
+bare_metal_viability = "plausible-with-ipv4"
+
+[[standard]]
+id = "RFC792"
+title = "Internet Control Message Protocol"
+url = "https://www.rfc-editor.org/rfc/rfc792.html"
+xml = "https://www.rfc-editor.org/rfc/rfc792.xml"
+status = "Internet Standard"
+published = "1981-09"
+role = "base"
+
+[[registry]]
+name = "Internet Control Message Protocol (ICMP) Parameters"
+url = "https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml"
+owner = "IANA"
+
+[[behavior]]
+id = "icmpv4-message-parse"
+kind = "packet-format"
+standards = ["RFC792"]
+implementation = []
+status = "unknown"
+
+[composition]
+accepts = ["ipv4-packet"]
+emits = ["icmpv4-message"]
+lower = ["ipv4"]
+upper = []
+

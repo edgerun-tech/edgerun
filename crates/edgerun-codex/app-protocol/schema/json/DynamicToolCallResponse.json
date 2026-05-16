@@ -1,0 +1,59 @@
+{
+  "title": "DynamicToolCallResponse",
+  "type": "object",
+  "properties": {
+    "contentItems": {
+      "type": "array",
+      "items": {
+        "title": "DynamicToolCallOutputContentItem",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "InputText",
+                "title": "InputTextDynamicToolCallResponseType"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "additionalProperties": false,
+            "title": "InputTextDynamicToolCallResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "imageUrl": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "InputImage",
+                "title": "InputImageDynamicToolCallResponseType"
+              }
+            },
+            "required": [
+              "type",
+              "imageUrl"
+            ],
+            "additionalProperties": false,
+            "title": "InputImageDynamicToolCallResponse"
+          }
+        ]
+      }
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "contentItems",
+    "success"
+  ]
+}

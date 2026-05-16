@@ -1,0 +1,101 @@
+{
+  "title": "ReviewStartParams",
+  "type": "object",
+  "properties": {
+    "delivery": {
+      "title": "ReviewDelivery",
+      "type": "string",
+      "enum": [
+        "Inline",
+        "Detached"
+      ]
+    },
+    "target": {
+      "title": "ReviewTarget",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "UncommittedChanges",
+              "title": "UncommittedChangesv2::ReviewStartParamsType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "UncommittedChangesv2::ReviewStartParams"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "branch": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "BaseBranch",
+              "title": "BaseBranchv2::ReviewStartParamsType"
+            }
+          },
+          "required": [
+            "type",
+            "branch"
+          ],
+          "additionalProperties": false,
+          "title": "BaseBranchv2::ReviewStartParams"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sha": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Commit",
+              "title": "Commitv2::ReviewStartParamsType"
+            }
+          },
+          "required": [
+            "type",
+            "sha"
+          ],
+          "additionalProperties": false,
+          "title": "Commitv2::ReviewStartParams"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "instructions": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Custom",
+              "title": "Customv2::ReviewStartParamsType"
+            }
+          },
+          "required": [
+            "type",
+            "instructions"
+          ],
+          "additionalProperties": false,
+          "title": "Customv2::ReviewStartParams"
+        }
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "target"
+  ]
+}

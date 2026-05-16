@@ -1,0 +1,19 @@
+{
+  "title": "McpResourceReadParams",
+  "type": "object",
+  "properties": {
+    "server": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "uri": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "server",
+    "uri"
+  ]
+}

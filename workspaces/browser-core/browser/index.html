@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EdgeRun Browser Core</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #f6f7f9;
+        color: #17191d;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #f6f7f9;
+      }
+
+      main {
+        box-sizing: border-box;
+        width: min(760px, 100%);
+        padding: 32px 20px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        margin: 0 0 20px;
+        font-size: 28px;
+        line-height: 1.2;
+        font-weight: 650;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        min-height: 44px;
+        margin-bottom: 18px;
+      }
+
+      .decision-group {
+        display: inline-flex;
+        min-height: 38px;
+        border: 1px solid #c5cad3;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      .decision-group label {
+        display: inline-flex;
+        align-items: center;
+        padding: 0 10px;
+        border-right: 1px solid #c5cad3;
+        font-size: 14px;
+      }
+
+      .decision-group label:last-child {
+        border-right: 0;
+      }
+
+      .decision-group input {
+        margin: 0 6px 0 0;
+      }
+
+      button {
+        min-width: 104px;
+        min-height: 38px;
+        border: 1px solid #1f2937;
+        border-radius: 6px;
+        background: #17191d;
+        color: #ffffff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
+      [data-edgerun-status] {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 10px;
+        border: 1px solid #c5cad3;
+        border-radius: 6px;
+        background: #ffffff;
+        font-size: 14px;
+      }
+
+      [data-edgerun-results] {
+        display: grid;
+        gap: 8px;
+      }
+
+      .result-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 1px solid #d7dbe2;
+        border-radius: 6px;
+        background: #ffffff;
+      }
+
+      .result-row strong {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .result-row.error strong {
+        color: #9f1239;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root,
+        body {
+          background: #111316;
+          color: #f3f4f6;
+        }
+
+        button {
+          border-color: #d7dbe2;
+          background: #f3f4f6;
+          color: #111316;
+        }
+
+        [data-edgerun-status],
+        .decision-group,
+        .result-row {
+          border-color: #303640;
+          background: #191d23;
+        }
+
+        .decision-group label {
+          border-color: #303640;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>EdgeRun Browser Core</h1>
+      <div class="toolbar">
+        <div class="decision-group" role="radiogroup" aria-label="First-run decision">
+          <label><input type="radio" name="decision" value="run-once" data-edgerun-decision />Run once</label>
+          <label><input type="radio" name="decision" value="verify-cache" data-edgerun-decision checked />Verify & cache</label>
+          <label><input type="radio" name="decision" value="cancel" data-edgerun-decision />Cancel</label>
+        </div>
+        <button type="button" data-edgerun-run>Run</button>
+        <span data-edgerun-status>Idle</span>
+      </div>
+      <section data-edgerun-results></section>
+    </main>
+    <script type="module">
+      import { bindBrowserCorePage } from "./page.mjs";
+
+      bindBrowserCorePage();
+    </script>
+  </body>
+</html>

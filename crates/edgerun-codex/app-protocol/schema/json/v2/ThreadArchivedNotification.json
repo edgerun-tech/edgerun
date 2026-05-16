@@ -1,0 +1,12 @@
+{
+  "title": "ThreadArchivedNotification",
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ]
+}

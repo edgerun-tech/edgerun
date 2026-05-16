@@ -1,0 +1,61 @@
+id = "example"
+name = "Example Protocol"
+summary = ""
+layer = "application"
+runs_over = []
+depends_on = []
+implementation_crates = []
+profiles = []
+standards_bodies = []
+
+[composition]
+accepts = []
+emits = []
+lower = []
+upper = []
+
+[environment]
+requires_clock = false
+requires_entropy = false
+requires_network_io = true
+requires_packet_io = false
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = false
+requires_crypto = false
+no_std_viability = "unknown"
+bare_metal_viability = "unknown"
+
+[[standard]]
+id = "RFC0000"
+title = ""
+url = "https://www.rfc-editor.org/rfc/rfc0000.html"
+status = "unknown"
+published = ""
+role = "base"
+
+[[registry]]
+name = ""
+url = ""
+owner = "IANA"
+
+[[requirement]]
+id = "example-0001"
+standard = "RFC0000"
+section = ""
+keyword = "MUST"
+text = ""
+kind = "validator"
+component = ""
+status = "unknown"
+implementation = []
+tests = []
+notes = ""
+
+[[component]]
+id = "example-definition"
+kind = "definition"
+manifest = "standards/components/manifests/example.toml"
+sha256 = ""
+requirements = []

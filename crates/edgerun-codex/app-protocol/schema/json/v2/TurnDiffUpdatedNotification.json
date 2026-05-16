@@ -1,0 +1,20 @@
+{
+  "title": "TurnDiffUpdatedNotification",
+  "type": "object",
+  "properties": {
+    "diff": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "diff"
+  ]
+}

@@ -1,0 +1,16 @@
+---
+apiVersion: edgerun.io/v1alpha1
+kind: ImapServer
+metadata:
+  name: mail
+  namespace: edgerun-server
+spec:
+  hostname: mail.example.edgerun.local
+  bind_address: "0.0.0.0:143"
+  imaps: true
+  maildir_root: /var/lib/edgerun/mail/maildirs
+  tls_cert: /etc/edgerun/server/tls/fullchain.pem
+  tls_key: /etc/edgerun/server/tls/privkey.pem
+  users:
+    - username: admin
+      password: REPLACE_WITH_LOCAL_SECRET

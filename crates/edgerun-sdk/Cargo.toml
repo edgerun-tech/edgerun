@@ -1,0 +1,39 @@
+[package]
+name = "edgerun-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "deterministic wasm unit SDK for composing Edgerun apps"
+
+[[bin]]
+name = "edgerun-sdk"
+path = "src/main.rs"
+required-features = ["std"]
+
+[[example]]
+name = "package_segmented_verifiable_app"
+path = "examples/package_segmented_verifiable_app.rs"
+required-features = ["browser-authoring"]
+
+[features]
+default = ["std"]
+browser-authoring = ["runtime-api", "dep:edgerun-crypto", "dep:edgerun-wire"]
+marketplace-domain = ["runtime-api", "dep:edgerun-wire"]
+runtime-api = ["dep:edgerun-protocols"]
+standards-seed = []
+wallet-app = ["runtime-api", "dep:edgerun-wire"]
+std = ["dep:edgerun-crypto", "dep:edgerun-encoding", "dep:edgerun-json", "dep:edgerun-machine-report", "runtime-api"]
+
+[dependencies]
+edgerun-crypto = { workspace = true, features = ["aes", "ed25519", "hmac", "x25519"], optional = true }
+edgerun-encoding = { workspace = true, optional = true }
+edgerun-machine-report = { version = "0.1", path = "../node/edgerun-machine-report", optional = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["ed25519", "seal", "sign", "ssh", "verify", "wire"], optional = true }
+edgerun-wire = { workspace = true, optional = true }
+edgerun-json = { workspace = true, optional = true }
+
+[lints]
+workspace = true

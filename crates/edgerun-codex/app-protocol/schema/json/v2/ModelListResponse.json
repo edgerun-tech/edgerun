@@ -1,0 +1,168 @@
+{
+  "title": "ModelListResponse",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "array",
+      "items": {
+        "title": "Model",
+        "type": "object",
+        "properties": {
+          "additionalSpeedTiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "availabilityNux": {
+            "title": "ModelAvailabilityNux",
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          },
+          "defaultReasoningEffort": {
+            "title": "ReasoningEffort",
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputModalities": {
+            "type": "array",
+            "items": {
+              "title": "InputModality",
+              "type": "string",
+              "enum": [
+                "text",
+                "image"
+              ]
+            }
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "serviceTiers": {
+            "type": "array",
+            "items": {
+              "title": "ModelServiceTier",
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "description"
+              ]
+            }
+          },
+          "supportedReasoningEfforts": {
+            "type": "array",
+            "items": {
+              "title": "ReasoningEffortOption",
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "reasoningEffort": {
+                  "title": "ReasoningEffort",
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh"
+                  ]
+                }
+              },
+              "required": [
+                "reasoningEffort",
+                "description"
+              ]
+            }
+          },
+          "supportsPersonality": {
+            "type": "boolean"
+          },
+          "upgrade": {
+            "type": "string"
+          },
+          "upgradeInfo": {
+            "title": "ModelUpgradeInfo",
+            "type": "object",
+            "properties": {
+              "migrationMarkdown": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "modelLink": {
+                "type": "string"
+              },
+              "upgradeCopy": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "model"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "model",
+          "displayName",
+          "description",
+          "hidden",
+          "supportedReasoningEfforts",
+          "defaultReasoningEffort",
+          "isDefault"
+        ]
+      }
+    },
+    "nextCursor": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "data"
+  ]
+}

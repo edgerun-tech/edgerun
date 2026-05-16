@@ -1,0 +1,62 @@
+{
+  "title": "ThreadGoalUpdatedNotification",
+  "type": "object",
+  "properties": {
+    "goal": {
+      "title": "ThreadGoal",
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "integer"
+        },
+        "objective": {
+          "type": "string"
+        },
+        "status": {
+          "title": "ThreadGoalStatus",
+          "type": "string",
+          "enum": [
+            "Active",
+            "Paused",
+            "BudgetLimited",
+            "Complete"
+          ]
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "timeUsedSeconds": {
+          "type": "integer"
+        },
+        "tokenBudget": {
+          "type": "integer"
+        },
+        "tokensUsed": {
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "threadId",
+        "objective",
+        "status",
+        "tokensUsed",
+        "timeUsedSeconds",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "goal"
+  ]
+}

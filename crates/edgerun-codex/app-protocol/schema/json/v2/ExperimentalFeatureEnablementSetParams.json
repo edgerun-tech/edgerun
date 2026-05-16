@@ -1,0 +1,15 @@
+{
+  "title": "ExperimentalFeatureEnablementSetParams",
+  "type": "object",
+  "properties": {
+    "enablement": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    }
+  },
+  "required": [
+    "enablement"
+  ]
+}

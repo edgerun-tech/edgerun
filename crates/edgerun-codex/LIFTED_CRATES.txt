@@ -1,0 +1,13 @@
+codex-app-server-protocol app-protocol
+codex-apply-patch patch
+codex-code-mode code
+codex-api api
+codex-client client
+codex-core core
+codex-model-provider model/provider
+codex-model-provider-info model/info
+codex-models-manager model/catalog
+codex-protocol protocol
+codex-response-debug-context debug-context
+codex-shell-command shell
+codex-tools tools

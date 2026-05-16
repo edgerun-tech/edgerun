@@ -1,0 +1,44 @@
+[package]
+name = "codex-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["native-transport"]
+native-transport = [
+    "codex-client/native-transport",
+    "dep:edgerun-reqwest",
+    "dep:edgerun-tungstenite",
+    "dep:edgerun-tokio-util",
+    "edgerun-tokio/fs",
+    "edgerun-tokio/net",
+    "edgerun-tokio-util/codec",
+    "edgerun-tokio-util/io",
+]
+
+[dependencies]
+edgerun-async-channel = { workspace = true }
+edgerun-async-trait = { workspace = true }
+codex-client = { workspace = true, default-features = false }
+codex-protocol = { workspace = true }
+edgerun-bytes = { workspace = true }
+edgerun-encoding = { workspace = true }
+edgerun-error = { workspace = true }
+edgerun-eventsource-stream = { workspace = true }
+edgerun-http = { workspace = true }
+edgerun-json = { workspace = true, features = ["derive"] }
+edgerun-tungstenite = { workspace = true, optional = true }
+edgerun-time = { workspace = true }
+edgerun-url = { workspace = true }
+edgerun-futures = { workspace = true }
+edgerun-reqwest = { workspace = true, default-features = false, optional = true, features = ["stream"] }
+edgerun-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tracing = { workspace = true }
+edgerun-tokio-util = { workspace = true, optional = true }
+
+[dev-dependencies]
+assert_matches = { package = "edgerun-assert-matches", path = "../../utility/edgerun-assert-matches" }
+tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }
+tokio_test = { package = "edgerun-tokio-test", path = "../../utility/edgerun-tokio-test" }
+wiremock = { package = "edgerun-wiremock", path = "../../utility/edgerun-wiremock" }

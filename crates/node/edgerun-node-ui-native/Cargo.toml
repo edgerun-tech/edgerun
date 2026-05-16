@@ -1,0 +1,15 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "edgerun-node-ui-native"
+version.workspace = true
+
+[[bin]]
+name = "edgerun-frontend"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-ui-core = { workspace = true, features = ["sdl"] }
+
+[lints]
+workspace = true

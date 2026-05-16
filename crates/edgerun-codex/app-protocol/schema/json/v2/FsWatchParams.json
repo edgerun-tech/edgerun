@@ -1,0 +1,17 @@
+{
+  "title": "FsWatchParams",
+  "type": "object",
+  "properties": {
+    "path": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "watchId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "watchId",
+    "path"
+  ]
+}

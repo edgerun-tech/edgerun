@@ -1,0 +1,157 @@
+{
+  "title": "ApplyPatchApprovalResponse",
+  "type": "object",
+  "properties": {
+    "decision": {
+      "title": "ReviewDecision",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Approved",
+              "title": "ApprovedApplyPatchApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "ApprovedApplyPatchApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "proposedExecpolicyAmendment": {
+              "title": "ExecPolicyAmendment",
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "command"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "ApprovedExecpolicyAmendment",
+              "title": "ApprovedExecpolicyAmendmentApplyPatchApprovalResponseType"
+            }
+          },
+          "required": [
+            "type",
+            "proposedExecpolicyAmendment"
+          ],
+          "additionalProperties": false,
+          "title": "ApprovedExecpolicyAmendmentApplyPatchApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ApprovedForSession",
+              "title": "ApprovedForSessionApplyPatchApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "ApprovedForSessionApplyPatchApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "networkPolicyAmendment": {
+              "title": "NetworkPolicyAmendment",
+              "type": "object",
+              "properties": {
+                "action": {
+                  "title": "NetworkPolicyRuleAction",
+                  "type": "string",
+                  "enum": [
+                    "Allow",
+                    "Deny"
+                  ]
+                },
+                "host": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "action"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "NetworkPolicyAmendment",
+              "title": "NetworkPolicyAmendmentApplyPatchApprovalResponseType"
+            }
+          },
+          "required": [
+            "type",
+            "networkPolicyAmendment"
+          ],
+          "additionalProperties": false,
+          "title": "NetworkPolicyAmendmentApplyPatchApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Denied",
+              "title": "DeniedApplyPatchApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "DeniedApplyPatchApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "TimedOut",
+              "title": "TimedOutApplyPatchApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "TimedOutApplyPatchApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Abort",
+              "title": "AbortApplyPatchApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "AbortApplyPatchApprovalResponse"
+        }
+      ]
+    }
+  },
+  "required": [
+    "decision"
+  ]
+}

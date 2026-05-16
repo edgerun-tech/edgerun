@@ -1,0 +1,25 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-model-provider-info"
+version.workspace = true
+
+[lib]
+doctest = false
+name = "codex_model_provider_info"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+codex-api = { workspace = true }
+codex-app-server-protocol = { workspace = true }
+codex-protocol = { workspace = true }
+edgerun-http = { workspace = true }
+edgerun-json = { workspace = true, features = ["derive", "std"] }
+schemars = { workspace = true }
+
+[dev-dependencies]
+edgerun-json = { workspace = true, features = ["toml"] }
+tempfile = { package = "edgerun-tempfile", path = "../../../utility/edgerun-tempfile" }

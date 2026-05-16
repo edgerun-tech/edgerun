@@ -1,0 +1,35 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:4173/blog",
+        "http://localhost:4173/blog/methodology",
+        "http://localhost:4173/et/blog",
+        "http://localhost:4173/et/blog/methodology",
+        "http://localhost:4173/th/blog",
+        "http://localhost:4173/th/blog/methodology"
+      ],
+      "numberOfRuns": 1,
+      "startServerCommand": "bun run preview -- --host 0.0.0.0 --port 4173",
+      "startServerReadyPattern": "Local:",
+      "settings": {
+        "preset": "desktop"
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 1.0 }],
+        "categories:accessibility": ["error", { "minScore": 1.0 }],
+        "categories:best-practices": ["error", { "minScore": 1.0 }],
+        "categories:seo": ["error", { "minScore": 1.0 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 1800 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.05 }]
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": ".lighthouseci"
+    },
+    "skip": false
+  }
+}

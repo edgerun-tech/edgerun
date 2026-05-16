@@ -1,0 +1,12 @@
+{
+  "title": "ConfigReadParams",
+  "type": "object",
+  "properties": {
+    "cwd": {
+      "type": "string"
+    },
+    "includeLayers": {
+      "type": "boolean"
+    }
+  }
+}

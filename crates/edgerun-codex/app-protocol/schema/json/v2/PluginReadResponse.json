@@ -1,0 +1,406 @@
+{
+  "title": "PluginReadResponse",
+  "type": "object",
+  "properties": {
+    "plugin": {
+      "title": "PluginDetail",
+      "type": "object",
+      "properties": {
+        "apps": {
+          "type": "array",
+          "items": {
+            "title": "AppSummary",
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "installUrl": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "needsAuth": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "needsAuth"
+            ]
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "title": "PluginHookSummary",
+            "type": "object",
+            "properties": {
+              "eventName": {
+                "title": "HookEventName",
+                "type": "string",
+                "enum": [
+                  "PreToolUse",
+                  "PostToolUse",
+                  "PreCompact",
+                  "PostCompact",
+                  "SessionStart",
+                  "UserPromptSubmit",
+                  "Stop"
+                ]
+              },
+              "key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "eventName"
+            ]
+          }
+        },
+        "marketplaceName": {
+          "type": "string"
+        },
+        "marketplacePath": {
+          "title": "AbsolutePathBuf",
+          "type": "object"
+        },
+        "mcpServers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "title": "SkillSummary",
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "interface": {
+                "title": "SkillInterface",
+                "type": "object",
+                "properties": {
+                  "brandColor": {
+                    "type": "string"
+                  },
+                  "defaultPrompt": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "iconLarge": {
+                    "title": "AbsolutePathBuf",
+                    "type": "object"
+                  },
+                  "iconSmall": {
+                    "title": "AbsolutePathBuf",
+                    "type": "object"
+                  },
+                  "shortDescription": {
+                    "type": "string"
+                  }
+                }
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "title": "AbsolutePathBuf",
+                "type": "object"
+              },
+              "shortDescription": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "enabled"
+            ]
+          }
+        },
+        "summary": {
+          "title": "PluginSummary",
+          "type": "object",
+          "properties": {
+            "authPolicy": {
+              "title": "PluginAuthPolicy",
+              "type": "string",
+              "enum": [
+                "ON_INSTALL",
+                "ON_USE"
+              ]
+            },
+            "availability": {
+              "title": "PluginAvailability",
+              "type": "string",
+              "enum": [
+                "AVAILABLE",
+                "DISABLED_BY_ADMIN"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "installPolicy": {
+              "title": "PluginInstallPolicy",
+              "type": "string",
+              "enum": [
+                "NOT_AVAILABLE",
+                "AVAILABLE",
+                "INSTALLED_BY_DEFAULT"
+              ]
+            },
+            "installed": {
+              "type": "boolean"
+            },
+            "interface": {
+              "title": "PluginInterface",
+              "type": "object",
+              "properties": {
+                "brandColor": {
+                  "type": "string"
+                },
+                "capabilities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "category": {
+                  "type": "string"
+                },
+                "composerIcon": {
+                  "title": "AbsolutePathBuf",
+                  "type": "object"
+                },
+                "composerIconUrl": {
+                  "type": "string"
+                },
+                "defaultPrompt": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "developerName": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "logo": {
+                  "title": "AbsolutePathBuf",
+                  "type": "object"
+                },
+                "logoUrl": {
+                  "type": "string"
+                },
+                "longDescription": {
+                  "type": "string"
+                },
+                "privacyPolicyUrl": {
+                  "type": "string"
+                },
+                "screenshotUrls": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "screenshots": {
+                  "type": "array",
+                  "items": {
+                    "title": "AbsolutePathBuf",
+                    "type": "object"
+                  }
+                },
+                "shortDescription": {
+                  "type": "string"
+                },
+                "termsOfServiceUrl": {
+                  "type": "string"
+                },
+                "websiteUrl": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "capabilities",
+                "screenshots",
+                "screenshotUrls"
+              ]
+            },
+            "keywords": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "name": {
+              "type": "string"
+            },
+            "shareContext": {
+              "title": "PluginShareContext",
+              "type": "object",
+              "properties": {
+                "creatorAccountUserId": {
+                  "type": "string"
+                },
+                "creatorName": {
+                  "type": "string"
+                },
+                "remotePluginId": {
+                  "type": "string"
+                },
+                "shareTargets": {
+                  "type": "array",
+                  "items": {
+                    "title": "PluginSharePrincipal",
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "principalId": {
+                        "type": "string"
+                      },
+                      "principalType": {
+                        "title": "PluginSharePrincipalType",
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "group",
+                          "workspace"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "principalType",
+                      "principalId",
+                      "name"
+                    ]
+                  }
+                },
+                "shareUrl": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "remotePluginId"
+              ]
+            },
+            "source": {
+              "title": "PluginSource",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "title": "AbsolutePathBuf",
+                      "type": "object"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "Local",
+                      "title": "Localv2::PluginReadResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "path"
+                  ],
+                  "additionalProperties": false,
+                  "title": "Localv2::PluginReadResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "refName": {
+                      "type": "string"
+                    },
+                    "sha": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "Git",
+                      "title": "Gitv2::PluginReadResponseType"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "url"
+                  ],
+                  "additionalProperties": false,
+                  "title": "Gitv2::PluginReadResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "Remote",
+                      "title": "Remotev2::PluginReadResponseType"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": false,
+                  "title": "Remotev2::PluginReadResponse"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "source",
+            "installed",
+            "enabled",
+            "installPolicy",
+            "authPolicy"
+          ]
+        }
+      },
+      "required": [
+        "marketplaceName",
+        "summary",
+        "skills",
+        "hooks",
+        "apps",
+        "mcpServers"
+      ]
+    }
+  },
+  "required": [
+    "plugin"
+  ]
+}

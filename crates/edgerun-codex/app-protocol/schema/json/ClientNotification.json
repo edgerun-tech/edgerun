@@ -1,0 +1,20 @@
+{
+  "title": "ClientNotification",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "const": "Initialized",
+          "title": "InitializedNotificationMethod"
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "additionalProperties": false,
+      "title": "InitializedNotification"
+    }
+  ]
+}

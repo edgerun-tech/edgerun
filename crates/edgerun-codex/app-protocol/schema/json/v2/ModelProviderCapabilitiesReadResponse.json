@@ -1,0 +1,20 @@
+{
+  "title": "ModelProviderCapabilitiesReadResponse",
+  "type": "object",
+  "properties": {
+    "imageGeneration": {
+      "type": "boolean"
+    },
+    "namespaceTools": {
+      "type": "boolean"
+    },
+    "webSearch": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "namespaceTools",
+    "imageGeneration",
+    "webSearch"
+  ]
+}

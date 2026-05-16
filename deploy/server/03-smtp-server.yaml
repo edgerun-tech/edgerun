@@ -1,0 +1,37 @@
+---
+apiVersion: edgerun.io/v1alpha1
+kind: SmtpServer
+metadata:
+  name: mail
+  namespace: edgerun-server
+spec:
+  hostname: mail.example.edgerun.local
+  bind_address: "0.0.0.0:25"
+  smtps: true
+  starttls: true
+  max_message_size: 35882577
+  local_domains:
+    - example.edgerun.local
+  maildir_root: /var/lib/edgerun/mail/maildirs
+  relay_enabled: true
+  queue_dir: /var/lib/edgerun/mail/queue
+  dns_server: "1.1.1.1:53"
+  dkim_domain: example.edgerun.local
+  dkim_selector: mail
+  dkim_key_path: /etc/edgerun/server/dkim-mail.private.pem
+  tls_cert: /etc/edgerun/server/tls/fullchain.pem
+  tls_key: /etc/edgerun/server/tls/privkey.pem
+  acme_enabled: true
+  acme_directory: letsencrypt
+  acme_contact_email: admin@example.edgerun.local
+  acme_domains:
+    - mail.example.edgerun.local
+    - mta-sts.example.edgerun.local
+    - blog.example.edgerun.local
+  acme_account_key_path: /etc/edgerun/server/acme-account.pem
+  acme_cert_dir: /etc/edgerun/server/tls
+  catch_all_user: admin
+  users:
+    - username: admin
+      domains:
+        - example.edgerun.local

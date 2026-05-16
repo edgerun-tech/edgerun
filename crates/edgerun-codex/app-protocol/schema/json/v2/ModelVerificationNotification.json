@@ -1,0 +1,27 @@
+{
+  "title": "ModelVerificationNotification",
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "verifications": {
+      "type": "array",
+      "items": {
+        "title": "ModelVerification",
+        "type": "string",
+        "enum": [
+          "TrustedAccessForCyber"
+        ]
+      }
+    }
+  },
+  "required": [
+    "threadId",
+    "turnId",
+    "verifications"
+  ]
+}

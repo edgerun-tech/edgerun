@@ -1,0 +1,165 @@
+{
+  "title": "TurnSteerParams",
+  "type": "object",
+  "properties": {
+    "expectedTurnId": {
+      "type": "string"
+    },
+    "input": {
+      "type": "array",
+      "items": {
+        "title": "UserInput",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "textElements": {
+                "type": "array",
+                "items": {
+                  "title": "TextElement",
+                  "type": "object",
+                  "properties": {
+                    "byteRange": {
+                      "title": "ByteRange",
+                      "type": "object",
+                      "properties": {
+                        "end": {
+                          "type": "integer"
+                        },
+                        "start": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ]
+                    },
+                    "placeholder": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "byteRange"
+                  ]
+                }
+              },
+              "type": {
+                "type": "string",
+                "const": "Text",
+                "title": "Textv2::TurnSteerParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "additionalProperties": false,
+            "title": "Textv2::TurnSteerParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "Image",
+                "title": "Imagev2::TurnSteerParamsType"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "url"
+            ],
+            "additionalProperties": false,
+            "title": "Imagev2::TurnSteerParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "LocalImage",
+                "title": "LocalImagev2::TurnSteerParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "path"
+            ],
+            "additionalProperties": false,
+            "title": "LocalImagev2::TurnSteerParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Skill",
+                "title": "Skillv2::TurnSteerParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "path"
+            ],
+            "additionalProperties": false,
+            "title": "Skillv2::TurnSteerParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Mention",
+                "title": "Mentionv2::TurnSteerParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "path"
+            ],
+            "additionalProperties": false,
+            "title": "Mentionv2::TurnSteerParams"
+          }
+        ]
+      }
+    },
+    "responsesapiClientMetadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "input",
+    "expectedTurnId"
+  ]
+}

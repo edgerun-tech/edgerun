@@ -1,0 +1,42 @@
+{
+  "title": "JSONRPCRequest",
+  "type": "object",
+  "properties": {
+    "id": {
+      "title": "RequestId",
+      "oneOf": [
+        {
+          "title": "String",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        },
+        {
+          "title": "Integer",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        }
+      ]
+    },
+    "method": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "method"
+  ]
+}

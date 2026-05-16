@@ -1,0 +1,22 @@
+[package]
+name = "edgerun-evdev-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Linux evdev input adapter for Edgerun"
+autobins = false
+
+[dependencies]
+edgerun-devices.workspace = true
+edgerun-capabilities = { workspace = true }
+edgerun-encoding = { workspace = true }
+edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
+
+[features]
+std = []
+
+[lints]
+workspace = true

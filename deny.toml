@@ -1,0 +1,57 @@
+# edgerun protocol workspace dependency policy.
+#
+# cargo-deny enforces these rules at CI / local audit time.
+# Run:  cargo deny check
+#
+# CRITICAL: serde_json is banned as a direct dependency in this workspace.
+# The edgerun internal wire protocol is rkyv. If you need to serialize
+# something for hashing, signing, storage, or transport, archive the concrete
+# protocol type through the rkyv boundary.
+
+[graph]
+targets = [
+  { triple = "x86_64-unknown-linux-gnu" },
+  { triple = "aarch64-unknown-linux-gnu" },
+]
+
+[advisories]
+ignore = [
+  # paste — unmaintained, retained only through legacy dependency trees until removed.
+  "RUSTSEC-2024-0436",
+  # atomic-polyfill — unmaintained, used via heapless → aead → aes-gcm.
+  # No safe upgrade available.
+  "RUSTSEC-2023-0089",
+  # atty — unmaintained, retained here only for older lockfiles/tooling caches.
+  "RUSTSEC-2024-0375",
+  # bincode — unmaintained, used via generic-array crypto tree.
+  "RUSTSEC-2025-0141",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+
+# serde_json may only appear behind explicit host-only comparison tooling
+# or as the edgerun-json workspace crate. It is not an internal wire format.
+[[bans.deny]]
+name = "serde_json"
+wrappers = ["edgerun-json"]
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+
+[licenses]
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-DFS-2016",
+  "OpenSSL",
+  "Unicode-3.0",
+  "MPL-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+]

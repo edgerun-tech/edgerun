@@ -1,0 +1,17 @@
+{
+  "title": "FsWriteFileParams",
+  "type": "object",
+  "properties": {
+    "dataBase64": {
+      "type": "string"
+    },
+    "path": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    }
+  },
+  "required": [
+    "path",
+    "dataBase64"
+  ]
+}

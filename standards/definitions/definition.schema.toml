@@ -1,0 +1,23 @@
+id = "protocol-object"
+kind = "frame"
+standard = "RFC0000"
+section = ""
+
+[[field]]
+name = ""
+type = "u8"
+length = ""
+constraint = ""
+
+[emits]
+type = ""
+when = ""
+
+[consumes]
+type = ""
+when = ""
+
+[wasm]
+manifest = ""
+sha256 = ""
+

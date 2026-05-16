@@ -1,0 +1,26 @@
+[package]
+name = "edgerun-pocketbase"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Small EdgeRun-native PocketBase-shaped data service"
+
+[[bin]]
+name = "edgerun-pocketbase"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-crypto = { workspace = true, features = ["sha2"] }
+edgerun-encoding = { workspace = true }
+edgerun-email = { version = "0.1", path = "../edgerun-email", default-features = false }
+edgerun-json = { workspace = true, features = ["std"] }
+edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["std", "server", "node-core", "dns", "dhcp", "https", "acme"] }
+edgerun-protocols = { version = "0.1", path = "../../protocol/edgerun-protocols", default-features = false, features = ["http", "oauth", "smtp", "dns", "dhcp", "tls", "acme", "websocket"] }
+edgerun-storage = { workspace = true }
+edgerun-ui-core = { version = "0.1", path = "../../utility/edgerun-ui-core", default-features = false, features = ["std", "fontdue-text", "tabler-svg-atlas"] }
+
+[lints]
+workspace = true

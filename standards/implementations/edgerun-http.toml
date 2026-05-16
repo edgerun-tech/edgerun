@@ -1,0 +1,92 @@
+id = "edgerun-http"
+crate = "crates/edgerun-http"
+status = "working-needs-proof-harness"
+
+profiles = [
+  "http-semantics-core",
+  "http1-message-syntax",
+  "http2-frame-codec",
+  "http2-frame-sequence",
+  "http3-frame-codec",
+]
+
+[[surface]]
+id = "http-token"
+protocol = "http"
+standards = ["RFC9110"]
+sections = ["5.6.2", "9.1"]
+kind = "validator"
+implementation = [
+  "crates/edgerun-http/src/header.rs",
+  "crates/edgerun-http/src/method.rs",
+]
+proof_status = "partial"
+notes = "Header token validation is explicit. Method parsing is permissive for standard methods and needs strict/permissive profile separation."
+
+[[surface]]
+id = "http-field-value"
+protocol = "http"
+standards = ["RFC9110"]
+sections = ["5.5"]
+kind = "validator"
+implementation = ["crates/edgerun-http/src/header.rs"]
+proof_status = "partial"
+notes = "Current validation rejects non-ASCII/control bytes; requirement IDs and corpus are needed."
+
+[[surface]]
+id = "http2-frame-codec"
+protocol = "http"
+standards = ["RFC9113"]
+sections = ["4.1", "6"]
+kind = "parser"
+implementation = ["crates/edgerun-http/src/http2/frame/mod.rs"]
+proof_status = "partial"
+notes = "Frame parser/serializer exists and is a good WASM checker target."
+
+[[surface]]
+id = "http2-frame-semantics"
+protocol = "http"
+standards = ["RFC9113"]
+sections = ["6.1", "6.2", "6.3", "6.4", "6.5", "6.7", "6.8", "6.9", "6.10"]
+kind = "validator"
+implementation = ["crates/edgerun-http/src/http2/frame/mod.rs"]
+proof_status = "partial"
+notes = "validate_semantics returns error codes, but not requirement-addressed findings."
+
+[[surface]]
+id = "http2-frame-sequence"
+protocol = "http"
+standards = ["RFC9113"]
+sections = ["4.3", "5.1", "6"]
+kind = "state-machine"
+implementation = ["crates/edgerun-http/src/http2/frame_sequence_conformance.rs"]
+proof_status = "latent"
+notes = "Validator exists but module is commented out from normal test inclusion."
+
+[[gap]]
+id = "http-test-no-std-cleanup"
+severity = "blocking"
+description = "HTTP/2 lib tests fail under no-default-features because test code assumes std or lacks alloc::vec imports."
+evidence = "cargo test -p edgerun-http --features http2 --lib --no-default-features"
+
+[[gap]]
+id = "http-method-case-sensitivity"
+severity = "profile-decision"
+description = "Strict RFC 9110 semantics require case-sensitive method tokens; current parser accepts standard methods case-insensitively."
+implementation = ["crates/edgerun-http/src/method.rs"]
+standard = "RFC9110"
+section = "9.1"
+
+[[gap]]
+id = "http2-push-promise-stream-id"
+severity = "review"
+description = "PUSH_PROMISE promised stream ID validation should be checked against sender-specific stream ID rules."
+implementation = ["crates/edgerun-http/src/http2/frame/mod.rs"]
+standard = "RFC9113"
+section = "6.6"
+
+[[command]]
+kind = "current-check"
+command = "cargo test -p edgerun-http --features http2 --lib --no-default-features"
+status = "fails-test-code"
+

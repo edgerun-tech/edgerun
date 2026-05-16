@@ -1,0 +1,204 @@
+{
+  "title": "GetAccountRateLimitsResponse",
+  "type": "object",
+  "properties": {
+    "rateLimits": {
+      "title": "RateLimitSnapshot",
+      "type": "object",
+      "properties": {
+        "credits": {
+          "title": "CreditsSnapshot",
+          "type": "object",
+          "properties": {
+            "balance": {
+              "type": "string"
+            },
+            "hasCredits": {
+              "type": "boolean"
+            },
+            "unlimited": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "hasCredits",
+            "unlimited"
+          ]
+        },
+        "limitId": {
+          "type": "string"
+        },
+        "limitName": {
+          "type": "string"
+        },
+        "planType": {
+          "title": "PlanType",
+          "type": "string",
+          "enum": [
+            "free",
+            "go",
+            "plus",
+            "pro",
+            "prolite",
+            "team",
+            "self_serve_business_usage_based",
+            "business",
+            "enterprise_cbp_usage_based",
+            "enterprise",
+            "edu",
+            "unknown"
+          ]
+        },
+        "primary": {
+          "title": "RateLimitWindow",
+          "type": "object",
+          "properties": {
+            "resetsAt": {
+              "type": "integer"
+            },
+            "usedPercent": {
+              "type": "integer"
+            },
+            "windowDurationMins": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "usedPercent"
+          ]
+        },
+        "rateLimitReachedType": {
+          "title": "RateLimitReachedType",
+          "type": "string",
+          "enum": [
+            "RateLimitReached",
+            "WorkspaceOwnerCreditsDepleted",
+            "WorkspaceMemberCreditsDepleted",
+            "WorkspaceOwnerUsageLimitReached",
+            "WorkspaceMemberUsageLimitReached"
+          ]
+        },
+        "secondary": {
+          "title": "RateLimitWindow",
+          "type": "object",
+          "properties": {
+            "resetsAt": {
+              "type": "integer"
+            },
+            "usedPercent": {
+              "type": "integer"
+            },
+            "windowDurationMins": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "usedPercent"
+          ]
+        }
+      }
+    },
+    "rateLimitsByLimitId": {
+      "type": "object",
+      "additionalProperties": {
+        "title": "RateLimitSnapshot",
+        "type": "object",
+        "properties": {
+          "credits": {
+            "title": "CreditsSnapshot",
+            "type": "object",
+            "properties": {
+              "balance": {
+                "type": "string"
+              },
+              "hasCredits": {
+                "type": "boolean"
+              },
+              "unlimited": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "hasCredits",
+              "unlimited"
+            ]
+          },
+          "limitId": {
+            "type": "string"
+          },
+          "limitName": {
+            "type": "string"
+          },
+          "planType": {
+            "title": "PlanType",
+            "type": "string",
+            "enum": [
+              "free",
+              "go",
+              "plus",
+              "pro",
+              "prolite",
+              "team",
+              "self_serve_business_usage_based",
+              "business",
+              "enterprise_cbp_usage_based",
+              "enterprise",
+              "edu",
+              "unknown"
+            ]
+          },
+          "primary": {
+            "title": "RateLimitWindow",
+            "type": "object",
+            "properties": {
+              "resetsAt": {
+                "type": "integer"
+              },
+              "usedPercent": {
+                "type": "integer"
+              },
+              "windowDurationMins": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "usedPercent"
+            ]
+          },
+          "rateLimitReachedType": {
+            "title": "RateLimitReachedType",
+            "type": "string",
+            "enum": [
+              "RateLimitReached",
+              "WorkspaceOwnerCreditsDepleted",
+              "WorkspaceMemberCreditsDepleted",
+              "WorkspaceOwnerUsageLimitReached",
+              "WorkspaceMemberUsageLimitReached"
+            ]
+          },
+          "secondary": {
+            "title": "RateLimitWindow",
+            "type": "object",
+            "properties": {
+              "resetsAt": {
+                "type": "integer"
+              },
+              "usedPercent": {
+                "type": "integer"
+              },
+              "windowDurationMins": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "usedPercent"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "rateLimits"
+  ]
+}

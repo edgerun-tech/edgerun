@@ -1,0 +1,46 @@
+id = "hpack"
+name = "HPACK"
+summary = "Header compression format for HTTP/2."
+layer = "presentation"
+runs_over = ["HTTP/2"]
+depends_on = ["HTTP/2"]
+implementation_crates = ["crates/utility/edgerun-hpack"]
+profiles = ["encoder", "decoder", "no_std-candidate"]
+standards_bodies = ["IETF"]
+
+[environment]
+requires_clock = false
+requires_entropy = false
+requires_network_io = false
+requires_packet_io = false
+requires_stream_io = false
+requires_filesystem = false
+requires_threads = false
+requires_allocator = true
+requires_crypto = false
+no_std_viability = "plausible-with-alloc"
+bare_metal_viability = "plausible"
+
+[[standard]]
+id = "RFC7541"
+title = "HPACK: Header Compression for HTTP/2"
+url = "https://www.rfc-editor.org/rfc/rfc7541.html"
+xml = "https://www.rfc-editor.org/rfc/rfc7541.xml"
+status = "Proposed Standard"
+published = "2015-05"
+role = "base"
+
+[[behavior]]
+id = "hpack-integer-codec"
+kind = "codec"
+standards = ["RFC7541"]
+implementation = ["crates/utility/edgerun-hpack"]
+status = "unknown"
+
+[[behavior]]
+id = "hpack-dynamic-table"
+kind = "state-machine"
+standards = ["RFC7541"]
+implementation = ["crates/utility/edgerun-hpack"]
+status = "unknown"
+

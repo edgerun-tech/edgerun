@@ -1,0 +1,32 @@
+[package]
+name = "edgerun-tokio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun-owned Tokio-compatible async runtime facade"
+
+[features]
+default = ["edgerun-runtime"]
+compat = []
+edgerun-runtime = []
+fs = []
+io-util = []
+macros = ["dep:edgerun-tokio-macros"]
+net = []
+process = []
+rt = []
+rt-multi-thread = []
+signal = []
+sync = []
+time = []
+
+[dependencies]
+edgerun-futures = { workspace = true }
+edgerun-runtime = { version = "0.1", path = "../edgerun-runtime", default-features = false, features = ["std"] }
+edgerun-tokio-macros = { version = "0.1", path = "../edgerun-tokio-macros", optional = true }
+
+[lints]
+workspace = true

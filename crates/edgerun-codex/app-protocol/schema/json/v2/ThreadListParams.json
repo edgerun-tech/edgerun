@@ -1,0 +1,91 @@
+{
+  "title": "ThreadListParams",
+  "type": "object",
+  "properties": {
+    "archived": {
+      "type": "boolean"
+    },
+    "cursor": {
+      "type": "string"
+    },
+    "cwd": {
+      "title": "ThreadListCwdFilter",
+      "oneOf": [
+        {
+          "title": "One",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        },
+        {
+          "title": "Many",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        }
+      ]
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "modelProviders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "searchTerm": {
+      "type": "string"
+    },
+    "sortDirection": {
+      "title": "SortDirection",
+      "type": "string",
+      "enum": [
+        "Asc",
+        "Desc"
+      ]
+    },
+    "sortKey": {
+      "title": "ThreadSortKey",
+      "type": "string",
+      "enum": [
+        "CreatedAt",
+        "UpdatedAt"
+      ]
+    },
+    "sourceKinds": {
+      "type": "array",
+      "items": {
+        "title": "ThreadSourceKind",
+        "type": "string",
+        "enum": [
+          "Cli",
+          "vscode",
+          "Exec",
+          "AppServer",
+          "SubAgent",
+          "SubAgentReview",
+          "SubAgentCompact",
+          "SubAgentThreadSpawn",
+          "SubAgentOther",
+          "Unknown"
+        ]
+      }
+    }
+  }
+}

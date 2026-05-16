@@ -1,0 +1,21 @@
+[package]
+name = "edgerun-exchange-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun Exchange HTTP API service"
+
+[dependencies]
+edgerun-protocols = { workspace = true, default-features = false, features = ["core"] }
+edgerun-exchange = { version = "0.1", path = "../../edgerun-exchange" }
+edgerun-wallet = { version = "0.1", path = "../../edgerun-wallet" }
+edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["server"] }
+edgerun-json = { workspace = true }
+edgerun-sdk = { version = "0.1", path = "../../edgerun-sdk", default-features = false, features = ["runtime-api"] }
+edgerun-time = { workspace = true }
+
+[lints]
+workspace = true

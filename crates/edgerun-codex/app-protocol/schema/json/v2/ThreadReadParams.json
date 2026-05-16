@@ -1,0 +1,15 @@
+{
+  "title": "ThreadReadParams",
+  "type": "object",
+  "properties": {
+    "includeTurns": {
+      "type": "boolean"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId"
+  ]
+}

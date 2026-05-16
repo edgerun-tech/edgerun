@@ -1,0 +1,12 @@
+{
+  "title": "TurnSteerResponse",
+  "type": "object",
+  "properties": {
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "turnId"
+  ]
+}
