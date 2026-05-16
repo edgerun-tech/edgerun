@@ -506,10 +506,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-fontdue"
-version = "0.1.1"
-
-[[package]]
 name = "edgerun-futures"
 version = "0.1.1"
 
@@ -958,7 +954,6 @@ name = "edgerun-ui-core"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
- "edgerun-fontdue",
 ]
 
 [[package]]

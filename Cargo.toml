@@ -85,7 +85,6 @@ members = [
   "crates/utility/edgerun-error",
   "crates/utility/edgerun-error-derive",
   "crates/utility/edgerun-eventsource-stream",
-  "crates/utility/edgerun-fontdue",
   "crates/utility/edgerun-futures",
   "crates/utility/edgerun-futures-channel",
   "crates/utility/edgerun-futures-core",

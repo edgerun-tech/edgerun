@@ -18,6 +18,8 @@ mod component_inventory;
 pub mod components;
 mod extracted_blocks;
 mod extracted_system;
+#[cfg(feature = "fontdue-text")]
+mod font_renderer;
 #[cfg(all(feature = "gpu-gl", not(target_arch = "wasm32")))]
 pub mod gl;
 mod icons;
@@ -140,11 +142,12 @@ use paint::{
 pub use painter::UiPainter;
 #[cfg(feature = "fontdue-text")]
 pub use pocketbase_admin::{
-    POCKETBASE_ADMIN_ACME_ID, POCKETBASE_ADMIN_BACKUPS_ID, POCKETBASE_ADMIN_COLLECTIONS_ID,
-    POCKETBASE_ADMIN_CRONS_ID, POCKETBASE_ADMIN_DNS_ID, POCKETBASE_ADMIN_HEALTH_ID,
-    POCKETBASE_ADMIN_IMPORT_ID, POCKETBASE_ADMIN_LOGS_ID, POCKETBASE_ADMIN_NEW_RECORD_ID,
-    POCKETBASE_ADMIN_OPTIONS_ID, POCKETBASE_ADMIN_SETTINGS_ID, UiPocketBaseAdminState,
-    UiPocketBaseCollection, UiPocketBaseLog, UiPocketBaseRecord, build_pocketbase_admin_scene,
+    POCKETBASE_ADMIN_ACME_ID, POCKETBASE_ADMIN_BACKUPS_ID, POCKETBASE_ADMIN_COLLECTION_ROW_BASE_ID,
+    POCKETBASE_ADMIN_COLLECTIONS_ID, POCKETBASE_ADMIN_CRONS_ID, POCKETBASE_ADMIN_DNS_ID,
+    POCKETBASE_ADMIN_HEALTH_ID, POCKETBASE_ADMIN_IMPORT_ID, POCKETBASE_ADMIN_LOGS_ID,
+    POCKETBASE_ADMIN_NEW_RECORD_ID, POCKETBASE_ADMIN_OPTIONS_ID, POCKETBASE_ADMIN_SETTINGS_ID,
+    UiPocketBaseAdminState, UiPocketBaseAdminView, UiPocketBaseCollection, UiPocketBaseLog,
+    UiPocketBaseRecord, build_pocketbase_admin_scene,
 };
 pub use preset_code::{
     PRESET_CODE_ALPHABET, UiPresetRecipe, decode_preset_code, encode_preset_code, is_preset_code,

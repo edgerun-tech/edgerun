@@ -39,9 +39,10 @@ use edgerun_storage::{
     BlobKeySource, BlobStore, BlobStoreConfig, DbBatch, open_file_database_repairing_tail,
 };
 use edgerun_ui_core::gpu::{
-    Color4, FontAtlas, GpuScene, ICON_VERTEX_FLOAT_STRIDE, PackedGpuScene, RECT_FLOAT_STRIDE,
-    RectMode, TEXT_VERTEX_FLOAT_STRIDE, UiPocketBaseAdminState, UiPocketBaseCollection,
-    UiPocketBaseLog, UiPocketBaseRecord, build_pocketbase_admin_scene,
+    Color4, FontAtlas, GpuScene, ICON_VERTEX_FLOAT_STRIDE, POCKETBASE_ADMIN_COLLECTION_ROW_BASE_ID,
+    PackedGpuScene, RECT_FLOAT_STRIDE, RectMode, TEXT_VERTEX_FLOAT_STRIDE, UiPocketBaseAdminState,
+    UiPocketBaseAdminView, UiPocketBaseCollection, UiPocketBaseLog, UiPocketBaseRecord,
+    build_pocketbase_admin_scene,
 };
 use edgerun_ui_core::initial_setup::{DEFAULT_KDF_ROUNDS, PASSWORD_MIN_LEN};
 use edgerun_ui_core::tabler_svg_atlas_generated::{
@@ -96,7 +97,13 @@ fn main() {
     };
 
     let bind = config.bind.clone();
-    let admin_ws_bind = admin_ws_bind_for(&bind);
+    let admin_ws_bind = match admin_ws_bind_for(&bind) {
+        Ok(bind) => bind,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    };
     let https_bind = config.https_bind.clone();
     let workers = config.workers;
     let tls = match load_tls_certificate(&config) {
@@ -106,7 +113,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    start_admin_ws_server(admin_ws_bind.clone(), Arc::clone(&state));
+    if let Err(error) = start_admin_ws_server(admin_ws_bind.clone(), Arc::clone(&state)) {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
     let runtime = match rt::Runtime::new_multi_thread()
         .worker_threads(workers)
         .enable_all()
@@ -204,26 +214,23 @@ fn run_cli_command(data_dir: PathBuf, command: CliCommand) -> Result<(), String>
     }
 }
 
-fn admin_ws_bind_for(http_bind: &str) -> String {
-    http_bind
-        .parse::<SocketAddr>()
-        .map(|addr| {
-            let port = addr.port().saturating_add(1);
-            SocketAddr::new(addr.ip(), port).to_string()
-        })
-        .unwrap_or_else(|_| "127.0.0.1:8091".to_string())
+fn admin_ws_bind_for(http_bind: &str) -> Result<String, String> {
+    let addr = http_bind.parse::<SocketAddr>().map_err(|error| {
+        format!("cannot derive admin websocket bind from --bind {http_bind:?}: {error}")
+    })?;
+    let port = addr.port().checked_add(1).ok_or_else(|| {
+        format!(
+            "cannot derive admin websocket bind from --bind {http_bind:?}: port 65535 has no adjacent websocket port"
+        )
+    })?;
+    Ok(SocketAddr::new(addr.ip(), port).to_string())
 }
 
-fn start_admin_ws_server(bind: String, state: Arc<Mutex<PocketState>>) {
+fn start_admin_ws_server(bind: String, state: Arc<Mutex<PocketState>>) -> Result<(), String> {
+    let listener = TcpListener::bind(&bind)
+        .map_err(|error| format!("admin websocket bind {bind} failed: {error}"))?;
+    println!("edgerun-pocketbase admin websocket on ws://{bind}/_/admin-ws");
     thread::spawn(move || {
-        let listener = match TcpListener::bind(&bind) {
-            Ok(listener) => listener,
-            Err(error) => {
-                eprintln!("admin websocket bind {bind} failed: {error}");
-                return;
-            }
-        };
-        println!("edgerun-pocketbase admin websocket on ws://{bind}/_/admin-ws");
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
@@ -238,6 +245,7 @@ fn start_admin_ws_server(bind: String, state: Arc<Mutex<PocketState>>) {
             }
         }
     });
+    Ok(())
 }
 
 fn handle_admin_ws_client(
@@ -363,16 +371,34 @@ fn handle_admin_ws_command(
         }
         AdminWsCommand::Action { id } => {
             let action = id.to_string();
-            let target = admin_action_target(&action).unwrap_or("/_/").to_string();
-            send_ws_json(
-                stream,
-                json!({
-                    "type": "admin.navigate",
-                    "id": action,
-                    "target": target
-                }),
-            )
+            if let Some(view) = admin_action_view(&action) {
+                send_ws_json(
+                    stream,
+                    json!({
+                        "type": "admin.view",
+                        "id": action,
+                        "view": view
+                    }),
+                )
+            } else {
+                let target = admin_action_target(&action).unwrap_or("/_/").to_string();
+                send_ws_json(
+                    stream,
+                    json!({
+                        "type": "admin.navigate",
+                        "id": action,
+                        "target": target
+                    }),
+                )
+            }
         }
+        AdminWsCommand::Collection { name } => send_ws_json(
+            stream,
+            json!({
+                "type": "admin.collection",
+                "collection": name
+            }),
+        ),
         AdminWsCommand::Unknown { .. } => send_ws_json(
             stream,
             json!({
@@ -395,6 +421,9 @@ fn parse_admin_ws_command(bytes: &[u8]) -> Result<AdminWsCommand, String> {
         "admin.action" => AdminWsCommand::Action {
             id: root.get_u64("id").unwrap_or_default(),
         },
+        "admin.collection" => AdminWsCommand::Collection {
+            name: root.get_str("collection").unwrap_or_default().to_string(),
+        },
         _ => AdminWsCommand::Unknown {
             kind: kind.to_string(),
         },
@@ -409,14 +438,21 @@ fn send_ws_json(stream: &mut TcpStream, value: Value) -> Result<(), String> {
 
 fn admin_action_target(id: &str) -> Option<&'static str> {
     match id {
-        "7101" => Some("/api/collections"),
-        "7102" => Some("/api/settings"),
-        "7103" => Some("/api/logs"),
-        "7104" => Some("/api/backups"),
-        "7105" => Some("/api/crons"),
         "7106" => Some("/api/edgerun/dns/zones"),
         "7107" => Some("/api/edgerun/acme/http01"),
         "7108" => Some("/api/health"),
+        "7109" => Some("/api/collections/import"),
+        _ => None,
+    }
+}
+
+fn admin_action_view(id: &str) -> Option<&'static str> {
+    match id {
+        "7101" => Some("collections"),
+        "7102" => Some("settings"),
+        "7103" => Some("logs"),
+        "7104" => Some("backups"),
+        "7105" => Some("crons"),
         _ => None,
     }
 }
@@ -638,8 +674,12 @@ fn admin_ui_host_js() -> &'static str {
     r#"const root = document.getElementById('app');
 let scene = null;
 let gl = null, rectProgram = null, texProgram = null, quadVao = null, textTex = null, iconTex = null;
+let fontAtlasAlpha = '', iconAtlasAlpha = '';
 let adminSocket = null, adminSnapshot = null;
 let wsReady = false;
+let adminView = 'collections';
+let adminCollection = '';
+const adminViewById = new Map([[7101,'collections'],[7102,'settings'],[7103,'logs'],[7104,'backups'],[7105,'crons']]);
 const encoder = new TextEncoder();
 const rectVert = `#version 300 es
 layout(location=0) in vec2 a_pos;
@@ -753,10 +793,25 @@ async function initGl(){
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0,1,0,1,1,0,0,1,1,0,1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const fontBytes = new Uint8Array(await fetch('/_/assets/admin-font-alpha.bin').then(r=>r.arrayBuffer()));
-  const iconBytes = new Uint8Array(await fetch('/_/assets/tabler-alpha.bin').then(r=>r.arrayBuffer()));
+  await uploadSceneTextures();
+}
+async function uploadSceneTextures(){
+  if(textTex && fontAtlasAlpha !== scene.fontAtlas.alpha){
+    gl.deleteTexture(textTex);
+    textTex = null;
+  }
+  if(iconTex && iconAtlasAlpha !== scene.iconAtlas.alpha){
+    gl.deleteTexture(iconTex);
+    iconTex = null;
+  }
+  const fontBytes = new Uint8Array(await fetch(scene.fontAtlas.alpha, {cache:'no-store'}).then(r=>r.arrayBuffer()));
   textTex = uploadAlphaTexture(scene.fontAtlas.width, scene.fontAtlas.height, fontBytes);
-  iconTex = uploadAlphaTexture(scene.iconAtlas.width, scene.iconAtlas.height, iconBytes);
+  fontAtlasAlpha = scene.fontAtlas.alpha;
+  if(!iconTex){
+    const iconBytes = new Uint8Array(await fetch(scene.iconAtlas.alpha).then(r=>r.arrayBuffer()));
+    iconTex = uploadAlphaTexture(scene.iconAtlas.width, scene.iconAtlas.height, iconBytes);
+    iconAtlasAlpha = scene.iconAtlas.alpha;
+  }
 }
 function resizeCanvas(){
   const canvas = gl.canvas;
@@ -819,8 +874,11 @@ function render(){
   drawTextured(scene.packed.textVertices || [], textTex);
 }
 async function loadScene(){
-  scene = await fetch(`/_/admin-scene.json?w=${innerWidth}&h=${innerHeight}`).then(r=>r.json());
+  const dpr = window.devicePixelRatio || 1;
+  scene = await fetch(`/_/admin-scene.json?w=${innerWidth}&h=${innerHeight}&dpr=${dpr}&view=${encodeURIComponent(adminView)}&collection=${encodeURIComponent(adminCollection)}`, {cache:'no-store'}).then(r=>r.json());
+  if(scene.collection) adminCollection = scene.collection;
   if(!gl) await initGl();
+  else if(fontAtlasAlpha !== scene.fontAtlas.alpha || iconAtlasAlpha !== scene.iconAtlas.alpha) await uploadSceneTextures();
   render();
 }
 function adminWsUrl(){
@@ -850,6 +908,13 @@ function connectAdminSocket(){
       }
     } else if(message.type === 'admin.navigate' && message.target){
       location.href = message.target;
+    } else if(message.type === 'admin.view' && message.view){
+      adminView = message.view;
+      await loadScene();
+    } else if(message.type === 'admin.collection'){
+      adminView = 'collections';
+      adminCollection = message.collection || '';
+      await loadScene();
     }
   });
   adminSocket.addEventListener('close', () => {
@@ -868,7 +933,19 @@ addEventListener('resize', () => {
 root.addEventListener('click', ev => {
   if(!scene) return;
   const hit = [...scene.hits].reverse().find(h => ev.offsetX >= h.x && ev.offsetY >= h.y && ev.offsetX <= h.x + h.w && ev.offsetY <= h.y + h.h);
-  if(hit && scene.actions && scene.actions[String(hit.id)]){
+  if(hit && adminViewById.has(hit.id)){
+    if(!sendAdmin('admin.action', {id: hit.id})){
+      adminView = adminViewById.get(hit.id);
+      loadScene();
+    }
+  } else if(hit && scene.collectionActions && scene.collectionActions[String(hit.id)]){
+    const collection = scene.collectionActions[String(hit.id)];
+    if(!sendAdmin('admin.collection', {collection})){
+      adminView = 'collections';
+      adminCollection = collection;
+      loadScene();
+    }
+  } else if(hit && scene.actions && scene.actions[String(hit.id)]){
     if(!sendAdmin('admin.action', {id: hit.id})) location.href = scene.actions[String(hit.id)];
   }
 });
@@ -962,6 +1039,7 @@ impl PersistDelta {
 enum AdminWsCommand {
     Snapshot,
     Action { id: u64 },
+    Collection { name: String },
     Unknown { kind: String },
 }
 
@@ -1766,20 +1844,41 @@ impl PocketState {
         })
     }
 
-    fn admin_ui_scene(&self, query: Option<&str>) -> Value {
+    fn admin_ui_scene(&self, query: Option<&str>) -> Result<Value, String> {
         let width = query_usize(query, "w").unwrap_or(1280).clamp(360, 3840) as f32;
         let height = query_usize(query, "h").unwrap_or(820).clamp(480, 2160) as f32;
-        let atlas = FontAtlas::load_geist(24.0).expect("bundled admin font atlas");
+        let dpr = query_f32(query, "dpr").unwrap_or(1.0).clamp(1.0, 4.0);
+        let view = admin_view_from_query(query);
+        let requested_collection = query_string(query, "collection").unwrap_or_default();
+        let selected_collection = self.admin_selected_collection(&requested_collection);
+        let atlas = FontAtlas::load_geist_for_device_scale(16.0, dpr)
+            .map_err(|error| format!("font atlas failed: {error}"))?;
+        let font_atlas_alpha =
+            format!("/_/assets/admin-font-alpha-geist-gvar-v2-16.bin?dpr={dpr:.3}");
         let mut scene = GpuScene::new(Color4::rgb_u8(9, 9, 9));
-        let admin_state = self.admin_ui_projection();
+        let admin_state = self.admin_ui_projection(view, &selected_collection);
         build_pocketbase_admin_scene(&mut scene, &atlas, &admin_state, width, height);
         let mut packed = PackedGpuScene::default();
         packed.pack(&scene);
         let packed_stats = packed.stats();
-        json!({
+        let collection_actions = self
+            .collections
+            .values()
+            .take(12)
+            .enumerate()
+            .map(|(index, collection)| {
+                (
+                    (POCKETBASE_ADMIN_COLLECTION_ROW_BASE_ID + index as u32).to_string(),
+                    collection.name.clone(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        Ok(json!({
             "surface": "pocketbase-admin",
             "source": "edgerun-ui-core::gpu::pocketbase_admin",
             "renderer": "webgl2",
+            "view": view.as_str(),
+            "collection": selected_collection,
             "width": width,
             "height": height,
             "clear": color_json(scene.clear),
@@ -1793,7 +1892,10 @@ impl PocketState {
             "fontAtlas": {
                 "width": atlas.width,
                 "height": atlas.height,
-                "alpha": "/_/assets/admin-font-alpha.bin"
+                "cssPx": 16.0,
+                "rasterPx": 16.0 * dpr,
+                "devicePixelRatio": dpr,
+                "alpha": font_atlas_alpha
             },
             "iconAtlas": {
                 "provider": "tabler",
@@ -1810,26 +1912,29 @@ impl PocketState {
                 "iconVertices": packed.icon_vertices
             },
             "actions": {
-                "7101": "/api/collections",
-                "7102": "/api/settings",
-                "7103": "/api/logs",
-                "7104": "/api/backups",
-                "7105": "/api/crons",
                 "7106": "/api/edgerun/dns/zones",
                 "7107": "/api/edgerun/acme/http01",
-                "7108": "/api/health"
+                "7108": "/api/health",
+                "7109": "/api/collections/import"
             },
+            "collectionActions": collection_actions,
             "stats": {
                 "rects": scene.rects().len(),
                 "hits": scene.hits().len(),
                 "textVertices": packed_stats.text_vertex_count,
                 "iconVertices": packed_stats.icon_vertex_count
             }
-        })
+        }))
     }
 
-    fn admin_ui_projection(&self) -> UiPocketBaseAdminState {
+    fn admin_ui_projection(
+        &self,
+        active_view: UiPocketBaseAdminView,
+        selected_collection: &str,
+    ) -> UiPocketBaseAdminState {
         UiPocketBaseAdminState {
+            active_view,
+            selected_collection: selected_collection.to_string(),
             superuser_count: self.admins.len(),
             collections: self
                 .collections
@@ -1872,6 +1977,13 @@ impl PocketState {
         }
     }
 
+    fn admin_selected_collection(&self, requested: &str) -> String {
+        if !requested.is_empty() && self.collections.contains_key(requested) {
+            return requested.to_string();
+        }
+        self.collections.keys().next().cloned().unwrap_or_default()
+    }
+
     fn dispatch(
         &mut self,
         method: Method,
@@ -1902,14 +2014,23 @@ impl PocketState {
             .with_header("Content-Type", "font/ttf")
             .with_header("Cache-Control", "public, max-age=31536000, immutable");
         }
-        if method == Method::GET && path == "_/assets/admin-font-alpha.bin" {
-            let atlas = match FontAtlas::load_geist(24.0) {
+        if method == Method::GET
+            && (path == "_/assets/admin-font-alpha-geist-gvar-v2-16.bin"
+                || path == "_/assets/admin-font-alpha-geist-gvar-v1-16.bin"
+                || path == "_/assets/admin-font-alpha-16.bin"
+                || path == "_/assets/admin-font-alpha-multi.bin"
+                || path == "_/assets/admin-font-alpha.bin")
+        {
+            let dpr = query_f32(request.uri().query(), "dpr")
+                .unwrap_or(1.0)
+                .clamp(1.0, 4.0);
+            let atlas = match FontAtlas::load_geist_for_device_scale(16.0, dpr) {
                 Ok(atlas) => atlas,
                 Err(error) => return error_response(500, &format!("font atlas failed: {error}")),
             };
             return Response::from_parts(status(200), Default::default(), atlas.alpha)
                 .with_header("Content-Type", "application/octet-stream")
-                .with_header("Cache-Control", "public, max-age=31536000, immutable");
+                .with_header("Cache-Control", "no-store");
         }
         if method == Method::GET && path == "_/assets/tabler-alpha.bin" {
             return Response::from_parts(
@@ -1924,7 +2045,10 @@ impl PocketState {
             return json_response(200, self.admin_ui_manifest());
         }
         if method == Method::GET && path == "_/admin-scene.json" {
-            return json_response(200, self.admin_ui_scene(request.uri().query()));
+            return match self.admin_ui_scene(request.uri().query()) {
+                Ok(scene) => json_response(200, scene),
+                Err(error) => error_response(500, &error),
+            };
         }
         if method == Method::GET && path == "api/health" {
             return json_response(
@@ -2452,11 +2576,10 @@ impl PocketState {
                 ) {
                     return error_response(403, "request rejected by collection delete rule");
                 }
-                let removed = collection.records.remove(id);
-                if removed.is_none() {
+                let Some(removed) = collection.records.remove(id) else {
                     return error_response(404, "record not found");
-                }
-                let removed_json = removed.unwrap().to_json();
+                };
+                let removed_json = removed.to_json();
                 let _ = std::fs::remove_dir_all(
                     self.data_dir.join("files").join(collection_name).join(id),
                 );
@@ -2581,7 +2704,9 @@ impl PocketState {
             });
         }
         let record = if let Some(record_id) = record_id {
-            let record = collection.records.get_mut(&record_id).unwrap();
+            let Some(record) = collection.records.get_mut(&record_id) else {
+                return error_response(500, "matched oauth2 record disappeared");
+            };
             append_external_auth(record, external);
             if !email.is_empty() {
                 record
@@ -3463,7 +3588,11 @@ impl PocketState {
                 let body = body
                     .filter(|value| *value != Value::Null)
                     .and_then(|value| edgerun_json::to_string(&value).ok());
-                let req = build_internal_request(method.clone(), url, body.as_deref(), actor);
+                let req = match build_internal_request(method.clone(), url, body.as_deref(), actor)
+                {
+                    Ok(req) => req,
+                    Err(message) => return Err(error_response(400, &message)),
+                };
                 let path = req.uri().path().trim_matches('/').to_string();
                 let response = staged.dispatch(method, path, req, actor);
                 let status = response.status().as_u16();
@@ -3603,7 +3732,11 @@ impl PocketState {
                 if let Err(error) = validate_dns_zones_value(&zones) {
                     return error_response(400, &error);
                 }
-                set_nested_setting(&mut self.settings, &["edgerun", "dns", "zones"], zones);
+                if let Err(error) =
+                    set_nested_setting(&mut self.settings, &["edgerun", "dns", "zones"], zones)
+                {
+                    return error_response(500, &error);
+                }
                 self.persist_settings_or_500(json!({"items": dns_zone_values(&self.settings)}), 200)
             }
             _ => error_response(405, "method not allowed"),
@@ -3763,11 +3896,13 @@ impl PocketState {
                     .filter(|item| item.get_str("token") != Some(token.as_str()))
                     .collect::<Vec<_>>();
                 items.push(challenge.clone());
-                set_nested_setting(
+                if let Err(error) = set_nested_setting(
                     &mut self.settings,
                     &["edgerun", "acme", "http01"],
                     Value::Array(items),
-                );
+                ) {
+                    return error_response(500, &error);
+                }
                 self.persist_settings_or_500(challenge, 200)
             }
             _ => error_response(405, "method not allowed"),
@@ -3790,11 +3925,13 @@ impl PocketState {
                     .into_iter()
                     .filter(|item| item.get_str("token") != Some(token))
                     .collect::<Vec<_>>();
-                set_nested_setting(
+                if let Err(error) = set_nested_setting(
                     &mut self.settings,
                     &["edgerun", "acme", "http01"],
                     Value::Array(items),
-                );
+                ) {
+                    return error_response(500, &error);
+                }
                 self.persist_settings_or_500(Value::Null, 204)
             }
             _ => error_response(405, "method not allowed"),
@@ -3869,8 +4006,10 @@ impl PocketState {
             Err(response) => return response,
         };
         let script = body.get_str("script").unwrap_or_default();
-        match eval_quickjs_hook(script, &body) {
-            Ok(value) => json_response(200, json!({"result": value, "runtime": "quickjs"})),
+        match eval_js_hook(script, &body) {
+            Ok((value, runtime)) => {
+                json_response(200, json!({"result": value, "runtime": runtime}))
+            }
             Err(error) => error_response(400, &error),
         }
     }
@@ -5438,45 +5577,80 @@ fn merge_json(target: &mut Value, patch: &Value) {
     }
 }
 
-fn set_nested_setting(root: &mut Value, path: &[&str], value: Value) {
+fn set_nested_setting(root: &mut Value, path: &[&str], value: Value) -> Result<(), String> {
     if path.is_empty() {
         *root = value;
-        return;
+        return Ok(());
     }
     let mut current = root;
     for key in &path[..path.len() - 1] {
         if current.as_object().is_none() {
             *current = Value::empty_object();
         }
-        let object = current.as_object_mut().unwrap();
+        let Some(object) = current.as_object_mut() else {
+            return Err(format!("settings path segment {key:?} is not an object"));
+        };
         if object.get(key).is_none() {
             object.push_field((*key).to_string(), Value::empty_object());
         }
-        current = object.get_mut(key).unwrap();
+        let Some(next) = object.get_mut(key) else {
+            return Err(format!("settings path segment {key:?} was not created"));
+        };
+        current = next;
     }
     if current.as_object().is_none() {
         *current = Value::empty_object();
     }
-    let object = current.as_object_mut().unwrap();
+    let Some(object) = current.as_object_mut() else {
+        return Err("settings leaf parent is not an object".to_string());
+    };
     if let Some(existing) = object.get_mut(path[path.len() - 1]) {
         *existing = value;
     } else {
         object.push_field(path[path.len() - 1].to_string(), value);
     }
+    Ok(())
 }
 
-fn eval_quickjs_hook(script: &str, body: &Value) -> Result<Value, String> {
-    let qjs = quickjs_binary_path()?;
+enum JsHookRuntime {
+    QuickJs(PathBuf),
+    Node(PathBuf),
+}
+
+impl JsHookRuntime {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::QuickJs(_) => "quickjs",
+            Self::Node(_) => "node",
+        }
+    }
+}
+
+fn eval_js_hook(script: &str, body: &Value) -> Result<(Value, &'static str), String> {
+    let runtime = js_hook_runtime()?;
     let context = edgerun_json::to_string(body).map_err(|error| error.to_string())?;
     let program = format!(
         "const request = {context}; const context = request; const result = (() => {{ {script} }})(); console.log(JSON.stringify(result === undefined ? null : result));"
     );
-    let output = Command::new(qjs)
-        .arg("--memory-limit")
-        .arg("8192")
-        .arg("--stack-size")
-        .arg("512")
-        .arg("-e")
+    let runtime_name = runtime.name();
+    let mut command = match runtime {
+        JsHookRuntime::QuickJs(path) => {
+            let mut command = Command::new(path);
+            command
+                .arg("--memory-limit")
+                .arg("8192")
+                .arg("--stack-size")
+                .arg("512")
+                .arg("-e");
+            command
+        }
+        JsHookRuntime::Node(path) => {
+            let mut command = Command::new(path);
+            command.arg("-e");
+            command
+        }
+    };
+    let output = command
         .arg(program)
         .output()
         .map_err(|error| error.to_string())?;
@@ -5488,16 +5662,17 @@ fn eval_quickjs_hook(script: &str, body: &Value) -> Result<Value, String> {
     let line = stdout
         .lines()
         .last()
-        .ok_or_else(|| "QuickJS produced no result".to_string())?;
-    from_slice(line.as_bytes()).map_err(|error| error.to_string())
+        .ok_or_else(|| "JavaScript hook runtime produced no result".to_string())?;
+    let value = from_slice(line.as_bytes()).map_err(|error| error.to_string())?;
+    Ok((value, runtime_name))
 }
 
-fn quickjs_binary_path() -> Result<PathBuf, String> {
+fn js_hook_runtime() -> Result<JsHookRuntime, String> {
     if let Some(path) = env::var_os("EDGERUN_QUICKJS")
         .map(PathBuf::from)
         .filter(|path| path.exists())
     {
-        return Ok(path);
+        return Ok(JsHookRuntime::QuickJs(path));
     }
 
     if let Some(path) = env::var_os("PATH").and_then(|paths| {
@@ -5505,10 +5680,18 @@ fn quickjs_binary_path() -> Result<PathBuf, String> {
             .map(|dir| dir.join("qjs"))
             .find(|path| path.exists())
     }) {
-        return Ok(path);
+        return Ok(JsHookRuntime::QuickJs(path));
     }
 
-    Err("QuickJS hook execution requires EDGERUN_QUICKJS or qjs on PATH".to_string())
+    if let Some(path) = env::var_os("PATH").and_then(|paths| {
+        env::split_paths(&paths)
+            .map(|dir| dir.join("node"))
+            .find(|path| path.exists())
+    }) {
+        return Ok(JsHookRuntime::Node(path));
+    }
+
+    Err("JavaScript hook execution requires EDGERUN_QUICKJS, qjs, or node on PATH".to_string())
 }
 
 fn field_options(value: &Value) -> Value {
@@ -5805,6 +5988,16 @@ fn query_usize(query: Option<&str>, key: &str) -> Option<usize> {
     })
 }
 
+fn query_f32(query: Option<&str>, key: &str) -> Option<f32> {
+    query_pairs(query).into_iter().find_map(|(name, value)| {
+        if name == key {
+            value.parse().ok()
+        } else {
+            None
+        }
+    })
+}
+
 fn query_bool(query: Option<&str>, key: &str) -> Option<bool> {
     query_pairs(query).into_iter().find_map(|(name, value)| {
         if name == key {
@@ -5813,6 +6006,31 @@ fn query_bool(query: Option<&str>, key: &str) -> Option<bool> {
             None
         }
     })
+}
+
+fn query_string(query: Option<&str>, key: &str) -> Option<String> {
+    query_pairs(query)
+        .into_iter()
+        .find_map(|(name, value)| (name == key).then_some(value))
+}
+
+fn admin_view_from_query(query: Option<&str>) -> UiPocketBaseAdminView {
+    query_pairs(query)
+        .into_iter()
+        .find_map(|(name, value)| {
+            if name == "view" {
+                Some(match value.as_str() {
+                    "logs" => UiPocketBaseAdminView::Logs,
+                    "settings" => UiPocketBaseAdminView::Settings,
+                    "backups" => UiPocketBaseAdminView::Backups,
+                    "crons" => UiPocketBaseAdminView::Crons,
+                    _ => UiPocketBaseAdminView::Collections,
+                })
+            } else {
+                None
+            }
+        })
+        .unwrap_or(UiPocketBaseAdminView::Collections)
 }
 
 fn query_pairs(query: Option<&str>) -> Vec<(String, String)> {
@@ -5951,7 +6169,7 @@ fn build_internal_request(
     path: &str,
     body: Option<&str>,
     actor: Option<&Actor>,
-) -> Request {
+) -> Result<Request, String> {
     let mut builder = Request::builder()
         .method(method)
         .uri(format!("http://127.0.0.1/{}", path.trim_start_matches('/')));
@@ -5964,7 +6182,9 @@ fn build_internal_request(
             &format!("Bearer internal.{}.{}", actor.kind, actor.id),
         );
     }
-    builder.build().unwrap()
+    builder
+        .build()
+        .map_err(|error| format!("invalid internal batch request: {error}"))
 }
 
 fn require_method(actual: &Method, expected: Method) -> Result<(), Response> {
@@ -6149,6 +6369,21 @@ fn invalid_data(error: impl std::fmt::Display) -> std::io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admin_ws_bind_uses_adjacent_port() {
+        assert_eq!(
+            admin_ws_bind_for("127.0.0.1:8090").unwrap(),
+            "127.0.0.1:8091"
+        );
+        assert_eq!(admin_ws_bind_for("[::1]:8090").unwrap(), "[::1]:8091");
+    }
+
+    #[test]
+    fn admin_ws_bind_rejects_ambiguous_or_overflowing_bind() {
+        assert!(admin_ws_bind_for("localhost:8090").is_err());
+        assert!(admin_ws_bind_for("127.0.0.1:65535").is_err());
+    }
 
     #[test]
     fn collection_record_crud_and_reload_persist_records() {
@@ -6552,12 +6787,21 @@ mod tests {
         assert_eq!(host.status().as_u16(), 200);
         let host = String::from_utf8(host.body().to_vec()).unwrap();
         assert!(host.contains("/_/admin-scene.json"));
+        assert!(host.contains("adminViewById"));
+        assert!(host.contains("collectionActions"));
+        assert!(host.contains("admin.view"));
+        assert!(host.contains("admin.collection"));
+        assert!(host.contains("scene.fontAtlas.alpha"));
         assert!(host.contains("webgl2"));
         assert!(host.contains("gl.drawArrays"));
         let font = state.route(request(Method::GET, "/_/assets/Geist-Variable.ttf", None));
         assert_eq!(font.status().as_u16(), 200);
         assert!(font.body().len() > 10_000);
-        let font_alpha = state.route(request(Method::GET, "/_/assets/admin-font-alpha.bin", None));
+        let font_alpha = state.route(request(
+            Method::GET,
+            "/_/assets/admin-font-alpha-geist-gvar-v2-16.bin?dpr=2",
+            None,
+        ));
         assert_eq!(font_alpha.status().as_u16(), 200);
         assert!(font_alpha.body().len() > 100_000);
         let icon_alpha = state.route(request(Method::GET, "/_/assets/tabler-alpha.bin", None));
@@ -6565,13 +6809,29 @@ mod tests {
         assert!(icon_alpha.body().len() > 100_000);
         let scene = state.route(request(
             Method::GET,
-            "/_/admin-scene.json?w=900&h=640",
+            "/_/admin-scene.json?w=900&h=640&dpr=2",
             None,
         ));
         assert_eq!(scene.status().as_u16(), 200);
         let scene = parse_response(scene);
         assert_eq!(scene.get_str("surface"), Some("pocketbase-admin"));
         assert_eq!(scene.get_str("renderer"), Some("webgl2"));
+        assert_eq!(scene.get_str("view"), Some("collections"));
+        assert_eq!(scene.get_str("collection"), Some("users"));
+        assert_eq!(
+            scene
+                .get_object("fontAtlas")
+                .and_then(|font| font.get("alpha"))
+                .and_then(Value::as_str),
+            Some("/_/assets/admin-font-alpha-geist-gvar-v2-16.bin?dpr=2.000")
+        );
+        assert_eq!(
+            scene
+                .get_object("fontAtlas")
+                .and_then(|font| font.get("rasterPx"))
+                .and_then(Value::as_f64),
+            Some(32.0)
+        );
         assert_eq!(
             scene
                 .get_object("font")
@@ -6603,6 +6863,33 @@ mod tests {
                 .get_array("hits")
                 .is_some_and(|hits| hits.iter().any(|hit| hit.get_u64("id") == Some(7101)))
         );
+        assert!(
+            scene
+                .get_object("collectionActions")
+                .is_some_and(|actions| actions.get("7200").and_then(Value::as_str) == Some("users"))
+        );
+        let selected_scene = state.route(request(
+            Method::GET,
+            "/_/admin-scene.json?w=900&h=640&collection=users",
+            None,
+        ));
+        assert_eq!(selected_scene.status().as_u16(), 200);
+        assert_eq!(
+            parse_response(selected_scene).get_str("collection"),
+            Some("users")
+        );
+        let logs_scene = state.route(request(
+            Method::GET,
+            "/_/admin-scene.json?w=900&h=640&view=logs",
+            None,
+        ));
+        assert_eq!(logs_scene.status().as_u16(), 200);
+        let logs_scene = parse_response(logs_scene);
+        assert_eq!(logs_scene.get_str("view"), Some("logs"));
+        assert!(logs_scene.get_array("hits").is_some_and(|hits| {
+            hits.iter()
+                .any(|hit| hit.get_u64("id").is_some_and(|id| id >= 7600))
+        }));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use super::font_renderer::{Font, FontSettings, VariationSetting};
 use super::{Color4, GpuScene};
 use std::collections::HashMap;
 use std::vec::Vec;
@@ -25,6 +26,13 @@ struct AtlasGlyph {
     size: [f32; 2],
     bearing: [f32; 2],
     advance: f32,
+    px: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct GlyphKey {
+    ch: char,
+    px: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -32,15 +40,47 @@ pub struct FontAtlas {
     pub width: u32,
     pub height: u32,
     pub alpha: Vec<u8>,
-    glyphs: HashMap<char, AtlasGlyph>,
+    glyphs: HashMap<GlyphKey, AtlasGlyph>,
     px: f32,
+    raster_px: u16,
+    ascent: f32,
+    descent: f32,
+    line_height: f32,
     skipped_glyphs: usize,
 }
 
 impl FontAtlas {
     pub fn from_font_bytes(bytes: &[u8], px: f32) -> Result<Self, String> {
-        let font = fontdue_font_from_bytes(bytes).map_err(str::to_string)?;
-        Ok(Self::build(&font, &ui_chars(), px))
+        Self::from_font_bytes_for_raster_px(bytes, px, px)
+    }
+
+    pub fn from_font_bytes_for_raster_px(
+        bytes: &[u8],
+        css_px: f32,
+        raster_px: f32,
+    ) -> Result<Self, String> {
+        let font =
+            renderer_font_from_bytes(bytes, FontSettings::default()).map_err(str::to_string)?;
+        Ok(Self::build(&font, &ui_chars(), css_px, raster_px))
+    }
+
+    pub fn from_font_bytes_with_variations(
+        bytes: &[u8],
+        px: f32,
+        variations: &[VariationSetting],
+    ) -> Result<Self, String> {
+        Self::from_font_bytes_with_variations_for_raster_px(bytes, px, px, variations)
+    }
+
+    pub fn from_font_bytes_with_variations_for_raster_px(
+        bytes: &[u8],
+        css_px: f32,
+        raster_px: f32,
+        variations: &[VariationSetting],
+    ) -> Result<Self, String> {
+        let font = renderer_font_from_bytes(bytes, FontSettings::with_variations(variations))
+            .map_err(str::to_string)?;
+        Ok(Self::build(&font, &ui_chars(), css_px, raster_px))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -53,12 +93,14 @@ impl FontAtlas {
         Self::from_font_bytes(GEIST_VARIABLE_FONT_BYTES, px)
     }
 
-    fn build(font: &fontdue::Font, chars: &[char], px: f32) -> Self {
-        let (width, height) = if px > 24.0 {
-            (2048u32, 2048u32)
-        } else {
-            (1024u32, 1024u32)
-        };
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_geist_for_device_scale(css_px: f32, device_scale: f32) -> Result<Self, String> {
+        let raster_px = css_px * device_scale.clamp(1.0, 4.0);
+        Self::from_font_bytes_for_raster_px(GEIST_VARIABLE_FONT_BYTES, css_px, raster_px)
+    }
+
+    fn build(font: &Font, chars: &[char], css_px: f32, raster_px: f32) -> Self {
+        let (width, height) = (2048u32, 2048u32);
         let mut alpha = vec![0u8; (width * height) as usize];
         let mut glyphs = HashMap::new();
         let mut x = 2u32;
@@ -66,16 +108,22 @@ impl FontAtlas {
         let mut row_h = 0u32;
         let mut skipped_glyphs = 0usize;
 
+        let raster_px = raster_px.clamp(1.0, 160.0);
+        let glyph_px = raster_px.round().clamp(1.0, u16::MAX as f32) as u16;
+        let vertical_metrics = font.vertical_metrics(raster_px);
+        let css_scale = css_px / raster_px.max(1.0);
         for &ch in chars {
-            let (metrics, bitmap) = font.rasterize(ch, px);
+            let (metrics, bitmap) = font.rasterize(ch, raster_px);
+            let key = GlyphKey { ch, px: glyph_px };
             if metrics.width == 0 || metrics.height == 0 {
                 glyphs.insert(
-                    ch,
+                    key,
                     AtlasGlyph {
                         uv: [0.0; 4],
                         size: [0.0, 0.0],
                         bearing: [metrics.xmin as f32, metrics.ymin as f32],
                         advance: metrics.advance_width,
+                        px: glyph_px as f32,
                     },
                 );
                 continue;
@@ -83,12 +131,12 @@ impl FontAtlas {
 
             let gw = metrics.width as u32;
             let gh = metrics.height as u32;
-            if x + gw + 2 >= width {
+            if x + gw + 4 >= width {
                 x = 2;
-                y += row_h + 2;
+                y += row_h + 4;
                 row_h = 0;
             }
-            if y + gh + 2 >= height {
+            if y + gh + 4 >= height {
                 skipped_glyphs += 1;
                 continue;
             }
@@ -100,20 +148,21 @@ impl FontAtlas {
             }
 
             glyphs.insert(
-                ch,
+                key,
                 AtlasGlyph {
                     uv: [
-                        x as f32 / width as f32,
-                        y as f32 / height as f32,
-                        (x + gw) as f32 / width as f32,
-                        (y + gh) as f32 / height as f32,
+                        (x as f32 + 0.5) / width as f32,
+                        (y as f32 + 0.5) / height as f32,
+                        (x as f32 + gw as f32 - 0.5) / width as f32,
+                        (y as f32 + gh as f32 - 0.5) / height as f32,
                     ],
                     size: [gw as f32, gh as f32],
                     bearing: [metrics.xmin as f32, metrics.ymin as f32],
                     advance: metrics.advance_width,
+                    px: glyph_px as f32,
                 },
             );
-            x += gw + 2;
+            x += gw + 4;
             row_h = row_h.max(gh);
         }
 
@@ -122,7 +171,11 @@ impl FontAtlas {
             height,
             alpha,
             glyphs,
-            px,
+            px: css_px,
+            raster_px: glyph_px,
+            ascent: vertical_metrics.ascent * css_scale,
+            descent: vertical_metrics.descent * css_scale,
+            line_height: vertical_metrics.line_height * css_scale,
             skipped_glyphs,
         }
     }
@@ -140,25 +193,47 @@ impl FontAtlas {
     }
 
     pub fn line_height(&self) -> f32 {
-        (self.px * 1.22).ceil()
+        self.line_height.max(self.ascent + self.descent).ceil()
     }
 
-    fn glyph_for(&self, ch: char) -> Option<&AtlasGlyph> {
+    pub fn line_height_scaled(&self, scale: f32) -> f32 {
+        (self.line_height.max(self.ascent + self.descent) * scale / 2.0).ceil()
+    }
+
+    fn font_target_px(&self, scale: f32) -> f32 {
+        (self.px * scale / 2.0).clamp(1.0, 160.0)
+    }
+
+    fn glyph_for_px(&self, ch: char, px: u16) -> Option<&AtlasGlyph> {
         self.glyphs
-            .get(&ch)
+            .get(&GlyphKey { ch, px })
             .or_else(|| {
                 ch.is_ascii()
-                    .then(|| self.glyphs.get(&ch.to_ascii_uppercase()))
+                    .then(|| {
+                        self.glyphs.get(&GlyphKey {
+                            ch: ch.to_ascii_uppercase(),
+                            px,
+                        })
+                    })
                     .flatten()
             })
-            .or_else(|| self.glyphs.get(&MISSING_GLYPH))
-            .or_else(|| self.glyphs.get(&'?'))
+            .or_else(|| {
+                self.glyphs.get(&GlyphKey {
+                    ch: MISSING_GLYPH,
+                    px,
+                })
+            })
+            .or_else(|| self.glyphs.get(&GlyphKey { ch: '?', px }))
+    }
+
+    fn advance_for_px(&self, ch: char, target_px: f32) -> f32 {
+        self.glyph_for_px(ch, self.raster_px)
+            .map(|glyph| glyph.advance.max(glyph.px * 0.28) * (target_px / glyph.px.max(1.0)))
+            .unwrap_or(target_px * 0.5)
     }
 
     fn advance_for(&self, ch: char) -> f32 {
-        self.glyph_for(ch)
-            .map(|glyph| glyph.advance.max(self.px * 0.28))
-            .unwrap_or(self.px * 0.5)
+        self.advance_for_px(ch, self.px)
     }
 
     pub(super) fn layout_text(
@@ -186,18 +261,20 @@ impl FontAtlas {
     ) -> Vec<TextQuad> {
         let mut quads = Vec::new();
         let origin_x = x;
-        let scale = font_scale_factor(self.px, scale);
-        let mut baseline = y + self.px * 0.82 * scale;
+        let target_px = self.font_target_px(scale);
+        let metric_scale = target_px / self.px.max(1.0);
+        let mut baseline = y + self.ascent * metric_scale;
         for ch in text.chars() {
             if ch == '\n' {
                 x = origin_x;
-                baseline += self.line_height() * scale;
+                baseline += self.line_height * metric_scale;
                 continue;
             }
-            let Some(glyph) = self.glyph_for(ch) else {
-                x += self.px * 0.5 * scale;
+            let Some(glyph) = self.glyph_for_px(ch, self.raster_px) else {
+                x += target_px * 0.5;
                 continue;
             };
+            let scale = target_px / glyph.px.max(1.0);
             if glyph.size[0] > 0.0 && glyph.size[1] > 0.0 {
                 quads.push(TextQuad {
                     x: (x + glyph.bearing[0] * scale).round(),
@@ -211,9 +288,21 @@ impl FontAtlas {
                     color,
                 });
             }
-            x += glyph.advance.max(self.px * 0.28) * scale;
+            x += glyph.advance.max(glyph.px * 0.28) * scale;
         }
         quads
+    }
+
+    pub fn visual_center_offset_scaled(&self, text: &str, scale: f32) -> Option<f32> {
+        let quads =
+            self.layout_text_quads_scaled(0.0, 0.0, text, scale, Color4::rgb_u8(255, 255, 255));
+        let mut top = f32::INFINITY;
+        let mut bottom = f32::NEG_INFINITY;
+        for quad in quads {
+            top = top.min(quad.y);
+            bottom = bottom.max(quad.y + quad.h);
+        }
+        top.is_finite().then_some((top + bottom) * 0.5)
     }
 
     pub fn layout_text_into(
@@ -246,7 +335,7 @@ impl FontAtlas {
     }
 
     pub fn text_width_scaled(&self, text: &str, scale: f32) -> f32 {
-        let scale = font_scale_factor(self.px, scale);
+        let target_px = self.font_target_px(scale);
         let mut current = 0.0f32;
         let mut widest = 0.0f32;
         for ch in text.chars() {
@@ -255,7 +344,7 @@ impl FontAtlas {
                 current = 0.0;
                 continue;
             }
-            current += self.advance_for(ch) * scale;
+            current += self.advance_for_px(ch, target_px);
         }
         widest.max(current)
     }
@@ -324,19 +413,17 @@ impl FontAtlas {
     }
 }
 
-fn font_scale_factor(atlas_px: f32, scale: f32) -> f32 {
-    let target_px = (scale * 8.0).clamp(8.0, 40.0);
-    target_px / atlas_px.max(1.0)
+fn renderer_font_from_bytes(bytes: &[u8], settings: FontSettings) -> Result<Font, &'static str> {
+    Font::from_bytes(bytes, settings.clone()).or_else(|_| {
+        first_ttc_face_bytes(bytes).and_then(|bytes| renderer_font_from_sfnt_bytes(bytes, settings))
+    })
 }
 
-fn fontdue_font_from_bytes(bytes: &[u8]) -> Result<fontdue::Font, &'static str> {
-    fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
-        .or_else(|_| first_ttc_face_bytes(bytes).and_then(fontdue_font_from_sfnt_bytes))
-}
-
-fn fontdue_font_from_sfnt_bytes(bytes: Vec<u8>) -> Result<fontdue::Font, &'static str> {
-    fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
-        .map_err(|_| "font parse failed")
+fn renderer_font_from_sfnt_bytes(
+    bytes: Vec<u8>,
+    settings: FontSettings,
+) -> Result<Font, &'static str> {
+    Font::from_bytes(bytes, settings).map_err(|_| "font parse failed")
 }
 
 fn first_ttc_face_bytes(bytes: &[u8]) -> Result<Vec<u8>, &'static str> {
@@ -480,14 +567,16 @@ mod tests {
 
     fn test_atlas() -> FontAtlas {
         let mut glyphs = HashMap::new();
+        let px = 16u16;
         for ch in ascii_chars() {
             glyphs.insert(
-                ch,
+                GlyphKey { ch, px },
                 AtlasGlyph {
                     uv: [0.0; 4],
-                    size: [8.0, 12.0],
+                    size: [px as f32 * 0.5, px as f32 * 0.75],
                     bearing: [0.0, 0.0],
-                    advance: 8.0,
+                    advance: px as f32 * 0.5,
+                    px: px as f32,
                 },
             );
         }
@@ -497,6 +586,10 @@ mod tests {
             alpha: Vec::new(),
             glyphs,
             px: 16.0,
+            raster_px: px,
+            ascent: 12.0,
+            descent: 4.0,
+            line_height: 20.0,
             skipped_glyphs: 0,
         }
     }
@@ -582,6 +675,38 @@ mod tests {
         assert!(!atlas.atlas_overflowed());
         assert!(atlas.glyph_count() >= ui_chars().len().saturating_sub(1));
         assert!(atlas.text_width("Variable Geist 123") > 0.0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn geist_font_atlas_applies_variable_weight_instance() {
+        let default = FontAtlas::load_geist(24.0).expect("default Geist font atlas");
+        let heavy = FontAtlas::from_font_bytes_with_variations(
+            GEIST_VARIABLE_FONT_BYTES,
+            24.0,
+            &[VariationSetting {
+                tag: *b"wght",
+                value: 900.0,
+            }],
+        )
+        .expect("heavy Geist font atlas");
+
+        assert_eq!(default.width, heavy.width);
+        assert_eq!(default.height, heavy.height);
+        assert_ne!(default.alpha, heavy.alpha);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn geist_atlas_uses_texel_center_uvs_for_linear_sampling() {
+        let atlas = FontAtlas::load_geist(16.0).expect("Geist font atlas");
+        let glyph = atlas.glyph_for_px('E', 16).expect("E glyph");
+        let half_texel = 0.5 / atlas.width as f32;
+
+        assert!(glyph.uv[0] >= half_texel);
+        assert!(glyph.uv[2] <= 1.0 - half_texel);
+        assert_ne!((glyph.uv[0] * atlas.width as f32).fract(), 0.0);
+        assert_ne!((glyph.uv[2] * atlas.width as f32).fract(), 0.0);
     }
 
     #[test]

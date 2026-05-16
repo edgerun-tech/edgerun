@@ -1,12 +1,24 @@
-#![no_std]
+use std::vec;
+use std::vec::Vec;
 
-extern crate alloc;
+#[derive(Clone, Debug, Default)]
+pub struct FontSettings {
+    variations: Vec<VariationSetting>,
+}
 
-use alloc::vec;
-use alloc::vec::Vec;
+impl FontSettings {
+    pub fn with_variations(variations: &[VariationSetting]) -> Self {
+        Self {
+            variations: variations.to_vec(),
+        }
+    }
+}
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct FontSettings;
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VariationSetting {
+    pub tag: [u8; 4],
+    pub value: f32,
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Metrics {
@@ -27,6 +39,13 @@ pub struct OutlineBounds {
     pub height: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct VerticalMetrics {
+    pub ascent: f32,
+    pub descent: f32,
+    pub line_height: f32,
+}
+
 #[derive(Clone, Debug)]
 pub struct Font {
     data: Vec<u8>,
@@ -37,6 +56,16 @@ pub struct Font {
     num_h_metrics: u16,
     ascent: i16,
     descent: i16,
+    _axes: Vec<VariationAxis>,
+    normalized_coords: Vec<f32>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VariationAxis {
+    pub tag: [u8; 4],
+    pub min: f32,
+    pub default: f32,
+    pub max: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -48,6 +77,8 @@ struct Tables {
     hmtx: Table,
     loca: Table,
     maxp: Table,
+    fvar: Table,
+    gvar: Table,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -114,7 +145,7 @@ impl Transform {
 impl Font {
     pub fn from_bytes<B: AsRef<[u8]>>(
         bytes: B,
-        _settings: FontSettings,
+        settings: FontSettings,
     ) -> Result<Self, &'static str> {
         let data = bytes.as_ref().to_vec();
         if data.len() < 12 {
@@ -145,6 +176,8 @@ impl Font {
                 b"hmtx" => tables.hmtx = table,
                 b"loca" => tables.loca = table,
                 b"maxp" => tables.maxp = table,
+                b"fvar" => tables.fvar = table,
+                b"gvar" => tables.gvar = table,
                 _ => {}
             }
         }
@@ -170,6 +203,8 @@ impl Font {
         if units_per_em == 0 || num_h_metrics == 0 || num_glyphs == 0 {
             return Err("invalid TrueType metrics");
         }
+        let axes = parse_fvar_axes(&data, tables.fvar).unwrap_or_default();
+        let normalized_coords = normalize_variations(&axes, &settings.variations);
 
         Ok(Self {
             data,
@@ -180,7 +215,23 @@ impl Font {
             num_h_metrics,
             ascent,
             descent,
+            _axes: axes,
+            normalized_coords,
         })
+    }
+
+    #[cfg(test)]
+    pub fn variation_axes(&self) -> &[VariationAxis] {
+        &self._axes
+    }
+
+    pub fn vertical_metrics(&self, px: f32) -> VerticalMetrics {
+        let scale = px / self.units_per_em as f32;
+        VerticalMetrics {
+            ascent: self.ascent as f32 * scale,
+            descent: -(self.descent as f32) * scale,
+            line_height: self.line_height(px),
+        }
     }
 
     pub fn metrics(&self, ch: char, px: f32) -> Metrics {
@@ -473,12 +524,16 @@ impl Font {
             ys.push(y);
         }
 
+        let mut xs: Vec<f32> = xs.into_iter().map(f32::from).collect();
+        let mut ys: Vec<f32> = ys.into_iter().map(f32::from).collect();
+        self.apply_gvar_deltas(glyph, point_count, &mut xs, &mut ys);
+
         let scale = px / self.units_per_em as f32;
         let mut points = Vec::with_capacity(point_count);
         for i in 0..point_count {
             points.push(transform.point(Point {
-                x: xs[i] as f32 * scale,
-                y: ys[i] as f32 * scale,
+                x: xs[i] * scale,
+                y: ys[i] * scale,
                 on: flags[i] & 0x01 != 0,
             }));
         }
@@ -492,6 +547,168 @@ impl Font {
             start = end + 1;
         }
         Some(())
+    }
+
+    fn apply_gvar_deltas(&self, glyph: u16, point_count: usize, xs: &mut [f32], ys: &mut [f32]) {
+        if self.tables.gvar.len == 0 || self.normalized_coords.is_empty() || point_count == 0 {
+            return;
+        }
+        let Some((glyph_data, shared_tuples, axis_count)) = self.gvar_glyph_data(glyph) else {
+            return;
+        };
+        if axis_count == 0 || axis_count != self.normalized_coords.len() {
+            return;
+        }
+
+        let tuple_count_raw = read_u16(glyph_data, 0).unwrap_or(0);
+        let tuple_count = (tuple_count_raw & 0x0fff) as usize;
+        let has_shared_points = tuple_count_raw & 0x8000 != 0;
+        let data_offset = read_u16(glyph_data, 2).unwrap_or(0) as usize;
+        if data_offset > glyph_data.len() {
+            return;
+        }
+
+        let mut header_pos = 4usize;
+        let mut tuple_data_pos = data_offset;
+        let mut shared_points: Option<Vec<usize>> = None;
+        if has_shared_points {
+            if let Some((points, consumed)) =
+                read_gvar_points(&glyph_data[tuple_data_pos..], point_count)
+            {
+                shared_points = Some(points);
+                tuple_data_pos += consumed;
+            } else {
+                return;
+            }
+        }
+
+        for _ in 0..tuple_count {
+            let Some(tuple_data_size) = read_u16(glyph_data, header_pos).map(usize::from) else {
+                return;
+            };
+            let Some(tuple_index) = read_u16(glyph_data, header_pos + 2) else {
+                return;
+            };
+            header_pos += 4;
+
+            let peak = if tuple_index & 0x8000 != 0 {
+                if let Some(coords) = read_f2dot14_tuple(glyph_data, header_pos, axis_count) {
+                    header_pos += axis_count * 2;
+                    coords
+                } else {
+                    return;
+                }
+            } else {
+                let shared_index = (tuple_index & 0x0fff) as usize;
+                let start = shared_index
+                    .checked_mul(axis_count * 2)
+                    .unwrap_or(usize::MAX);
+                if let Some(coords) = read_f2dot14_tuple(shared_tuples, start, axis_count) {
+                    coords
+                } else {
+                    return;
+                }
+            };
+
+            let (start_tuple, end_tuple) = if tuple_index & 0x4000 != 0 {
+                let Some(start) = read_f2dot14_tuple(glyph_data, header_pos, axis_count) else {
+                    return;
+                };
+                header_pos += axis_count * 2;
+                let Some(end) = read_f2dot14_tuple(glyph_data, header_pos, axis_count) else {
+                    return;
+                };
+                header_pos += axis_count * 2;
+                (Some(start), Some(end))
+            } else {
+                (None, None)
+            };
+
+            let tuple_data_end = tuple_data_pos.saturating_add(tuple_data_size);
+            let Some(tuple_data) = glyph_data.get(tuple_data_pos..tuple_data_end) else {
+                return;
+            };
+            tuple_data_pos = tuple_data_end;
+
+            let scalar = variation_scalar(
+                &self.normalized_coords,
+                &peak,
+                start_tuple.as_deref(),
+                end_tuple.as_deref(),
+            );
+            if scalar == 0.0 {
+                continue;
+            }
+
+            let mut pos = 0usize;
+            let points = if tuple_index & 0x2000 != 0 {
+                let Some((points, consumed)) = read_gvar_points(tuple_data, point_count) else {
+                    continue;
+                };
+                pos += consumed;
+                points
+            } else if let Some(points) = &shared_points {
+                points.clone()
+            } else {
+                (0..point_count).collect()
+            };
+            let Some((x_deltas, consumed)) = read_gvar_deltas(&tuple_data[pos..], points.len())
+            else {
+                continue;
+            };
+            pos += consumed;
+            let Some((y_deltas, _)) = read_gvar_deltas(&tuple_data[pos..], points.len()) else {
+                continue;
+            };
+
+            for (i, point) in points.iter().copied().enumerate() {
+                if point < point_count {
+                    xs[point] += x_deltas[i] as f32 * scalar;
+                    ys[point] += y_deltas[i] as f32 * scalar;
+                }
+            }
+        }
+    }
+
+    fn gvar_glyph_data(&self, glyph: u16) -> Option<(&[u8], &[u8], usize)> {
+        let table = self.tables.gvar;
+        let data = self.data.get(table.off..table.off + table.len)?;
+        let axis_count = read_u16(data, 4)? as usize;
+        let shared_tuple_count = read_u16(data, 6)? as usize;
+        let shared_tuple_off = read_u32(data, 8)? as usize;
+        let glyph_count = read_u16(data, 12)? as usize;
+        let flags = read_u16(data, 14)?;
+        let glyph_data_base = read_u32(data, 16)? as usize;
+        let glyph_index = glyph as usize;
+        if glyph_index >= glyph_count {
+            return None;
+        }
+
+        let offsets_base = 20usize;
+        let (start, end) = if flags & 0x0001 != 0 {
+            (
+                read_u32(data, offsets_base + glyph_index * 4)? as usize,
+                read_u32(data, offsets_base + (glyph_index + 1) * 4)? as usize,
+            )
+        } else {
+            (
+                read_u16(data, offsets_base + glyph_index * 2)? as usize * 2,
+                read_u16(data, offsets_base + (glyph_index + 1) * 2)? as usize * 2,
+            )
+        };
+        if start == end {
+            return None;
+        }
+        let glyph_start = glyph_data_base.checked_add(start)?;
+        let glyph_end = glyph_data_base.checked_add(end)?;
+        let shared_start = shared_tuple_off;
+        let shared_end =
+            shared_start.checked_add(shared_tuple_count.checked_mul(axis_count * 2)?)?;
+        Some((
+            data.get(glyph_start..glyph_end)?,
+            data.get(shared_start..shared_end)?,
+            axis_count,
+        ))
     }
 
     fn flatten_composite_glyph(
@@ -676,6 +893,178 @@ fn f2dot14(value: i16) -> f32 {
     value as f32 / 16384.0
 }
 
+fn fixed_16_16(value: i32) -> f32 {
+    value as f32 / 65536.0
+}
+
+fn parse_fvar_axes(data: &[u8], table: Table) -> Option<Vec<VariationAxis>> {
+    if table.len == 0 {
+        return Some(Vec::new());
+    }
+    let fvar = data.get(table.off..table.off + table.len)?;
+    let axes_offset = read_u16(fvar, 4)? as usize;
+    let axis_count = read_u16(fvar, 8)? as usize;
+    let axis_size = read_u16(fvar, 10)? as usize;
+    if axis_size < 20 {
+        return None;
+    }
+    let mut axes = Vec::with_capacity(axis_count);
+    for axis in 0..axis_count {
+        let off = axes_offset.checked_add(axis.checked_mul(axis_size)?)?;
+        let tag = [
+            *fvar.get(off)?,
+            *fvar.get(off + 1)?,
+            *fvar.get(off + 2)?,
+            *fvar.get(off + 3)?,
+        ];
+        axes.push(VariationAxis {
+            tag,
+            min: fixed_16_16(read_i32(fvar, off + 4)?),
+            default: fixed_16_16(read_i32(fvar, off + 8)?),
+            max: fixed_16_16(read_i32(fvar, off + 12)?),
+        });
+    }
+    Some(axes)
+}
+
+fn normalize_variations(axes: &[VariationAxis], settings: &[VariationSetting]) -> Vec<f32> {
+    axes.iter()
+        .map(|axis| {
+            let value = settings
+                .iter()
+                .find(|setting| setting.tag == axis.tag)
+                .map(|setting| setting.value)
+                .unwrap_or(axis.default)
+                .clamp(axis.min, axis.max);
+            if value == axis.default {
+                0.0
+            } else if value < axis.default {
+                ((value - axis.default) / (axis.default - axis.min).max(f32::EPSILON))
+                    .clamp(-1.0, 0.0)
+            } else {
+                ((value - axis.default) / (axis.max - axis.default).max(f32::EPSILON))
+                    .clamp(0.0, 1.0)
+            }
+        })
+        .collect()
+}
+
+fn variation_scalar(
+    coords: &[f32],
+    peak: &[f32],
+    start: Option<&[f32]>,
+    end: Option<&[f32]>,
+) -> f32 {
+    let mut scalar = 1.0f32;
+    for axis in 0..coords.len() {
+        let coord = coords[axis];
+        let peak = peak.get(axis).copied().unwrap_or(0.0);
+        if peak == 0.0 {
+            continue;
+        }
+        let axis_scalar = if let (Some(start), Some(end)) = (start, end) {
+            let start = start.get(axis).copied().unwrap_or(0.0);
+            let end = end.get(axis).copied().unwrap_or(0.0);
+            if coord <= start || coord >= end || peak <= start || peak >= end {
+                0.0
+            } else if coord == peak {
+                1.0
+            } else if coord < peak {
+                (coord - start) / (peak - start)
+            } else {
+                (end - coord) / (end - peak)
+            }
+        } else if coord == 0.0 || coord.signum() != peak.signum() || coord.abs() > peak.abs() {
+            0.0
+        } else {
+            coord / peak
+        };
+        scalar *= axis_scalar.clamp(0.0, 1.0);
+        if scalar == 0.0 {
+            break;
+        }
+    }
+    scalar
+}
+
+fn read_f2dot14_tuple(data: &[u8], off: usize, axis_count: usize) -> Option<Vec<f32>> {
+    let mut tuple = Vec::with_capacity(axis_count);
+    for axis in 0..axis_count {
+        tuple.push(f2dot14(read_i16(data, off + axis * 2)?));
+    }
+    Some(tuple)
+}
+
+fn read_gvar_points(data: &[u8], point_count: usize) -> Option<(Vec<usize>, usize)> {
+    let first = *data.first()?;
+    if first == 0 {
+        return Some(((0..point_count).collect(), 1));
+    }
+    let (count, mut pos) = if first & 0x80 != 0 {
+        ((((first & 0x7f) as usize) << 8) | *data.get(1)? as usize, 2)
+    } else {
+        (first as usize, 1)
+    };
+    let mut points = Vec::with_capacity(count);
+    let mut last = 0usize;
+    while points.len() < count {
+        let control = *data.get(pos)?;
+        pos += 1;
+        let run_count = (control & 0x7f) as usize + 1;
+        let word_deltas = control & 0x80 != 0;
+        for _ in 0..run_count {
+            if points.len() >= count {
+                break;
+            }
+            let delta = if word_deltas {
+                let value = read_u16(data, pos)? as usize;
+                pos += 2;
+                value
+            } else {
+                let value = *data.get(pos)? as usize;
+                pos += 1;
+                value
+            };
+            last = last.checked_add(delta)?;
+            if last >= point_count {
+                return None;
+            }
+            points.push(last);
+        }
+    }
+    Some((points, pos))
+}
+
+fn read_gvar_deltas(data: &[u8], count: usize) -> Option<(Vec<i16>, usize)> {
+    let mut deltas = Vec::with_capacity(count);
+    let mut pos = 0usize;
+    while deltas.len() < count {
+        let control = *data.get(pos)?;
+        pos += 1;
+        let run_count = (control & 0x3f) as usize + 1;
+        if control & 0x80 != 0 {
+            deltas.extend(std::iter::repeat_n(0, run_count.min(count - deltas.len())));
+        } else if control & 0x40 != 0 {
+            for _ in 0..run_count {
+                if deltas.len() >= count {
+                    break;
+                }
+                deltas.push(read_i16(data, pos)?);
+                pos += 2;
+            }
+        } else {
+            for _ in 0..run_count {
+                if deltas.len() >= count {
+                    break;
+                }
+                deltas.push(*data.get(pos)? as i8 as i16);
+                pos += 1;
+            }
+        }
+    }
+    Some((deltas, pos))
+}
+
 #[cfg(test)]
 fn bitmap_has_soft_edges(bitmap: &[u8]) -> bool {
     bitmap.iter().any(|alpha| *alpha > 0 && *alpha < 255)
@@ -717,6 +1106,10 @@ fn read_i16(bytes: &[u8], off: usize) -> Option<i16> {
     read_u16(bytes, off).map(|v| v as i16)
 }
 
+fn read_i32(bytes: &[u8], off: usize) -> Option<i32> {
+    read_u32(bytes, off).map(|v| v as i32)
+}
+
 fn read_u32(bytes: &[u8], off: usize) -> Option<u32> {
     let b = bytes.get(off..off + 4)?;
     Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
@@ -745,12 +1138,12 @@ mod tests {
     use super::*;
 
     const DEJAVU_MONO: &[u8] =
-        include_bytes!("../../../edgerun-term/edgerun-term-core/assets/DejaVuSansMono.ttf");
-    const GEIST_VARIABLE: &[u8] = include_bytes!("../../edgerun-ui-core/assets/Geist-Variable.ttf");
+        include_bytes!("../../../../edgerun-term/edgerun-term-core/assets/DejaVuSansMono.ttf");
+    const GEIST_VARIABLE: &[u8] = include_bytes!("../../assets/Geist-Variable.ttf");
 
     #[test]
     fn rasterizes_real_truetype_outlines() {
-        let font = Font::from_bytes(DEJAVU_MONO, FontSettings).unwrap();
+        let font = Font::from_bytes(DEJAVU_MONO, FontSettings::default()).unwrap();
         let (metrics, bitmap) = font.rasterize('A', 32.0);
 
         assert!(metrics.width > 8);
@@ -773,7 +1166,7 @@ mod tests {
 
     #[test]
     fn uses_font_metrics_for_advance_width() {
-        let font = Font::from_bytes(DEJAVU_MONO, FontSettings).unwrap();
+        let font = Font::from_bytes(DEJAVU_MONO, FontSettings::default()).unwrap();
 
         assert!(font.metrics('W', 18.0).advance_width > 1.0);
         assert!(font.metrics(' ', 18.0).advance_width > 1.0);
@@ -782,7 +1175,7 @@ mod tests {
 
     #[test]
     fn rasterizes_composite_glyphs_from_real_outlines() {
-        let font = Font::from_bytes(GEIST_VARIABLE, FontSettings).unwrap();
+        let font = Font::from_bytes(GEIST_VARIABLE, FontSettings::default()).unwrap();
         let (metrics, bitmap) = font.rasterize('é', 30.0);
 
         assert!(metrics.width > 8);
@@ -797,7 +1190,7 @@ mod tests {
 
     #[test]
     fn rasterizes_variable_font_default_instance_with_real_edges() {
-        let font = Font::from_bytes(GEIST_VARIABLE, FontSettings).unwrap();
+        let font = Font::from_bytes(GEIST_VARIABLE, FontSettings::default()).unwrap();
         let (metrics, bitmap) = font.rasterize('a', 16.0);
 
         assert!(metrics.width > 4);
@@ -806,6 +1199,39 @@ mod tests {
         assert!(
             !looks_like_fallback_box(&bitmap, metrics.width, metrics.height),
             "default variable-font instance should use glyf outlines"
+        );
+    }
+
+    #[test]
+    fn applies_gvar_weight_axis_deltas() {
+        let default = Font::from_bytes(GEIST_VARIABLE, FontSettings::default()).unwrap();
+        let heavy = Font::from_bytes(
+            GEIST_VARIABLE,
+            FontSettings::with_variations(&[VariationSetting {
+                tag: *b"wght",
+                value: 900.0,
+            }]),
+        )
+        .unwrap();
+
+        assert!(
+            default
+                .variation_axes()
+                .iter()
+                .any(|axis| axis.tag == *b"wght")
+        );
+
+        let (default_metrics, default_bitmap) = default.rasterize('a', 32.0);
+        let (heavy_metrics, heavy_bitmap) = heavy.rasterize('a', 32.0);
+        let default_alpha: usize = default_bitmap.iter().map(|alpha| *alpha as usize).sum();
+        let heavy_alpha: usize = heavy_bitmap.iter().map(|alpha| *alpha as usize).sum();
+
+        assert_eq!(default_metrics.width, heavy_metrics.width);
+        assert_eq!(default_metrics.height, heavy_metrics.height);
+        assert_ne!(default_bitmap, heavy_bitmap);
+        assert!(
+            heavy_alpha > default_alpha,
+            "heavier variable font instance should cover more alpha"
         );
     }
 }

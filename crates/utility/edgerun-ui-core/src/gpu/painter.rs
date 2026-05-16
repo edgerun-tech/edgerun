@@ -84,6 +84,24 @@ impl<'a, 'font> UiPainter<'a, 'font> {
         );
     }
 
+    pub fn label_line_height(&self, scale: f32) -> f32 {
+        #[cfg(feature = "fontdue-text")]
+        if let Some(atlas) = self.atlas {
+            return atlas.line_height_scaled(scale);
+        }
+        (scale * 8.0 * 1.22).ceil()
+    }
+
+    pub fn visual_centered_label_y(&self, y: f32, h: f32, text: &str, scale: f32) -> f32 {
+        #[cfg(feature = "fontdue-text")]
+        if let Some(atlas) = self.atlas {
+            if let Some(center_offset) = atlas.visual_center_offset_scaled(text, scale) {
+                return (y + h * 0.5 - center_offset).round();
+            }
+        }
+        (y + (h - self.label_line_height(scale)) * 0.5).round()
+    }
+
     pub fn bounded_label(
         &mut self,
         x: f32,

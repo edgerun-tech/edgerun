@@ -16,13 +16,12 @@ default = ["fontdue-text", "tabler-svg-atlas", "lucide-svg-atlas"]
 std = []
 gpu-gl = ["std"]
 sdl = ["gpu-gl", "fontdue-text"]
-fontdue-text = ["std", "dep:fontdue"]
+fontdue-text = ["std"]
 tabler-svg-atlas = []
 lucide-svg-atlas = []
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "alloc", "sha2"] }
-fontdue = { package = "edgerun-fontdue", path = "../edgerun-fontdue", optional = true }
 
 [[bin]]
 name = "ui-preview-sdl-shadcn"
