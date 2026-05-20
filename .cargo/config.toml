@@ -47,3 +47,8 @@ target = "x86_64-unknown-linux-gnu"
 #   an explicit config file for that build only:
 #     cargo vendor vendor/cargo > .cargo/vendor-config.toml
 #     CARGO_HOME=$PWD/.cargo-home cargo build --config .cargo/vendor-config.toml
+
+[alias]
+# Run edgerun-build from the workspace root.
+# cargo will build the binary on first use if it's not already built.
+edgerun-build = "run -p edgerun-codelyzer --bin edgerun-build --"
