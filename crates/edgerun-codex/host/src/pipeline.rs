@@ -105,7 +105,7 @@ Your job:
 - Output a compact TaskClassification handoff.
 
 Boundary rules:
-- Repository work happens in the in-memory repo workspace.
+- Repository work happens in the in-memory repo workspace and is written back immediately after Executor edits.
 - Searching, reading, editing, diffing, and patch planning for repo files must assume memory-backed repo tools, not shell.
 - host_shell is only for non-repo operations and only when the user explicitly asks for shell/OS work.
 
@@ -200,6 +200,7 @@ ExpectedArtifacts:"#,
 Your job:
 - Produce exact in-memory repo edits from the ToolPlan.
 - Use repo_edit(path) followed immediately by one fenced replacement body for full-file replacement edits.
+- The host will apply those edits in memory and immediately write changed files back to disk.
 - Prefer one focused edit over many speculative edits.
 - Keep output actionable and minimal.
 - Do not add new systems when existing callers/components should be updated.
@@ -219,12 +220,11 @@ ExpectedResult:"#,
         prompt: r#"You are the Reviewer stage.
 
 Your job:
-- Review the in-memory repo diff before it is written back.
+- Review the already-written repo diff from the Executor stage.
 - Find contradictions, duplicate systems, broken interfaces, unsafe assumptions, and likely compile failures.
+- If something is wrong, give corrected patch guidance for the next pipeline turn.
 - Confirm the plan respects the in-memory repo boundary.
 - Flag any host_shell use for repo work as a blocking issue.
-- Prefer corrections over vague criticism.
-- Return Verdict: accept only when the diff should be written back to disk.
 
 Output exactly these sections:
 Verdict:
@@ -300,13 +300,7 @@ pub fn run_pipeline(
         )?;
 
         if output.stage.kind == PipelineKind::Executor {
-            output.text = apply_repo_edits_from_executor(&output.text, repo, observer)?;
-        } else if output.stage.kind == PipelineKind::Reviewer && reviewer_accepts(&output.text) {
-            let written = write_back_changed_files(repo, observer)?;
-            if !written.is_empty() {
-                output.text.push_str("\n\nRepoWriteback:\n");
-                output.text.push_str(&written);
-            }
+            output.text = apply_repo_edits_and_writeback_from_executor(&output.text, repo, observer)?;
         }
 
         stage_outputs.push(output);
@@ -338,7 +332,7 @@ pub fn run_mock_pipeline(
         let stage = STAGES[*stage_index];
         observer.stage_started(&stage, index, total)?;
         let text = format!(
-            "{}:\nmock handoff for request: {}\nBoundary: repo operations stay in memory; host_shell only on explicit non-repo request.\n",
+            "{}:\nmock handoff for request: {}\nBoundary: repo operations stay in memory and write back after Executor; host_shell only on explicit non-repo request.\n",
             stage.output_name, user_request
         );
         observer.stage_finished(&stage, index, total, &text)?;
@@ -346,7 +340,7 @@ pub fn run_mock_pipeline(
     }
 
     let final_reply = format!(
-        "Pipeline completed in mock mode using {} stages. Repository work is expected to stay inside the in-memory workspace; host_shell is reserved for explicit non-repo requests.\n\nRequest: {}",
+        "Pipeline completed in mock mode using {} stages. Repository work stays inside the in-memory workspace during editing and writes back immediately after Executor.\n\nRequest: {}",
         total, user_request
     );
 
@@ -422,7 +416,7 @@ fn run_stage(
     })
 }
 
-fn apply_repo_edits_from_executor(
+fn apply_repo_edits_and_writeback_from_executor(
     output: &str,
     repo: &mut dyn RepoTools,
     observer: &mut dyn PipelineObserver,
@@ -441,8 +435,17 @@ fn apply_repo_edits_from_executor(
         text.push_str(&edit.path);
         text.push_str(if ok { " applied in memory\n" } else { " failed\n" });
     }
+
+    let diff = repo.diff();
     text.push_str("\nRepoDiff:\n");
-    text.push_str(&repo.diff());
+    text.push_str(&diff);
+
+    let written = write_back_changed_files(repo, observer)?;
+    if !written.is_empty() {
+        text.push_str("\nRepoWriteback:\n");
+        text.push_str(&written);
+    }
+
     Ok(truncate_chars(&text, MAX_STAGE_OUTPUT_CHARS))
 }
 
@@ -459,12 +462,6 @@ fn write_back_changed_files(
         out.push_str(if ok { " written\n" } else { " write failed\n" });
     }
     Ok(out)
-}
-
-fn reviewer_accepts(output: &str) -> bool {
-    output
-        .lines()
-        .any(|line| line.trim().eq_ignore_ascii_case("Verdict: accept") || line.trim().eq_ignore_ascii_case("Verdict: accepted"))
 }
 
 fn append_revealed_context(out: &mut String, label: &str, body: &str) {
@@ -692,8 +689,8 @@ fn pipeline_handoff(
     out.push_str("- The host will reveal from memory and rerun this same stage.\n");
     out.push_str("\nEDIT_LOOP:\n");
     out.push_str("- Executor may output repo_edit(path) followed by one fenced full-file replacement body.\n");
-    out.push_str("- The host applies repo_edit only in memory and sends the resulting RepoDiff to Reviewer.\n");
-    out.push_str("- Reviewer controls writeback. Only Verdict: accept writes changed files to disk.\n");
+    out.push_str("- The host applies repo_edit in memory, produces RepoDiff, and writes changed files back immediately.\n");
+    out.push_str("- Reviewer audits the already-written diff and gives corrected guidance for the next turn when needed.\n");
     out.push_str("\nBOUNDARY:\n");
     out.push_str("- Repository search/read/edit/diff/patch work happens in the in-memory repo workspace.\n");
     out.push_str("- host_shell is a separate non-repo tool and only available when the user explicitly asks for host/OS shell work.\n");
@@ -887,11 +884,5 @@ mod tests {
         assert_eq!(edits.len(), 1);
         assert_eq!(edits[0].path, "src/lib.rs");
         assert_eq!(edits[0].replacement, "fn main() {}\n");
-    }
-
-    #[test]
-    fn reviewer_accepts_exact_verdict() {
-        assert!(reviewer_accepts("Verdict: accept\nBlockingIssues:"));
-        assert!(!reviewer_accepts("Verdict: reject"));
     }
 }
