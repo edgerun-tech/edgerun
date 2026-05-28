@@ -59,6 +59,7 @@ struct Config {
     model: String,
     base_url: String,
     api_key: Option<String>,
+    ui_stream_stdout: bool,
     ui_stream_path: Option<PathBuf>,
     agent_seed: [u8; 32],
     executor_seed: [u8; 32],
@@ -67,28 +68,35 @@ struct Config {
 }
 
 struct UiStreamSink {
-    file: Option<std::fs::File>,
+    writer: Option<Box<dyn Write>>,
 }
 
 impl UiStreamSink {
-    fn open(path: Option<&PathBuf>) -> Result<Self, Box<dyn Error>> {
+    fn open(stdout: bool, path: Option<&PathBuf>) -> Result<Self, Box<dyn Error>> {
+        if stdout {
+            return Ok(Self {
+                writer: Some(Box::new(std::io::stdout())),
+            });
+        }
         let Some(path) = path else {
-            return Ok(Self { file: None });
+            return Ok(Self { writer: None });
         };
         let file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)?;
-        Ok(Self { file: Some(file) })
+        Ok(Self {
+            writer: Some(Box::new(file)),
+        })
     }
 
     fn emit_patch(&mut self, patch: Vec<u8>) -> Result<(), Box<dyn Error>> {
-        let Some(file) = self.file.as_mut() else {
+        let Some(writer) = self.writer.as_mut() else {
             return Ok(());
         };
-        file.write_all(&[ui_stream::MessageType::Patch as u8])?;
-        file.write_all(&patch)?;
-        file.flush()?;
+        writer.write_all(&[ui_stream::MessageType::Patch as u8])?;
+        writer.write_all(&patch)?;
+        writer.flush()?;
         Ok(())
     }
 
@@ -149,22 +157,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             auth_provider(&config)?,
         )),
     };
-    let mut ui_sink = UiStreamSink::open(config.ui_stream_path.as_ref())?;
+    let mut ui_sink = UiStreamSink::open(config.ui_stream_stdout, config.ui_stream_path.as_ref())?;
     ui_sink.status("codex-host starting")?;
     ui_sink.progress(0.0)?;
     ui_sink.emit_patch(ui_stream::agent::run_button("Run"))?;
 
     let hub = WebSocketWorkHub::bind(&config.listen)?;
-    println!("codex-host listening on ws://{}", hub.listen_addr());
-    println!("codex model {}", config.model);
-    println!("codex model base_url {}", config.base_url);
-    if let Some(path) = &config.ui_stream_path {
-        println!("ui_stream patch output {}", path.display());
+    eprintln!("codex-host listening on ws://{}", hub.listen_addr());
+    eprintln!("codex model {}", config.model);
+    eprintln!("codex model base_url {}", config.base_url);
+    if config.ui_stream_stdout {
+        eprintln!("ui_stream patch output stdout");
+    } else if let Some(path) = &config.ui_stream_path {
+        eprintln!("ui_stream patch output {}", path.display());
     }
-    println!("codex agent node {}", hex(&agent.node_id));
-    println!("host executor node {}", hex(&executor.node_id()));
-    println!("import contact card in frontend/chat.html:");
-    println!("{}", hex(&contact_card(&agent_key, &agent)?));
+    eprintln!("codex agent node {}", hex(&agent.node_id));
+    eprintln!("host executor node {}", hex(&executor.node_id()));
+    eprintln!("import contact card in frontend/chat.html:");
+    eprintln!("{}", hex(&contact_card(&agent_key, &agent)?));
     ui_sink.status("codex-host ready")?;
 
     let mut threads = BTreeMap::<NodeId, PeerThreadState>::new();
@@ -505,6 +515,7 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
         model: std::env::var("CODEX_HOST_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string()),
         base_url: std::env::var("CODEX_HOST_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string()),
         api_key: std::env::var("CODEX_HOST_API_KEY").ok(),
+        ui_stream_stdout: env_bool("CODEX_HOST_UI_STREAM_STDOUT"),
         ui_stream_path: std::env::var_os("CODEX_HOST_UI_STREAM_PATH").map(PathBuf::from),
         agent_seed: seed_from_env("CODEX_HOST_AGENT_SEED_HEX", 201)?,
         executor_seed: seed_from_env("CODEX_HOST_EXECUTOR_SEED_HEX", 202)?,
@@ -518,6 +529,7 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
             "--model" => config.model = args.next().ok_or("--model requires a model")?,
             "--base-url" => config.base_url = args.next().ok_or("--base-url requires a URL")?,
             "--api-key" => config.api_key = Some(args.next().ok_or("--api-key requires a value")?),
+            "--ui-stream-stdout" => config.ui_stream_stdout = true,
             "--ui-stream-path" => {
                 config.ui_stream_path = Some(PathBuf::from(args.next().ok_or("--ui-stream-path requires a path")?))
             }
@@ -545,13 +557,20 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--ui-stream-path PATH] [--print-contact] [--mock-response TEXT]"
+        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--ui-stream-stdout|--ui-stream-path PATH] [--print-contact] [--mock-response TEXT]"
     );
     println!(
-        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_UI_STREAM_PATH CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
+        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_UI_STREAM_STDOUT CODEX_HOST_UI_STREAM_PATH CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
     );
     println!("Default base URL: {DEFAULT_BASE_URL}");
-    println!("UI stream path receives raw ui_stream MessageType.patch + patch bytes");
+    println!("Native mode should prefer --ui-stream-stdout and read raw ui_stream MessageType.patch bytes from the child stdout pipe; logs are written to stderr.");
+}
+
+fn env_bool(name: &str) -> bool {
+    matches!(
+        std::env::var(name).as_deref(),
+        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES") | Ok("on") | Ok("ON")
+    )
 }
 
 fn seed_from_env(name: &str, fallback_byte: u8) -> Result<[u8; 32], Box<dyn Error>> {
