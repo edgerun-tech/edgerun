@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -6,8 +7,9 @@ use std::path::PathBuf;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_TOTAL_BYTES: usize = 32 * 1024 * 1024;
 const MAX_FILES: usize = 8192;
-const MAX_SEARCH_RESULTS: usize = 12;
-const MAX_SNIPPET_BYTES: usize = 1200;
+const MAX_REPO_MAP_DEFINITIONS: usize = 220;
+const MAX_REPO_MAP_IMPORTS: usize = 160;
+const MAX_REVEAL_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct RepoWorkspace {
@@ -15,6 +17,8 @@ pub struct RepoWorkspace {
     files: Vec<RepoFile>,
     skipped_files: usize,
     skipped_bytes: usize,
+    index: RepoIndex,
+    repo_map: String,
 }
 
 #[derive(Clone, Debug)]
@@ -24,11 +28,39 @@ pub struct RepoFile {
     text: Option<String>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct RepoIndex {
+    definitions: Vec<Definition>,
+    imports: Vec<Import>,
+    by_path: BTreeMap<String, usize>,
+}
+
 #[derive(Clone, Debug)]
-pub struct SearchHit {
+pub struct Definition {
     pub path: String,
-    pub score: usize,
-    pub snippet: String,
+    pub name: String,
+    pub kind: DefinitionKind,
+    pub line: usize,
+    pub byte_start: usize,
+    pub byte_end: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DefinitionKind {
+    Function,
+    Struct,
+    Enum,
+    Trait,
+    Impl,
+    Const,
+    Type,
+}
+
+#[derive(Clone, Debug)]
+pub struct Import {
+    pub path: String,
+    pub target: String,
+    pub line: usize,
 }
 
 impl RepoWorkspace {
@@ -39,10 +71,13 @@ impl RepoWorkspace {
             files: Vec::new(),
             skipped_files: 0,
             skipped_bytes: 0,
+            index: RepoIndex::default(),
+            repo_map: String::new(),
         };
         let root = workspace.root.clone();
         workspace.load_dir(&root)?;
         workspace.files.sort_by(|left, right| left.path.cmp(&right.path));
+        workspace.rebuild_index();
         Ok(workspace)
     }
 
@@ -58,41 +93,12 @@ impl RepoWorkspace {
         self.files.iter().map(|file| file.bytes.len()).sum()
     }
 
-    pub fn summary(&self) -> String {
-        let mut out = String::new();
-        out.push_str("RepoWorkspace:\n");
-        out.push_str(&format!("Root: {}\n", self.root.display()));
-        out.push_str(&format!("LoadedFiles: {}\n", self.file_count()));
-        out.push_str(&format!("LoadedBytes: {}\n", self.total_bytes()));
-        out.push_str(&format!("SkippedFiles: {}\n", self.skipped_files));
-        out.push_str(&format!("SkippedBytes: {}\n", self.skipped_bytes));
-        out.push_str("ImportantFiles:\n");
-        for path in self.important_paths().into_iter().take(80) {
-            out.push_str("- ");
-            out.push_str(path);
-            out.push('\n');
-        }
-        out
+    pub fn repo_map(&self) -> &str {
+        &self.repo_map
     }
 
-    pub fn context_for_request(&self, request: &str) -> String {
-        let mut out = self.summary();
-        let hits = self.search(request);
-        if !hits.is_empty() {
-            out.push_str("\nInMemorySearchHits:\n");
-            for hit in hits {
-                out.push_str("--- ");
-                out.push_str(&hit.path);
-                out.push_str(" score=");
-                out.push_str(&hit.score.to_string());
-                out.push_str(" ---\n");
-                out.push_str(&hit.snippet);
-                if !hit.snippet.ends_with('\n') {
-                    out.push('\n');
-                }
-            }
-        }
-        out
+    pub fn context_for_request(&self, _request: &str) -> String {
+        self.repo_map.clone()
     }
 
     pub fn read_text(&self, path: &str) -> Option<&str> {
@@ -102,6 +108,36 @@ impl RepoWorkspace {
             .and_then(|file| file.text.as_deref())
     }
 
+    pub fn reveal_file(&self, path: &str) -> Option<String> {
+        let text = self.read_text(path)?;
+        Some(truncate_chars(text, MAX_REVEAL_BYTES))
+    }
+
+    pub fn reveal_definition(&self, name: &str) -> Option<String> {
+        let definition = self
+            .index
+            .definitions
+            .iter()
+            .find(|definition| definition.name == name)
+            .or_else(|| {
+                self.index
+                    .definitions
+                    .iter()
+                    .find(|definition| definition.name.ends_with(name))
+            })?;
+        let text = self.read_text(&definition.path)?;
+        let start = definition.byte_start.min(text.len());
+        let end = definition.byte_end.min(text.len()).max(start);
+        Some(format!(
+            "{}:{} {:?} {}\n{}",
+            definition.path,
+            definition.line,
+            definition.kind,
+            definition.name,
+            truncate_chars(&text[start..end], MAX_REVEAL_BYTES)
+        ))
+    }
+
     pub fn replace_text(&mut self, path: &str, new_text: String) -> bool {
         let normalized = normalize_repo_path(path);
         let Some(file) = self.files.iter_mut().find(|file| file.path == normalized) else {
@@ -109,6 +145,7 @@ impl RepoWorkspace {
         };
         file.bytes = new_text.as_bytes().to_vec();
         file.text = Some(new_text);
+        self.rebuild_index();
         true
     }
 
@@ -124,30 +161,15 @@ impl RepoWorkspace {
         fs::write(disk_path, &file.bytes)
     }
 
-    pub fn search(&self, query: &str) -> Vec<SearchHit> {
-        let terms = query_terms(query);
-        if terms.is_empty() {
-            return Vec::new();
-        }
-
-        let mut hits = Vec::new();
-        for file in &self.files {
-            let Some(text) = file.text.as_deref() else {
-                continue;
-            };
-            let score = score_file(&file.path, text, &terms);
-            if score == 0 {
-                continue;
+    fn rebuild_index(&mut self) {
+        self.index = RepoIndex::default();
+        for (index, file) in self.files.iter().enumerate() {
+            self.index.by_path.insert(file.path.clone(), index);
+            if let Some(text) = file.text.as_deref() {
+                index_file(&mut self.index, &file.path, text);
             }
-            hits.push(SearchHit {
-                path: file.path.clone(),
-                score,
-                snippet: snippet_for(text, &terms),
-            });
         }
-        hits.sort_by(|left, right| right.score.cmp(&left.score).then_with(|| left.path.cmp(&right.path)));
-        hits.truncate(MAX_SEARCH_RESULTS);
-        hits
+        self.repo_map = build_repo_map(self);
     }
 
     fn load_dir(&mut self, dir: &Path) -> io::Result<()> {
@@ -206,6 +228,161 @@ impl RepoWorkspace {
     }
 }
 
+fn build_repo_map(workspace: &RepoWorkspace) -> String {
+    let mut out = String::new();
+    out.push_str("RepoExpertIndex:\n");
+    out.push_str(&format!("Root: {}\n", workspace.root.display()));
+    out.push_str(&format!("LoadedFiles: {}\n", workspace.file_count()));
+    out.push_str(&format!("LoadedBytes: {}\n", workspace.total_bytes()));
+    out.push_str(&format!("SkippedFiles: {}\n", workspace.skipped_files));
+    out.push_str(&format!("SkippedBytes: {}\n", workspace.skipped_bytes));
+    out.push_str("\nImportantFiles:\n");
+    for path in workspace.important_paths().into_iter().take(120) {
+        out.push_str("- ");
+        out.push_str(path);
+        out.push('\n');
+    }
+
+    out.push_str("\nDefinitions:\n");
+    for definition in workspace.index.definitions.iter().take(MAX_REPO_MAP_DEFINITIONS) {
+        out.push_str("- ");
+        out.push_str(&definition.path);
+        out.push(':');
+        out.push_str(&definition.line.to_string());
+        out.push(' ');
+        out.push_str(kind_label(definition.kind));
+        out.push(' ');
+        out.push_str(&definition.name);
+        out.push('\n');
+    }
+
+    out.push_str("\nImports:\n");
+    for import in workspace.index.imports.iter().take(MAX_REPO_MAP_IMPORTS) {
+        out.push_str("- ");
+        out.push_str(&import.path);
+        out.push(':');
+        out.push_str(&import.line.to_string());
+        out.push(' ');
+        out.push_str(&import.target);
+        out.push('\n');
+    }
+
+    out.push_str("\nRevealTools:\n");
+    out.push_str("- repo_reveal_file(path): reveal a loaded file body from memory.\n");
+    out.push_str("- repo_reveal_definition(name): reveal a known function/type/body from memory.\n");
+    out.push_str("- repo_edit(path, replacement): edit in-memory file contents.\n");
+    out.push_str("- repo_writeback(path): write one edited file back to disk only after review.\n");
+    out.push_str("- host_shell: non-repo OS command only when explicitly requested by user.\n");
+    out
+}
+
+fn index_file(index: &mut RepoIndex, path: &str, text: &str) {
+    let mut byte_offset = 0;
+    for (line_index, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if let Some(definition) = parse_definition(path, text, trimmed, line_index + 1, byte_offset) {
+            index.definitions.push(definition);
+        }
+        if let Some(import) = parse_import(path, trimmed, line_index + 1) {
+            index.imports.push(import);
+        }
+        byte_offset += line.len() + 1;
+    }
+}
+
+fn parse_definition(path: &str, text: &str, line: &str, line_no: usize, byte_offset: usize) -> Option<Definition> {
+    let stripped = line.strip_prefix("pub ").unwrap_or(line);
+    let (kind, rest) = if let Some(rest) = stripped.strip_prefix("fn ") {
+        (DefinitionKind::Function, rest)
+    } else if let Some(rest) = stripped.strip_prefix("async fn ") {
+        (DefinitionKind::Function, rest)
+    } else if let Some(rest) = stripped.strip_prefix("struct ") {
+        (DefinitionKind::Struct, rest)
+    } else if let Some(rest) = stripped.strip_prefix("enum ") {
+        (DefinitionKind::Enum, rest)
+    } else if let Some(rest) = stripped.strip_prefix("trait ") {
+        (DefinitionKind::Trait, rest)
+    } else if let Some(rest) = stripped.strip_prefix("impl ") {
+        (DefinitionKind::Impl, rest)
+    } else if let Some(rest) = stripped.strip_prefix("const ") {
+        (DefinitionKind::Const, rest)
+    } else if let Some(rest) = stripped.strip_prefix("type ") {
+        (DefinitionKind::Type, rest)
+    } else if let Some(rest) = stripped.strip_prefix("pub const ") {
+        (DefinitionKind::Const, rest)
+    } else if let Some(rest) = stripped.strip_prefix("pub type ") {
+        (DefinitionKind::Type, rest)
+    } else if let Some(rest) = stripped.strip_prefix("pub struct ") {
+        (DefinitionKind::Struct, rest)
+    } else if let Some(rest) = stripped.strip_prefix("pub enum ") {
+        (DefinitionKind::Enum, rest)
+    } else {
+        return None;
+    };
+
+    let name = definition_name(kind, rest)?;
+    let byte_end = definition_end(text, byte_offset, kind);
+    Some(Definition {
+        path: path.to_string(),
+        name,
+        kind,
+        line: line_no,
+        byte_start: byte_offset,
+        byte_end,
+    })
+}
+
+fn definition_name(kind: DefinitionKind, rest: &str) -> Option<String> {
+    let name = match kind {
+        DefinitionKind::Impl => rest
+            .split(|ch: char| ch == '{' || ch.is_whitespace())
+            .find(|value| !value.is_empty())?,
+        _ => rest
+            .split(|ch: char| ch == '(' || ch == '<' || ch == ':' || ch == '=' || ch == '{' || ch.is_whitespace())
+            .find(|value| !value.is_empty())?,
+    };
+    Some(name.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_').to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn definition_end(text: &str, byte_start: usize, kind: DefinitionKind) -> usize {
+    let max = (byte_start + MAX_REVEAL_BYTES).min(text.len());
+    if matches!(kind, DefinitionKind::Const | DefinitionKind::Type) {
+        return text[byte_start..max]
+            .find('\n')
+            .map(|offset| byte_start + offset)
+            .unwrap_or(max);
+    }
+
+    let slice = &text[byte_start..max];
+    let mut depth = 0usize;
+    let mut seen_open = false;
+    for (offset, ch) in slice.char_indices() {
+        if ch == '{' {
+            depth += 1;
+            seen_open = true;
+        } else if ch == '}' && seen_open {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return byte_start + offset + ch.len_utf8();
+            }
+        }
+    }
+    max
+}
+
+fn parse_import(path: &str, line: &str, line_no: usize) -> Option<Import> {
+    let target = line
+        .strip_prefix("use ")
+        .or_else(|| line.strip_prefix("mod "))
+        .or_else(|| line.strip_prefix("const ").and_then(|value| value.split("@import(").nth(1)))?;
+    Some(Import {
+        path: path.to_string(),
+        target: target.trim().trim_end_matches(';').trim_matches('"').to_string(),
+        line: line_no,
+    })
+}
+
 fn important_path_rank(path: &str) -> usize {
     if path == "Cargo.toml" || path == "Makefile" || path.ends_with("/Cargo.toml") {
         return 0;
@@ -225,46 +402,16 @@ fn important_path_rank(path: &str) -> usize {
     5
 }
 
-fn score_file(path: &str, text: &str, terms: &[String]) -> usize {
-    let path_lower = path.to_ascii_lowercase();
-    let text_lower = text.to_ascii_lowercase();
-    let mut score = 0;
-    for term in terms {
-        if path_lower.contains(term) {
-            score += 20;
-        }
-        score += text_lower.matches(term).take(10).count();
+fn kind_label(kind: DefinitionKind) -> &'static str {
+    match kind {
+        DefinitionKind::Function => "fn",
+        DefinitionKind::Struct => "struct",
+        DefinitionKind::Enum => "enum",
+        DefinitionKind::Trait => "trait",
+        DefinitionKind::Impl => "impl",
+        DefinitionKind::Const => "const",
+        DefinitionKind::Type => "type",
     }
-    score
-}
-
-fn snippet_for(text: &str, terms: &[String]) -> String {
-    let lower = text.to_ascii_lowercase();
-    let mut start = 0;
-    for term in terms {
-        if let Some(index) = lower.find(term) {
-            start = index.saturating_sub(MAX_SNIPPET_BYTES / 3);
-            break;
-        }
-    }
-    while start > 0 && !text.is_char_boundary(start) {
-        start -= 1;
-    }
-    let mut end = (start + MAX_SNIPPET_BYTES).min(text.len());
-    while end > start && !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[start..end].to_string()
-}
-
-fn query_terms(query: &str) -> Vec<String> {
-    query
-        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_' && ch != '-')
-        .filter(|term| term.len() >= 3)
-        .map(|term| term.to_ascii_lowercase())
-        .filter(|term| !STOP_TERMS.contains(&term.as_str()))
-        .take(24)
-        .collect()
 }
 
 fn normalize_repo_path(path: &str) -> String {
@@ -300,21 +447,38 @@ fn should_ignore_path(path: &Path) -> bool {
     )
 }
 
-const STOP_TERMS: &[&str] = &[
-    "the", "and", "for", "with", "that", "this", "from", "have", "make", "what", "when", "where", "there", "their", "into", "your", "you", "are", "was", "were", "will", "would", "should", "could",
-];
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (index, ch) in value.chars().enumerate() {
+        if index >= max_chars {
+            out.push_str("...");
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn query_terms_drop_short_and_stop_words() {
-        assert_eq!(query_terms("fix the codex host"), vec!["fix", "codex", "host"]);
+    fn normalize_paths_are_repo_relative() {
+        assert_eq!(normalize_repo_path("./a\\b.rs"), "a/b.rs");
     }
 
     #[test]
-    fn normalize_paths_are_repo_relative() {
-        assert_eq!(normalize_repo_path("./a\\b.rs"), "a/b.rs");
+    fn parses_rust_function_definition() {
+        let text = "pub fn hello() {\n    println!(\"hi\");\n}\n";
+        let def = parse_definition("src/lib.rs", text, "pub fn hello() {", 1, 0).unwrap();
+        assert_eq!(def.name, "hello");
+        assert_eq!(def.kind, DefinitionKind::Function);
+    }
+
+    #[test]
+    fn parses_zig_import_as_import() {
+        let import = parse_import("src/app.zig", "const ui = @import(\"ui.zig\");", 1).unwrap();
+        assert!(import.target.contains("ui.zig"));
     }
 }
