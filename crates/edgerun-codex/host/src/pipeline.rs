@@ -14,6 +14,9 @@ const MAX_HISTORY_CHARS: usize = 2400;
 const MAX_STAGE_OUTPUT_CHARS: usize = 2400;
 const MAX_PREVIOUS_OUTPUT_CHARS: usize = 9000;
 const MAX_REPO_CONTEXT_CHARS: usize = 12_000;
+const MAX_REVEALED_CONTEXT_CHARS: usize = 18_000;
+const MAX_REVEAL_ROUNDS: usize = 2;
+const MAX_REVEALS_PER_ROUND: usize = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PipelineKind {
@@ -47,6 +50,11 @@ pub struct PipelineOutput {
     pub stages: Vec<StageOutput>,
 }
 
+pub trait RepoRevealer {
+    fn reveal_file(&self, path: &str) -> Option<String>;
+    fn reveal_definition(&self, name: &str) -> Option<String>;
+}
+
 pub trait PipelineObserver {
     fn stage_started(
         &mut self,
@@ -62,6 +70,10 @@ pub trait PipelineObserver {
         total: usize,
         output: &str,
     ) -> Result<(), BoxError>;
+
+    fn repo_revealed(&mut self, _request: &str, _found: bool) -> Result<(), BoxError> {
+        Ok(())
+    }
 }
 
 pub const STAGES: &[PipelineStage] = &[
@@ -151,7 +163,7 @@ ValidationPlan:"#,
 
 Your job:
 - Translate the ChangePlan into exact memory-backed repo tool actions.
-- Choose repo_search, repo_read, repo_edit, repo_diff, repo_writeback, and validation commands.
+- Choose repo_reveal_file, repo_reveal_definition, repo_edit, repo_diff, repo_writeback, and validation commands.
 - Do not use host_shell for repository search, read, edit, patch, diff, or build planning.
 - host_shell is only for non-repo OS operations when the user explicitly asks for it.
 - Avoid exploratory thrashing.
@@ -159,7 +171,7 @@ Your job:
 
 Output exactly these sections:
 RepoReads:
-RepoSearches:
+RepoDefinitions:
 RepoEdits:
 ValidationCommands:
 HostShellRequests:
@@ -235,6 +247,7 @@ pub fn run_pipeline(
     user_request: &str,
     prior_history: &[ResponseItem],
     repo_context: &str,
+    repo: &dyn RepoRevealer,
     observer: &mut dyn PipelineObserver,
 ) -> Result<PipelineOutput, BoxError> {
     let mut stage_outputs = Vec::with_capacity(STAGES.len());
@@ -245,6 +258,7 @@ pub fn run_pipeline(
         user_request,
         prior_history,
         repo_context,
+        repo,
         &stage_outputs,
         ROUTER_STAGE_INDEX,
         0,
@@ -263,6 +277,7 @@ pub fn run_pipeline(
             user_request,
             prior_history,
             repo_context,
+            repo,
             &stage_outputs,
             *stage_index,
             position + 1,
@@ -324,6 +339,7 @@ fn run_stage(
     user_request: &str,
     prior_history: &[ResponseItem],
     repo_context: &str,
+    repo: &dyn RepoRevealer,
     stage_outputs: &[StageOutput],
     stage_index: usize,
     position: usize,
@@ -331,20 +347,134 @@ fn run_stage(
     observer: &mut dyn PipelineObserver,
 ) -> Result<StageOutput, BoxError> {
     let stage = STAGES[stage_index];
-    observer.stage_started(&stage, position, total)?;
-    let handoff = pipeline_handoff(user_request, prior_history, repo_context, stage_outputs, &stage);
-    let output = runtime.block_on(client.collect_turn(turn_request(vec![
-        message_item("system", stage.prompt),
-        message_item("user", &handoff),
-    ])))?;
+    let mut revealed_context = String::new();
+    let mut text = String::new();
 
-    let text = normalize_output(output.output_text);
+    for round in 0..=MAX_REVEAL_ROUNDS {
+        observer.stage_started(&stage, position, total)?;
+        let handoff = pipeline_handoff(
+            user_request,
+            prior_history,
+            repo_context,
+            &revealed_context,
+            stage_outputs,
+            &stage,
+        );
+        let output = runtime.block_on(client.collect_turn(turn_request(vec![
+            message_item("system", stage.prompt),
+            message_item("user", &handoff),
+        ])))?;
+        text = normalize_output(output.output_text);
+
+        let requests = reveal_requests(&text);
+        if requests.is_empty() || round == MAX_REVEAL_ROUNDS {
+            break;
+        }
+
+        let mut added = false;
+        for request in requests.into_iter().take(MAX_REVEALS_PER_ROUND) {
+            let label = request.label();
+            let revealed = match &request {
+                RevealRequest::File(path) => repo.reveal_file(path),
+                RevealRequest::Definition(name) => repo.reveal_definition(name),
+            };
+            observer.repo_revealed(&label, revealed.is_some())?;
+            if let Some(body) = revealed {
+                append_revealed_context(&mut revealed_context, &label, &body);
+                added = true;
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+
     let bounded = truncate_chars(&text, MAX_STAGE_OUTPUT_CHARS);
     observer.stage_finished(&stage, position, total, &bounded)?;
     Ok(StageOutput {
         stage,
         text: bounded,
     })
+}
+
+fn append_revealed_context(out: &mut String, label: &str, body: &str) {
+    if out.len() >= MAX_REVEALED_CONTEXT_CHARS {
+        return;
+    }
+    out.push_str("\n--- ");
+    out.push_str(label);
+    out.push_str(" ---\n");
+    let remaining = MAX_REVEALED_CONTEXT_CHARS.saturating_sub(out.len());
+    out.push_str(&truncate_chars(body, remaining));
+    out.push('\n');
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum RevealRequest {
+    File(String),
+    Definition(String),
+}
+
+impl RevealRequest {
+    fn label(&self) -> String {
+        match self {
+            RevealRequest::File(path) => format!("repo_reveal_file({path})"),
+            RevealRequest::Definition(name) => format!("repo_reveal_definition({name})"),
+        }
+    }
+}
+
+fn reveal_requests(text: &str) -> Vec<RevealRequest> {
+    let mut out = Vec::new();
+    collect_reveal_calls(text, "repo_reveal_file", |arg| RevealRequest::File(arg), &mut out);
+    collect_reveal_calls(text, "repo_reveal_definition", |arg| RevealRequest::Definition(arg), &mut out);
+    dedupe_reveals(out)
+}
+
+fn collect_reveal_calls(
+    text: &str,
+    function_name: &str,
+    to_request: impl Fn(String) -> RevealRequest,
+    out: &mut Vec<RevealRequest>,
+) {
+    let mut cursor = 0;
+    let needle = format!("{function_name}(");
+    while let Some(relative) = text[cursor..].find(&needle) {
+        let start = cursor + relative + needle.len();
+        let Some(end_relative) = text[start..].find(')') else {
+            break;
+        };
+        let end = start + end_relative;
+        if let Some(arg) = clean_reveal_arg(&text[start..end]) {
+            out.push(to_request(arg));
+        }
+        cursor = end + 1;
+    }
+}
+
+fn clean_reveal_arg(raw: &str) -> Option<String> {
+    let cleaned = raw
+        .trim()
+        .trim_matches('`')
+        .trim_matches('"')
+        .trim_matches('\'')
+        .trim()
+        .to_string();
+    if cleaned.is_empty() || cleaned.len() > 256 || cleaned.contains('\n') {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+fn dedupe_reveals(requests: Vec<RevealRequest>) -> Vec<RevealRequest> {
+    let mut out = Vec::new();
+    for request in requests {
+        if !out.contains(&request) {
+            out.push(request);
+        }
+    }
+    out
 }
 
 fn route_after_router(user_request: &str, router_output: &str) -> Vec<usize> {
@@ -409,6 +539,7 @@ fn pipeline_handoff(
     user_request: &str,
     prior_history: &[ResponseItem],
     repo_context: &str,
+    revealed_context: &str,
     stage_outputs: &[StageOutput],
     stage: &PipelineStage,
 ) -> String {
@@ -421,6 +552,10 @@ fn pipeline_handoff(
     out.push_str(stage.output_name);
     out.push_str("\n\nREPO_WORKSPACE_CONTEXT:\n");
     out.push_str(&truncate_chars(repo_context, MAX_REPO_CONTEXT_CHARS));
+    if !revealed_context.is_empty() {
+        out.push_str("\n\nREVEALED_REPO_CONTEXT:\n");
+        out.push_str(revealed_context);
+    }
     out.push_str("\n\nRECENT_TRANSCRIPT_SUMMARY:\n");
     out.push_str(&compact_history(prior_history));
     out.push_str("\n\nPREVIOUS_STAGE_OUTPUTS:\n");
@@ -431,6 +566,10 @@ fn pipeline_handoff(
         append_previous_outputs(&mut out, stage_outputs);
     }
 
+    out.push_str("\nREVEAL_LOOP:\n");
+    out.push_str("- If you need an exact loaded file body, output repo_reveal_file(path) and stop.\n");
+    out.push_str("- If you need an exact known function/type/body, output repo_reveal_definition(name) and stop.\n");
+    out.push_str("- The host will reveal from memory and rerun this same stage.\n");
     out.push_str("\nBOUNDARY:\n");
     out.push_str("- Repository search/read/edit/diff/patch work happens in the in-memory repo workspace.\n");
     out.push_str("- host_shell is a separate non-repo tool and only available when the user explicitly asks for host/OS shell work.\n");
@@ -546,6 +685,18 @@ fn message_item(role: &str, text: &str) -> ResponseItem {
 mod tests {
     use super::*;
 
+    struct EmptyRepo;
+
+    impl RepoRevealer for EmptyRepo {
+        fn reveal_file(&self, _: &str) -> Option<String> {
+            None
+        }
+
+        fn reveal_definition(&self, _: &str) -> Option<String> {
+            None
+        }
+    }
+
     #[test]
     fn pipeline_has_cache_friendly_fixed_stage_order() {
         assert_eq!(STAGES.len(), 7);
@@ -577,8 +728,16 @@ mod tests {
 
     #[test]
     fn handoff_contains_repo_workspace_boundary() {
-        let handoff = pipeline_handoff("fix thing", &[], "RepoWorkspace:\nLoadedFiles: 1", &[], &STAGES[1]);
+        let handoff = pipeline_handoff("fix thing", &[], "RepoWorkspace:\nLoadedFiles: 1", "", &[], &STAGES[1]);
         assert!(handoff.contains("REPO_WORKSPACE_CONTEXT"));
         assert!(handoff.contains("host_shell is a separate non-repo tool"));
+    }
+
+    #[test]
+    fn parses_reveal_requests() {
+        let requests = reveal_requests("Need repo_reveal_file(src/main.rs) and repo_reveal_definition(handle_chat_envelope)");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0], RevealRequest::File("src/main.rs".to_string()));
+        assert_eq!(requests[1], RevealRequest::Definition("handle_chat_envelope".to_string()));
     }
 }
