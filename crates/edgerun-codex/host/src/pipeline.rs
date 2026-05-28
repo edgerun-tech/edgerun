@@ -13,6 +13,7 @@ const SUMMARIZER_STAGE_INDEX: usize = 6;
 const MAX_HISTORY_CHARS: usize = 2400;
 const MAX_STAGE_OUTPUT_CHARS: usize = 2400;
 const MAX_PREVIOUS_OUTPUT_CHARS: usize = 9000;
+const MAX_REPO_CONTEXT_CHARS: usize = 12_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PipelineKind {
@@ -78,6 +79,11 @@ Your job:
 - Do not produce patches.
 - Output a compact TaskClassification handoff.
 
+Boundary rules:
+- Repository work happens in the in-memory repo workspace.
+- Searching, reading, editing, diffing, and patch planning for repo files must assume memory-backed repo tools, not shell.
+- host_shell is only for non-repo operations and only when the user explicitly asks for shell/OS work.
+
 Routing rules:
 - Explanation-only tasks should usually use: Router, Codebase, Summarizer.
 - Build/test/debug failures should usually use: Router, Codebase, Toolsmith, Executor, Reviewer, Summarizer.
@@ -99,10 +105,11 @@ StopConditions:"#,
         prompt: r#"You are the Codebase stage.
 
 Your job:
-- Assume you keep a stable mental map of the repository.
-- Given the user task and Router classification, identify the exact files/modules/concepts that likely matter.
+- Use the provided in-memory repo workspace context as the source of truth.
+- Identify the exact files/modules/concepts that likely matter.
+- Prefer existing APIs and callers over adding compatibility shims.
 - Prefer small relevant context over broad search.
-- Produce a CodebaseContextPlan that another agent can execute with minimal repo reads.
+- Produce a CodebaseContextPlan that another agent can execute using memory-backed repo tools.
 - Do not write code yet.
 
 Output exactly these sections:
@@ -123,6 +130,7 @@ Your job:
 - Convert the task and CodebaseContextPlan into the smallest coherent change.
 - Prefer adapting existing architecture over creating parallel systems.
 - Be aggressive about avoiding duplicate abstractions.
+- Assume repository reads/searches/edits happen in the in-memory workspace.
 - Produce a concise ChangePlan for an Executor.
 - Do not output code unless a tiny signature or data shape is necessary.
 
@@ -142,17 +150,19 @@ ValidationPlan:"#,
         prompt: r#"You are the Toolsmith stage.
 
 Your job:
-- Translate the ChangePlan into exact tools/actions.
-- Choose shell commands, file reads, patch strategy, tests, and verification commands.
+- Translate the ChangePlan into exact memory-backed repo tool actions.
+- Choose repo_search, repo_read, repo_edit, repo_diff, repo_writeback, and validation commands.
+- Do not use host_shell for repository search, read, edit, patch, diff, or build planning.
+- host_shell is only for non-repo OS operations when the user explicitly asks for it.
 - Avoid exploratory thrashing.
 - Make the Executor's work deterministic.
 
 Output exactly these sections:
-ReadCommands:
-EditStrategy:
-PatchBoundaries:
-BuildCommands:
-TestCommands:
+RepoReads:
+RepoSearches:
+RepoEdits:
+ValidationCommands:
+HostShellRequests:
 RollbackPlan:
 ExpectedArtifacts:"#,
     },
@@ -163,17 +173,18 @@ ExpectedArtifacts:"#,
         prompt: r#"You are the Executor stage.
 
 Your job:
-- Produce the exact implementation plan or patch instructions from the ToolPlan.
+- Produce the exact in-memory repo edit plan from the ToolPlan.
 - Prefer one focused patch over many speculative edits.
 - Keep output actionable and minimal.
-- When code is required, output concrete patch chunks or replacement blocks.
+- When code is required, output concrete replacement blocks or patch chunks for repo_edit.
 - Do not add new systems when existing callers/components should be updated.
+- Do not use shell for repo file operations.
 
 Output exactly these sections:
 PatchSummary:
 FilesModified:
-ExactChanges:
-CommandsToRun:
+RepoEditOperations:
+ValidationCommands:
 ExpectedResult:"#,
     },
     PipelineStage {
@@ -185,6 +196,8 @@ ExpectedResult:"#,
 Your job:
 - Review the proposed PatchExecution before it is applied or finalized.
 - Find contradictions, duplicate systems, broken interfaces, unsafe assumptions, and likely compile failures.
+- Confirm the plan respects the in-memory repo boundary.
+- Flag any host_shell use for repo work as a blocking issue.
 - Prefer corrections over vague criticism.
 
 Output exactly these sections:
@@ -206,6 +219,7 @@ Your job:
 - Keep it compact.
 - Include what changed, what remains, and exact next command.
 - Preserve critical decisions for future agent context.
+- Mention whether the repo work stayed inside the in-memory workspace boundary.
 
 Output exactly these sections:
 FinalAnswer:
@@ -220,6 +234,7 @@ pub fn run_pipeline(
     client: &ModelClient,
     user_request: &str,
     prior_history: &[ResponseItem],
+    repo_context: &str,
     observer: &mut dyn PipelineObserver,
 ) -> Result<PipelineOutput, BoxError> {
     let mut stage_outputs = Vec::with_capacity(STAGES.len());
@@ -229,6 +244,7 @@ pub fn run_pipeline(
         client,
         user_request,
         prior_history,
+        repo_context,
         &stage_outputs,
         ROUTER_STAGE_INDEX,
         0,
@@ -246,6 +262,7 @@ pub fn run_pipeline(
             client,
             user_request,
             prior_history,
+            repo_context,
             &stage_outputs,
             *stage_index,
             position + 1,
@@ -281,7 +298,7 @@ pub fn run_mock_pipeline(
         let stage = STAGES[*stage_index];
         observer.stage_started(&stage, index, total)?;
         let text = format!(
-            "{}:\nmock handoff for request: {}\n",
+            "{}:\nmock handoff for request: {}\nBoundary: repo operations stay in memory; host_shell only on explicit non-repo request.\n",
             stage.output_name, user_request
         );
         observer.stage_finished(&stage, index, total, &text)?;
@@ -289,7 +306,7 @@ pub fn run_mock_pipeline(
     }
 
     let final_reply = format!(
-        "Pipeline completed in mock mode using {} stages. Request classified, planned, routed through tools, reviewed when needed, and summarized.\n\nRequest: {}",
+        "Pipeline completed in mock mode using {} stages. Repository work is expected to stay inside the in-memory workspace; host_shell is reserved for explicit non-repo requests.\n\nRequest: {}",
         total, user_request
     );
 
@@ -306,6 +323,7 @@ fn run_stage(
     client: &ModelClient,
     user_request: &str,
     prior_history: &[ResponseItem],
+    repo_context: &str,
     stage_outputs: &[StageOutput],
     stage_index: usize,
     position: usize,
@@ -314,7 +332,7 @@ fn run_stage(
 ) -> Result<StageOutput, BoxError> {
     let stage = STAGES[stage_index];
     observer.stage_started(&stage, position, total)?;
-    let handoff = pipeline_handoff(user_request, prior_history, stage_outputs, &stage);
+    let handoff = pipeline_handoff(user_request, prior_history, repo_context, stage_outputs, &stage);
     let output = runtime.block_on(client.collect_turn(turn_request(vec![
         message_item("system", stage.prompt),
         message_item("user", &handoff),
@@ -390,6 +408,7 @@ fn contains_any(value: &str, needles: &[&str]) -> bool {
 fn pipeline_handoff(
     user_request: &str,
     prior_history: &[ResponseItem],
+    repo_context: &str,
     stage_outputs: &[StageOutput],
     stage: &PipelineStage,
 ) -> String {
@@ -400,6 +419,8 @@ fn pipeline_handoff(
     out.push_str(stage.name);
     out.push_str("\n\nEXPECTED_OUTPUT:\n");
     out.push_str(stage.output_name);
+    out.push_str("\n\nREPO_WORKSPACE_CONTEXT:\n");
+    out.push_str(&truncate_chars(repo_context, MAX_REPO_CONTEXT_CHARS));
     out.push_str("\n\nRECENT_TRANSCRIPT_SUMMARY:\n");
     out.push_str(&compact_history(prior_history));
     out.push_str("\n\nPREVIOUS_STAGE_OUTPUTS:\n");
@@ -410,6 +431,10 @@ fn pipeline_handoff(
         append_previous_outputs(&mut out, stage_outputs);
     }
 
+    out.push_str("\nBOUNDARY:\n");
+    out.push_str("- Repository search/read/edit/diff/patch work happens in the in-memory repo workspace.\n");
+    out.push_str("- host_shell is a separate non-repo tool and only available when the user explicitly asks for host/OS shell work.\n");
+    out.push_str("- Do not solve repo work by shelling out.\n");
     out.push_str("\nCONSTRAINTS:\n");
     out.push_str("- Keep output compact.\n");
     out.push_str("- Prefer existing repo systems and interfaces.\n");
@@ -548,5 +573,12 @@ mod tests {
     fn router_output_can_select_route() {
         let route = route_after_router("hello", "DownstreamPlan: Codebase, Summarizer");
         assert_eq!(route, vec![1, 6]);
+    }
+
+    #[test]
+    fn handoff_contains_repo_workspace_boundary() {
+        let handoff = pipeline_handoff("fix thing", &[], "RepoWorkspace:\nLoadedFiles: 1", &[], &STAGES[1]);
+        assert!(handoff.contains("REPO_WORKSPACE_CONTEXT"));
+        assert!(handoff.contains("host_shell is a separate non-repo tool"));
     }
 }
