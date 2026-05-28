@@ -17,6 +17,7 @@ const MAX_REPO_CONTEXT_CHARS: usize = 12_000;
 const MAX_REVEALED_CONTEXT_CHARS: usize = 18_000;
 const MAX_REVEAL_ROUNDS: usize = 2;
 const MAX_REVEALS_PER_ROUND: usize = 8;
+const MAX_REPO_EDITS_PER_STAGE: usize = 4;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PipelineKind {
@@ -50,9 +51,13 @@ pub struct PipelineOutput {
     pub stages: Vec<StageOutput>,
 }
 
-pub trait RepoRevealer {
+pub trait RepoTools {
     fn reveal_file(&self, path: &str) -> Option<String>;
     fn reveal_definition(&self, name: &str) -> Option<String>;
+    fn edit_file(&mut self, path: &str, replacement: String) -> Result<(), String>;
+    fn diff(&self) -> String;
+    fn changed_files(&self) -> Vec<String>;
+    fn write_back(&mut self, path: &str) -> Result<(), String>;
 }
 
 pub trait PipelineObserver {
@@ -72,6 +77,14 @@ pub trait PipelineObserver {
     ) -> Result<(), BoxError>;
 
     fn repo_revealed(&mut self, _request: &str, _found: bool) -> Result<(), BoxError> {
+        Ok(())
+    }
+
+    fn repo_edited(&mut self, _path: &str, _ok: bool) -> Result<(), BoxError> {
+        Ok(())
+    }
+
+    fn repo_written(&mut self, _path: &str, _ok: bool) -> Result<(), BoxError> {
         Ok(())
     }
 }
@@ -185,10 +198,10 @@ ExpectedArtifacts:"#,
         prompt: r#"You are the Executor stage.
 
 Your job:
-- Produce the exact in-memory repo edit plan from the ToolPlan.
-- Prefer one focused patch over many speculative edits.
+- Produce exact in-memory repo edits from the ToolPlan.
+- Use repo_edit(path) followed immediately by one fenced replacement body for full-file replacement edits.
+- Prefer one focused edit over many speculative edits.
 - Keep output actionable and minimal.
-- When code is required, output concrete replacement blocks or patch chunks for repo_edit.
 - Do not add new systems when existing callers/components should be updated.
 - Do not use shell for repo file operations.
 
@@ -206,11 +219,12 @@ ExpectedResult:"#,
         prompt: r#"You are the Reviewer stage.
 
 Your job:
-- Review the proposed PatchExecution before it is applied or finalized.
+- Review the in-memory repo diff before it is written back.
 - Find contradictions, duplicate systems, broken interfaces, unsafe assumptions, and likely compile failures.
 - Confirm the plan respects the in-memory repo boundary.
 - Flag any host_shell use for repo work as a blocking issue.
 - Prefer corrections over vague criticism.
+- Return Verdict: accept only when the diff should be written back to disk.
 
 Output exactly these sections:
 Verdict:
@@ -247,7 +261,7 @@ pub fn run_pipeline(
     user_request: &str,
     prior_history: &[ResponseItem],
     repo_context: &str,
-    repo: &dyn RepoRevealer,
+    repo: &mut dyn RepoTools,
     observer: &mut dyn PipelineObserver,
 ) -> Result<PipelineOutput, BoxError> {
     let mut stage_outputs = Vec::with_capacity(STAGES.len());
@@ -271,7 +285,7 @@ pub fn run_pipeline(
     let total = route.len() + 1;
 
     for (position, stage_index) in route.iter().enumerate() {
-        let output = run_stage(
+        let mut output = run_stage(
             runtime,
             client,
             user_request,
@@ -284,6 +298,17 @@ pub fn run_pipeline(
             total,
             observer,
         )?;
+
+        if output.stage.kind == PipelineKind::Executor {
+            output.text = apply_repo_edits_from_executor(&output.text, repo, observer)?;
+        } else if output.stage.kind == PipelineKind::Reviewer && reviewer_accepts(&output.text) {
+            let written = write_back_changed_files(repo, observer)?;
+            if !written.is_empty() {
+                output.text.push_str("\n\nRepoWriteback:\n");
+                output.text.push_str(&written);
+            }
+        }
+
         stage_outputs.push(output);
     }
 
@@ -339,7 +364,7 @@ fn run_stage(
     user_request: &str,
     prior_history: &[ResponseItem],
     repo_context: &str,
-    repo: &dyn RepoRevealer,
+    repo: &mut dyn RepoTools,
     stage_outputs: &[StageOutput],
     stage_index: usize,
     position: usize,
@@ -397,6 +422,51 @@ fn run_stage(
     })
 }
 
+fn apply_repo_edits_from_executor(
+    output: &str,
+    repo: &mut dyn RepoTools,
+    observer: &mut dyn PipelineObserver,
+) -> Result<String, BoxError> {
+    let mut text = output.to_string();
+    let edits = repo_edits(output);
+    if edits.is_empty() {
+        return Ok(text);
+    }
+
+    text.push_str("\n\nRepoEditResults:\n");
+    for edit in edits.into_iter().take(MAX_REPO_EDITS_PER_STAGE) {
+        let ok = repo.edit_file(&edit.path, edit.replacement).is_ok();
+        observer.repo_edited(&edit.path, ok)?;
+        text.push_str("- ");
+        text.push_str(&edit.path);
+        text.push_str(if ok { " applied in memory\n" } else { " failed\n" });
+    }
+    text.push_str("\nRepoDiff:\n");
+    text.push_str(&repo.diff());
+    Ok(truncate_chars(&text, MAX_STAGE_OUTPUT_CHARS))
+}
+
+fn write_back_changed_files(
+    repo: &mut dyn RepoTools,
+    observer: &mut dyn PipelineObserver,
+) -> Result<String, BoxError> {
+    let mut out = String::new();
+    for path in repo.changed_files() {
+        let ok = repo.write_back(&path).is_ok();
+        observer.repo_written(&path, ok)?;
+        out.push_str("- ");
+        out.push_str(&path);
+        out.push_str(if ok { " written\n" } else { " write failed\n" });
+    }
+    Ok(out)
+}
+
+fn reviewer_accepts(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| line.trim().eq_ignore_ascii_case("Verdict: accept") || line.trim().eq_ignore_ascii_case("Verdict: accepted"))
+}
+
 fn append_revealed_context(out: &mut String, label: &str, body: &str) {
     if out.len() >= MAX_REVEALED_CONTEXT_CHARS {
         return;
@@ -424,6 +494,12 @@ impl RevealRequest {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RepoEdit {
+    path: String,
+    replacement: String,
+}
+
 fn reveal_requests(text: &str) -> Vec<RevealRequest> {
     let mut out = Vec::new();
     collect_reveal_calls(text, "repo_reveal_file", |arg| RevealRequest::File(arg), &mut out);
@@ -445,14 +521,58 @@ fn collect_reveal_calls(
             break;
         };
         let end = start + end_relative;
-        if let Some(arg) = clean_reveal_arg(&text[start..end]) {
+        if let Some(arg) = clean_tool_arg(&text[start..end]) {
             out.push(to_request(arg));
         }
         cursor = end + 1;
     }
 }
 
-fn clean_reveal_arg(raw: &str) -> Option<String> {
+fn repo_edits(text: &str) -> Vec<RepoEdit> {
+    let mut out = Vec::new();
+    let mut cursor = 0;
+    let needle = "repo_edit(";
+    while let Some(relative) = text[cursor..].find(needle) {
+        let path_start = cursor + relative + needle.len();
+        let Some(path_end_relative) = text[path_start..].find(')') else {
+            break;
+        };
+        let path_end = path_start + path_end_relative;
+        let Some(path) = clean_tool_arg(&text[path_start..path_end]) else {
+            cursor = path_end + 1;
+            continue;
+        };
+        let after_path = path_end + 1;
+        let Some(fence_start_relative) = text[after_path..].find("```") else {
+            cursor = after_path;
+            continue;
+        };
+        let fence_start = after_path + fence_start_relative + 3;
+        let Some(fence_end_relative) = text[fence_start..].find("```") else {
+            break;
+        };
+        let fence_end = fence_start + fence_end_relative;
+        let replacement = strip_fence_language(&text[fence_start..fence_end]).to_string();
+        out.push(RepoEdit { path, replacement });
+        cursor = fence_end + 3;
+    }
+    out
+}
+
+fn strip_fence_language(value: &str) -> &str {
+    let value = value.trim_start_matches('\n');
+    let Some(newline) = value.find('\n') else {
+        return value;
+    };
+    let first = &value[..newline];
+    if first.len() <= 32 && first.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '+') {
+        &value[newline + 1..]
+    } else {
+        value
+    }
+}
+
+fn clean_tool_arg(raw: &str) -> Option<String> {
     let cleaned = raw
         .trim()
         .trim_matches('`')
@@ -570,6 +690,10 @@ fn pipeline_handoff(
     out.push_str("- If you need an exact loaded file body, output repo_reveal_file(path) and stop.\n");
     out.push_str("- If you need an exact known function/type/body, output repo_reveal_definition(name) and stop.\n");
     out.push_str("- The host will reveal from memory and rerun this same stage.\n");
+    out.push_str("\nEDIT_LOOP:\n");
+    out.push_str("- Executor may output repo_edit(path) followed by one fenced full-file replacement body.\n");
+    out.push_str("- The host applies repo_edit only in memory and sends the resulting RepoDiff to Reviewer.\n");
+    out.push_str("- Reviewer controls writeback. Only Verdict: accept writes changed files to disk.\n");
     out.push_str("\nBOUNDARY:\n");
     out.push_str("- Repository search/read/edit/diff/patch work happens in the in-memory repo workspace.\n");
     out.push_str("- host_shell is a separate non-repo tool and only available when the user explicitly asks for host/OS shell work.\n");
@@ -687,13 +811,29 @@ mod tests {
 
     struct EmptyRepo;
 
-    impl RepoRevealer for EmptyRepo {
+    impl RepoTools for EmptyRepo {
         fn reveal_file(&self, _: &str) -> Option<String> {
             None
         }
 
         fn reveal_definition(&self, _: &str) -> Option<String> {
             None
+        }
+
+        fn edit_file(&mut self, _: &str, _: String) -> Result<(), String> {
+            Err("not found".to_string())
+        }
+
+        fn diff(&self) -> String {
+            "(no changes)".to_string()
+        }
+
+        fn changed_files(&self) -> Vec<String> {
+            Vec::new()
+        }
+
+        fn write_back(&mut self, _: &str) -> Result<(), String> {
+            Err("not found".to_string())
         }
     }
 
@@ -739,5 +879,19 @@ mod tests {
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[0], RevealRequest::File("src/main.rs".to_string()));
         assert_eq!(requests[1], RevealRequest::Definition("handle_chat_envelope".to_string()));
+    }
+
+    #[test]
+    fn parses_repo_edit_with_fenced_replacement() {
+        let edits = repo_edits("repo_edit(src/lib.rs)\n```rust\nfn main() {}\n```");
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].path, "src/lib.rs");
+        assert_eq!(edits[0].replacement, "fn main() {}\n");
+    }
+
+    #[test]
+    fn reviewer_accepts_exact_verdict() {
+        assert!(reviewer_accepts("Verdict: accept\nBlockingIssues:"));
+        assert!(!reviewer_accepts("Verdict: reject"));
     }
 }
