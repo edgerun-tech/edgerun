@@ -25,19 +25,22 @@ use edgerun_work::*;
 const CONTACT_CARD_MAGIC: &[u8] = b"EDGERUN-CHAT-CONTACT1";
 const CONTACT_CARD_DOMAIN: &[u8] = b"edgerun:v1:work:chat-contact-card";
 const DEFAULT_LISTEN: &str = "127.0.0.1:8787";
-const DEFAULT_MODEL: &str = "gpt-5.5";
+const DEFAULT_MODEL: &str = "local";
+const DEFAULT_BASE_URL: &str = "http://127.0.0.1:5000/v1";
 
 #[derive(Debug)]
-struct ChatGptAuth {
-    access_token: String,
+struct HostAuth {
+    bearer_token: Option<String>,
     account_id: Option<String>,
 }
 
-impl AuthProvider for ChatGptAuth {
+impl AuthProvider for HostAuth {
     fn add_auth_headers(&self, headers: &mut HeaderMap) {
-        let bearer = format!("Bearer {}", self.access_token);
-        if let Ok(value) = HeaderValue::from_str(&bearer) {
-            headers.insert(AUTHORIZATION, value);
+        if let Some(token) = self.bearer_token.as_deref() {
+            let bearer = format!("Bearer {token}");
+            if let Ok(value) = HeaderValue::from_str(&bearer) {
+                headers.insert(AUTHORIZATION, value);
+            }
         }
         if let Some(account_id) = self.account_id.as_deref()
             && let Ok(value) = HeaderValue::from_str(account_id)
@@ -51,6 +54,8 @@ impl AuthProvider for ChatGptAuth {
 struct Config {
     listen: String,
     model: String,
+    base_url: String,
+    api_key: Option<String>,
     agent_seed: [u8; 32],
     executor_seed: [u8; 32],
     print_contact: bool,
@@ -93,12 +98,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(_) => None,
         None => Some(codex_core::ModelClient::new_native(
             config.model.clone(),
-            provider(),
-            read_chatgpt_auth()?,
+            provider(&config),
+            auth_provider(&config)?,
         )),
     };
     let hub = WebSocketWorkHub::bind(&config.listen)?;
     println!("codex-host listening on ws://{}", hub.listen_addr());
+    println!("codex model {}", config.model);
+    println!("codex model base_url {}", config.base_url);
     println!("codex agent node {}", hex(&agent.node_id));
     println!("host executor node {}", hex(&executor.node_id()));
     println!("import contact card in frontend/chat.html:");
@@ -316,15 +323,15 @@ fn assistant_item(text: String) -> ResponseItem {
     }
 }
 
-fn provider() -> Provider {
+fn provider(config: &Config) -> Provider {
     let mut headers = HeaderMap::new();
     headers.insert(
         "version",
         HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
     );
     Provider {
-        name: "OpenAI".to_string(),
-        base_url: "https://chatgpt.com/backend-api/codex".to_string(),
+        name: provider_name(&config.base_url).to_string(),
+        base_url: config.base_url.clone(),
         query_params: None::<HashMap<String, String>>,
         headers,
         retry: RetryConfig {
@@ -338,6 +345,32 @@ fn provider() -> Provider {
     }
 }
 
+fn provider_name(base_url: &str) -> &'static str {
+    if base_url.contains("chatgpt.com") || base_url.contains("openai.com") {
+        "OpenAI"
+    } else {
+        "OpenAI-compatible-local"
+    }
+}
+
+fn auth_provider(config: &Config) -> Result<Arc<HostAuth>, Box<dyn Error>> {
+    if let Some(api_key) = config.api_key.as_deref().filter(|value| !value.is_empty()) {
+        return Ok(Arc::new(HostAuth {
+            bearer_token: Some(api_key.to_string()),
+            account_id: None,
+        }));
+    }
+
+    if config.base_url.contains("chatgpt.com") {
+        return read_chatgpt_auth();
+    }
+
+    Ok(Arc::new(HostAuth {
+        bearer_token: None,
+        account_id: None,
+    }))
+}
+
 fn codex_home() -> PathBuf {
     std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
@@ -345,7 +378,7 @@ fn codex_home() -> PathBuf {
         .expect("CODEX_HOME or HOME must be set")
 }
 
-fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
+fn read_chatgpt_auth() -> Result<Arc<HostAuth>, Box<dyn Error>> {
     let auth_path = codex_home().join("auth.json");
     let auth: Value = edgerun_json::from_slice(&std::fs::read(&auth_path)?)?;
     let access_token = auth
@@ -361,8 +394,8 @@ fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
         .and_then(Value::as_str)
         .filter(|account_id| !account_id.is_empty())
         .map(ToString::to_string);
-    Ok(Arc::new(ChatGptAuth {
-        access_token,
+    Ok(Arc::new(HostAuth {
+        bearer_token: Some(access_token),
         account_id,
     }))
 }
@@ -395,6 +428,8 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
     let mut config = Config {
         listen: std::env::var("CODEX_HOST_LISTEN").unwrap_or_else(|_| DEFAULT_LISTEN.to_string()),
         model: std::env::var("CODEX_HOST_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string()),
+        base_url: std::env::var("CODEX_HOST_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string()),
+        api_key: std::env::var("CODEX_HOST_API_KEY").ok(),
         agent_seed: seed_from_env("CODEX_HOST_AGENT_SEED_HEX", 201)?,
         executor_seed: seed_from_env("CODEX_HOST_EXECUTOR_SEED_HEX", 202)?,
         print_contact: false,
@@ -405,6 +440,8 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
         match arg.as_str() {
             "--listen" => config.listen = args.next().ok_or("--listen requires an address")?,
             "--model" => config.model = args.next().ok_or("--model requires a model")?,
+            "--base-url" => config.base_url = args.next().ok_or("--base-url requires a URL")?,
+            "--api-key" => config.api_key = Some(args.next().ok_or("--api-key requires a value")?),
             "--agent-seed-hex" => {
                 config.agent_seed =
                     parse_seed(&args.next().ok_or("--agent-seed-hex requires hex")?)?
@@ -429,11 +466,12 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage: codex-host [--listen ADDR] [--model MODEL] [--print-contact] [--mock-response TEXT]"
+        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--print-contact] [--mock-response TEXT]"
     );
     println!(
-        "Env: CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
+        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
     );
+    println!("Default base URL: {DEFAULT_BASE_URL}");
 }
 
 fn seed_from_env(name: &str, fallback_byte: u8) -> Result<[u8; 32], Box<dyn Error>> {
