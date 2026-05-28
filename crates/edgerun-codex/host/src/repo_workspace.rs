@@ -12,6 +12,7 @@ const MAX_FILES: usize = 8192;
 const MAX_REPO_MAP_DEFINITIONS: usize = 220;
 const MAX_REPO_MAP_IMPORTS: usize = 160;
 const MAX_REVEAL_BYTES: usize = 16 * 1024;
+const MAX_DIFF_BYTES: usize = 24 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct RepoWorkspace {
@@ -26,8 +27,10 @@ pub struct RepoWorkspace {
 #[derive(Clone, Debug)]
 pub struct RepoFile {
     path: String,
+    original_bytes: Vec<u8>,
     bytes: Vec<u8>,
     text: Option<String>,
+    dirty: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -65,13 +68,31 @@ pub struct Import {
     pub line: usize,
 }
 
-impl pipeline::RepoRevealer for RepoWorkspace {
+impl pipeline::RepoTools for RepoWorkspace {
     fn reveal_file(&self, path: &str) -> Option<String> {
         self.reveal_file(path)
     }
 
     fn reveal_definition(&self, name: &str) -> Option<String> {
         self.reveal_definition(name)
+    }
+
+    fn edit_file(&mut self, path: &str, replacement: String) -> Result<(), String> {
+        self.replace_text(path, replacement)
+            .then_some(())
+            .ok_or_else(|| format!("repo path not loaded: {path}"))
+    }
+
+    fn diff(&self) -> String {
+        self.diff()
+    }
+
+    fn changed_files(&self) -> Vec<String> {
+        self.changed_files()
+    }
+
+    fn write_back(&mut self, path: &str) -> Result<(), String> {
+        self.write_back(path).map_err(|error| error.to_string())
     }
 }
 
@@ -157,20 +178,52 @@ impl RepoWorkspace {
         };
         file.bytes = new_text.as_bytes().to_vec();
         file.text = Some(new_text);
+        file.dirty = file.bytes != file.original_bytes;
         self.rebuild_index();
         true
     }
 
-    pub fn write_back(&self, path: &str) -> io::Result<()> {
+    pub fn changed_files(&self) -> Vec<String> {
+        self.files
+            .iter()
+            .filter(|file| file.dirty)
+            .map(|file| file.path.clone())
+            .collect()
+    }
+
+    pub fn diff(&self) -> String {
+        let mut out = String::new();
+        for file in self.files.iter().filter(|file| file.dirty) {
+            out.push_str("diff --repo-memory ");
+            out.push_str(&file.path);
+            out.push('\n');
+            let original = String::from_utf8_lossy(&file.original_bytes);
+            let current = String::from_utf8_lossy(&file.bytes);
+            append_simple_diff(&mut out, &file.path, &original, &current);
+            if out.len() >= MAX_DIFF_BYTES {
+                out.push_str("\n... diff truncated ...\n");
+                break;
+            }
+        }
+        if out.is_empty() {
+            out.push_str("(no in-memory repo changes)\n");
+        }
+        truncate_chars(&out, MAX_DIFF_BYTES)
+    }
+
+    pub fn write_back(&mut self, path: &str) -> io::Result<()> {
         let normalized = normalize_repo_path(path);
-        let Some(file) = self.files.iter().find(|file| file.path == normalized) else {
+        let Some(file) = self.files.iter_mut().find(|file| file.path == normalized) else {
             return Err(io::Error::new(io::ErrorKind::NotFound, "repo workspace path not loaded"));
         };
         let disk_path = self.root.join(&file.path);
         if let Some(parent) = disk_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(disk_path, &file.bytes)
+        fs::write(disk_path, &file.bytes)?;
+        file.original_bytes = file.bytes.clone();
+        file.dirty = false;
+        Ok(())
     }
 
     fn rebuild_index(&mut self) {
@@ -227,8 +280,10 @@ impl RepoWorkspace {
         let text = String::from_utf8(bytes.clone()).ok();
         self.files.push(RepoFile {
             path: repo_path,
+            original_bytes: bytes.clone(),
             bytes,
             text,
+            dirty: false,
         });
         Ok(())
     }
@@ -237,6 +292,56 @@ impl RepoWorkspace {
         let mut paths: Vec<&str> = self.files.iter().map(|file| file.path.as_str()).collect();
         paths.sort_by_key(|path| important_path_rank(path));
         paths
+    }
+}
+
+fn append_simple_diff(out: &mut String, path: &str, original: &str, current: &str) {
+    out.push_str("--- a/");
+    out.push_str(path);
+    out.push('\n');
+    out.push_str("+++ b/");
+    out.push_str(path);
+    out.push('\n');
+
+    if original == current {
+        return;
+    }
+
+    let original_lines: Vec<&str> = original.lines().collect();
+    let current_lines: Vec<&str> = current.lines().collect();
+    let common_prefix = original_lines
+        .iter()
+        .zip(current_lines.iter())
+        .take_while(|(left, right)| left == right)
+        .count();
+    let mut common_suffix = 0;
+    while common_suffix + common_prefix < original_lines.len()
+        && common_suffix + common_prefix < current_lines.len()
+        && original_lines[original_lines.len() - 1 - common_suffix]
+            == current_lines[current_lines.len() - 1 - common_suffix]
+    {
+        common_suffix += 1;
+    }
+
+    let original_changed_end = original_lines.len().saturating_sub(common_suffix);
+    let current_changed_end = current_lines.len().saturating_sub(common_suffix);
+    out.push_str(&format!(
+        "@@ -{},{} +{},{} @@\n",
+        common_prefix + 1,
+        original_changed_end.saturating_sub(common_prefix),
+        common_prefix + 1,
+        current_changed_end.saturating_sub(common_prefix)
+    ));
+
+    for line in &original_lines[common_prefix..original_changed_end] {
+        out.push('-');
+        out.push_str(line);
+        out.push('\n');
+    }
+    for line in &current_lines[common_prefix..current_changed_end] {
+        out.push('+');
+        out.push_str(line);
+        out.push('\n');
     }
 }
 
@@ -282,8 +387,9 @@ fn build_repo_map(workspace: &RepoWorkspace) -> String {
     out.push_str("\nRevealTools:\n");
     out.push_str("- repo_reveal_file(path): reveal a loaded file body from memory.\n");
     out.push_str("- repo_reveal_definition(name): reveal a known function/type/body from memory.\n");
-    out.push_str("- repo_edit(path, replacement): edit in-memory file contents.\n");
-    out.push_str("- repo_writeback(path): write one edited file back to disk only after review.\n");
+    out.push_str("- repo_edit(path) followed by a fenced replacement body: edit in-memory file contents.\n");
+    out.push_str("- repo_diff(): show current in-memory diff.\n");
+    out.push_str("- repo_writeback(path): write one edited file back to disk only after review accepts.\n");
     out.push_str("- host_shell: non-repo OS command only when explicitly requested by user.\n");
     out
 }
