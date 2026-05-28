@@ -4,6 +4,8 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::pipeline;
+
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_TOTAL_BYTES: usize = 32 * 1024 * 1024;
 const MAX_FILES: usize = 8192;
@@ -61,6 +63,16 @@ pub struct Import {
     pub path: String,
     pub target: String,
     pub line: usize,
+}
+
+impl pipeline::RepoRevealer for RepoWorkspace {
+    fn reveal_file(&self, path: &str) -> Option<String> {
+        self.reveal_file(path)
+    }
+
+    fn reveal_definition(&self, name: &str) -> Option<String> {
+        self.reveal_definition(name)
+    }
 }
 
 impl RepoWorkspace {
