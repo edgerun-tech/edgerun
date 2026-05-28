@@ -262,6 +262,7 @@ dependencies = [
  "esp-backtrace",
  "esp-bootloader-esp-idf",
  "esp-hal",
+ "esp-println",
  "esp-radio",
  "esp-rtos",
  "heapless 0.8.0",
@@ -751,6 +752,7 @@ dependencies = [
  "esp-metadata-generated 0.3.0",
  "esp-sync",
  "log",
+ "portable-atomic",
 ]
 
 [[package]]
