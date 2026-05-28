@@ -144,6 +144,21 @@ impl pipeline::PipelineObserver for UiStreamSink {
         self.tool_call(stage.output_name, output)?;
         Ok(())
     }
+
+    fn repo_revealed(&mut self, request: &str, found: bool) -> Result<(), pipeline::BoxError> {
+        self.tool_call("repo_reveal", &format!("{} {}", request, if found { "ok" } else { "missing" }))?;
+        Ok(())
+    }
+
+    fn repo_edited(&mut self, path: &str, ok: bool) -> Result<(), pipeline::BoxError> {
+        self.tool_call("repo_edit", &format!("{} {}", path, if ok { "memory" } else { "failed" }))?;
+        Ok(())
+    }
+
+    fn repo_written(&mut self, path: &str, ok: bool) -> Result<(), pipeline::BoxError> {
+        self.tool_call("repo_writeback", &format!("{} {}", path, if ok { "written" } else { "failed" }))?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -165,7 +180,7 @@ impl Default for PeerThreadState {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = parse_config()?;
-    let repo_workspace = repo_workspace::RepoWorkspace::load(&config.repo_root)?;
+    let mut repo_workspace = repo_workspace::RepoWorkspace::load(&config.repo_root)?;
     let agent_key = Ed25519SigningKey::from_bytes(&config.agent_seed);
     let agent = node_identity_from_key(&agent_key, NODE_ROLE_MESSAGE);
     let executor_key = Ed25519SigningKey::from_bytes(&config.executor_seed);
@@ -228,7 +243,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     &hub,
                     &agent_key,
                     &agent,
-                    &repo_workspace,
+                    &mut repo_workspace,
                     &mut threads,
                     &mut ui_sink,
                     envelope,
@@ -255,7 +270,7 @@ fn handle_chat_envelope(
     hub: &WebSocketWorkHub,
     agent_key: &Ed25519SigningKey,
     agent: &NodeIdentity,
-    repo_workspace: &repo_workspace::RepoWorkspace,
+    repo_workspace: &mut repo_workspace::RepoWorkspace,
     threads: &mut BTreeMap<NodeId, PeerThreadState>,
     ui_sink: &mut UiStreamSink,
     envelope: ChannelEnvelope,
@@ -301,6 +316,7 @@ fn handle_chat_envelope(
             &text,
             &thread_state.history,
             &repo_context,
+            repo_workspace,
             ui_sink,
         )?
     };
