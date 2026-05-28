@@ -22,6 +22,7 @@ use edgerun_json::Value;
 use edgerun_work::*;
 
 mod pipeline;
+mod repo_workspace;
 mod ui_stream;
 
 const CONTACT_CARD_MAGIC: &[u8] = b"EDGERUN-CHAT-CONTACT1";
@@ -60,6 +61,7 @@ struct Config {
     api_key: Option<String>,
     ui_stream_stdout: bool,
     ui_stream_path: Option<PathBuf>,
+    repo_root: PathBuf,
     agent_seed: [u8; 32],
     executor_seed: [u8; 32],
     print_contact: bool,
@@ -163,6 +165,7 @@ impl Default for PeerThreadState {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = parse_config()?;
+    let repo_workspace = repo_workspace::RepoWorkspace::load(&config.repo_root)?;
     let agent_key = Ed25519SigningKey::from_bytes(&config.agent_seed);
     let agent = node_identity_from_key(&agent_key, NODE_ROLE_MESSAGE);
     let executor_key = Ed25519SigningKey::from_bytes(&config.executor_seed);
@@ -193,6 +196,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("codex-host listening on ws://{}", hub.listen_addr());
     eprintln!("codex model {}", config.model);
     eprintln!("codex model base_url {}", config.base_url);
+    eprintln!(
+        "repo workspace {} files {} bytes root {}",
+        repo_workspace.file_count(),
+        repo_workspace.total_bytes(),
+        repo_workspace.root().display()
+    );
     if config.ui_stream_stdout {
         eprintln!("ui_stream patch output stdout");
     } else if let Some(path) = &config.ui_stream_path {
@@ -202,6 +211,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("host executor node {}", hex(&executor.node_id()));
     eprintln!("import contact card in frontend/chat.html:");
     eprintln!("{}", hex(&contact_card(&agent_key, &agent)?));
+    ui_sink.tool_call(
+        "repo workspace",
+        &format!("{} files indexed in memory", repo_workspace.file_count()),
+    )?;
     ui_sink.status("codex-host ready")?;
 
     let mut threads = BTreeMap::<NodeId, PeerThreadState>::new();
@@ -215,6 +228,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     &hub,
                     &agent_key,
                     &agent,
+                    &repo_workspace,
                     &mut threads,
                     &mut ui_sink,
                     envelope,
@@ -241,6 +255,7 @@ fn handle_chat_envelope(
     hub: &WebSocketWorkHub,
     agent_key: &Ed25519SigningKey,
     agent: &NodeIdentity,
+    repo_workspace: &repo_workspace::RepoWorkspace,
     threads: &mut BTreeMap<NodeId, PeerThreadState>,
     ui_sink: &mut UiStreamSink,
     envelope: ChannelEnvelope,
@@ -273,11 +288,21 @@ fn handle_chat_envelope(
         .max(message.sequence.saturating_add(1));
     thread_state.history.push(user_item(text.clone()));
 
+    let repo_context = repo_workspace.context_for_request(&text);
+    ui_sink.tool_call("repo index", "using persistent in-memory repo state")?;
+
     let pipeline_output = if mock_response.is_some() {
         pipeline::run_mock_pipeline(&text, ui_sink)?
     } else {
         let client = client.ok_or("codex model client unavailable")?;
-        pipeline::run_pipeline(runtime, client, &text, &thread_state.history, ui_sink)?
+        pipeline::run_pipeline(
+            runtime,
+            client,
+            &text,
+            &thread_state.history,
+            &repo_context,
+            ui_sink,
+        )?
     };
     let reply = pipeline_output.final_reply;
     ui_sink.assistant_draft(&reply)?;
@@ -525,6 +550,9 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
         api_key: std::env::var("CODEX_HOST_API_KEY").ok(),
         ui_stream_stdout: env_bool("CODEX_HOST_UI_STREAM_STDOUT"),
         ui_stream_path: std::env::var_os("CODEX_HOST_UI_STREAM_PATH").map(PathBuf::from),
+        repo_root: std::env::var_os("CODEX_HOST_REPO_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or(std::env::current_dir()?),
         agent_seed: seed_from_env("CODEX_HOST_AGENT_SEED_HEX", 201)?,
         executor_seed: seed_from_env("CODEX_HOST_EXECUTOR_SEED_HEX", 202)?,
         print_contact: false,
@@ -537,6 +565,7 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
             "--model" => config.model = args.next().ok_or("--model requires a model")?,
             "--base-url" => config.base_url = args.next().ok_or("--base-url requires a URL")?,
             "--api-key" => config.api_key = Some(args.next().ok_or("--api-key requires a value")?),
+            "--repo-root" => config.repo_root = PathBuf::from(args.next().ok_or("--repo-root requires a path")?),
             "--ui-stream-stdout" => config.ui_stream_stdout = true,
             "--ui-stream-path" => {
                 config.ui_stream_path = Some(PathBuf::from(args.next().ok_or("--ui-stream-path requires a path")?))
@@ -565,13 +594,13 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--ui-stream-stdout|--ui-stream-path PATH] [--print-contact] [--mock-response TEXT]"
+        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--repo-root PATH] [--ui-stream-stdout|--ui-stream-path PATH] [--print-contact] [--mock-response TEXT]"
     );
     println!(
-        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_UI_STREAM_STDOUT CODEX_HOST_UI_STREAM_PATH CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
+        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_REPO_ROOT CODEX_HOST_UI_STREAM_STDOUT CODEX_HOST_UI_STREAM_PATH CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
     );
     println!("Default base URL: {DEFAULT_BASE_URL}");
-    println!("Native mode should prefer --ui-stream-stdout and read raw ui_stream MessageType.patch bytes from the child stdout pipe; logs are written to stderr.");
+    println!("Repository files are indexed into an in-memory workspace from --repo-root/current directory. Native mode should prefer --ui-stream-stdout and read raw ui_stream MessageType.patch bytes from the child stdout pipe; logs are written to stderr.");
 }
 
 fn env_bool(name: &str) -> bool {
