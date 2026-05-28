@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "minimal rkyv-only EdgeRun browser wire boundary"
 
 [lib]
-name = "edgerun_wire"
+name = "edgerun_browser_wire"
 
 [features]
 default = []

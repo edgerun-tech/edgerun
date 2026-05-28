@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "minimal browser work primitives for admission and capability envelopes"
 
 [lib]
-name = "edgerun_work"
+name = "edgerun_browser_work"
 
 [dependencies]
 edgerun-crypto = { path = "../../../../crates/utility/edgerun-crypto", default-features = false, features = ["ed25519"] }

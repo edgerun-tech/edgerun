@@ -25,6 +25,8 @@ mod pipeline;
 mod repo_workspace;
 mod ui_stream;
 
+use crate::pipeline::PipelineObserver;
+
 const CONTACT_CARD_MAGIC: &[u8] = b"EDGERUN-CHAT-CONTACT1";
 const CONTACT_CARD_DOMAIN: &[u8] = b"edgerun:v1:work:chat-contact-card";
 const DEFAULT_LISTEN: &str = "127.0.0.1:8787";
@@ -262,6 +264,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
+
+fn is_commit_command(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "commit" | "/commit" | "commit repo" | "writeback" | "/writeback"
+    )
+}
+
+fn commit_pending_repo_changes(
+    repo_workspace: &mut repo_workspace::RepoWorkspace,
+    ui_sink: &mut UiStreamSink,
+) -> Result<String, Box<dyn Error>> {
+    let changed = repo_workspace.changed_files();
+    if changed.is_empty() {
+        return Ok("No pending in-memory repo changes to commit.".to_string());
+    }
+
+    let mut out = String::from("Committed pending in-memory repo changes to disk:\n");
+    for path in changed {
+        let ok = repo_workspace.write_back(&path).is_ok();
+        ui_sink.repo_written(&path, ok)?;
+        out.push_str("- ");
+        out.push_str(&path);
+        out.push_str(if ok { " written\n" } else { " write failed\n" });
+    }
+    Ok(out)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn handle_chat_envelope(
     runtime: &edgerun_tokio::runtime::Runtime,
@@ -302,6 +333,28 @@ fn handle_chat_envelope(
         .next_sequence
         .max(message.sequence.saturating_add(1));
     thread_state.history.push(user_item(text.clone()));
+
+    if is_commit_command(&text) {
+        let reply = commit_pending_repo_changes(repo_workspace, ui_sink)?;
+        thread_state.history.push(assistant_item(reply.clone()));
+        let response = signed_chat_response(
+            agent_key,
+            agent,
+            &sender,
+            message.via_relay,
+            envelope.channel_id,
+            envelope.route_hash,
+            thread_state.next_sequence,
+            thread_state.previous_message_hash,
+            reply.as_bytes(),
+        )?;
+        thread_state.previous_message_hash = response.message_id;
+        thread_state.next_sequence = thread_state.next_sequence.saturating_add(1);
+        hub.send_envelope_to(sender.node_id, &response.envelope)?;
+        ui_sink.assistant_draft(&reply)?;
+        ui_sink.status("ready")?;
+        return Ok(());
+    }
 
     let repo_context = repo_workspace.context_for_request(&text);
     ui_sink.tool_call("repo index", "using persistent in-memory repo state")?;

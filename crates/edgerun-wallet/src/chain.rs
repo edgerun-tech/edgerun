@@ -13,14 +13,14 @@ use crate::DecimalAmount;
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Archive, Serialize, Deserialize,
 )]
 #[rkyv(crate = edgerun_wire)]
-#[repr(u16)]
+#[repr(u8)]
 pub enum WalletChainFamily {
     EdgeRun = 1,
     BitcoinLike = 2,
     EvmLike = 3,
     SolanaLike = 4,
     TronLike = 5,
-    Other = 65535,
+    Other = 255,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Archive, Serialize, Deserialize)]

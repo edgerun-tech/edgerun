@@ -1,6 +1,9 @@
-use edgerun_ui_core::gpu::sdl::{SdlGlWindowOptions, run_edgerun_shell_sdl_window};
+use std::env;
+
+use edgerun_ui_core::gpu::sdl::{SdlGlWindowOptions, instantiate_sdl_app};
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, UiColorScheme, UiHostSession, UiShellSurfacePreset, palette,
+    Color4, FontAtlas, GpuScene, UiAction, UiAppControl, UiColorScheme, UiNode, UiPainter, UiRect,
+    UiShellState, UiSurfaceApp, UiWorkspace, UiWorkspaceSurface, column, palette, text,
 };
 
 fn main() {
@@ -13,26 +16,69 @@ fn main() {
 fn run() -> Result<(), String> {
     let args = Args::parse()?;
     if args.dump_scene {
-        let mut session = UiHostSession::new(args.surface);
-        session.set_color_scheme(args.scheme);
-        let atlas = FontAtlas::load_inter(18.0)?;
+        let mut workspace = UiWorkspace::single(UiWorkspaceSurface::new(1, "EdgeRun"));
         let mut scene = GpuScene::new(palette::BG);
-        session.build_combined_frame(&atlas, 1120.0, 720.0);
-        scene.clone_from(&session.scene);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            workspace.render(
+                &mut ui,
+                UiRect::new(0.0, 0.0, 1120.0, 720.0),
+                |ui, bounds, _surface| {
+                    ui.fill_rect(bounds, 8.0, palette::PANEL);
+                    ui.bounded_label(bounds.x + 12.0, bounds.y + 14.0, bounds.w - 24.0, "EdgeRun", 2.0, palette::TEXT);
+                },
+            );
+        }
         println!(
             "edgerun-frontend scene rects={} text_quads={}",
             scene.rects().len(),
-            scene.text_quads().len()
+            scene.text_quads().len(),
         );
         return Ok(());
     }
 
-    let mut session = UiHostSession::new(args.surface);
-    session.set_color_scheme(args.scheme);
-    let options = SdlGlWindowOptions::new(args.surface.title(), 1120, 720, palette::BG)
-        .min_size(360, 320)
-        .frames(args.frames);
-    run_edgerun_shell_sdl_window(options, session)
+    instantiate_sdl_app(
+        SdlGlWindowOptions::new("edgerun-frontend", 1120, 720, palette::BG)
+            .min_size(360, 320)
+            .frames(args.frames),
+        FrontendApp::new(args.scheme),
+    )
+}
+
+struct FrontendApp {
+    scheme: UiColorScheme,
+    shell: UiShellState,
+    workspace: UiWorkspace,
+}
+
+impl FrontendApp {
+    fn new(scheme: UiColorScheme) -> Self {
+        let workspace = UiWorkspace::single(UiWorkspaceSurface::new(1, "Dashboard"));
+        Self {
+            scheme,
+            shell: UiShellState::default(),
+            workspace,
+        }
+    }
+}
+
+impl UiSurfaceApp for FrontendApp {
+    fn surface(&mut self, viewport: UiRect) -> UiNode {
+        column("bg-bg h-full w-full").child(text("EdgeRun Frontend"))
+    }
+
+    fn handle_action(&mut self, action: UiAction) -> UiAppControl {
+        match action {
+            UiAction::Hovered(_) | UiAction::Focused(_) | UiAction::Activated(_) => {
+                UiAppControl::dirty()
+            }
+            _ => UiAppControl::clean(),
+        }
+    }
+
+    fn tick(&mut self, _delta_ms: u32) -> UiAppControl {
+        UiAppControl::clean()
+    }
 }
 
 #[derive(Default)]
@@ -40,12 +86,11 @@ struct Args {
     frames: Option<u32>,
     dump_scene: bool,
     scheme: UiColorScheme,
-    surface: UiShellSurfacePreset,
 }
 
 impl Args {
     fn parse() -> Result<Self, String> {
-        let mut args = std::env::args().skip(1);
+        let mut args = env::args().skip(1);
         let mut parsed = Self::default();
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -59,21 +104,13 @@ impl Args {
                 }
                 "--dump-scene" => parsed.dump_scene = true,
                 "--scheme" => {
-                    let value = args
-                        .next()
-                        .ok_or("--scheme requires dark, light, or terminal")?;
+                    let value =
+                        args.next().ok_or("--scheme requires dark, light, or terminal")?;
                     parsed.scheme = parse_scheme(&value)?;
-                }
-                "--surface" => {
-                    let value = args.next().ok_or(
-                        "--surface requires codex, workspace, lock, capability, or gallery",
-                    )?;
-                    parsed.surface = UiShellSurfacePreset::parse(&value)
-                        .ok_or_else(|| format!("invalid --surface value: {value}"))?;
                 }
                 "--help" | "-h" => {
                     println!(
-                        "Usage: edgerun-frontend [--frames N] [--dump-scene] [--scheme dark|light|terminal] [--surface codex|workspace|lock|capability|gallery]"
+                        "Usage: edgerun-frontend [--frames N] [--dump-scene] [--scheme dark|light|terminal]"
                     );
                     std::process::exit(0);
                 }
