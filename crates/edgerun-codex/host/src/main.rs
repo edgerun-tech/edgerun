@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -21,6 +22,8 @@ use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
 use edgerun_json::Value;
 use edgerun_work::*;
+
+mod ui_stream;
 
 const CONTACT_CARD_MAGIC: &[u8] = b"EDGERUN-CHAT-CONTACT1";
 const CONTACT_CARD_DOMAIN: &[u8] = b"edgerun:v1:work:chat-contact-card";
@@ -56,10 +59,54 @@ struct Config {
     model: String,
     base_url: String,
     api_key: Option<String>,
+    ui_stream_path: Option<PathBuf>,
     agent_seed: [u8; 32],
     executor_seed: [u8; 32],
     print_contact: bool,
     mock_response: Option<String>,
+}
+
+struct UiStreamSink {
+    file: Option<std::fs::File>,
+}
+
+impl UiStreamSink {
+    fn open(path: Option<&PathBuf>) -> Result<Self, Box<dyn Error>> {
+        let Some(path) = path else {
+            return Ok(Self { file: None });
+        };
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        Ok(Self { file: Some(file) })
+    }
+
+    fn emit_patch(&mut self, patch: Vec<u8>) -> Result<(), Box<dyn Error>> {
+        let Some(file) = self.file.as_mut() else {
+            return Ok(());
+        };
+        file.write_all(&[ui_stream::MessageType::Patch as u8])?;
+        file.write_all(&patch)?;
+        file.flush()?;
+        Ok(())
+    }
+
+    fn status(&mut self, text: &str) -> Result<(), Box<dyn Error>> {
+        self.emit_patch(ui_stream::agent::status(text))
+    }
+
+    fn progress(&mut self, value: f32) -> Result<(), Box<dyn Error>> {
+        self.emit_patch(ui_stream::agent::progress(value))
+    }
+
+    fn assistant_draft(&mut self, text: &str) -> Result<(), Box<dyn Error>> {
+        self.emit_patch(ui_stream::agent::assistant_draft(text))
+    }
+
+    fn tool_call(&mut self, name: &str, detail: &str) -> Result<(), Box<dyn Error>> {
+        self.emit_patch(ui_stream::agent::tool_call(name, detail))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -102,14 +149,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             auth_provider(&config)?,
         )),
     };
+    let mut ui_sink = UiStreamSink::open(config.ui_stream_path.as_ref())?;
+    ui_sink.status("codex-host starting")?;
+    ui_sink.progress(0.0)?;
+    ui_sink.emit_patch(ui_stream::agent::run_button("Run"))?;
+
     let hub = WebSocketWorkHub::bind(&config.listen)?;
     println!("codex-host listening on ws://{}", hub.listen_addr());
     println!("codex model {}", config.model);
     println!("codex model base_url {}", config.base_url);
+    if let Some(path) = &config.ui_stream_path {
+        println!("ui_stream patch output {}", path.display());
+    }
     println!("codex agent node {}", hex(&agent.node_id));
     println!("host executor node {}", hex(&executor.node_id()));
     println!("import contact card in frontend/chat.html:");
     println!("{}", hex(&contact_card(&agent_key, &agent)?));
+    ui_sink.status("codex-host ready")?;
 
     let mut threads = BTreeMap::<NodeId, PeerThreadState>::new();
     loop {
@@ -123,12 +179,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     &agent_key,
                     &agent,
                     &mut threads,
+                    &mut ui_sink,
                     envelope,
                 ) {
+                    let _ = ui_sink.status("chat envelope failed");
                     eprintln!("chat envelope failed: {error}");
                 }
             } else if envelope.to == executor.node_id() {
-                if let Err(error) = handle_executor_envelope(&hub, &mut executor, envelope) {
+                if let Err(error) = handle_executor_envelope(&hub, &mut executor, &mut ui_sink, envelope) {
+                    let _ = ui_sink.status("executor envelope failed");
                     eprintln!("executor envelope failed: {error}");
                 }
             }
@@ -146,6 +205,7 @@ fn handle_chat_envelope(
     agent_key: &Ed25519SigningKey,
     agent: &NodeIdentity,
     threads: &mut BTreeMap<NodeId, PeerThreadState>,
+    ui_sink: &mut UiStreamSink,
     envelope: ChannelEnvelope,
 ) -> Result<(), Box<dyn Error>> {
     let WorkPacket::NetworkMessage(message) = envelope.packet else {
@@ -165,6 +225,10 @@ fn handle_chat_envelope(
         return Ok(());
     }
 
+    ui_sink.status("thinking")?;
+    ui_sink.progress(0.1)?;
+    ui_sink.assistant_draft("")?;
+
     let thread_state = threads.entry(message.from).or_default();
     thread_state.previous_message_hash = message.message_id;
     thread_state.next_sequence = thread_state
@@ -173,17 +237,22 @@ fn handle_chat_envelope(
     thread_state.history.push(user_item(text.clone()));
 
     let reply = if let Some(reply) = mock_response {
+        ui_sink.progress(0.5)?;
         reply.replace("{input}", &text)
     } else {
         let client = client.ok_or("codex model client unavailable")?;
+        ui_sink.progress(0.25)?;
         let output =
             runtime.block_on(client.collect_turn(turn_request(thread_state.history.clone())))?;
+        ui_sink.progress(0.75)?;
         if output.output_text.trim().is_empty() {
             "(no assistant text returned)".to_string()
         } else {
             output.output_text
         }
     };
+    ui_sink.assistant_draft(&reply)?;
+    ui_sink.status("finalizing")?;
     thread_state.history.push(assistant_item(reply.clone()));
 
     let response = signed_chat_response(
@@ -200,19 +269,24 @@ fn handle_chat_envelope(
     thread_state.previous_message_hash = response.message_id;
     thread_state.next_sequence = thread_state.next_sequence.saturating_add(1);
     hub.send_envelope_to(sender.node_id, &response.envelope)?;
+    ui_sink.progress(1.0)?;
+    ui_sink.status("ready")?;
     Ok(())
 }
 
 fn handle_executor_envelope(
     hub: &WebSocketWorkHub,
     executor: &mut ProgramIoService<NativeProcessAdapter>,
+    ui_sink: &mut UiStreamSink,
     envelope: ChannelEnvelope,
 ) -> Result<(), Box<dyn Error>> {
     let from = envelope.from;
     let channel_id = envelope.channel_id;
     let route_hash = envelope.route_hash;
+    ui_sink.tool_call("host executor", "packet received")?;
     let response = executor.handle_packet(envelope.packet, now_unix_ms());
     let Some(packet) = response.packet else {
+        ui_sink.tool_call("host executor", "no response packet")?;
         return Ok(());
     };
     let encoded = encode_work_packet_once(&packet)
@@ -227,6 +301,7 @@ fn handle_executor_envelope(
         packet,
     };
     hub.send_envelope_to(from, &response_envelope)?;
+    ui_sink.tool_call("host executor", "event sent")?;
     Ok(())
 }
 
@@ -430,6 +505,7 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
         model: std::env::var("CODEX_HOST_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string()),
         base_url: std::env::var("CODEX_HOST_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string()),
         api_key: std::env::var("CODEX_HOST_API_KEY").ok(),
+        ui_stream_path: std::env::var_os("CODEX_HOST_UI_STREAM_PATH").map(PathBuf::from),
         agent_seed: seed_from_env("CODEX_HOST_AGENT_SEED_HEX", 201)?,
         executor_seed: seed_from_env("CODEX_HOST_EXECUTOR_SEED_HEX", 202)?,
         print_contact: false,
@@ -442,6 +518,9 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
             "--model" => config.model = args.next().ok_or("--model requires a model")?,
             "--base-url" => config.base_url = args.next().ok_or("--base-url requires a URL")?,
             "--api-key" => config.api_key = Some(args.next().ok_or("--api-key requires a value")?),
+            "--ui-stream-path" => {
+                config.ui_stream_path = Some(PathBuf::from(args.next().ok_or("--ui-stream-path requires a path")?))
+            }
             "--agent-seed-hex" => {
                 config.agent_seed =
                     parse_seed(&args.next().ok_or("--agent-seed-hex requires hex")?)?
@@ -466,12 +545,13 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--print-contact] [--mock-response TEXT]"
+        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--ui-stream-path PATH] [--print-contact] [--mock-response TEXT]"
     );
     println!(
-        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
+        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_UI_STREAM_PATH CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
     );
     println!("Default base URL: {DEFAULT_BASE_URL}");
+    println!("UI stream path receives raw ui_stream MessageType.patch + patch bytes");
 }
 
 fn seed_from_env(name: &str, fallback_byte: u8) -> Result<[u8; 32], Box<dyn Error>> {
