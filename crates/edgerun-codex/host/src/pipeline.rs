@@ -8,6 +8,12 @@ use codex_core::TurnRequest;
 
 pub type BoxError = Box<dyn Error>;
 
+const ROUTER_STAGE_INDEX: usize = 0;
+const SUMMARIZER_STAGE_INDEX: usize = 6;
+const MAX_HISTORY_CHARS: usize = 2400;
+const MAX_STAGE_OUTPUT_CHARS: usize = 2400;
+const MAX_PREVIOUS_OUTPUT_CHARS: usize = 9000;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PipelineKind {
     Router,
@@ -71,6 +77,12 @@ Your job:
 - Do not solve the task.
 - Do not produce patches.
 - Output a compact TaskClassification handoff.
+
+Routing rules:
+- Explanation-only tasks should usually use: Router, Codebase, Summarizer.
+- Build/test/debug failures should usually use: Router, Codebase, Toolsmith, Executor, Reviewer, Summarizer.
+- Code edits should usually use: Router, Codebase, Architect, Toolsmith, Executor, Reviewer, Summarizer.
+- Architecture-only tasks should usually use: Router, Codebase, Architect, Reviewer, Summarizer.
 
 Output exactly these sections:
 TaskType:
@@ -211,19 +223,36 @@ pub fn run_pipeline(
     observer: &mut dyn PipelineObserver,
 ) -> Result<PipelineOutput, BoxError> {
     let mut stage_outputs = Vec::with_capacity(STAGES.len());
-    let total = STAGES.len();
 
-    for (index, stage) in STAGES.iter().enumerate() {
-        observer.stage_started(stage, index, total)?;
-        let handoff = pipeline_handoff(user_request, prior_history, &stage_outputs, stage);
-        let output = runtime.block_on(client.collect_turn(turn_request(vec![
-            message_item("system", stage.prompt),
-            message_item("user", &handoff),
-        ])))?;
+    let router_output = run_stage(
+        runtime,
+        client,
+        user_request,
+        prior_history,
+        &stage_outputs,
+        ROUTER_STAGE_INDEX,
+        0,
+        STAGES.len(),
+        observer,
+    )?;
+    stage_outputs.push(router_output);
 
-        let text = normalize_output(output.output_text);
-        observer.stage_finished(stage, index, total, &text)?;
-        stage_outputs.push(StageOutput { stage: *stage, text });
+    let route = route_after_router(user_request, &stage_outputs[0].text);
+    let total = route.len() + 1;
+
+    for (position, stage_index) in route.iter().enumerate() {
+        let output = run_stage(
+            runtime,
+            client,
+            user_request,
+            prior_history,
+            &stage_outputs,
+            *stage_index,
+            position + 1,
+            total,
+            observer,
+        )?;
+        stage_outputs.push(output);
     }
 
     let durable_summary = stage_outputs
@@ -244,22 +273,24 @@ pub fn run_mock_pipeline(
     user_request: &str,
     observer: &mut dyn PipelineObserver,
 ) -> Result<PipelineOutput, BoxError> {
-    let mut stages = Vec::with_capacity(STAGES.len());
-    let total = STAGES.len();
+    let route = fallback_route_for_request(user_request);
+    let total = route.len();
+    let mut stages = Vec::with_capacity(total);
 
-    for (index, stage) in STAGES.iter().enumerate() {
-        observer.stage_started(stage, index, total)?;
+    for (index, stage_index) in route.iter().enumerate() {
+        let stage = STAGES[*stage_index];
+        observer.stage_started(&stage, index, total)?;
         let text = format!(
             "{}:\nmock handoff for request: {}\n",
             stage.output_name, user_request
         );
-        observer.stage_finished(stage, index, total, &text)?;
-        stages.push(StageOutput { stage: *stage, text });
+        observer.stage_finished(&stage, index, total, &text)?;
+        stages.push(StageOutput { stage, text });
     }
 
     let final_reply = format!(
-        "Pipeline completed in mock mode. Request classified, planned, routed through tools, reviewed, and summarized.\n\nRequest: {}",
-        user_request
+        "Pipeline completed in mock mode using {} stages. Request classified, planned, routed through tools, reviewed when needed, and summarized.\n\nRequest: {}",
+        total, user_request
     );
 
     Ok(PipelineOutput {
@@ -267,6 +298,93 @@ pub fn run_mock_pipeline(
         final_reply,
         stages,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_stage(
+    runtime: &edgerun_tokio::runtime::Runtime,
+    client: &ModelClient,
+    user_request: &str,
+    prior_history: &[ResponseItem],
+    stage_outputs: &[StageOutput],
+    stage_index: usize,
+    position: usize,
+    total: usize,
+    observer: &mut dyn PipelineObserver,
+) -> Result<StageOutput, BoxError> {
+    let stage = STAGES[stage_index];
+    observer.stage_started(&stage, position, total)?;
+    let handoff = pipeline_handoff(user_request, prior_history, stage_outputs, &stage);
+    let output = runtime.block_on(client.collect_turn(turn_request(vec![
+        message_item("system", stage.prompt),
+        message_item("user", &handoff),
+    ])))?;
+
+    let text = normalize_output(output.output_text);
+    let bounded = truncate_chars(&text, MAX_STAGE_OUTPUT_CHARS);
+    observer.stage_finished(&stage, position, total, &bounded)?;
+    Ok(StageOutput {
+        stage,
+        text: bounded,
+    })
+}
+
+fn route_after_router(user_request: &str, router_output: &str) -> Vec<usize> {
+    let mut route = Vec::new();
+    let lower = router_output.to_ascii_lowercase();
+    for stage_index in 1..STAGES.len() {
+        let stage = STAGES[stage_index];
+        if lower.contains(&stage.name.to_ascii_lowercase())
+            || lower.contains(&stage.output_name.to_ascii_lowercase())
+        {
+            push_unique(&mut route, stage_index);
+        }
+    }
+
+    if route.is_empty() {
+        route = fallback_route_for_request(user_request);
+        route.retain(|stage| *stage != ROUTER_STAGE_INDEX);
+    }
+
+    if !route.contains(&SUMMARIZER_STAGE_INDEX) {
+        route.push(SUMMARIZER_STAGE_INDEX);
+    }
+    route.retain(|stage| *stage != ROUTER_STAGE_INDEX);
+    route
+}
+
+fn fallback_route_for_request(user_request: &str) -> Vec<usize> {
+    let lower = user_request.to_ascii_lowercase();
+    let mut route = vec![ROUTER_STAGE_INDEX, 1];
+
+    if contains_any(&lower, &["fix", "edit", "patch", "implement", "make it", "compile", "build", "test", "error", "failed", "failure", "panic", "crash"])
+    {
+        route.extend_from_slice(&[2, 3, 4, 5]);
+    } else if contains_any(&lower, &["architecture", "design", "plan", "improve", "refactor"])
+    {
+        route.extend_from_slice(&[2, 5]);
+    }
+
+    route.push(SUMMARIZER_STAGE_INDEX);
+    dedupe_route(route)
+}
+
+fn push_unique(route: &mut Vec<usize>, stage: usize) {
+    if !route.contains(&stage) {
+        route.push(stage);
+    }
+}
+
+fn dedupe_route(route: Vec<usize>) -> Vec<usize> {
+    let mut out = Vec::with_capacity(route.len());
+    for stage in route {
+        push_unique(&mut out, stage);
+    }
+    out
+}
+
+fn contains_any(value: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| value.contains(needle))
 }
 
 fn pipeline_handoff(
@@ -277,7 +395,7 @@ fn pipeline_handoff(
 ) -> String {
     let mut out = String::new();
     out.push_str("USER_REQUEST:\n");
-    out.push_str(user_request);
+    out.push_str(&truncate_chars(user_request, 1800));
     out.push_str("\n\nCURRENT_STAGE:\n");
     out.push_str(stage.name);
     out.push_str("\n\nEXPECTED_OUTPUT:\n");
@@ -289,15 +407,7 @@ fn pipeline_handoff(
     if stage_outputs.is_empty() {
         out.push_str("(none)\n");
     } else {
-        for item in stage_outputs {
-            out.push_str("\n--- ");
-            out.push_str(item.stage.output_name);
-            out.push_str(" / ");
-            out.push_str(item.stage.name);
-            out.push_str(" ---\n");
-            out.push_str(&item.text);
-            out.push('\n');
-        }
+        append_previous_outputs(&mut out, stage_outputs);
     }
 
     out.push_str("\nCONSTRAINTS:\n");
@@ -308,17 +418,41 @@ fn pipeline_handoff(
     out
 }
 
+fn append_previous_outputs(out: &mut String, stage_outputs: &[StageOutput]) {
+    let mut remaining = MAX_PREVIOUS_OUTPUT_CHARS;
+    for item in stage_outputs.iter().rev() {
+        if remaining == 0 {
+            break;
+        }
+        out.push_str("\n--- ");
+        out.push_str(item.stage.output_name);
+        out.push_str(" / ");
+        out.push_str(item.stage.name);
+        out.push_str(" ---\n");
+        let chunk = truncate_chars(&item.text, remaining.min(MAX_STAGE_OUTPUT_CHARS));
+        remaining = remaining.saturating_sub(chunk.len());
+        out.push_str(&chunk);
+        out.push('\n');
+    }
+}
+
 fn compact_history(history: &[ResponseItem]) -> String {
     let mut out = String::new();
-    let keep_from = history.len().saturating_sub(6);
+    let keep_from = history.len().saturating_sub(4);
+    let mut remaining = MAX_HISTORY_CHARS;
     for item in &history[keep_from..] {
+        if remaining == 0 {
+            break;
+        }
         if let ResponseItem::Message { role, content, .. } = item {
             out.push_str(role);
             out.push_str(": ");
             for part in content {
                 match part {
                     ContentItem::InputText { text } | ContentItem::OutputText { text } => {
-                        out.push_str(&truncate_chars(text, 600));
+                        let chunk = truncate_chars(text, remaining.min(600));
+                        remaining = remaining.saturating_sub(chunk.len());
+                        out.push_str(&chunk);
                     }
                     _ => {}
                 }
@@ -398,5 +532,21 @@ mod tests {
     fn final_answer_is_extracted_from_summary() {
         let summary = "FinalAnswer:\nDone.\nDurableMemory:\nRemember this.";
         assert_eq!(final_answer_from_summary(summary).unwrap(), "Done.");
+    }
+
+    #[test]
+    fn simple_explanation_route_skips_executor_chain() {
+        assert_eq!(fallback_route_for_request("explain how this works"), vec![0, 1, 6]);
+    }
+
+    #[test]
+    fn build_failure_route_includes_execution_chain() {
+        assert_eq!(fallback_route_for_request("fix the build error"), vec![0, 1, 2, 3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn router_output_can_select_route() {
+        let route = route_after_router("hello", "DownstreamPlan: Codebase, Summarizer");
+        assert_eq!(route, vec![1, 6]);
     }
 }
