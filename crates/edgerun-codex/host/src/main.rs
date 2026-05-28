@@ -9,9 +9,7 @@ use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use codex_core::Prompt;
 use codex_core::Provider;
-use codex_core::TurnRequest;
 use codex_core::api::AuthProvider;
 use codex_core::api::RetryConfig;
 use codex_core::protocol::models::ContentItem;
@@ -23,6 +21,7 @@ use edgerun_http::header::AUTHORIZATION;
 use edgerun_json::Value;
 use edgerun_work::*;
 
+mod pipeline;
 mod ui_stream;
 
 const CONTACT_CARD_MAGIC: &[u8] = b"EDGERUN-CHAT-CONTACT1";
@@ -117,6 +116,34 @@ impl UiStreamSink {
     }
 }
 
+impl pipeline::PipelineObserver for UiStreamSink {
+    fn stage_started(
+        &mut self,
+        stage: &pipeline::PipelineStage,
+        index: usize,
+        total: usize,
+    ) -> Result<(), pipeline::BoxError> {
+        let progress = (index as f32) / (total.max(1) as f32);
+        self.status(&format!("pipeline: {}", stage.name))?;
+        self.progress(progress)?;
+        self.tool_call(stage.name, "started")?;
+        Ok(())
+    }
+
+    fn stage_finished(
+        &mut self,
+        stage: &pipeline::PipelineStage,
+        index: usize,
+        total: usize,
+        output: &str,
+    ) -> Result<(), pipeline::BoxError> {
+        let progress = ((index + 1) as f32) / (total.max(1) as f32);
+        self.progress(progress)?;
+        self.tool_call(stage.output_name, output)?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 struct PeerThreadState {
     next_sequence: u64,
@@ -160,7 +187,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut ui_sink = UiStreamSink::open(config.ui_stream_stdout, config.ui_stream_path.as_ref())?;
     ui_sink.status("codex-host starting")?;
     ui_sink.progress(0.0)?;
-    ui_sink.emit_patch(ui_stream::agent::run_button("Run"))?;
+    ui_sink.emit_patch(ui_stream::agent::run_button("Run pipeline"))?;
 
     let hub = WebSocketWorkHub::bind(&config.listen)?;
     eprintln!("codex-host listening on ws://{}", hub.listen_addr());
@@ -235,8 +262,8 @@ fn handle_chat_envelope(
         return Ok(());
     }
 
-    ui_sink.status("thinking")?;
-    ui_sink.progress(0.1)?;
+    ui_sink.status("pipeline")?;
+    ui_sink.progress(0.0)?;
     ui_sink.assistant_draft("")?;
 
     let thread_state = threads.entry(message.from).or_default();
@@ -246,21 +273,13 @@ fn handle_chat_envelope(
         .max(message.sequence.saturating_add(1));
     thread_state.history.push(user_item(text.clone()));
 
-    let reply = if let Some(reply) = mock_response {
-        ui_sink.progress(0.5)?;
-        reply.replace("{input}", &text)
+    let pipeline_output = if mock_response.is_some() {
+        pipeline::run_mock_pipeline(&text, ui_sink)?
     } else {
         let client = client.ok_or("codex model client unavailable")?;
-        ui_sink.progress(0.25)?;
-        let output =
-            runtime.block_on(client.collect_turn(turn_request(thread_state.history.clone())))?;
-        ui_sink.progress(0.75)?;
-        if output.output_text.trim().is_empty() {
-            "(no assistant text returned)".to_string()
-        } else {
-            output.output_text
-        }
+        pipeline::run_pipeline(runtime, client, &text, &thread_state.history, ui_sink)?
     };
+    let reply = pipeline_output.final_reply;
     ui_sink.assistant_draft(&reply)?;
     ui_sink.status("finalizing")?;
     thread_state.history.push(assistant_item(reply.clone()));
@@ -377,17 +396,6 @@ fn sender_identity_from_message(message: &NetworkMessage) -> Result<NodeIdentity
         role: NODE_ROLE_MESSAGE,
         public_key,
     })
-}
-
-fn turn_request(input: Vec<ResponseItem>) -> TurnRequest {
-    TurnRequest {
-        prompt: Prompt {
-            input,
-            ..Prompt::default()
-        },
-        store: false,
-        ..TurnRequest::default()
-    }
 }
 
 fn user_item(text: String) -> ResponseItem {
