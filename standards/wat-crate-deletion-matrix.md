@@ -20,7 +20,7 @@ Use this status language:
 
 | Crate | Covered behavior | WAT owner | Remaining Rust value | Action |
 | --- | --- | --- | --- | --- |
-| `crates/utility/edgerun-percent-encoding` | Strict percent decode, component encode, malformed escape rejection | `percent-url-form.wat`: `percent_decode_strict`, `percent_encode_component` | `AsciiSet`, iterators, `Cow`, permissive malformed-percent preservation, lossy UTF-8 | Delete local crate. Do not touch `edgerun-percent-encoding-upstream`; it is a separate upstream-shaped compatibility surface. |
+| `crates/utility/edgerun-percent-encoding` | Strict percent decode, component encode, malformed escape rejection | `percent-url-form.wat`: `percent_decode_strict`, `percent_encode_component` | `AsciiSet`, iterators, `Cow`, permissive malformed-percent preservation, lossy UTF-8 | Delete local crate. The later upstream-shaped crate deletion extracts baggage policy and rejects the compatibility API. |
 | `crates/utility/edgerun-form-urlencoded` | Form pair scanning, key-only pairs, empty values, strict percent validation, URI path/query/fragment scan | `percent-url-form.wat`: `form_urlencoded_next_pair`, `uri_scan_path_query`, `percent_decode_strict`, `percent_encode_component` | Owned iterators, `Serializer`, `EncodingOverride`, lossy UTF-8, permissive legacy behavior | Delete crate source and metadata. Form plus-as-space is adapter policy, not a crate. |
 | `crates/utility/edgerun-hpack` | Prefix integers, HPACK strings, Huffman decode/validate, header-block structural scan, table arithmetic | `http-prefix-int.wat`, `hpack-string.wat`, `hpack-huffman.wat`, `hpack-header-block.wat`, `hpack-table-core.wat` | `Decoder`/`Encoder` API, static/dynamic table runtime state, callback ownership | Delete compatibility crate. Runtime state belongs in `edgerun-protocols/src/http/http2/hpack.rs` as a WAT-record adapter, not in a revived crate. |
 | `crates/utility/edgerun-json` | JSON scalar scan, token tape, value-kind helpers, object field lookup, compact emission, TOML scan, YAML scan | `json-scalar.wat`, `json-tape.wat`, `json-value-core.wat`, `json-emit.wat`, `toml-scan.wat`, `yaml-scan.wat` | `JsonValue`, `Map`, macros, derive-compatible traits, IO/error glue, permissive parser conveniences | Delete/tombstone crate. Callers should move to WAT field projection, fixed emitters, raw spans, or rkyv records. |
@@ -62,6 +62,38 @@ emission, not raw UTF-8 validation. The removed Rust value was `BufRead` glue,
 callbacks, borrowed `&str` API shape, display text, and `std::error::Error`
 impls.
 
+## Crossed out: `edgerun-simdutf8`
+
+`crates/utility/edgerun-simdutf8` is deleted. Its useful behavior, strict
+UTF-8 validation with optional `valid_up_to` / `error_len` detail, is owned by
+`utf8-scan.wat`. The removed Rust value was CPU-specific SIMD dispatch,
+unsafe public implementation modules, streaming validator traits, borrowed
+`&str` / `&mut str` API shape, and Rust diagnostics. The only live dependency
+edge was `simd_cesu8`, which has now also been deleted after CESU-8/MUTF-8
+extraction.
+
+## Crossed out: `edgerun-simd-cesu8`
+
+`crates/utility/edgerun-simd-cesu8` is deleted. Its useful behavior, strict
+CESU-8 and Java Modified UTF-8 encode/decode, is owned by `cesu8-mutf8.wat`.
+That primitive covers BMP passthrough, supplementary UTF-8 to surrogate-pair
+triples, MUTF-8 NUL encoding and decoding, strict surrogate-pair decode back to
+UTF-8, malformed/truncated/unpaired surrogate rejection, and output-capacity
+failure. The removed Rust value was `Cow` API shape, lossy wrappers, SIMD/word
+dispatch, benchmark/image material, display/error wrappers, and docs.
+Remaining JNI callers are deliberate fallout for the JNI string lane; do not
+restore a Rust `simd_cesu8` crate.
+
+## Crossed out: `edgerun-hashbrown`
+
+`crates/utility/edgerun-hashbrown` is deleted. It was a Rust SwissTable
+`HashMap` / `HashSet` implementation, not a portable standards behavior.
+No WAT extraction was done. The removed value was collection API compatibility,
+raw table internals, SIMD group scanning, allocator layout, rayon impls, and
+raw-entry support. `rkyv` no longer depends on the crate; its local
+sharing/pooling/validation maps now use `alloc::collections::BTreeMap`, and
+the archived-hashbrown compatibility impl module is gone.
+
 ## Crossed out: `edgerun-encoding`
 
 `crates/utility/edgerun-encoding` was drained module-by-module and then deleted.
@@ -69,6 +101,56 @@ The final empty shell (`Cargo.toml` and `src/lib.rs`) is gone, along with the
 root workspace member and root workspace dependency. Remaining
 `edgerun_encoding::*` imports in product crates are deliberate caller-demolition
 targets against deleted APIs; Cargo health is not a deletion gate on this branch.
+
+## Crossed out: `edgerun-percent-encoding-upstream`
+
+`crates/utility/edgerun-percent-encoding-upstream` is deleted. Its only concrete
+live upstream-shaped policy, OpenTelemetry/W3C baggage percent encoding, is now
+owned by `percent-url-form.wat::percent_encode_baggage`. The removed value was
+`AsciiSet` API compatibility, iterator/display/Cow wrappers, lossy UTF-8
+helpers, and permissive malformed percent decode.
+
+## Crossed out: `edgerun-eventsource-stream`
+
+`crates/utility/edgerun-eventsource-stream` is deleted. SSE frame parsing is now
+owned by `sse-event-stream.wat::sse_parse_events`: blank-line dispatch,
+multi-line `data:` joining, event type override, last-event-id carry/update and
+empty clear, NUL-bearing id ignore, retry capture, comment and unknown-field
+ignore, optional one leading space after colon, strict UTF-8 rejection, and
+bounded record/text output. The removed Rust value was async `Stream` glue,
+generic transport error plumbing, `String` object shape, and display/error
+compatibility.
+
+## Crossed out: `edgerun-shlex`
+
+`crates/utility/edgerun-shlex` is deleted. Its useful shell-like word split
+behavior is owned by `shell-word-scan.wat` (`300070`): ASCII whitespace
+separation, single/double quotes, backslash policy, empty quoted words,
+unterminated quote rejection, and output-cap failure. The removed Rust value was
+`Vec<String>` allocation, iterator/string API shape, and shell quote/join
+helpers. Codex shell callers still importing `edgerun_shlex` are intentional
+caller-demolition fallout.
+
+## Crossed out: `edgerun-sixel`
+
+`crates/utility/edgerun-sixel` is deleted. Its useful terminal image behavior is
+owned by `sixel-decode.wat` (`300071`): DCS payload scanning, `!N<char>` repeat
+handling, color register selection, RGB-percent color definitions, `$` and `-`
+raster movement, sixel char bit mapping, corrected dimensions, empty/invalid
+repeat/invalid color rejection, and output-cap failure. The removed Rust value
+was `SixelImage`, `DcsSettings`, `SixelError`, allocation, display/std error
+impls, and terminal-facing image struct shape. `edgerun-term-core` imports are
+intentional caller-demolition fallout.
+
+## Crossed out: `edgerun-terminal-parser`
+
+`crates/utility/edgerun-terminal-parser` is deleted. Its useful byte-stream
+scanner behavior is owned by `terminal-control-scan.wat` (`300112`): printable
+spans, C0/DEL execute records, ESC classification, CSI params/final byte, OSC
+BEL/ST payload spans, DCS hook/data/end records, incomplete sequence records,
+and output-cap failure. The removed Rust value was the `Perform` callback trait,
+`Parser` facade, nested `Params` vector API, and renderer-facing convenience
+shape. `edgerun-term-core` caller imports are intentional demolition fallout.
 
 ### Already deleted or source-retired modules
 
@@ -123,6 +205,7 @@ for deleted APIs.
 | OAuth / ACME | `edgerun-encoding` base64url and percent, `edgerun-json` for ACME JSON | `encoding-text.wat`, `percent-url-form.wat`, `json-tape.wat`, `json-emit.wat` | Delete direct imports in `edgerun-protocols/src/oauth`, `src/acme`, and `apps/edgerun-oauth`. |
 | DNS / TSIG / DNSSEC | base64url, standard base64, base32hex, DNS name/header helpers | `encoding-text.wat`, `encoding-base64.wat`, DNS WAT family; add `encoding-base32hex.wat` | Delete DoH base64url first; extract base32hex before NSEC3 cleanup. |
 | WebSocket | standard base64 accept, frame helpers | `ws-accept.wat`, `ws-frame.wat` | Replace all accept-string code with `ws_accept_key`; delete incorrect `encode_u64_base64` path. |
+| `edgerun-tungstenite` | WebSocket handshake accept, frame header parse/format, mask transform, close payload shape | `ws-accept.wat`, `ws-frame.wat` | Deleted after `ws-frame` gained masked client header, full header parse, and close payload coverage. Remaining `edgerun-tungstenite` callers are intentional demolition fallout. |
 | SSH / terminal | standard base64, authorized-key scanning, length fields | `encoding-base64.wat`, `ssh-authorized-key.wat`; add `length-field.wat` | Delete SSH authorized-key Rust scan/base64 split; keep key structure parsing only if still needed. |
 | Email auth / SMTP | standard base64, DKIM body canonicalization, tag-list parsing, quoted-printable | `encoding-base64.wat`, `dkim-body.wat`; add `tag-list.wat`, `mime-quoted-printable.wat` | Delete DKIM body canonicalization Rust first; extract tag-list next. |
 | HTTP/2 / HTTP/3 | `edgerun-hpack`, QPACK byte parsers, frame headers | HPACK/QPACK WAT family, `http2-frame.wat`, `http3-frame.wat` | Delete `edgerun-hpack` crate now; build runtime adapter in protocol crate as follow-up. |

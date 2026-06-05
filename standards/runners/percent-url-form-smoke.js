@@ -156,6 +156,36 @@ function span(memory, base) {
   );
   assert(encodeShort.status === 2, "percent encode should reject small output cap");
 
+  const baggage = callBytes(
+    exports,
+    "percent_encode_baggage",
+    Buffer.from('name value";,=/%+?', "ascii"),
+  );
+  assert(baggage.status === 0, "baggage percent encode failed");
+  assert(
+    baggage.output.toString("ascii") === "name%20value%22%3B%2C%3D/%+?",
+    "baggage percent encode mismatch",
+  );
+
+  const baggageControls = callBytes(
+    exports,
+    "percent_encode_baggage",
+    Buffer.from([0x00, 0x1f, 0x7f, 0x80, 0xff]),
+  );
+  assert(baggageControls.status === 0, "baggage control encode failed");
+  assert(
+    baggageControls.output.toString("ascii") === "%00%1F%7F%80%FF",
+    "baggage control encode mismatch",
+  );
+
+  const baggageShort = callBytes(
+    exports,
+    "percent_encode_baggage",
+    Buffer.from(" ", "ascii"),
+    2,
+  );
+  assert(baggageShort.status === 2, "baggage encode should reject small output cap");
+
   const formInput = Buffer.from("a=1&a=2&=emptykey&b=two+words&empty=&keyonly", "ascii");
   const inPtr = 8192;
   const outPtr = 12000;
@@ -223,6 +253,9 @@ function span(memory, base) {
       "percent_encode_component",
       "percent_encode_path_mode",
       "percent_encode_query_mode",
+      "percent_encode_baggage",
+      "percent_encode_baggage_controls",
+      "percent_encode_baggage_small_cap",
       "percent_plus_literal_policy",
       "percent_space_encode_policy",
       "percent_encode_small_cap",

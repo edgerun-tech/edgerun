@@ -20,6 +20,32 @@ owning caller when they are only host-language glue.
 
 ## Active lanes
 
+### WebSocket / Tungstenite
+
+Status:
+
+- `crates/utility/edgerun-tungstenite` is crossed out. Source, crate metadata,
+  root workspace member, root workspace dependency, and lock package entry are
+  deleted.
+- `ws-accept.wat` owns WebSocket accept-key SHA-1 plus standard-base64 behavior.
+- `ws-frame.wat` owns frame prefix decode, extended payload length decode,
+  full header parse, server/general header formatting, mask XOR, and close
+  payload status/reason-byte shape.
+
+Verified WAT coverage:
+
+- `node standards/runners/ws-frame-smoke.js`
+- `node standards/runners/ws-accept-smoke.js`
+
+Current gates:
+
+- Remaining `edgerun-tungstenite` references are caller demolition targets.
+  Do not restore the Rust compatibility crate or stream/config facades.
+
+Documentation:
+
+- `standards/deletion-edgerun-tungstenite.md`
+
 ### Compression and miniz
 
 Primary target:
@@ -143,6 +169,74 @@ Status:
 Documentation:
 
 - `standards/deletion-edgerun-utf-8.md`
+
+### CESU-8 and Java MUTF-8
+
+Status:
+
+- `crates/utility/edgerun-simd-cesu8` is crossed out. Source, crate metadata,
+  root workspace member, root workspace dependency, and lockfile package entry
+  are deleted.
+- Strict CESU-8 and MUTF-8 encode/decode behavior is owned by
+  `cesu8-mutf8.wat` (`300069`).
+- The deleted Rust crate's `Cow`, lossy wrapper, SIMD dispatch, docs, benchmark,
+  image, and error wrapper surfaces were compatibility scaffolding and were not
+  ported.
+
+Current caller fallout:
+
+- JNI string helpers in `crates/utility/edgerun-jni` and
+  `crates/utility/edgerun-jni-macros` still reference `simd_cesu8`. Leave them
+  broken until the JNI string lane routes Java MUTF-8 C-string behavior through
+  WAT or caller-owned host adapters.
+
+Verified WAT coverage:
+
+- `cesu8-mutf8.wat`
+- `cesu8-mutf8-smoke.js`
+
+Documentation:
+
+- `standards/deletion-edgerun-simd-cesu8.md`
+
+### Shell word scan
+
+Status:
+
+- `crates/utility/edgerun-shlex` is crossed out. Source, crate metadata, root
+  workspace member, root workspace dependency, lock package entry, and the Codex
+  shell manifest dependency are deleted.
+- Shell-like word splitting is owned by `shell-word-scan.wat` (`300070`):
+  ASCII whitespace separation, single and double quote handling, backslash
+  escaping, empty quoted words, and unterminated quote rejection.
+- The deleted Rust crate's quote/join helpers were string allocation API
+  scaffolding and were not ported.
+- Remaining `edgerun_shlex::*` imports in Codex shell source are deliberate
+  caller-demolition targets against deleted APIs.
+
+Documentation:
+
+- `standards/deletion-edgerun-shlex.md`
+
+### Server-Sent Events
+
+Status:
+
+- `crates/utility/edgerun-eventsource-stream` is crossed out. Source, crate
+  metadata, root workspace member, root workspace dependency, and lock package
+  entry are deleted.
+- SSE frame parsing is owned by `sse-event-stream.wat` (`300072`) through
+  `sse_parse_events`.
+- The WAT parser covers blank-line dispatch, joined multi-line `data:`, event
+  type override, last-event-id carry/update/empty clear, NUL-bearing id ignore,
+  numeric retry capture, comment and unknown-field ignore, optional one leading
+  space after colon, strict UTF-8 rejection, and bounded record/text output.
+- Remaining Codex/API imports of `edgerun_eventsource_stream` are
+  caller-demolition targets. Do not restore the Rust async `Stream` wrapper.
+
+Documentation:
+
+- `standards/deletion-edgerun-eventsource-stream.md`
 
 Final compression deletion status:
 
@@ -366,23 +460,82 @@ Status:
 
 - `crates/utility/edgerun-percent-encoding` deleted.
 - `crates/utility/edgerun-form-urlencoded` deleted.
-- `crates/utility/edgerun-percent-encoding-upstream` intentionally untouched.
+- `crates/utility/edgerun-percent-encoding-upstream` deleted after extracting
+  the only concrete live upstream-style policy, OpenTelemetry/W3C baggage
+  percent encoding, to `percent-url-form.wat::percent_encode_baggage`.
 
 Verified WAT coverage:
 
 - `percent-url-form.wat`
 - `percent-url-form-smoke.js`
 - `codec-composition-http1-query.js`
+- `percent_encode_baggage` baggage policy smoke coverage in
+  `percent-url-form-smoke.js`
 
 Cleanup status:
 
 - Closed: `standards/runners/rust-parity-misc-codecs.js` no longer compiles a
   Rust oracle for the deleted local percent/form crates. It records fixed WAT
   expectations and a deleted-oracle note instead.
+- Closed: upstream-shaped `percent-encoding` source is deleted. `AsciiSet`,
+  iterator/Cow, and permissive malformed decode behavior are not portable
+  standards ownership.
 
 Documentation:
 
 - `standards/deletion-percent-form-caller-queue.md`
+- `standards/deletion-edgerun-percent-encoding-upstream.md`
+
+### Terminal control scan
+
+Status:
+
+- `crates/utility/edgerun-terminal-parser` is deleted.
+- Root workspace member/dependency metadata and the lock package entry are
+  removed.
+- `crates/edgerun-term/edgerun-term-core` still contains broken
+  `edgerun_terminal_parser::*` imports as caller-demolition fallout.
+
+Verified WAT coverage:
+
+- `terminal-control-scan.wat` (`300112`)
+- `terminal-control-scan-smoke.js`
+
+Covered behavior:
+
+- printable spans, C0/DEL execute records, ESC, CSI params/final byte, OSC
+  BEL/ST payload spans, DCS hook/data/end, incomplete sequences, and output-cap
+  failure.
+
+Documentation:
+
+- `standards/deletion-edgerun-terminal-parser.md`
+
+### SIXEL decode
+
+Status:
+
+- `crates/utility/edgerun-sixel` is deleted.
+- Root workspace member/dependency metadata, terminal dependency metadata, and
+  the lock package entry are removed.
+- `crates/edgerun-term/edgerun-term-core` still contains broken
+  `edgerun_sixel::*` imports as caller-demolition fallout.
+
+Verified WAT coverage:
+
+- `sixel-decode.wat` (`300071`)
+- `sixel-decode-smoke.js`
+
+Covered behavior:
+
+- DCS payload scanning, sixel char bit mapping, repeat handling, color register
+  selection, RGB-percent color definitions, `$` and `-` raster movement,
+  corrected dimensions, empty/invalid repeat/invalid color rejection, and
+  output-cap failure.
+
+Documentation:
+
+- `standards/deletion-edgerun-sixel.md`
 
 ## Freed-slot queue
 
@@ -399,6 +552,10 @@ active write set:
    paths now that the crate shell is gone.
 6. Compression caller adapter implementation for OCI gzip read, HTTP
    compression, APK ZIP method 8, and tor bench.
+7. Terminal renderer caller demolition: replace `edgerun_terminal_parser`
+   callback imports in `edgerun-term-core` with host/WAT record routing.
+8. Terminal SIXEL caller demolition: replace `edgerun_sixel` image decode calls
+   in `edgerun-term-core` with host/WAT RGBA record routing.
 
 ## Verification snippets
 
@@ -420,4 +577,5 @@ rg -n "edgerun-encoding|edgerun_encoding" crates Cargo.toml standards --glob '*.
 rg -n "edgerun_json::|use edgerun_json" crates --glob '*.rs'
 rg -n "edgerun_hpack|edgerun-hpack" crates Cargo.toml standards
 rg -n "edgerun_percent_encoding|edgerun_form_urlencoded|edgerun-percent-encoding|edgerun-form-urlencoded" crates Cargo.toml standards
+rg -n "edgerun_sixel|edgerun-sixel" crates Cargo.toml standards
 ```

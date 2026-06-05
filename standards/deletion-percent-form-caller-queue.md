@@ -4,10 +4,11 @@ This queue crosses out the local compatibility crates:
 
 - `crates/utility/edgerun-percent-encoding`
 - `crates/utility/edgerun-form-urlencoded`
+- `crates/utility/edgerun-percent-encoding-upstream`
 
-Do not touch `crates/utility/edgerun-percent-encoding-upstream`. It remains the
-upstream-shaped `percent-encoding` compatibility crate for OpenTelemetry and any
-other caller that needs that API shape.
+`crates/utility/edgerun-percent-encoding-upstream` was deleted after the only
+concrete live upstream-shaped policy, OpenTelemetry/W3C baggage percent
+encoding, was extracted to `percent-url-form.wat::percent_encode_baggage`.
 
 ## Canonical WAT
 
@@ -46,12 +47,13 @@ they are no longer crate metadata.
 
 ## Remaining References
 
-Workspace root references are only for the upstream-shaped compatibility crate:
+The previous workspace root references for the upstream-shaped compatibility
+crate are now deleted:
 
 - `Cargo.toml`: workspace member `crates/utility/edgerun-percent-encoding-upstream`
-- `Cargo.toml`: workspace dependency `percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }`
+- `Cargo.toml`: workspace dependency `percent-encoding`
 
-Those are intentionally retained.
+Those are historical references only.
 
 Standards docs still mention the deleted local crates as historical parity
 sources and deletion evidence. Those references are documentation, not live Rust

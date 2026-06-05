@@ -5,9 +5,9 @@ This audit scopes retirement of the local compatibility crates:
 - `crates/utility/edgerun-form-urlencoded`
 - `crates/utility/edgerun-percent-encoding`
 
-It explicitly leaves `crates/utility/edgerun-percent-encoding-upstream` in place.
-That crate is the workspace replacement for the published `percent-encoding`
-API and is still used by OpenTelemetry compatibility code.
+`crates/utility/edgerun-percent-encoding-upstream` was later deleted after its
+only concrete live upstream-shaped policy, OpenTelemetry/W3C baggage percent
+encoding, was extracted to `percent-url-form.wat::percent_encode_baggage`.
 
 ## Verified counts
 
@@ -133,15 +133,15 @@ form query handling is already moving toward explicit runtime units.
 
 ## Leave upstream compatibility
 
-Do not delete or modify this crate in the form/percent retirement batch:
+Later batch status:
 
 - `crates/utility/edgerun-percent-encoding-upstream`
 
-It remains reachable through the root workspace dependency:
+The root workspace dependency was deleted:
 
 - `Cargo.toml`
-  - workspace member: `crates/utility/edgerun-percent-encoding-upstream`
-  - workspace dependency: `percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }`
+  - deleted workspace member: `crates/utility/edgerun-percent-encoding-upstream`
+  - deleted workspace dependency: `percent-encoding`
 
 Concrete upstream callers:
 
@@ -178,19 +178,18 @@ local compatibility crates and their direct dependency edge:
 - `crates/utility/edgerun-percent-encoding/Cargo.lock`
   - local crate lockfile can be removed or left as tombstone metadata
 
-Root `Cargo.toml` currently lists only the upstream percent crate:
+Root `Cargo.toml` previously listed only the upstream percent crate:
 
 - `crates/utility/edgerun-percent-encoding-upstream`
 - `percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }`
 
-No root workspace cleanup is needed for the local form or local percent crates
-unless a later scan finds them added as workspace members.
+Both entries are now deleted.
 
 ## Retirement recommendation
 
 Retire both local crates as a single batch:
 
-1. Keep `edgerun-percent-encoding-upstream` untouched.
+1. Keep `edgerun-percent-encoding-upstream` deleted.
 2. Add a deletion note for the local form/percent crates.
 3. Keep `percent-url-form.wat` as the canonical portable implementation.
 4. Update `rust-parity-misc-codecs.js` to report a deleted Rust oracle for this

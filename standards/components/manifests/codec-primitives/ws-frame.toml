@@ -18,9 +18,13 @@ exports = [
   "ws_decode_prefix",
   "ws_decode_payload_len",
   "ws_apply_mask_in_place",
+  "ws_parse_header",
+  "ws_write_frame_header",
+  "ws_parse_close_payload",
+  "ws_write_close_payload",
   "ws_write_server_frame_header",
 ]
 parity_sources = [
   "crates/protocol/edgerun-work/src/ws_channel.rs",
+  "standards/deletion-edgerun-tungstenite.md",
 ]
-

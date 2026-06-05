@@ -68,6 +68,7 @@ Current module ids:
 300025 dns-name
 300026 dns-message-header
 300027 percent-url-form
+300071 sixel-decode
 ```
 
 Current modules:
@@ -83,7 +84,8 @@ Current modules:
 - `hpack-string.wat`: HPACK raw/Huffman string literal scanner and decoder.
 - `qpack-string.wat`: QPACK raw/Huffman prefix-string scanner and decoder.
 - `http3-frame.wat`: HTTP/3 frame header encode/decode/classification.
-- `ws-frame.wat`: WebSocket frame-prefix, payload-length, and mask helpers.
+- `ws-frame.wat`: WebSocket frame-prefix, payload-length, header format/parse,
+  mask, and close-payload helpers.
 - `der-tlv.wat`: DER TLV tag/length helpers.
 - `der-oid.wat`: DER OBJECT IDENTIFIER root, arc iteration, and small arc encoding helpers.
 - `der-asn1-basic.wat`: DER INTEGER, BIT STRING, OCTET STRING, NULL, and SEQUENCE span scanners.
@@ -99,3 +101,4 @@ Current modules:
 - `dns-name.wat`: DNS uncompressed wire-name scanning and lowercase dotted-name emission.
 - `dns-message-header.wat`: DNS 12-byte message header encode/decode and flag classification.
 - `percent-url-form.wat`: strict percent encoding/decoding, form-url-encoded pair spans, and URI path/query/fragment scanning.
+- `sixel-decode.wat`: SIXEL DCS payload decode to bounded RGBA raster bytes with repeat, color, movement, and dimension handling.

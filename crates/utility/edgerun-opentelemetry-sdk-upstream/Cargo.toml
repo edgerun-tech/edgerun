@@ -83,7 +83,6 @@ testing = [
 trace = [
     "opentelemetry/trace",
     "edgerun-crypto",
-    "percent-encoding",
 ]
 
 [lib]
@@ -109,10 +108,6 @@ default-features = false
 [dependencies.opentelemetry]
 path = "../edgerun-opentelemetry-upstream"
 default-features = false
-
-[dependencies.percent-encoding]
-path = "../edgerun-percent-encoding-upstream"
-optional = true
 
 [dependencies.thiserror]
 path = "../edgerun-thiserror"

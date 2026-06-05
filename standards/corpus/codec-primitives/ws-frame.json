@@ -37,6 +37,20 @@
       "input": { "hex": "82ff8000000000000000" },
       "expect": { "status": 4 },
       "notes": "WebSocket 64-bit payload lengths must not set the high bit."
+    },
+    {
+      "id": "masked-client-header-format",
+      "function": "ws_write_frame_header",
+      "input": { "opcode": 1, "flags": 128, "payload_len": 5, "mask": "11223344" },
+      "expect": { "status": 0, "written": 6, "hex": "818511223344" },
+      "notes": "Client-to-server frames carry the mask bit and four mask bytes."
+    },
+    {
+      "id": "close-payload-normal",
+      "function": "ws_write_close_payload",
+      "input": { "code": 1000, "reason": "normal" },
+      "expect": { "status": 0, "written": 8, "hex": "03e86e6f726d616c" },
+      "notes": "Close payload is status code in network byte order followed by reason bytes."
     }
   ]
 }

@@ -154,6 +154,43 @@
       end
     end)
 
+  (func $preserve_baggage_byte (param $b i32) (result i32)
+    local.get $b
+    i32.const 128
+    i32.ge_u
+    if (result i32)
+      i32.const 0
+    else
+      local.get $b
+      i32.const 32
+      i32.lt_u
+      local.get $b
+      i32.const 127
+      i32.eq
+      i32.or
+      local.get $b
+      i32.const 32
+      i32.eq
+      i32.or
+      local.get $b
+      i32.const 34
+      i32.eq
+      i32.or
+      local.get $b
+      i32.const 44
+      i32.eq
+      i32.or
+      local.get $b
+      i32.const 59
+      i32.eq
+      i32.or
+      local.get $b
+      i32.const 61
+      i32.eq
+      i32.or
+      i32.eqz
+    end)
+
   (func $validate_percent_span (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $c i32)
@@ -346,6 +383,95 @@
         local.tee $b
         local.get $mode
         call $preserve_byte
+        if
+          local.get $o
+          local.get $out_cap
+          i32.ge_u
+          if
+            i32.const 2
+            local.get $o
+            call $pack
+            return
+          end
+          local.get $out_ptr
+          local.get $o
+          i32.add
+          local.get $b
+          i32.store8
+          local.get $o
+          i32.const 1
+          i32.add
+          local.set $o
+        else
+          local.get $o
+          i32.const 3
+          i32.add
+          local.get $out_cap
+          i32.gt_u
+          if
+            i32.const 2
+            local.get $o
+            call $pack
+            return
+          end
+          local.get $out_ptr
+          local.get $o
+          i32.add
+          i32.const 37
+          i32.store8
+          local.get $out_ptr
+          local.get $o
+          i32.add
+          i32.const 1
+          i32.add
+          local.get $b
+          i32.const 4
+          i32.shr_u
+          call $hex_upper
+          i32.store8
+          local.get $out_ptr
+          local.get $o
+          i32.add
+          i32.const 2
+          i32.add
+          local.get $b
+          i32.const 15
+          i32.and
+          call $hex_upper
+          i32.store8
+          local.get $o
+          i32.const 3
+          i32.add
+          local.set $o
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $loop
+      end
+    end
+    i32.const 0
+    local.get $o
+    call $pack)
+
+  (func (export "percent_encode_baggage")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $i i32)
+    (local $o i32)
+    (local $b i32)
+    loop $loop
+      local.get $i
+      local.get $in_len
+      i32.lt_u
+      if
+        local.get $in_ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.tee $b
+        call $preserve_baggage_byte
         if
           local.get $o
           local.get $out_cap

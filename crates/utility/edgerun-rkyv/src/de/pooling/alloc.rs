@@ -1,11 +1,10 @@
-use core::{error::Error, fmt, hash::BuildHasherDefault};
+use alloc::collections::btree_map::{BTreeMap, Entry};
+use core::{error::Error, fmt};
 
-use hashbrown::hash_map::{Entry, HashMap};
 use rancor::{fail, Source};
 
 use crate::{
     de::pooling::{ErasedPtr, Pooling, PoolingState},
-    hash::FxHasher64,
 };
 
 #[derive(Debug)]
@@ -26,7 +25,7 @@ impl Drop for SharedPointer {
 /// shared pointer.
 #[derive(Default)]
 pub struct Pool {
-    shared_pointers: HashMap<usize, Option<SharedPointer>, BuildHasherDefault<FxHasher64>>,
+    shared_pointers: BTreeMap<usize, Option<SharedPointer>>,
 }
 
 impl Pool {
@@ -39,8 +38,9 @@ impl Pool {
     /// Creates a new shared pointer unifier with initial capacity.
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
+        let _ = capacity;
         Self {
-            shared_pointers: HashMap::with_capacity_and_hasher(capacity, Default::default()),
+            shared_pointers: BTreeMap::new(),
         }
     }
 }

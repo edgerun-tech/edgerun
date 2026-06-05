@@ -17,10 +17,14 @@ exports = [
   "proto_standard_id",
   "percent_decode_strict",
   "percent_encode_component",
+  "percent_encode_baggage",
   "form_urlencoded_next_pair",
   "uri_scan_path_query",
 ]
 parity_sources = [
   "crates/utility/edgerun-encoding/src/percent.rs",
+  "crates/utility/edgerun-percent-encoding-upstream/src/lib.rs",
+  "crates/utility/edgerun-percent-encoding-upstream/src/ascii_set.rs",
+  "crates/utility/edgerun-opentelemetry-sdk-upstream/src/propagation/baggage.rs",
   "crates/protocol/edgerun-protocols/src/http/uri.rs",
 ]

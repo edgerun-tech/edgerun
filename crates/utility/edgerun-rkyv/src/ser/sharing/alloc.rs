@@ -1,18 +1,15 @@
-use core::{error::Error, fmt, hash::BuildHasherDefault};
+use alloc::collections::btree_map::{BTreeMap, Entry};
+use core::{error::Error, fmt};
 
-use hashbrown::hash_map::{Entry, HashMap};
 use rancor::{fail, Source};
 
-use crate::{
-    hash::FxHasher64,
-    ser::{sharing::SharingState, Sharing},
-};
+use crate::ser::{sharing::SharingState, Sharing};
 
 /// A shared pointer strategy that shares serializations of the same shared
 /// pointer.
 #[derive(Debug, Default)]
 pub struct Share {
-    shared_address_to_pos: HashMap<usize, Option<usize>, BuildHasherDefault<FxHasher64>>,
+    shared_address_to_pos: BTreeMap<usize, Option<usize>>,
 }
 
 impl Share {
@@ -25,8 +22,9 @@ impl Share {
     /// Creates a new shared pointer unifier with initial capacity.
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
+        let _ = capacity;
         Self {
-            shared_address_to_pos: HashMap::with_capacity_and_hasher(capacity, Default::default()),
+            shared_address_to_pos: BTreeMap::new(),
         }
     }
 

@@ -10,13 +10,6 @@
 mod arrayvec_0_7;
 #[cfg(feature = "bytes-1")]
 mod bytes_1;
-#[cfg(any(
-    feature = "hashbrown-0_14",
-    feature = "hashbrown-0_15",
-    feature = "hashbrown-0_16",
-    feature = "hashbrown-0_17"
-))]
-mod hashbrown;
 #[cfg(feature = "indexmap-2")]
 mod indexmap_2;
 #[cfg(feature = "smallvec-1")]

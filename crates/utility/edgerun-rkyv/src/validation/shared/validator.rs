@@ -1,23 +1,16 @@
 //! Validators add validation capabilities by wrapping and extending basic
 //! validators.
 
-use core::{any::TypeId, error::Error, fmt, hash::BuildHasherDefault};
-#[cfg(feature = "std")]
-use std::collections::hash_map;
-
-#[cfg(not(feature = "std"))]
-use hashbrown::hash_map;
+use alloc::collections::BTreeMap;
+use core::{any::TypeId, error::Error, fmt};
 use rancor::{fail, Source};
 
-use crate::{
-    hash::FxHasher64,
-    validation::{shared::ValidationState, SharedContext},
-};
+use crate::validation::{shared::ValidationState, SharedContext};
 
 /// A validator that can verify shared pointers.
 #[derive(Debug, Default)]
 pub struct SharedValidator {
-    shared: hash_map::HashMap<usize, (TypeId, bool), BuildHasherDefault<FxHasher64>>,
+    shared: BTreeMap<usize, (TypeId, bool)>,
 }
 
 impl SharedValidator {
@@ -30,8 +23,9 @@ impl SharedValidator {
     /// Creates a new shared pointer validator with specific capacity.
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
+        let _ = capacity;
         Self {
-            shared: hash_map::HashMap::with_capacity_and_hasher(capacity, Default::default()),
+            shared: BTreeMap::new(),
         }
     }
 }

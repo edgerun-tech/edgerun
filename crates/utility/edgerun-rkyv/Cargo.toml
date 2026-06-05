@@ -11,10 +11,10 @@ description = "EdgeRun-owned zero-copy deserialization framework"
 [features]
 default = ["std", "bytecheck"]
 aligned = []
-alloc = ["hashbrown", "tinyvec", "tinyvec/alloc", "rancor/alloc"]
+alloc = ["tinyvec", "tinyvec/alloc", "rancor/alloc"]
 big_endian = []
 bytecheck = ["dep:bytecheck", "rend/bytecheck", "rkyv_derive/bytecheck"]
-hashbrown-0_17 = ["hashbrown"]
+hashbrown-0_17 = []
 little_endian = []
 pointer_width_16 = []
 pointer_width_32 = []
@@ -24,7 +24,6 @@ unaligned = []
 
 [dependencies]
 bytecheck = { workspace = true, features = ["simdutf8"], optional = true }
-hashbrown = { workspace = true, optional = true }
 munge = { workspace = true }
 ptr_meta = { workspace = true }
 rancor = { workspace = true }

@@ -60,7 +60,6 @@ dependencies = [
  "edgerun-bytes",
  "edgerun-encoding",
  "edgerun-error",
- "edgerun-eventsource-stream",
  "edgerun-futures",
  "edgerun-http",
  "edgerun-json",
@@ -71,7 +70,6 @@ dependencies = [
  "edgerun-tokio",
  "edgerun-tokio-test",
  "edgerun-tokio-util",
- "edgerun-tungstenite",
  "edgerun-url",
  "edgerun-wiremock",
 ]
@@ -118,7 +116,6 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-error",
- "edgerun-eventsource-stream",
  "edgerun-futures",
  "edgerun-http",
  "edgerun-http-client",
@@ -253,7 +250,6 @@ dependencies = [
  "codex-protocol",
  "edgerun-encoding",
  "edgerun-json",
- "edgerun-shlex",
  "edgerun-url",
 ]
 
@@ -473,13 +469,6 @@ dependencies = [
  "edgerun-devices",
  "edgerun-encoding",
  "edgerun-linux-sysfs",
-]
-
-[[package]]
-name = "edgerun-eventsource-stream"
-version = "0.1.1"
-dependencies = [
- "edgerun-futures",
 ]
 
 [[package]]
@@ -844,15 +833,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-shlex"
-version = "0.1.1"
-
-[[package]]
 name = "edgerun-similar"
-version = "0.1.1"
-
-[[package]]
-name = "edgerun-sixel"
 version = "0.1.1"
 
 [[package]]
@@ -889,14 +870,8 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-log",
- "edgerun-sixel",
- "edgerun-terminal-parser",
  "edgerun-unicode",
 ]
-
-[[package]]
-name = "edgerun-terminal-parser"
-version = "0.1.1"
 
 [[package]]
 name = "edgerun-time"
@@ -946,18 +921,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
-]
-
-[[package]]
-name = "edgerun-tungstenite"
-version = "0.1.1"
-dependencies = [
- "edgerun-bytes",
- "edgerun-crypto",
- "edgerun-encoding",
- "edgerun-futures",
- "edgerun-http",
- "edgerun-tokio",
 ]
 
 [[package]]
@@ -1108,10 +1071,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hashbrown"
-version = "0.17.1"
-
-[[package]]
 name = "itoa"
 version = "1.0.18"
 
@@ -1125,7 +1084,6 @@ dependencies = [
  "jni-macros",
  "jni-sys",
  "log",
- "simd_cesu8",
  "thiserror",
 ]
 
@@ -1135,7 +1093,6 @@ version = "0.22.4"
 dependencies = [
  "proc-macro2",
  "quote",
- "simd_cesu8",
  "syn",
 ]
 
@@ -1229,13 +1186,8 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "opentelemetry",
- "percent-encoding",
  "thiserror",
 ]
-
-[[package]]
-name = "percent-encoding"
-version = "2.3.2"
 
 [[package]]
 name = "pin-project-lite"
@@ -1290,7 +1242,6 @@ name = "rkyv"
 version = "0.8.16"
 dependencies = [
  "bytecheck",
- "hashbrown",
  "munge",
  "ptr_meta",
  "rancor",
@@ -1318,17 +1269,6 @@ version = "0.1.7"
 dependencies = [
  "lazy_static",
 ]
-
-[[package]]
-name = "simd_cesu8"
-version = "1.1.1"
-dependencies = [
- "simdutf8",
-]
-
-[[package]]
-name = "simdutf8"
-version = "0.1.5"
 
 [[package]]
 name = "slab"

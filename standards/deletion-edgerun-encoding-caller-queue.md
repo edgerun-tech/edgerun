@@ -34,7 +34,7 @@ Current WAT primitives:
 | percent/form/query | `standards/build/wasm/codec-primitives/percent-url-form.wat` | `percent_decode_strict`, `percent_encode_component`, `form_urlencoded_next_pair`, `uri_scan_path_query` |
 | HTTP/1 chunk body scanning | `standards/build/wasm/codec-primitives/http1-chunk-stream.wat` | `http1_chunk_next`, `http1_chunk_scan_body` |
 | HTTP body framing | `standards/build/wasm/codec-primitives/http1-body.wat` | `http_parse_content_length`, `http_has_transfer_token`, `http_classify_body_framing` |
-| WebSocket frame bytes | `standards/build/wasm/codec-primitives/ws-frame.wat` | `ws_decode_prefix`, `ws_decode_payload_len`, `ws_apply_mask_in_place`, `ws_write_server_frame_header` |
+| WebSocket frame bytes | `standards/build/wasm/codec-primitives/ws-frame.wat` | `ws_decode_prefix`, `ws_decode_payload_len`, `ws_apply_mask_in_place`, `ws_parse_header`, `ws_write_frame_header`, `ws_parse_close_payload`, `ws_write_close_payload`, `ws_write_server_frame_header` |
 | PEM base64 text extraction | `standards/build/wasm/codec-primitives/pem-rfc7468.wat` | `pem_scan`, `pem_compact_base64` |
 
 Standard base64 is now covered by `encoding-base64.wat`; callers below still
@@ -150,10 +150,14 @@ Acceptance evidence:
 
 ## Packet 3: WebSocket accept and base64
 
+Status: `crates/utility/edgerun-tungstenite` is deleted. Useful portable
+behavior is WAT-owned by `ws-accept.wat` and `ws-frame.wat`; remaining
+workspace references to `edgerun-tungstenite` are caller demolition targets, not
+compatibility APIs to restore.
+
 First files:
 
 - `crates/protocol/edgerun-protocols/src/websocket.rs`
-- `crates/utility/edgerun-tungstenite/src/lib.rs`
 - `crates/utility/edgerun-http-client/src/http/http1/upgrade.rs`
 - `crates/node/edgerun-node/src/http/http1/upgrade.rs`
 
@@ -166,8 +170,9 @@ WAT replacement:
 
 - WebSocket frame byte work: `ws-frame.wat::ws_decode_prefix`,
   `ws_decode_payload_len`, `ws_apply_mask_in_place`,
-  `ws_write_server_frame_header`
-- WebSocket accept text: currently blocked by the standard-base64 export gap
+  `ws_parse_header`, `ws_write_frame_header`, `ws_parse_close_payload`,
+  `ws_write_close_payload`, `ws_write_server_frame_header`
+- WebSocket accept text: `ws-accept.wat::ws_accept_key`
 
 Deletion strategy:
 
@@ -177,11 +182,9 @@ Deletion strategy:
    accept pipeline.
 2. Move frame parsing and frame header writing to `ws-frame.wat` independently
    of the handshake accept string.
-3. Add standard-base64 encode to `encoding-text.wat` or a WebSocket accept WAT
-   helper before deleting `standard_encode` users in handshake code.
-4. Retire duplicate WebSocket accept implementations after one canonical adapter
+3. Retire duplicate WebSocket accept implementations after one canonical adapter
    covers `edgerun-protocols`, node HTTP upgrade, HTTP client upgrade, and
-   tungstenite compatibility.
+   the deleted tungstenite compatibility fallout.
 
 Acceptance evidence:
 
@@ -382,8 +385,9 @@ WAT replacement:
 
 Deletion strategy:
 
-1. Keep `crates/utility/edgerun-percent-encoding-upstream` untouched. It is a
-   separate upstream-compatible crate.
+1. Keep `crates/utility/edgerun-percent-encoding-upstream` deleted. Its concrete
+   baggage policy is extracted to `percent-url-form.wat::percent_encode_baggage`;
+   do not restore upstream-shaped compatibility.
 2. Delete or tombstone local form/percent crate source after no runtime caller
    imports them.
 3. For form semantics, explicitly apply plus-as-space before strict percent

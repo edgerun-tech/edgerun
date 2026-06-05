@@ -6,8 +6,9 @@
 crate is an allocation/iterator compatibility API.
 
 This note applies only to the local crate named `edgerun-percent-encoding`.
-`crates/utility/edgerun-percent-encoding-upstream` is a separate upstream-shaped
-compatibility crate used by OpenTelemetry and is not part of this deletion.
+`crates/utility/edgerun-percent-encoding-upstream` was retired later after
+OpenTelemetry/W3C baggage percent encoding was extracted to
+`percent-url-form.wat::percent_encode_baggage`.
 
 ## Rust Behavior
 
@@ -27,7 +28,7 @@ The local crate exposes:
 The only direct workspace consumer of this local crate is
 `edgerun-form-urlencoded`, which uses `percent_decode` and
 `percent_encode_byte`. Generic upstream-style `AsciiSet` usage lives in
-`edgerun-percent-encoding-upstream`, not this crate.
+`edgerun-percent-encoding-upstream`, which is now deleted after WAT extraction.
 
 ## WAT Ownership
 
@@ -72,8 +73,9 @@ this retired local crate.
 Same-batch retirement is justified:
 
 - `rg` shows the local crate is directly used by `edgerun-form-urlencoded`.
-- `edgerun-percent-encoding-upstream` remains available for OpenTelemetry's
-  upstream-style `AsciiSet` API.
+- OpenTelemetry's upstream-style baggage policy is now covered by
+  `percent-url-form.wat::percent_encode_baggage`; the `AsciiSet` API is not
+  preserved.
 - WAT already covers the form-urlencoded batch's required percent byte behavior.
 
 After this batch, `edgerun-form-urlencoded` should consume the WAT

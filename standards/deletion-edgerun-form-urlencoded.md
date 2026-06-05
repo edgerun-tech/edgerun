@@ -84,9 +84,10 @@ crate:
 - `EncodingOverride`: delete as noncanonical caller policy.
 
 The companion local crate `crates/utility/edgerun-percent-encoding` can be
-retired in the same family after its direct callers are audited. Do not delete
-`edgerun-percent-encoding-upstream` in this batch; it is a separate compatibility
-surface used by other workspace code.
+retired in the same family after its direct callers are audited.
+`edgerun-percent-encoding-upstream` was deleted in a later batch after
+OpenTelemetry/W3C baggage percent encoding was extracted to
+`percent-url-form.wat::percent_encode_baggage`.
 
 ## Proofs to keep attached
 
