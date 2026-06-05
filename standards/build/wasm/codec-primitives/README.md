@@ -69,6 +69,7 @@ Current module ids:
 300026 dns-message-header
 300027 percent-url-form
 300071 sixel-decode
+300073 integer-decimal
 ```
 
 Current modules:
@@ -102,3 +103,4 @@ Current modules:
 - `dns-message-header.wat`: DNS 12-byte message header encode/decode and flag classification.
 - `percent-url-form.wat`: strict percent encoding/decoding, form-url-encoded pair spans, and URI path/query/fragment scanning.
 - `sixel-decode.wat`: SIXEL DCS payload decode to bounded RGBA raster bytes with repeat, color, movement, and dimension handling.
+- `integer-decimal.wat`: bounded u64, i64, and split-limb u128 decimal ASCII formatting.

@@ -1,0 +1,31 @@
+id = "codec-byte-search"
+name = "byte-search"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300074
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/byte-search.wat"
+runner = "standards/runners/byte-search-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "needle"]
+outputs = ["index"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "memchr",
+  "memrchr",
+  "memchr2",
+  "memrchr2",
+  "memchr3",
+  "memrchr3",
+  "memmem_find",
+  "memmem_rfind",
+]
+parity_sources = [
+  "crates/utility/edgerun-memchr/src/memchr.rs",
+  "crates/utility/edgerun-memchr/src/memmem/mod.rs",
+  "crates/utility/edgerun-memchr/src/memmem/searcher.rs",
+]

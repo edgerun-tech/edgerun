@@ -199,6 +199,28 @@ Documentation:
 
 - `standards/deletion-edgerun-simd-cesu8.md`
 
+### Parser combinator / combine
+
+Status:
+
+- `crates/utility/edgerun-combine` is crossed out. Source, crate metadata, root
+  workspace member, root patch entry, JNI manifest dependency, and lock package
+  refs are deleted.
+- No WAT primitive was added for `combine`; it was Rust parser-combinator
+  framework code, not a protocol codec.
+- The only meaningful live caller was JNI signature parsing in
+  `crates/utility/edgerun-jni/src/signature.rs`.
+
+Current caller fallout:
+
+- `crates/utility/edgerun-jni/src/signature.rs` still imports `combine`. Leave
+  it broken until the JNI signature lane routes descriptor validation through
+  its WAT primitive or deletes the broader JNI crate family.
+
+Documentation:
+
+- `standards/deletion-edgerun-combine.md`
+
 ### Shell word scan
 
 Status:
@@ -217,6 +239,28 @@ Status:
 Documentation:
 
 - `standards/deletion-edgerun-shlex.md`
+
+### Integer decimal formatting
+
+Status:
+
+- `crates/utility/edgerun-itoa` is crossed out. Source, crate metadata, root
+  workspace member, root workspace dependency, and lock package entry are
+  deleted.
+- Decimal integer formatting is owned by `integer-decimal.wat` (`300073`):
+  bounded `u64`, `i64` including `i64::MIN`, and split-limb `u128` formatting
+  into caller-provided output buffers.
+- The deleted Rust crate's `Buffer`, integer trait dispatch, borrowed `&str`
+  return shape, and target-width wrappers were compatibility scaffolding and
+  were not ported.
+
+Verified WAT coverage:
+
+- `node standards/runners/integer-decimal-smoke.js`
+
+Documentation:
+
+- `standards/deletion-edgerun-itoa.md`
 
 ### Server-Sent Events
 

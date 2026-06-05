@@ -84,6 +84,24 @@ dispatch, benchmark/image material, display/error wrappers, and docs.
 Remaining JNI callers are deliberate fallout for the JNI string lane; do not
 restore a Rust `simd_cesu8` crate.
 
+## Crossed out: `edgerun-itoa`
+
+`crates/utility/edgerun-itoa` is deleted. Its useful behavior, bounded decimal
+formatting for `u64`, `i64`, and split-limb `u128`, is owned by
+`integer-decimal.wat` (`300073`). The removed Rust value was `Buffer`,
+trait-based dispatch, borrowed `&str` API shape, target-width wrappers, and
+decimal-pair optimization details. Remaining `itoa` callers are intentional
+caller-demolition fallout.
+
+## Crossed out: `edgerun-combine`
+
+`crates/utility/edgerun-combine` is deleted. Its only meaningful live caller was
+JNI signature parsing in `crates/utility/edgerun-jni/src/signature.rs`; the rest
+of the crate was Rust parser-combinator API scaffolding. No standalone WAT was
+added for `combine`. JNI descriptor validation belongs to the JNI signature WAT
+lane, and the remaining `combine` import in `signature.rs` is intentional
+caller-demolition fallout.
+
 ## Crossed out: `edgerun-hashbrown`
 
 `crates/utility/edgerun-hashbrown` is deleted. It was a Rust SwissTable

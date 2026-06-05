@@ -77,7 +77,51 @@ function cstr(memory, offset, text) {
   const invalidNameLen = cstr(memory, tokenPtr, "bad/name");
   assert.strictEqual(exports.http_validate_header_name(tokenPtr, invalidNameLen), 3);
   memory[valuePtr] = 0x80;
+  assert.strictEqual(exports.http_validate_header_value(valuePtr, 1), 0);
+  memory[valuePtr] = 0x1f;
   assert.strictEqual(exports.http_validate_header_value(valuePtr, 1), 3);
+  memory[valuePtr] = 0x09;
+  assert.strictEqual(exports.http_validate_header_value(valuePtr, 1), 0);
+
+  const mixedNameLen = cstr(memory, tokenPtr, "Content-TYPE");
+  let lowered = unpack(exports.http_lowercase_header_name(tokenPtr, mixedNameLen, outPtr, 64));
+  assert.deepStrictEqual(lowered, { status: 0, value: mixedNameLen });
+  assert.strictEqual(Buffer.from(memory.slice(outPtr, outPtr + mixedNameLen)).toString("ascii"), "content-type");
+  lowered = unpack(exports.http_lowercase_header_name(tokenPtr, mixedNameLen, outPtr, 4));
+  assert.deepStrictEqual(lowered, { status: 2, value: mixedNameLen });
+  const invalidLowerNameLen = cstr(memory, tokenPtr, "bad/name");
+  lowered = unpack(exports.http_lowercase_header_name(tokenPtr, invalidLowerNameLen, outPtr, 64));
+  assert.deepStrictEqual(lowered, { status: 3, value: 3 });
+
+  const methodCases = [
+    ["GET", 2],
+    ["POST", 3],
+    ["PUT", 4],
+    ["PATCH", 5],
+    ["DELETE", 6],
+    ["HEAD", 7],
+    ["OPTIONS", 8],
+    ["CONNECT", 9],
+    ["TRACE", 10],
+    ["PROPFIND", 1],
+  ];
+  for (const [method, kind] of methodCases) {
+    const len = cstr(memory, tokenPtr, method);
+    assert.strictEqual(exports.http_method_classify(tokenPtr, len), kind, method);
+  }
+  assert.strictEqual(exports.http_method_classify(tokenPtr, 0), 0);
+  memory[tokenPtr] = 0x20;
+  assert.strictEqual(exports.http_method_classify(tokenPtr, 1), 0);
+  memory[tokenPtr] = 0x80;
+  assert.strictEqual(exports.http_method_classify(tokenPtr, 1), 0);
+
+  assert.strictEqual(exports.http_status_code_flags(99), 0);
+  assert.strictEqual(exports.http_status_code_flags(100), 1);
+  assert.strictEqual(exports.http_status_code_flags(204), 3);
+  assert.strictEqual(exports.http_status_code_flags(404), 5);
+  assert.strictEqual(exports.http_status_code_flags(503), 9);
+  assert.strictEqual(exports.http_status_code_flags(999), 1);
+  assert.strictEqual(exports.http_status_code_flags(1000), 0);
 
   console.log(
     JSON.stringify(

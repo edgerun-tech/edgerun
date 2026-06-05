@@ -19,11 +19,14 @@ exports = [
   "http_find_double_crlf",
   "http_validate_header_name",
   "http_validate_header_value",
+  "http_lowercase_header_name",
+  "http_method_classify",
+  "http_status_code_flags",
   "http_value_has_token",
   "http_parse_chunk_step",
 ]
 parity_sources = [
   "crates/protocol/edgerun-protocols/src/http/header.rs",
   "crates/protocol/edgerun-protocols/src/http/chunked.rs",
+  "crates/utility/edgerun-http/src/lib.rs",
 ]
-

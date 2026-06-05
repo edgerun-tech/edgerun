@@ -134,6 +134,15 @@
     i32.eq
     i32.or)
 
+  (func $is_ascii_graphic (param $b i32) (result i32)
+    local.get $b
+    i32.const 33
+    i32.ge_u
+    local.get $b
+    i32.const 126
+    i32.le_u
+    i32.and)
+
   (func $hex_value (param $b i32) (result i32)
     local.get $b
     i32.const 48
@@ -356,10 +365,6 @@
       local.get $b
       i32.const 32
       i32.ge_u
-      local.get $b
-      i32.const 126
-      i32.le_u
-      i32.and
       i32.or
       i32.eqz
       if
@@ -373,6 +378,371 @@
       br $scan
     end
     i32.const 0)
+
+  (func (export "http_lowercase_header_name") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
+    (local $i i32)
+    (local $b i32)
+    local.get $len
+    i32.eqz
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $len
+    local.get $cap
+    i32.gt_u
+    if
+      i32.const 2
+      local.get $len
+      call $pack
+      return
+    end
+    loop $scan
+      local.get $i
+      local.get $len
+      i32.ge_u
+      if
+        i32.const 0
+        local.get $len
+        call $pack
+        return
+      end
+      local.get $ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      local.tee $b
+      call $is_tchar
+      i32.eqz
+      if
+        i32.const 3
+        local.get $i
+        call $pack
+        return
+      end
+      local.get $out
+      local.get $i
+      i32.add
+      local.get $b
+      call $lower
+      i32.store8
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i
+      br $scan
+    end
+    i32.const 0
+    local.get $len
+    call $pack)
+
+  (func $bytes_eq_3 (param $ptr i32) (param $a i32) (param $b i32) (param $c i32) (result i32)
+    local.get $ptr
+    i32.load8_u
+    local.get $a
+    i32.eq
+    local.get $ptr
+    i32.const 1
+    i32.add
+    i32.load8_u
+    local.get $b
+    i32.eq
+    i32.and
+    local.get $ptr
+    i32.const 2
+    i32.add
+    i32.load8_u
+    local.get $c
+    i32.eq
+    i32.and)
+
+  (func $bytes_eq_4 (param $ptr i32) (param $a i32) (param $b i32) (param $c i32) (param $d i32) (result i32)
+    local.get $ptr
+    i32.load8_u
+    local.get $a
+    i32.eq
+    local.get $ptr
+    i32.const 1
+    i32.add
+    i32.load8_u
+    local.get $b
+    i32.eq
+    i32.and
+    local.get $ptr
+    i32.const 2
+    i32.add
+    i32.load8_u
+    local.get $c
+    i32.eq
+    i32.and
+    local.get $ptr
+    i32.const 3
+    i32.add
+    i32.load8_u
+    local.get $d
+    i32.eq
+    i32.and)
+
+  (func $bytes_eq_5 (param $ptr i32) (param $a i32) (param $b i32) (param $c i32) (param $d i32) (param $e i32) (result i32)
+    local.get $ptr
+    local.get $a
+    local.get $b
+    local.get $c
+    local.get $d
+    call $bytes_eq_4
+    local.get $ptr
+    i32.const 4
+    i32.add
+    i32.load8_u
+    local.get $e
+    i32.eq
+    i32.and)
+
+  (func $bytes_eq_6 (param $ptr i32) (param $a i32) (param $b i32) (param $c i32) (param $d i32) (param $e i32) (param $f i32) (result i32)
+    local.get $ptr
+    local.get $a
+    local.get $b
+    local.get $c
+    local.get $d
+    local.get $e
+    call $bytes_eq_5
+    local.get $ptr
+    i32.const 5
+    i32.add
+    i32.load8_u
+    local.get $f
+    i32.eq
+    i32.and)
+
+  (func $bytes_eq_7 (param $ptr i32) (param $a i32) (param $b i32) (param $c i32) (param $d i32) (param $e i32) (param $f i32) (param $g i32) (result i32)
+    local.get $ptr
+    local.get $a
+    local.get $b
+    local.get $c
+    local.get $d
+    local.get $e
+    local.get $f
+    call $bytes_eq_6
+    local.get $ptr
+    i32.const 6
+    i32.add
+    i32.load8_u
+    local.get $g
+    i32.eq
+    i32.and)
+
+  (func (export "http_method_classify") (param $ptr i32) (param $len i32) (result i32)
+    (local $i i32)
+    local.get $len
+    i32.eqz
+    if
+      i32.const 0
+      return
+    end
+    block $valid_done
+      loop $validate
+        local.get $i
+        local.get $len
+        i32.ge_u
+        if
+          br $valid_done
+        end
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        call $is_ascii_graphic
+        i32.eqz
+        if
+          i32.const 0
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $validate
+      end
+    end
+    local.get $len
+    i32.const 3
+    i32.eq
+    if
+      local.get $ptr
+      i32.const 71
+      i32.const 69
+      i32.const 84
+      call $bytes_eq_3
+      if
+        i32.const 2
+        return
+      end
+      local.get $ptr
+      i32.const 80
+      i32.const 85
+      i32.const 84
+      call $bytes_eq_3
+      if
+        i32.const 4
+        return
+      end
+    end
+    local.get $len
+    i32.const 4
+    i32.eq
+    if
+      local.get $ptr
+      i32.const 80
+      i32.const 79
+      i32.const 83
+      i32.const 84
+      call $bytes_eq_4
+      if
+        i32.const 3
+        return
+      end
+      local.get $ptr
+      i32.const 72
+      i32.const 69
+      i32.const 65
+      i32.const 68
+      call $bytes_eq_4
+      if
+        i32.const 7
+        return
+      end
+    end
+    local.get $len
+    i32.const 5
+    i32.eq
+    if
+      local.get $ptr
+      i32.const 80
+      i32.const 65
+      i32.const 84
+      i32.const 67
+      i32.const 72
+      call $bytes_eq_5
+      if
+        i32.const 5
+        return
+      end
+      local.get $ptr
+      i32.const 84
+      i32.const 82
+      i32.const 65
+      i32.const 67
+      i32.const 69
+      call $bytes_eq_5
+      if
+        i32.const 10
+        return
+      end
+    end
+    local.get $len
+    i32.const 6
+    i32.eq
+    if
+      local.get $ptr
+      i32.const 68
+      i32.const 69
+      i32.const 76
+      i32.const 69
+      i32.const 84
+      i32.const 69
+      call $bytes_eq_6
+      if
+        i32.const 6
+        return
+      end
+    end
+    local.get $len
+    i32.const 7
+    i32.eq
+    if
+      local.get $ptr
+      i32.const 79
+      i32.const 80
+      i32.const 84
+      i32.const 73
+      i32.const 79
+      i32.const 78
+      i32.const 83
+      call $bytes_eq_7
+      if
+        i32.const 8
+        return
+      end
+      local.get $ptr
+      i32.const 67
+      i32.const 79
+      i32.const 78
+      i32.const 78
+      i32.const 69
+      i32.const 67
+      i32.const 84
+      call $bytes_eq_7
+      if
+        i32.const 9
+        return
+      end
+    end
+    i32.const 1)
+
+  (func (export "http_status_code_flags") (param $code i32) (result i32)
+    local.get $code
+    i32.const 100
+    i32.lt_u
+    local.get $code
+    i32.const 999
+    i32.gt_u
+    i32.or
+    if
+      i32.const 0
+      return
+    end
+    i32.const 1
+    local.get $code
+    i32.const 200
+    i32.ge_u
+    local.get $code
+    i32.const 300
+    i32.lt_u
+    i32.and
+    if (result i32)
+      i32.const 2
+    else
+      i32.const 0
+    end
+    i32.or
+    local.get $code
+    i32.const 400
+    i32.ge_u
+    local.get $code
+    i32.const 500
+    i32.lt_u
+    i32.and
+    if (result i32)
+      i32.const 4
+    else
+      i32.const 0
+    end
+    i32.or
+    local.get $code
+    i32.const 500
+    i32.ge_u
+    local.get $code
+    i32.const 600
+    i32.lt_u
+    i32.and
+    if (result i32)
+      i32.const 8
+    else
+      i32.const 0
+    end
+    i32.or)
 
   (func $token_match (param $vptr i32) (param $tptr i32) (param $len i32) (result i32)
     (local $i i32)
