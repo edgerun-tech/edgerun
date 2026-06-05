@@ -75,6 +75,15 @@ app_dns = "not-used"
 app_ip_addressing = "not-used"
 app_ingress = "hidden-service"
 
+[local_memory_validation]
+runner = "standards/runners/tor-end-to-end-memory-smoke.js"
+host_io = "in-memory-queues"
+app_ports = "not-exposed"
+app_dns = "not-used"
+app_ip_addressing = "not-used"
+app_ingress = "hidden-service"
+message_security = "seal-to-identity"
+
 [[standard]]
 id = "tor-spec"
 title = "Tor Specifications"
