@@ -88,6 +88,32 @@ function writeAscii(memory, value, ptr) {
   assert.equal(str("node_command_reason_code", "unsupported_command_type"), 12);
   assert.equal(str("node_init_mode_code", "software"), 1);
   assert.equal(str("node_init_mode_code", "provisioned"), 5);
+  assert.equal(e.node_ui_panel_for_nav(10001), 1);
+  assert.equal(e.node_ui_panel_for_nav(10005), 5);
+  assert.equal(e.node_ui_action_family(20101), 1);
+  assert.equal(e.node_ui_action_family(21004), 2);
+  assert.equal(e.node_ui_action_family(21103), 3);
+  assert.equal(e.node_ui_action_family(21202), 4);
+  assert.equal(e.node_ui_action_family(22501), 5);
+  assert.equal(e.node_ui_setup_count(0x1ff), 9);
+  assert.equal(e.node_ui_readiness_class(0), 0);
+  assert.equal(e.node_ui_readiness_class(3), 1);
+  assert.equal(e.node_ui_readiness_class(8), 2);
+  assert.equal(e.node_ui_readiness_class(9), 3);
+  assert.equal(e.node_ui_trust_next_action(0), 21103);
+  assert.equal(e.node_ui_trust_next_action(0b111), 0);
+  assert.equal(e.node_ui_trust_next_action(0b1111), 21002);
+  assert.equal(e.node_ui_trust_next_action(0x1ff), 0);
+  assert.equal(e.node_ui_service_count(0x7ff), 11);
+  assert.equal(e.node_ui_service_next_action(0), 22001);
+  assert.equal(e.node_ui_service_next_action(0b1), 22103);
+  assert.equal(e.node_ui_service_next_action(0x7ff), 0);
+  assert.equal(e.node_dns_default_ttl(), 3600);
+  assert.equal(e.node_dns_udp_buffer(), 4096);
+  assert.equal(e.node_dns_tcp_idle_timeout_secs(), 300);
+  assert.equal(e.node_dns_rate_limit_allow(0, 0), 1);
+  assert.equal(e.node_dns_rate_limit_allow(10, 0), 0);
+  assert.equal(e.node_dns_rate_limit_allow(10, 1), 1);
 
   console.log(JSON.stringify({ unit: "node-runtime-core", standard_id: e.proto_standard_id(), ok: true }));
 })().catch((error) => {
