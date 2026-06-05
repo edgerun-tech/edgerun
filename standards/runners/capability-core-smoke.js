@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+
+const assert = require("assert");
+const { execFileSync } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const root = path.resolve(__dirname, "../..");
+const wat = path.join(root, "standards/build/wasm/capability-primitives/capability-core.wat");
+const wasm = path.join(os.tmpdir(), `capability-core-${process.pid}.wasm`);
+
+execFileSync("wat2wasm", [wat, "-o", wasm], { stdio: "pipe" });
+
+(async () => {
+  const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), {});
+  const e = instance.exports;
+
+  assert.strictEqual(e.cap_descriptor_version(), 1);
+  assert.strictEqual(e.cap_validate_descriptor(1, 1, 1, 1, 1), 0);
+  assert.strictEqual(e.cap_validate_descriptor(0, 1, 1, 1, 1), 1);
+  assert.strictEqual(e.cap_validate_descriptor(1, 1, 0, 1, 1), 3);
+  assert.strictEqual(e.cap_validate_grant(1, 1, 1), 0);
+  assert.strictEqual(e.cap_validate_grant(0, 1, 1), 1);
+  assert.strictEqual(e.cap_policy_default_secs(1), 300n);
+  assert.strictEqual(e.cap_policy_default_secs(2), 3600n);
+  assert.strictEqual(e.cap_context_default(1), 1);
+  assert.strictEqual(e.cap_context_default(2), 0);
+  assert.strictEqual(e.cap_revocation_reason_code(4), 4);
+  assert.strictEqual(e.cap_revocation_reason_code(9), 5);
+  assert.strictEqual(e.cap_effective_access_class(0), 1);
+  assert.strictEqual(e.cap_effective_access_class(3), 3);
+  assert.strictEqual(e.cap_effective_operations_source(2, 0, 3), 1);
+  assert.strictEqual(e.cap_effective_operations_source(0, 2, 3), 2);
+  assert.strictEqual(e.cap_effective_operations_source(0, 0, 3), 3);
+  assert.strictEqual(e.cap_dedupe_append(0), 1);
+  assert.strictEqual(e.cap_dedupe_append(1), 0);
+  assert.strictEqual(e.cap_selector_match_result(0, 0, 0, 0, 0), 0);
+  assert.strictEqual(e.cap_selector_match_result(1, 0, 0, 0, 0), 1);
+  assert.strictEqual(e.cap_selector_match_result(0, 0, 0, 1, 0), 4);
+  assert.strictEqual(e.cap_requires_user_presence(0, 1, 0, 1), 1);
+  assert.strictEqual(e.cap_requires_user_presence(0, 0, 1, 1), 1);
+  assert.strictEqual(e.cap_requires_user_presence(0, 1, 0, 0), 0);
+  assert.strictEqual(e.cap_evaluate_constraints(1, 0, 0, 0, 0, 0, 0, 0, 0), 1);
+  assert.strictEqual(e.cap_evaluate_constraints(0, 0, 1, 0, 0, 0, 0, 0, 0), 2);
+  assert.strictEqual(e.cap_evaluate_constraints(0, 1, 0, 1, 0, 0, 0, 0, 0), 3);
+  assert.strictEqual(e.cap_evaluate_constraints(0, 1, 0, 0, 0, 1, 0, 0, 0), 4);
+  assert.strictEqual(e.cap_evaluate_constraints(0, 1, 0, 0, 0, 0, 0, 1, 0), 5);
+  assert.strictEqual(e.cap_evaluate_constraints(0, 1, 0, 0, 1, 0, 1, 1, 1), 0);
+  assert.strictEqual(e.cap_requested_expiry_secs(1, 1000n, 300n, 3600n), 1000n);
+  assert.strictEqual(e.cap_requested_expiry_secs(1, 5000n, 300n, 3600n), 3600n);
+  assert.strictEqual(e.cap_requested_expiry_secs(0, 0n, 300n, 3600n), 300n);
+  assert.strictEqual(e.cap_evaluate_request_result(0, 1, 0, 1, 0, 0), 0);
+  assert.strictEqual(e.cap_evaluate_request_result(0, 0, 0, 1, 0, 0), 2);
+  assert.strictEqual(e.cap_evaluate_request_result(0, 1, 0, 0, 0, 0), 4);
+  assert.strictEqual(e.cap_authorize_invocation_result(1, 0, 0, 1, 1, 1, 1, 0, 0, 0n, 0), 4);
+  assert.strictEqual(e.cap_authorize_invocation_result(1, 0, 0, 0, 0, 0, 1, 0, 0, 0n, 0), 5);
+  assert.strictEqual(e.cap_authorize_invocation_result(1, 0, 0, 0, 0, 1, 1, 0, 1, 1n, 0), 8);
+  assert.strictEqual(e.cap_authorize_invocation_result(1, 0, 0, 0, 0, 1, 1, 0, 0, 0n, 0), 0);
+  assert.strictEqual(e.cap_rate_limit_allows(2n, 3n), 1);
+  assert.strictEqual(e.cap_rate_limit_allows(3n, 3n), 0);
+  assert.strictEqual(e.cap_timestamp_valid(-1n, 0), 0);
+  assert.strictEqual(e.cap_duration_valid(1n, -1), 0);
+  assert.strictEqual(e.cap_grant_id_preimage_len(4, 8, 9), 106);
+  assert.strictEqual(e.cap_revocation_id_domain(), 1);
+
+  assert.strictEqual(e.remote_session_open_request_selector_source(1), 1);
+  assert.strictEqual(e.remote_session_open_request_selector_source(0), 2);
+  assert.strictEqual(e.remote_session_accept_kind(0, 1), 2);
+  assert.strictEqual(e.remote_session_accept_kind(1, 1), 1);
+  assert.strictEqual(e.remote_session_accept_kind(1, 0), 3);
+  assert.strictEqual(e.remote_accept_unchecked_fields(4), 4);
+  assert.strictEqual(e.remote_serve_action(1, 0, 1, 0), 1);
+  assert.strictEqual(e.remote_serve_action(2, 0, 1, 0), 2);
+  assert.strictEqual(e.remote_serve_action(2, 0, 0, 0), 3);
+  assert.strictEqual(e.remote_serve_action(3, 0, 1, 0), 4);
+  assert.strictEqual(e.remote_serve_action(5, 0, 1, 1), 7);
+  assert.strictEqual(e.remote_serve_action(6, 0, 1, 0), 9);
+  assert.strictEqual(e.remote_result_message_kind(0), 1);
+  assert.strictEqual(e.remote_result_message_kind(8), 2);
+  assert.strictEqual(e.remote_error_result_success(), 0);
+  assert.strictEqual(e.remote_pump_event_action(1), 1);
+  assert.strictEqual(e.remote_memory_transport_action(1, 2), 3);
+  assert.strictEqual(e.remote_memory_transport_action(2, 0), 0);
+  assert.strictEqual(e.remote_framed_recv_result(0, 0), 0);
+  assert.strictEqual(e.remote_framed_recv_result(4, 1), 1);
+  assert.strictEqual(e.remote_framed_recv_result(4, 0), 3);
+  assert.strictEqual(e.remote_policy_invoke_result(0, 0, 1), 1);
+  assert.strictEqual(e.remote_policy_invoke_result(1, 4, 1), 2);
+  assert.strictEqual(e.remote_policy_invoke_result(1, 0, 1), 0);
+  assert.strictEqual(e.remote_close_session_action(1), 1);
+  assert.strictEqual(e.remote_stream_event_sequence(1, 7n), 7n);
+  assert.strictEqual(e.remote_next_sequence(7n), 8n);
+  assert.strictEqual(e.remote_stream_oriented_invoke(), 1);
+
+  assert.strictEqual(e.remote_input_kind_to_wire(6), 6);
+  assert.strictEqual(e.remote_input_kind_to_wire(22), 0x8016);
+  assert.strictEqual(e.remote_input_kind_from_wire(0x8016), 22);
+  assert.strictEqual(e.remote_audio_capture_format(4), 4);
+  assert.strictEqual(e.remote_audio_capture_format(9), -2147483639);
+  assert.strictEqual(e.remote_speaker_format_result(3), 3);
+  assert.strictEqual(e.remote_speaker_format_result(4), -1);
+  assert.strictEqual(e.remote_speaker_invoke_result(0, 4, 0), 1);
+  assert.strictEqual(e.remote_speaker_invoke_result(1, 3, 0), 3);
+  assert.strictEqual(e.remote_speaker_invoke_result(1, 3, 1), 2);
+  assert.strictEqual(e.remote_speaker_invoke_result(1, 4, 0), 4);
+  assert.strictEqual(e.remote_bluetooth_address_kind(2), 2);
+  assert.strictEqual(e.remote_bluetooth_address_kind(3), -1);
+  assert.strictEqual(e.remote_bluetooth_transport_kind(3), 3);
+  assert.strictEqual(e.remote_bluetooth_profile_kind(12), 12);
+  assert.strictEqual(e.remote_bluetooth_profile_kind(255), 255);
+  assert.strictEqual(e.remote_bluetooth_link_kind(4), -1);
+  assert.strictEqual(e.remote_wifi_power_state(3), 3);
+  assert.strictEqual(e.remote_wifi_interface_mode(4), 4);
+  assert.strictEqual(e.remote_display_content_kind(4), 4);
+  assert.strictEqual(e.remote_display_content_kind(9), -2147483639);
+  assert.strictEqual(e.remote_camera_pixel_format(5), 5);
+  assert.strictEqual(e.remote_camera_quality_result(4), 4);
+  assert.strictEqual(e.remote_camera_quality_result(5), -1);
+  assert.strictEqual(e.remote_biometric_modality(5), 5);
+  assert.strictEqual(e.remote_biometric_modality(9), 0);
+
+  console.log("capability core smoke passed");
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
