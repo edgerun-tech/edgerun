@@ -1,0 +1,61 @@
+id = "app-tor-relay-full"
+name = "tor-relay-full"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300205
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-relay-full/tor-relay-full.wat"
+entrypoint = "er_tor_relay_init"
+deterministic = true
+inputs = ["bytes", "scalars", "wat-crypto", "host-tor-relay-fabric"]
+outputs = ["bytes", "status", "records", "relay-actions"]
+depends_on = ["app-tor-cell-codec", "app-tor-relay-crypto", "app-tor-ntor-crypto", "app-tor-ntor-v3-crypto", "app-tor-cgo-crypto", "app-tor-wat-crypto", "app-tor-wat-protocol"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_relay_full_cell_len",
+  "tor_relay_full_data_max",
+  "tor_relay_full_circuit_size",
+  "tor_relay_full_circuits_base",
+  "er_tor_relay_init",
+  "er_tor_relay_alloc_circuit",
+  "er_tor_relay_set_keys",
+  "er_tor_relay_get_state",
+  "er_tor_relay_get_last_action",
+  "er_tor_relay_build_created2",
+  "er_tor_relay_build_created2_len",
+  "er_tor_relay_handle_create2",
+  "er_tor_relay_handle_create2_v3",
+  "er_tor_relay_build_relay_cell",
+  "er_tor_relay_build_sendme",
+  "er_tor_relay_build_extended2",
+  "er_tor_relay_handle_extend2",
+  "er_tor_relay_forward_cell",
+  "er_tor_relay_process_recognized",
+  "er_tor_relay_decrement_windows",
+  "er_tor_relay_should_send_sendme",
+  "er_tor_relay_close_circuit",
+]
+imports = [
+  "tor.crypto.tor_relay_digest_update20_sha1",
+  "tor.crypto.tor_aes_ctr_crypt",
+  "tor.crypto.tor_ntor_server_handshake_seeded",
+  "tor.crypto.tor_ntor_v3_server_handshake_seeded",
+  "edgerun.io.tor_relay_connect",
+  "edgerun.io.tor_relay_send_cell",
+]
+app_model = "identity-routed-app-ipc"
+app_addressing = "identity"
+app_accept_connections = "hidden-service"
+app_ports = "not-exposed"
+app_dns = "not-used"
+app_tls = "not-used"
+memory_model = "preallocated-full-app-memory"
+parity_sources = [
+  "kernel/x86_64/crypto/tor_cell.asm",
+  "kernel/x86_64/crypto/tor.asm",
+  "kernel/x86_64/crypto/tor_ntor.asm",
+  "kernel/x86_64/crypto/tor_constants.inc",
+  "/home/ken/tor-spec/02-tor-protocol.md",
+]

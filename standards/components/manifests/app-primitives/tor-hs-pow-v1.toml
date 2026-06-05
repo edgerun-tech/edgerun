@@ -1,0 +1,33 @@
+id = "app-tor-hs-pow-v1"
+name = "tor-hs-pow-v1"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300219
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-hs-pow-v1/tor-hs-pow-v1.wat"
+runner = "standards/runners/tor-hs-pow-v1-smoke.js"
+entrypoint = "tor_hs_pow_v1_verify"
+deterministic = true
+inputs = ["blinded-service-identity", "pow-seed", "pow-nonce", "pow-effort", "pow-seed-prefix", "equix-solution"]
+outputs = ["pow-result", "replay-state", "status"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_hs_pow_v1_challenge_len",
+  "tor_hs_pow_v1_solution_len",
+  "tor_hs_pow_v1_replay_capacity",
+  "tor_hs_pow_v1_replay_reset",
+  "tor_hs_pow_v1_replay_count",
+  "tor_hs_pow_v1_challenge",
+  "tor_hs_pow_v1_equix_verify",
+  "tor_hs_pow_v1_blake2b_result",
+  "tor_hs_pow_v1_verify",
+  "tor_hs_pow_v1_solve_first",
+]
+parity_sources = [
+  "/home/ken/tor-spec/14-proof-of-work.md",
+  "equix crate 0.6.2 from Arti",
+]
+notes = "Tor onion-service PoW v1 verifier: Equi-X/HashX via the Arti equix crate, Tor challenge construction, Blake2b-32 effort gate, and preallocated nonce replay table."

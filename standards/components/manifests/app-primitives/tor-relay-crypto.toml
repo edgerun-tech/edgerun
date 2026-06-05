@@ -1,0 +1,12 @@
+id = "app-tor-relay-crypto"
+name = "tor-relay-crypto"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300218
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-relay-crypto/tor-relay-crypto.wat"
+exports = ["proto_standard_id", "proto_abi_version", "tor_relay_digest_update20_sha1", "tor_relay_digest4_le_sha1", "tor_relay_digest_update32", "tor_relay_digest4_le", "tor_relay_aes128_ctr_crypt"]
+inputs = ["bytes", "tor-relay-payload", "crypto-state"]
+outputs = ["digest-state", "relay-payload"]
+depends_on = []
+notes = "WAT-backed Tor relay cryptographic core: Tor SHA1 running relay digest, SHA256 compatibility helper, and AES-128-CTR payload encryption with counter update."

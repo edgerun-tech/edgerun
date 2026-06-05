@@ -1,0 +1,27 @@
+id = "app-tor-hs-identity"
+name = "tor-hs-identity"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300211
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-hs-identity/tor-hs-identity.wat"
+runner = "standards/runners/tor-hs-identity-smoke.js"
+entrypoint = "tor_hs_identity_validate_onion"
+deterministic = true
+inputs = ["bytes", "ed25519-public-key", "blinded-public-key"]
+outputs = ["bytes", "status", "credential", "subcredential"]
+depends_on = ["app-tor-ntor-v3-crypto"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_hs_identity_onion_len",
+  "tor_hs_identity_raw_len",
+  "tor_hs_identity_build_onion",
+  "tor_hs_identity_validate_onion",
+  "tor_hs_identity_credential",
+  "tor_hs_identity_subcredential",
+]
+parity_sources = [
+  "/home/ken/tor-spec/13-onion-services.md",
+]

@@ -1,0 +1,33 @@
+id = "app-tor-hs-descriptor-crypto"
+name = "tor-hs-descriptor-crypto"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300212
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-hs-descriptor-crypto/tor-hs-descriptor-crypto.wat"
+runner = "standards/runners/tor-hs-descriptor-crypto-smoke.js"
+entrypoint = "tor_hs_desc_encrypt_first"
+deterministic = true
+inputs = ["bytes", "subcredential", "descriptor-cookie", "blinded-public-key", "salt", "revision-counter"]
+outputs = ["bytes", "status", "mac", "key-material"]
+depends_on = ["app-tor-hs-identity", "app-tor-ntor-v3-crypto"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_hs_desc_salt_len",
+  "tor_hs_desc_mac_len",
+  "tor_hs_desc_key_material_len",
+  "tor_hs_desc_derive_first",
+  "tor_hs_desc_derive_second",
+  "tor_hs_desc_encrypt_first",
+  "tor_hs_desc_decrypt_first",
+  "tor_hs_desc_encrypt_second",
+  "tor_hs_desc_decrypt_second",
+  "tor_hs_desc_cookie_keys",
+  "tor_hs_desc_wrap_cookie",
+  "tor_hs_desc_client_cookie_keys",
+]
+parity_sources = [
+  "/home/ken/tor-spec/13-onion-services.md",
+]

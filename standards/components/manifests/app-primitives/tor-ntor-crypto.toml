@@ -1,0 +1,28 @@
+id = "app-tor-ntor-crypto"
+name = "tor-ntor-crypto"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300206
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-ntor-crypto/tor-ntor-crypto.wat"
+entrypoint = "tor_ntor_server_handshake_seeded"
+deterministic = true
+inputs = ["bytes", "scalars", "entropy-seed"]
+outputs = ["bytes", "status", "key-material"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_sha256",
+  "tor_hmac_sha256",
+  "tor_x25519_public",
+  "tor_x25519_shared",
+  "tor_ntor_client_handshake_seeded",
+  "tor_ntor_client_process",
+  "tor_ntor_server_handshake_seeded",
+]
+parity_sources = [
+  "kernel/x86_64/crypto/curve25519.asm.erobj",
+  "kernel/x86_64/crypto/tor_ntor.asm.erobj",
+  "/home/ken/tor-spec.md",
+]

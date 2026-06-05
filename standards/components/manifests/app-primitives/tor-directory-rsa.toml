@@ -1,0 +1,28 @@
+id = "app-tor-directory-rsa"
+name = "tor-directory-rsa"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300223
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-directory-rsa/tor-directory-rsa.wat"
+runner = "standards/runners/tor-directory-rsa-smoke.js"
+entrypoint = "tor_dir_rsa_verify_pkcs1"
+deterministic = true
+inputs = ["signed-document", "rsa-public-exponent", "rsa-modulus", "directory-signature", "algorithm"]
+outputs = ["status"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_dir_rsa_algorithm_sha1_pkcs1",
+  "tor_dir_rsa_algorithm_sha256_pkcs1",
+  "tor_dir_rsa_verify_pkcs1",
+]
+app_model = "local-directory-authority"
+app_ports = "not-exposed"
+app_dns = "not-used"
+app_ip_addressing = "identity-next-hop"
+parity_sources = [
+  "/home/ken/tor-spec/03-directory-protocol.md",
+]

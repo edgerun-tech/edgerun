@@ -1,0 +1,37 @@
+id = "app-tor-hs-intro-extensions"
+name = "tor-hs-intro-extensions"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300216
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-hs-intro-extensions/tor-hs-intro-extensions.wat"
+runner = "standards/runners/tor-hs-intro-extensions-smoke.js"
+entrypoint = "tor_hs_intro_ext_validate"
+deterministic = true
+inputs = ["introduce-extensions", "pow-nonce", "pow-effort", "pow-seed", "pow-solution"]
+outputs = ["extension-records", "pow-challenge", "pow-blake2b-result", "status"]
+depends_on = ["app-tor-hs-pow-v1", "app-tor-hs-ntor"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_hs_intro_ext_pow_len",
+  "tor_hs_intro_ext_pow_challenge_len",
+  "tor_hs_intro_ext_empty",
+  "tor_hs_intro_ext_build_cc",
+  "tor_hs_intro_ext_build_pow",
+  "tor_hs_intro_ext_build_cc_pow",
+  "tor_hs_intro_ext_validate",
+  "tor_hs_intro_ext_record",
+  "tor_hs_intro_ext_find",
+  "tor_hs_intro_ext_parse_pow",
+  "tor_hs_intro_pow_seed_prefix_ok",
+  "tor_hs_intro_pow_challenge",
+  "tor_hs_intro_pow_blake2b_result",
+  "tor_hs_intro_pow_effort_gate",
+]
+parity_sources = [
+  "/home/ken/tor-spec/13-onion-services.md",
+  "/home/ken/tor-spec/14-proof-of-work.md",
+]
+notes = "Implements encrypted INTRODUCE extension codec, PoW extension parsing, Tor challenge construction, and Blake2b effort gate. Full Equi-X/HashX verification is provided by app-tor-hs-pow-v1."

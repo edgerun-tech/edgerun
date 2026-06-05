@@ -1,16 +1,36 @@
 id = "tor"
 name = "Tor"
-summary = "Onion-routing overlay protocol for circuits, relay cells, directory operations, and onion services."
-layer = "application"
-runs_over = ["TCP", "TLS"]
-depends_on = ["TLS"]
+summary = "Identity-routed app IPC and network fabric: circuits, relay cells, sealed identity messages, and hidden-service ingress."
+layer = "fabric"
+runs_over = ["host-tor-relay", "tls-available"]
+depends_on = []
 implementation_crates = [
+  "standards/build/wasm/app-primitives/tor-full-spec/tor-full-spec.wat",
+  "standards/build/wasm/app-primitives/tor-directory-authority/tor-directory-authority.wat",
+  "standards/build/wasm/app-primitives/tor-directory-vote/tor-directory-vote.wat",
+  "standards/build/wasm/app-primitives/tor-directory-rsa/tor-directory-rsa.wat",
+  "standards/build/wasm/app-primitives/tor-channel-handshake/tor-channel-handshake.wat",
+  "standards/build/wasm/app-primitives/tor-cell-codec/tor-cell-codec.wat",
   "standards/build/wasm/app-primitives/tor-wat/tor-library.wat",
+  "standards/build/wasm/app-primitives/tor-hidden-service-full/tor-hidden-service-full.wat",
+  "standards/build/wasm/app-primitives/tor-identity-seal/tor-identity-seal.wat",
+  "standards/build/wasm/app-primitives/tor-hs-identity/tor-hs-identity.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-auth/tor-hs-intro-auth.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-extensions/tor-hs-intro-extensions.wat",
+  "standards/build/wasm/app-primitives/tor-hs-pow-v1/tor-hs-pow-v1.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-relay/tor-hs-intro-relay.wat",
+  "standards/build/wasm/app-primitives/tor-hs-descriptor-crypto/tor-hs-descriptor-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-hs-ntor/tor-hs-ntor.wat",
+  "standards/build/wasm/app-primitives/tor-relay-full/tor-relay-full.wat",
+  "standards/build/wasm/app-primitives/tor-relay-crypto/tor-relay-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-ntor-crypto/tor-ntor-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-ntor-v3-crypto/tor-ntor-v3-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-cgo-crypto/tor-cgo-crypto.wat",
   "standards/build/wasm/app-primitives/tor-wat/protocol.wat",
   "standards/build/wasm/app-primitives/tor-wat/crypto.wat",
   "standards/build/wasm/app-primitives/tor-device/tor-device.wat",
 ]
-profiles = ["client", "relay", "hidden-service", "directory", "wat-port"]
+profiles = ["guard-app", "middle-app", "hidden-service-app", "directory", "identity-fabric"]
 standards_bodies = ["Tor Project"]
 
 [environment]
@@ -23,8 +43,37 @@ requires_filesystem = false
 requires_threads = false
 requires_allocator = true
 requires_crypto = true
+requires_tls = false
+tls_available = true
+requires_dns = false
+requires_ip_addressing = false
 no_std_viability = "plausible-with-alloc"
 bare_metal_viability = "plausible-with-clock-entropy-io"
+
+[edgerun_app_model]
+ipc_is_network = true
+transport = "host-tor-relay"
+addressing = "identity"
+accept_connections = "hidden-service"
+ports = "not-exposed"
+dns = "not-used"
+ips = "not-used"
+tls = "available-not-identity-security"
+tls_available = true
+memory_model = "preallocated-full-app-memory"
+message_security = "seal-to-identity"
+sdk_roles = ["guard", "middle", "hidden-service"]
+host_boundary = ["relay-scheduling", "network-device-io", "clock", "entropy"]
+wat_boundary = ["cell-codec", "relay-state-machine", "ntor", "crypto", "identity-sealing"]
+
+[host_tor_relay_standard]
+standard = "tor-spec"
+must_implement_full_standard = true
+tls = "available"
+app_ports = "not-exposed"
+app_dns = "not-used"
+app_ip_addressing = "not-used"
+app_ingress = "hidden-service"
 
 [[standard]]
 id = "tor-spec"
@@ -34,25 +83,186 @@ status = "living"
 role = "base"
 
 [[behavior]]
+id = "tor-full-spec-index"
+kind = "spec-coverage"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-full-spec/tor-full-spec.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-directory-authority"
+kind = "directory-authority"
+standards = ["tor-spec", "edgerun-app-model"]
+implementation = [
+  "standards/build/wasm/app-primitives/tor-directory-authority/tor-directory-authority.wat",
+  "standards/build/wasm/app-primitives/tor-directory-vote/tor-directory-vote.wat",
+  "standards/build/wasm/app-primitives/tor-directory-rsa/tor-directory-rsa.wat",
+]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-channel-handshake"
+kind = "or-channel-handshake"
+standards = ["tor-spec", "cert-spec", "tls-available"]
+implementation = ["standards/build/wasm/app-primitives/tor-channel-handshake/tor-channel-handshake.wat"]
+status = "restored-wat"
+
+[[behavior]]
 id = "tor-cell-codec"
 kind = "cell-format"
 standards = ["tor-spec"]
-implementation = ["standards/build/wasm/app-primitives/tor-wat/protocol.wat"]
-status = "partial"
+implementation = [
+  "standards/build/wasm/app-primitives/tor-cell-codec/tor-cell-codec.wat",
+  "standards/build/wasm/app-primitives/tor-wat/protocol.wat",
+]
+status = "restored-wat"
 
 [[behavior]]
 id = "tor-crypto-primitives"
 kind = "crypto"
 standards = ["tor-spec"]
-implementation = ["standards/build/wasm/app-primitives/tor-wat/crypto.wat"]
-status = "partial"
+implementation = [
+  "standards/build/wasm/app-primitives/tor-ntor-crypto/tor-ntor-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-ntor-v3-crypto/tor-ntor-v3-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-relay-crypto/tor-relay-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-cgo-crypto/tor-cgo-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-channel-handshake/tor-channel-handshake.wat",
+  "standards/build/wasm/app-primitives/tor-directory-rsa/tor-directory-rsa.wat",
+  "standards/build/wasm/app-primitives/tor-wat/crypto.wat",
+]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-ntor-crypto"
+kind = "key-agreement"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-ntor-crypto/tor-ntor-crypto.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-ntor-v3-crypto"
+kind = "key-agreement"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-ntor-v3-crypto/tor-ntor-v3-crypto.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-create2-extensions"
+kind = "handshake-extension"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-ntor-v3-crypto/tor-ntor-v3-crypto.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-relay-crypto"
+kind = "relay-cell-crypto"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-relay-crypto/tor-relay-crypto.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-relay-cgo"
+kind = "relay-cell-crypto"
+standards = ["tor-spec", "proposal-359"]
+implementation = ["standards/build/wasm/app-primitives/tor-cgo-crypto/tor-cgo-crypto.wat"]
+status = "restored-wat"
 
 [[behavior]]
 id = "tor-hidden-service-app"
 kind = "application-state"
 standards = ["tor-spec"]
-implementation = ["standards/build/wasm/app-primitives/tor-wat/tor-library.wat"]
-status = "partial"
+implementation = [
+  "standards/build/wasm/app-primitives/tor-hidden-service-full/tor-hidden-service-full.wat",
+  "standards/build/wasm/app-primitives/tor-hs-identity/tor-hs-identity.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-auth/tor-hs-intro-auth.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-extensions/tor-hs-intro-extensions.wat",
+  "standards/build/wasm/app-primitives/tor-hs-pow-v1/tor-hs-pow-v1.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-relay/tor-hs-intro-relay.wat",
+  "standards/build/wasm/app-primitives/tor-hs-descriptor-crypto/tor-hs-descriptor-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-hs-ntor/tor-hs-ntor.wat",
+  "standards/build/wasm/app-primitives/tor-wat/tor-library.wat",
+]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-hidden-service-identity"
+kind = "onion-address"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-hs-identity/tor-hs-identity.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-hidden-service-intro-auth"
+kind = "introduction-point-auth"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-hs-intro-auth/tor-hs-intro-auth.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-hidden-service-introduce-extensions"
+kind = "introduce-extension-codec"
+standards = ["tor-spec", "proof-of-work-v1"]
+implementation = ["standards/build/wasm/app-primitives/tor-hs-intro-extensions/tor-hs-intro-extensions.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-hidden-service-pow-v1"
+kind = "proof-of-work-verifier"
+standards = ["tor-spec", "proof-of-work-v1"]
+implementation = ["standards/build/wasm/app-primitives/tor-hs-pow-v1/tor-hs-pow-v1.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-hidden-service-intro-relay"
+kind = "introduction-point-forwarding"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-hs-intro-relay/tor-hs-intro-relay.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-hidden-service-descriptor-crypto"
+kind = "descriptor-encryption"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-hs-descriptor-crypto/tor-hs-descriptor-crypto.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-hidden-service-ntor"
+kind = "hidden-service-handshake"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-hs-ntor/tor-hs-ntor.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "edgerun-app-ipc-fabric"
+kind = "identity-network"
+standards = ["edgerun-app-model", "tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-relay-full/tor-relay-full.wat"]
+status = "model-recorded"
+
+[[behavior]]
+id = "edgerun-hidden-service-ingress"
+kind = "app-listen"
+standards = ["edgerun-app-model", "tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-hidden-service-full/tor-hidden-service-full.wat"]
+status = "restored-wat"
+
+[[behavior]]
+id = "edgerun-seal-to-identity"
+kind = "message-security"
+standards = ["edgerun-app-model"]
+implementation = [
+  "standards/build/wasm/app-primitives/tor-identity-seal/tor-identity-seal.wat",
+  "standards/build/wasm/app-primitives/tor-ntor-crypto/tor-ntor-crypto.wat",
+]
+status = "restored-wat"
+
+[[behavior]]
+id = "tor-full-relay"
+kind = "relay-state-machine"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-relay-full/tor-relay-full.wat"]
+status = "wat-crypto-linked"
 
 [[behavior]]
 id = "tor-device-cell-route"

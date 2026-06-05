@@ -1,0 +1,63 @@
+id = "app-tor-cell-codec"
+name = "tor-cell-codec"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300224
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-cell-codec/tor-cell-codec.wat"
+runner = "standards/runners/tor-cell-codec-smoke.js"
+entrypoint = "tor_cell_build_fixed"
+deterministic = true
+inputs = ["link-version", "circ-id", "cell-command", "cell-body", "relay-payload"]
+outputs = ["cell-bytes", "parsed-cell-view", "parsed-relay-view", "status"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_cell_body_len",
+  "tor_cell_relay_header_len",
+  "tor_cell_relay_data_max",
+  "tor_cell_circ_id_len",
+  "tor_cell_fixed_len",
+  "tor_cell_var_header_len",
+  "tor_cell_is_variable_command",
+  "tor_cell_command_circ_requirement",
+  "tor_cell_destroy_reason_none",
+  "tor_cell_destroy_reason_protocol",
+  "tor_cell_padding_command_stop",
+  "tor_cell_padding_command_start",
+  "tor_cell_sendme_version_0",
+  "tor_cell_sendme_version_1",
+  "tor_cell_relay_stream_requirement",
+  "tor_cell_validate_relay_stream_id",
+  "tor_cell_validate_command",
+  "tor_cell_build_fixed",
+  "tor_cell_parse_fixed",
+  "tor_cell_build_var",
+  "tor_cell_parse_var",
+  "tor_cell_build_versions_body",
+  "tor_cell_parse_versions_body",
+  "tor_cell_versions_negotiate",
+  "tor_cell_build_relay_payload",
+  "tor_cell_parse_relay_payload",
+  "tor_cell_build_create2_body",
+  "tor_cell_parse_create2_body",
+  "tor_cell_build_created2_body",
+  "tor_cell_parse_created2_body",
+  "tor_cell_build_destroy_body",
+  "tor_cell_parse_destroy_body",
+  "tor_cell_build_padding_negotiate_body",
+  "tor_cell_parse_padding_negotiate_body",
+  "tor_cell_build_sendme_v0",
+  "tor_cell_build_sendme_v1",
+  "tor_cell_parse_sendme_body",
+  "tor_cell_sendme_v1_digest_matches",
+]
+app_model = "identity-routed-app-ipc"
+app_ports = "not-exposed"
+app_dns = "not-used"
+app_ip_addressing = "identity-next-hop"
+parity_sources = [
+  "/home/ken/tor-spec/02-tor-protocol.md",
+]

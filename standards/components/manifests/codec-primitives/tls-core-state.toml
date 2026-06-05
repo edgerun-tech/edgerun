@@ -1,0 +1,35 @@
+id = "codec-tls-core-state"
+name = "tls-core-state"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300110
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/tls-core-state.wat"
+runner = "standards/runners/tls-core-state-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "classifications"]
+depends_on = ["codec-tls-frame", "codec-tls-vector", "codec-tls-clienthello"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "tls_record_content_type",
+  "tls_record_header_status",
+  "tls_alert_level",
+  "tls_alert_description",
+  "tls_alert_message_status",
+  "tls_handshake_type",
+  "tls_extension_type",
+  "tls_named_group",
+  "tls_hkdf_label",
+  "tls_alpn_protocol",
+  "tls_cert_list_status",
+  "tls_cert_valid_at",
+  "tls_hostname_wildcard_shape",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/tls",
+  "crates/edgerun-tls",
+]

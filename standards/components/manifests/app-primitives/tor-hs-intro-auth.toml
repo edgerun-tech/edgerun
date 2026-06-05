@@ -1,0 +1,28 @@
+id = "app-tor-hs-intro-auth"
+name = "tor-hs-intro-auth"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300215
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-hs-intro-auth/tor-hs-intro-auth.wat"
+runner = "standards/runners/tor-hs-intro-auth-smoke.js"
+entrypoint = "tor_hs_intro_auth_sign"
+deterministic = true
+inputs = ["ed25519-seed", "circuit-kh", "establish-intro-extensions"]
+outputs = ["establish-intro-body", "handshake-auth", "signature", "status"]
+depends_on = ["app-tor-hs-identity"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_hs_intro_auth_noext_len",
+  "tor_hs_intro_auth_domain_len",
+  "tor_hs_intro_auth_public",
+  "tor_hs_intro_auth_build_dos_extension",
+  "tor_hs_intro_auth_derive",
+  "tor_hs_intro_auth_sign",
+  "tor_hs_intro_auth_verify",
+]
+parity_sources = [
+  "/home/ken/tor-spec/13-onion-services.md",
+]

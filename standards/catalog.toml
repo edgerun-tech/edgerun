@@ -158,16 +158,43 @@ name = "Transport Layer Security"
 file = "protocols/tls.toml"
 layer = "security"
 runs_over = ["TCP", "QUIC"]
-implementation_crates = ["crates/edgerun-tls"]
+implementation_crates = [
+  "standards/build/wasm/codec-primitives/tls-frame.wat",
+  "standards/build/wasm/codec-primitives/tls-vector.wat",
+  "standards/build/wasm/codec-primitives/tls-clienthello.wat",
+  "standards/build/wasm/codec-primitives/tls-extension-walk.wat",
+  "standards/build/wasm/codec-primitives/tls-certificate-list.wat",
+  "standards/build/wasm/codec-primitives/tls-core-state.wat",
+]
 
 [[protocol]]
 id = "tor"
 name = "Tor"
 file = "protocols/tor.toml"
-layer = "application"
-runs_over = ["TCP", "TLS"]
+layer = "fabric"
+runs_over = ["host-tor-relay"]
 implementation_crates = [
+  "standards/build/wasm/app-primitives/tor-full-spec/tor-full-spec.wat",
+  "standards/build/wasm/app-primitives/tor-directory-authority/tor-directory-authority.wat",
+  "standards/build/wasm/app-primitives/tor-directory-vote/tor-directory-vote.wat",
+  "standards/build/wasm/app-primitives/tor-directory-rsa/tor-directory-rsa.wat",
+  "standards/build/wasm/app-primitives/tor-channel-handshake/tor-channel-handshake.wat",
+  "standards/build/wasm/app-primitives/tor-cell-codec/tor-cell-codec.wat",
   "standards/build/wasm/app-primitives/tor-wat/tor-library.wat",
+  "standards/build/wasm/app-primitives/tor-hidden-service-full/tor-hidden-service-full.wat",
+  "standards/build/wasm/app-primitives/tor-identity-seal/tor-identity-seal.wat",
+  "standards/build/wasm/app-primitives/tor-hs-identity/tor-hs-identity.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-auth/tor-hs-intro-auth.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-extensions/tor-hs-intro-extensions.wat",
+  "standards/build/wasm/app-primitives/tor-hs-pow-v1/tor-hs-pow-v1.wat",
+  "standards/build/wasm/app-primitives/tor-hs-intro-relay/tor-hs-intro-relay.wat",
+  "standards/build/wasm/app-primitives/tor-hs-descriptor-crypto/tor-hs-descriptor-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-hs-ntor/tor-hs-ntor.wat",
+  "standards/build/wasm/app-primitives/tor-relay-full/tor-relay-full.wat",
+  "standards/build/wasm/app-primitives/tor-relay-crypto/tor-relay-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-ntor-crypto/tor-ntor-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-ntor-v3-crypto/tor-ntor-v3-crypto.wat",
+  "standards/build/wasm/app-primitives/tor-cgo-crypto/tor-cgo-crypto.wat",
   "standards/build/wasm/app-primitives/tor-wat/protocol.wat",
   "standards/build/wasm/app-primitives/tor-wat/crypto.wat",
   "standards/build/wasm/app-primitives/tor-device/tor-device.wat",

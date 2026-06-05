@@ -32,8 +32,8 @@ exports = [
   "parse_extended2_body",
   "ntor_state_init",
   "ntor_state_build_handshake",
-  "ntor_client_process_stub",
 ]
+depends_on = ["app-tor-ntor-crypto"]
 parity_sources = [
   "kernel/x86_64/crypto/tor.asm",
   "kernel/x86_64/crypto/tor_cell.asm",

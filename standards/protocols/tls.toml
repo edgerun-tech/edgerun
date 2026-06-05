@@ -4,7 +4,14 @@ summary = "Cryptographic protocol for authenticated key exchange and secure reco
 layer = "security"
 runs_over = ["TCP", "QUIC"]
 depends_on = []
-implementation_crates = ["crates/edgerun-tls"]
+implementation_crates = [
+  "standards/build/wasm/codec-primitives/tls-frame.wat",
+  "standards/build/wasm/codec-primitives/tls-vector.wat",
+  "standards/build/wasm/codec-primitives/tls-clienthello.wat",
+  "standards/build/wasm/codec-primitives/tls-extension-walk.wat",
+  "standards/build/wasm/codec-primitives/tls-certificate-list.wat",
+  "standards/build/wasm/codec-primitives/tls-core-state.wat",
+]
 profiles = ["client", "server", "no_std-candidate", "unikernel-candidate"]
 standards_bodies = ["IETF"]
 
@@ -39,13 +46,19 @@ owner = "IANA"
 id = "tls13-handshake"
 kind = "state-machine"
 standards = ["RFC8446"]
-implementation = ["crates/edgerun-tls"]
-status = "unknown"
+implementation = [
+  "standards/build/wasm/codec-primitives/tls-clienthello.wat",
+  "standards/build/wasm/codec-primitives/tls-extension-walk.wat",
+  "standards/build/wasm/codec-primitives/tls-core-state.wat",
+]
+status = "wat-available"
 
 [[behavior]]
 id = "tls13-record-layer"
 kind = "record-format"
 standards = ["RFC8446"]
-implementation = ["crates/edgerun-tls"]
-status = "unknown"
-
+implementation = [
+  "standards/build/wasm/codec-primitives/tls-frame.wat",
+  "standards/build/wasm/codec-primitives/tls-vector.wat",
+]
+status = "wat-available"

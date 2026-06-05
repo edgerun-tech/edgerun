@@ -1,0 +1,52 @@
+id = "app-tor-directory-vote"
+name = "tor-directory-vote"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300222
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-directory-vote/tor-directory-vote.wat"
+runner = "standards/runners/tor-directory-vote-smoke.js"
+entrypoint = "tor_dir_vote_sign"
+deterministic = true
+inputs = ["vote-document", "authority-identity", "directory-signing-key", "consensus-timing", "consensus-parameters", "known-flags"]
+outputs = ["sha256-digest", "directory-signature-record", "detached-signature-lines", "consensus-medians", "status"]
+depends_on = ["app-tor-directory-authority", "app-tor-channel-handshake", "app-tor-directory-rsa"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_dir_vote_signature_record_len",
+  "tor_dir_vote_algorithm_sha256_ed25519",
+  "tor_dir_vote_public_from_seed",
+  "tor_dir_vote_doc_digest",
+  "tor_dir_vote_hex32",
+  "tor_dir_vote_signature_object",
+  "tor_dir_vote_directory_signature_block",
+  "tor_dir_vote_consensus_digest_line",
+  "tor_dir_vote_additional_digest_line",
+  "tor_dir_vote_additional_signature_line",
+  "tor_dir_vote_detached_timing_block",
+  "tor_dir_vote_build_signature_record",
+  "tor_dir_vote_parse_signature_record",
+  "tor_dir_vote_sign",
+  "tor_dir_vote_verify",
+  "tor_dir_vote_median3",
+  "tor_dir_vote_low_median3",
+  "tor_dir_vote_timing_median3",
+  "tor_dir_vote_params_low_median3",
+  "tor_dir_vote_known_flags_union",
+  "tor_dir_vote_threshold",
+  "tor_dir_vote_method_mask",
+  "tor_dir_vote_choose_method_masks",
+  "tor_dir_vote_flag_consensus",
+  "tor_dir_vote_median_u32",
+  "tor_dir_vote_low_median_u32",
+]
+app_model = "local-directory-authority"
+app_ports = "not-exposed"
+app_dns = "not-used"
+app_ip_addressing = "identity-next-hop"
+parity_sources = [
+  "/home/ken/tor-spec/03-directory-protocol.md",
+  "/home/ken/tor-spec/21-parameters.md",
+]

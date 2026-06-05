@@ -1,0 +1,32 @@
+id = "app-tor-hs-intro-relay"
+name = "tor-hs-intro-relay"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300217
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-hs-intro-relay/tor-hs-intro-relay.wat"
+runner = "standards/runners/tor-hs-intro-relay-smoke.js"
+entrypoint = "tor_hs_intro_relay_register"
+deterministic = true
+inputs = ["establish-intro-body", "introduce1-body", "intro-circuit", "service-circuit"]
+outputs = ["introduce2-body", "introduce-ack", "route-record", "status"]
+depends_on = ["app-tor-hs-intro-auth", "app-tor-hs-ntor", "app-tor-relay-full"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_hs_intro_relay_max_body_len",
+  "tor_hs_intro_relay_record_size",
+  "tor_hs_intro_relay_init",
+  "tor_hs_intro_relay_parse_establish_intro_auth",
+  "tor_hs_intro_relay_register",
+  "tor_hs_intro_relay_validate_introduce1",
+  "tor_hs_intro_relay_build_introduce2",
+  "tor_hs_intro_relay_build_introduce_ack",
+  "tor_hs_intro_relay_build_relay_header",
+  "tor_hs_intro_relay_record_ptr",
+]
+parity_sources = [
+  "/home/ken/tor-spec/13-onion-services.md",
+  "/home/ken/tor-spec/02-tor-protocol.md",
+]

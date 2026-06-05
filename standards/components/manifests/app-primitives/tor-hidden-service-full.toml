@@ -1,0 +1,46 @@
+id = "app-tor-hidden-service-full"
+name = "tor-hidden-service-full"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300207
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-hidden-service-full/tor-hidden-service-full.wat"
+entrypoint = "tor_hs_full_init"
+deterministic = true
+inputs = ["bytes", "identity", "preallocated-memory", "wat-crypto"]
+outputs = ["bytes", "status", "descriptor-records", "relay-actions"]
+depends_on = ["app-tor-hs-identity", "app-tor-hs-intro-auth", "app-tor-hs-intro-extensions", "app-tor-hs-pow-v1", "app-tor-hs-intro-relay", "app-tor-hs-descriptor-crypto", "app-tor-hs-ntor", "app-tor-ntor-crypto", "app-tor-ntor-v3-crypto", "app-tor-wat-crypto", "app-tor-relay-full"]
+exports = [
+  "memory",
+  "proto_standard_id",
+  "proto_abi_version",
+  "tor_hs_full_init",
+  "tor_hs_validate_onion_address",
+  "tor_hs_time_period",
+  "tor_hs_descriptor_slot",
+  "tor_hs_should_republish",
+  "tor_hs_schedule_republish",
+  "tor_hs_build_fetch_path",
+  "tor_hs_build_publish_path",
+  "tor_hs_register_intro_point",
+  "tor_hs_intro_count",
+  "tor_hs_intro_record_ptr",
+  "tor_hs_build_descriptor_record",
+  "tor_hs_build_intro_established",
+  "tor_hs_build_rendezvous_established",
+  "tor_hs_build_introduce_ack",
+  "tor_hs_build_establish_rendezvous",
+  "tor_hs_parse_establish_rendezvous",
+  "tor_hs_build_rendezvous1",
+  "tor_hs_parse_rendezvous1",
+]
+app_model = "identity-routed-app-ipc"
+app_accept_connections = "hidden-service"
+app_ports = "not-exposed"
+app_tls = "available-but-not-required"
+memory_model = "preallocated-full-app-memory"
+parity_sources = [
+  "/home/ken/tor-spec/13-onion-services.md",
+  "/home/ken/tor-spec/02-tor-protocol.md",
+  "/home/ken/tor-spec/29-cert-spec.md",
+]
