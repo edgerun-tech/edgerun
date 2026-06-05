@@ -1,0 +1,62 @@
+id = "tor"
+name = "Tor"
+summary = "Onion-routing overlay protocol for circuits, relay cells, directory operations, and onion services."
+layer = "application"
+runs_over = ["TCP", "TLS"]
+depends_on = ["TLS"]
+implementation_crates = [
+  "standards/build/wasm/app-primitives/tor-wat/tor-library.wat",
+  "standards/build/wasm/app-primitives/tor-wat/protocol.wat",
+  "standards/build/wasm/app-primitives/tor-wat/crypto.wat",
+  "standards/build/wasm/app-primitives/tor-device/tor-device.wat",
+]
+profiles = ["client", "relay", "hidden-service", "directory", "wat-port"]
+standards_bodies = ["Tor Project"]
+
+[environment]
+requires_clock = true
+requires_entropy = true
+requires_network_io = true
+requires_packet_io = false
+requires_stream_io = true
+requires_filesystem = false
+requires_threads = false
+requires_allocator = true
+requires_crypto = true
+no_std_viability = "plausible-with-alloc"
+bare_metal_viability = "plausible-with-clock-entropy-io"
+
+[[standard]]
+id = "tor-spec"
+title = "Tor Specifications"
+url = "https://spec.torproject.org/"
+status = "living"
+role = "base"
+
+[[behavior]]
+id = "tor-cell-codec"
+kind = "cell-format"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-wat/protocol.wat"]
+status = "partial"
+
+[[behavior]]
+id = "tor-crypto-primitives"
+kind = "crypto"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-wat/crypto.wat"]
+status = "partial"
+
+[[behavior]]
+id = "tor-hidden-service-app"
+kind = "application-state"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-wat/tor-library.wat"]
+status = "partial"
+
+[[behavior]]
+id = "tor-device-cell-route"
+kind = "device-overlay"
+standards = ["tor-spec"]
+implementation = ["standards/build/wasm/app-primitives/tor-device/tor-device.wat"]
+status = "local-extension"

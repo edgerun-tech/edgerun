@@ -159,3 +159,16 @@ file = "protocols/tls.toml"
 layer = "security"
 runs_over = ["TCP", "QUIC"]
 implementation_crates = ["crates/edgerun-tls"]
+
+[[protocol]]
+id = "tor"
+name = "Tor"
+file = "protocols/tor.toml"
+layer = "application"
+runs_over = ["TCP", "TLS"]
+implementation_crates = [
+  "standards/build/wasm/app-primitives/tor-wat/tor-library.wat",
+  "standards/build/wasm/app-primitives/tor-wat/protocol.wat",
+  "standards/build/wasm/app-primitives/tor-wat/crypto.wat",
+  "standards/build/wasm/app-primitives/tor-device/tor-device.wat",
+]

@@ -1,0 +1,10 @@
+pre-erobj Tor source baseline
+
+commit: 1b243c8d6a843585bc54b4366f814cf5f56615b1
+date: 2026-06-03T11:33:09+07:00
+subject: wip: checkpoint
+
+This is the last clean baseline used for the WAT port before the source-object
+lowering and erobj conversion wave. The later x86 conversion commit is:
+
+97b85c5dde2c9d169f435e14b483e6c0a0ba55df build: convert x86 sources to object records

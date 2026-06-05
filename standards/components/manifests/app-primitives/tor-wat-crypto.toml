@@ -1,0 +1,26 @@
+id = "app-tor-wat-crypto"
+name = "tor-wat-crypto"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300201
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-wat/crypto.wat"
+entrypoint = "er_tor_sha256"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["bytes", "status"]
+exports = [
+  "memory",
+  "er_sha256_init",
+  "er_sha256_update",
+  "er_sha256_final",
+  "er_tor_sha256",
+  "er_tor_hmac_sha256",
+  "er_tor_aes128_ctr",
+  "er_tor_aes_ctr",
+]
+parity_sources = [
+  "kernel/x86_64/crypto/sha256.asm",
+  "kernel/x86_64/crypto/tor_digest.asm",
+  "kernel/x86_64/crypto/tor_aes.asm",
+]

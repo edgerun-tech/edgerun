@@ -1,0 +1,40 @@
+id = "app-tor-wat-library"
+name = "tor-wat-library"
+kind = "app-primitive"
+version = "0.1.0"
+standard_id = 300203
+abi_version = 1
+wat = "standards/build/wasm/app-primitives/tor-wat/tor-library.wat"
+entrypoint = "er_tor_get_role"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["bytes", "status", "records"]
+depends_on = ["app-tor-wat-crypto", "app-tor-wat-protocol"]
+exports = [
+  "memory",
+  "er_memcpy",
+  "er_memset",
+  "er_tor_get_role",
+  "er_tor_get_role_caps",
+  "er_tor_set_role",
+  "er_tor_set_role_caps",
+  "er_tor_enable_role",
+  "er_tor_set_guard_material",
+  "er_tor_cell_get_circ_id",
+  "er_tor_cell_set_circ_id",
+  "er_tor_cell_get_cmd",
+  "er_tor_cell_set_cmd",
+  "er_tor_build_extend2_body",
+  "er_tor_build_relay_begin_ipv4",
+  "er_tor_hsdir_build_fetch_request",
+  "er_tor_hsdir_build_publish_header",
+  "er_tor_hs_b64_decode",
+  "er_tor_hs_desc_armor_message",
+  "er_tor_hs_app_init",
+  "er_tor_hs_app_handle_frame",
+]
+parity_sources = [
+  "kernel/x86_64/crypto/tor.asm",
+  "kernel/x86_64/crypto/tor_hs.asm",
+  "kernel/x86_64/crypto/tor_hs_app.asm",
+]
