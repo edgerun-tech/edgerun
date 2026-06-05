@@ -1,9 +1,0 @@
-This crate includes a small subset of Microsoft Fluent Emoji image resources.
-
-Source: https://github.com/microsoft/fluentui-emoji
-
-Fluent Emoji is provided by Microsoft under the MIT License.
-
-The bundled files under assets/fluent-emoji-3d-64 are derived from Fluent
-Emoji 3D PNG art converted to raw RGBA byte data for dependency-free runtime
-loading.
