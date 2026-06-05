@@ -406,4 +406,52 @@
 
   (func (export "smtp_response_class") (param $code i32) (result i32)
     (i32.div_u (local.get $code) (i32.const 100)))
+
+  (func (export "mail_spf_qualifier_result") (param $byte i32) (result i32)
+    (if (i32.eq (local.get $byte) (i32.const 45)) (then (return (i32.const 2))))
+    (if (i32.eq (local.get $byte) (i32.const 126)) (then (return (i32.const 3))))
+    (if (i32.eq (local.get $byte) (i32.const 63)) (then (return (i32.const 4))))
+    i32.const 1)
+
+  (func (export "mail_auth_passes") (param $spf_status i32) (param $dmarc_status i32) (result i32)
+    (i32.or (i32.eq (local.get $spf_status) (i32.const 1)) (i32.eq (local.get $dmarc_status) (i32.const 1))))
+
+  (func (export "mail_dkim_header_complete") (param $has_domain i32) (param $has_selector i32) (param $has_signature i32) (param $has_body_hash i32) (result i32)
+    (i32.and (local.get $has_domain) (i32.and (local.get $has_selector) (i32.and (local.get $has_signature) (local.get $has_body_hash)))))
+
+  (func (export "mail_dmarc_status") (param $has_policy i32) (param $spf_aligned i32) (param $dkim_aligned i32) (result i32)
+    (if (i32.eqz (local.get $has_policy)) (then (return (i32.const 3))))
+    (if (i32.or (local.get $spf_aligned) (local.get $dkim_aligned)) (then (return (i32.const 1))))
+    i32.const 2)
+
+  (func (export "mail_dmarc_effective_policy") (param $policy i32) (param $subdomain_policy i32) (param $is_subdomain i32) (result i32)
+    (if (i32.and (local.get $is_subdomain) (i32.ne (local.get $subdomain_policy) (i32.const 0)))
+      (then (return (local.get $subdomain_policy))))
+    local.get $policy)
+
+  (func (export "smtp_default_limit") (param $kind i32) (result i32)
+    (if (i32.eq (local.get $kind) (i32.const 1)) (then (return (i32.const 35882577))))
+    (if (i32.eq (local.get $kind) (i32.const 2)) (then (return (i32.const 100))))
+    (if (i32.eq (local.get $kind) (i32.const 3)) (then (return (i32.const 998))))
+    (if (i32.eq (local.get $kind) (i32.const 4)) (then (return (i32.const 300))))
+    (if (i32.eq (local.get $kind) (i32.const 5)) (then (return (i32.const 1000))))
+    i32.const 0)
+
+  (func (export "lmtp_session_transition") (param $state i32) (param $cmd i32) (param $recipient_valid i32) (result i32)
+    (if (i32.eq (local.get $cmd) (i32.const 17)) (then (return (call $pack (i32.const 250) (i32.const 1) (i32.const 0) (i32.const 0)))))
+    (if (i32.eq (local.get $cmd) (i32.const 3))
+      (then
+        (if (i32.eqz (i32.or (i32.eq (local.get $state) (i32.const 1)) (i32.eq (local.get $state) (i32.const 2)))) (then (return (call $pack (i32.const 503) (local.get $state) (i32.const 0) (i32.const 0)))))
+        (return (call $pack (i32.const 250) (i32.const 2) (i32.const 0) (i32.const 0)))))
+    (if (i32.eq (local.get $cmd) (i32.const 4))
+      (then
+        (if (i32.eqz (i32.or (i32.eq (local.get $state) (i32.const 2)) (i32.eq (local.get $state) (i32.const 3)))) (then (return (call $pack (i32.const 503) (local.get $state) (i32.const 0) (i32.const 0)))))
+        (if (i32.eqz (local.get $recipient_valid)) (then (return (call $pack (i32.const 550) (local.get $state) (i32.const 0) (i32.const 0)))))
+        (return (call $pack (i32.const 250) (i32.const 3) (i32.const 0) (i32.const 0)))))
+    (if (i32.eq (local.get $cmd) (i32.const 5))
+      (then
+        (if (i32.ne (local.get $state) (i32.const 3)) (then (return (call $pack (i32.const 503) (local.get $state) (i32.const 0) (i32.const 0)))))
+        (return (call $pack (i32.const 354) (i32.const 4) (i32.const 0) (i32.const 0)))))
+    (if (i32.eq (local.get $cmd) (i32.const 9)) (then (return (call $pack (i32.const 221) (i32.const 5) (i32.const 0) (i32.const 1)))))
+    (call $pack (i32.const 554) (local.get $state) (i32.const 0) (i32.const 0)))
 )

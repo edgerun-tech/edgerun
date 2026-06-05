@@ -218,6 +218,62 @@ function unpack(word) {
   });
 
   len = write(memory, ptr, "NOOP\n");
+  assert.strictEqual(e.mail_spf_qualifier_result("+".charCodeAt(0)), 1);
+  assert.strictEqual(e.mail_spf_qualifier_result("-".charCodeAt(0)), 2);
+  assert.strictEqual(e.mail_spf_qualifier_result("~".charCodeAt(0)), 3);
+  assert.strictEqual(e.mail_spf_qualifier_result("?".charCodeAt(0)), 4);
+  assert.strictEqual(e.mail_auth_passes(1, 2), 1);
+  assert.strictEqual(e.mail_auth_passes(2, 1), 1);
+  assert.strictEqual(e.mail_auth_passes(2, 2), 0);
+  assert.strictEqual(e.mail_dkim_header_complete(1, 1, 1, 1), 1);
+  assert.strictEqual(e.mail_dkim_header_complete(1, 1, 1, 0), 0);
+  assert.strictEqual(e.mail_dmarc_status(0, 0, 0), 3);
+  assert.strictEqual(e.mail_dmarc_status(1, 1, 0), 1);
+  assert.strictEqual(e.mail_dmarc_status(1, 0, 1), 1);
+  assert.strictEqual(e.mail_dmarc_status(1, 0, 0), 2);
+  assert.strictEqual(e.mail_dmarc_effective_policy(1, 2, 1), 2);
+  assert.strictEqual(e.mail_dmarc_effective_policy(1, 0, 1), 1);
+  assert.strictEqual(e.smtp_default_limit(1), 35882577);
+  assert.strictEqual(e.smtp_default_limit(2), 100);
+  assert.strictEqual(e.smtp_default_limit(3), 998);
+  assert.strictEqual(e.smtp_default_limit(4), 300);
+  assert.strictEqual(e.smtp_default_limit(5), 1000);
+  assert.deepStrictEqual(unpack(e.lmtp_session_transition(0, 17, 0)), {
+    status: 250,
+    state: 1,
+    authExchange: 0,
+    action: 0,
+  });
+  assert.deepStrictEqual(unpack(e.lmtp_session_transition(1, 3, 0)), {
+    status: 250,
+    state: 2,
+    authExchange: 0,
+    action: 0,
+  });
+  assert.deepStrictEqual(unpack(e.lmtp_session_transition(2, 4, 0)), {
+    status: 550,
+    state: 2,
+    authExchange: 0,
+    action: 0,
+  });
+  assert.deepStrictEqual(unpack(e.lmtp_session_transition(2, 4, 1)), {
+    status: 250,
+    state: 3,
+    authExchange: 0,
+    action: 0,
+  });
+  assert.deepStrictEqual(unpack(e.lmtp_session_transition(3, 5, 1)), {
+    status: 354,
+    state: 4,
+    authExchange: 0,
+    action: 0,
+  });
+  assert.deepStrictEqual(unpack(e.lmtp_session_transition(1, 9, 1)), {
+    status: 221,
+    state: 5,
+    authExchange: 0,
+    action: 1,
+  });
   assert.strictEqual(e.mail_crlf_validate(ptr, len), 1);
   len = write(memory, ptr, "NO\rOP\r\n");
   assert.strictEqual(e.mail_crlf_validate(ptr, len), 3);
