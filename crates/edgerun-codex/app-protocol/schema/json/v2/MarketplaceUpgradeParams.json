@@ -1,9 +1,0 @@
-{
-  "title": "MarketplaceUpgradeParams",
-  "type": "object",
-  "properties": {
-    "marketplaceName": {
-      "type": "string"
-    }
-  }
-}
