@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use core::fmt::Write as _;
 
 use super::image_ref::ImageRef;
 use super::manifest::{LayerDescriptor, SingleManifest};
@@ -43,6 +44,38 @@ impl ImageProvenance {
                 .collect(),
         }
     }
+
+    pub fn to_json_string_pretty(&self) -> String {
+        let mut out = String::new();
+        out.push_str("{\n  \"schemaVersion\": ");
+        write!(&mut out, "{}", self.schema_version).expect("writing to String cannot fail");
+        out.push_str(",\n  \"image\": ");
+        write_json_string(&mut out, &self.image);
+        out.push_str(",\n  \"registry\": ");
+        write_json_string(&mut out, &self.registry);
+        out.push_str(",\n  \"repository\": ");
+        write_json_string(&mut out, &self.repository);
+        out.push_str(",\n  \"reference\": ");
+        write_json_string(&mut out, &self.reference);
+        out.push_str(",\n  \"referenceKind\": ");
+        write_json_string(&mut out, &self.reference_kind);
+        out.push_str(",\n  \"configDigest\": ");
+        write_json_string(&mut out, &self.config_digest);
+        out.push_str(",\n  \"layers\": [");
+        for (index, layer) in self.layers.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            out.push_str("\n    ");
+            layer.write_json(&mut out);
+        }
+        if !self.layers.is_empty() {
+            out.push('\n');
+            out.push_str("  ");
+        }
+        out.push_str("]\n}");
+        out
+    }
 }
 
 impl ImageLayerProvenance {
@@ -53,34 +86,38 @@ impl ImageLayerProvenance {
             media_type: layer.media_type.clone(),
         }
     }
-}
 
-edgerun_json::impl_json_struct! {
-    ImageProvenance {
-        required {
-            schema_version: "schemaVersion" => u32,
-            image: "image" => String,
-            registry: "registry" => String,
-            repository: "repository" => String,
-            reference: "reference" => String,
-            reference_kind: "referenceKind" => String,
-            config_digest: "configDigest" => String,
-            layers: "layers" => Vec<ImageLayerProvenance>,
+    fn write_json(&self, out: &mut String) {
+        out.push_str("{\"digest\":");
+        write_json_string(out, &self.digest);
+        out.push_str(",\"size\":");
+        write!(out, "{}", self.size).expect("writing to String cannot fail");
+        if let Some(media_type) = &self.media_type {
+            out.push_str(",\"mediaType\":");
+            write_json_string(out, media_type);
         }
-        optional {}
+        out.push('}');
     }
 }
 
-edgerun_json::impl_json_struct! {
-    ImageLayerProvenance {
-        required {
-            digest: "digest" => String,
-            size: "size" => u64,
-        }
-        optional {
-            media_type: "mediaType" => String,
+fn write_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch <= '\u{1f}' => {
+                write!(out, "\\u{:04x}", ch as u32).expect("writing to String cannot fail");
+            }
+            ch => out.push(ch),
         }
     }
+    out.push('"');
 }
 
 #[cfg(test)]

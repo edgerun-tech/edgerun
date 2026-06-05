@@ -3,7 +3,7 @@ use core::convert::TryInto;
 use core::fmt;
 use core::num::TryFromIntError;
 
-use edgerun_encoding::buf::{Buf, BufMut, Cursor};
+use super::buf::{Buf, BufMut, Cursor};
 
 use super::{
     dynamic::{DynamicTable, DynamicTableDecoder, Error as DynamicTableError},
@@ -342,7 +342,7 @@ mod tests {
     extern crate alloc;
     use alloc::{format, vec, vec::Vec};
 
-    use super::super::helpers::{TABLE_SIZE, build_table_with_size};
+    use super::super::helpers::{build_table_with_size, TABLE_SIZE};
     use super::*;
 
     // #[test]

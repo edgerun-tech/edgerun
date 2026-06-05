@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "encoding-core",
+  "module": "encoding-core.wat",
+  "cases": [
+    {
+      "id": "leb128-u64-max",
+      "function": "leb128_u64_decode",
+      "input": { "hex": "ffffffffffffffffff01" },
+      "expect": { "status": 0, "bytes_read": 10, "value_hex_le": "ffffffffffffffff" },
+      "notes": "Maximum u64 encoded as unsigned LEB128."
+    },
+    {
+      "id": "leb128-truncated",
+      "function": "leb128_u64_decode",
+      "input": { "hex": "80" },
+      "expect": { "status": 5 },
+      "notes": "Continuation bit without a following byte."
+    },
+    {
+      "id": "quic-varint-four-byte-threshold",
+      "function": "quic_varint_decode",
+      "input": { "hex": "80004000" },
+      "expect": { "status": 0, "bytes_read": 4, "value": 16384 },
+      "notes": "First value that requires QUIC's four-byte varint form."
+    },
+    {
+      "id": "crc32-123456789",
+      "function": "crc32_ieee",
+      "input": { "ascii": "123456789" },
+      "expect": { "status": 0, "value_hex": "cbf43926" },
+      "notes": "Common IEEE CRC32 check vector."
+    },
+    {
+      "id": "adler32-wikipedia",
+      "function": "adler32",
+      "input": { "ascii": "Wikipedia" },
+      "expect": { "status": 0, "value_hex": "11e60398" },
+      "notes": "Common Adler32 check vector."
+    }
+  ]
+}

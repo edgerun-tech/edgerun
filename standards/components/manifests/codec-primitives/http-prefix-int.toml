@@ -1,0 +1,28 @@
+id = "codec-http-prefix-int"
+name = "http-prefix-int"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300011
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/http-prefix-int.wat"
+runner = "standards/runners/http-prefix-int-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "hpack_prefix_int_decode",
+  "hpack_prefix_int_encode",
+  "qpack_prefix_int_decode",
+  "qpack_prefix_int_encode",
+]
+parity_sources = [
+  "crates/utility/edgerun-hpack/src/decoder.rs",
+  "crates/utility/edgerun-hpack/src/encoder.rs",
+  "crates/protocol/edgerun-protocols/src/http/http3/qpack/prefix_int.rs",
+]
+

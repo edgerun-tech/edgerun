@@ -1,0 +1,39 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "http-prefix-int",
+  "module": "http-prefix-int.wat",
+  "cases": [
+    {
+      "id": "hpack-prefix-fits",
+      "function": "hpack_prefix_int_decode",
+      "input": { "hex": "0a" },
+      "params": { "prefix_bits": 5 },
+      "expect": { "status": 0, "value": 10, "bytes_read": 1 },
+      "notes": "Value fits directly inside a five-bit prefix."
+    },
+    {
+      "id": "hpack-prefix-continuation",
+      "function": "hpack_prefix_int_decode",
+      "input": { "hex": "1fe107" },
+      "params": { "prefix_bits": 5 },
+      "expect": { "status": 0, "value": 1024, "bytes_read": 3 },
+      "notes": "Continuation bytes encode a value larger than the prefix max."
+    },
+    {
+      "id": "hpack-truncated-continuation",
+      "function": "hpack_prefix_int_decode",
+      "input": { "hex": "1f80" },
+      "params": { "prefix_bits": 5 },
+      "expect": { "status": 5 },
+      "notes": "Continuation bit remains set at end of input."
+    },
+    {
+      "id": "qpack-wide-value",
+      "function": "qpack_prefix_int_decode",
+      "input": { "hex": "ff0100" },
+      "params": { "prefix_bits": 8 },
+      "expect": { "status": 0, "value": 256, "bytes_read": 2 },
+      "notes": "QPACK prefix integer permits wider integer coverage."
+    }
+  ]
+}

@@ -115,6 +115,7 @@ pub mod time {
 mod client;
 mod discovery;
 mod errors;
+mod json_fixed;
 mod jwt;
 mod oauth_client;
 mod pkce;

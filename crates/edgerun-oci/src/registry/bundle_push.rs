@@ -62,8 +62,7 @@ pub(crate) async fn push(
         config_blob.len(),
         layer_digest.clone(),
         layer_data.len(),
-    )
-    .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+    );
 
     push_manifest(
         client,

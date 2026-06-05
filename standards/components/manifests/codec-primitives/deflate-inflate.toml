@@ -1,0 +1,24 @@
+id = "codec-deflate-inflate"
+name = "deflate-inflate"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300067
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/deflate-inflate.wat"
+runner = "standards/runners/deflate-inflate-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "deflate_inflate_raw",
+  "deflate_scan_blocks",
+]
+parity_sources = [
+  "crates/utility/edgerun-encoding/src/compression.rs",
+  "crates/utility/edgerun-miniz-oxide",
+]

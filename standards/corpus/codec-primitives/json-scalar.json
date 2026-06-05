@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "json-scalar",
+  "module": "json-scalar.wat",
+  "cases": [
+    {
+      "id": "string-surrogate-pair",
+      "function": "json_scan_string_strict",
+      "input": { "ascii": "\"\\uD83D\\uDE00\"" },
+      "expect": { "status": 0 },
+      "notes": "Valid UTF-16 surrogate pair escape sequence."
+    },
+    {
+      "id": "string-lone-high-surrogate",
+      "function": "json_scan_string_strict",
+      "input": { "ascii": "\"\\uD83D\"" },
+      "expect": { "status": 3 },
+      "notes": "High surrogate must be followed by a low surrogate escape."
+    },
+    {
+      "id": "number-leading-zero",
+      "function": "json_scan_number_strict",
+      "input": { "ascii": "01" },
+      "expect": { "status": 3 },
+      "notes": "JSON numbers do not permit leading zeroes."
+    },
+    {
+      "id": "parse-i64-min",
+      "function": "json_parse_i64",
+      "input": { "ascii": "-9223372036854775808" },
+      "expect": { "status": 0, "value": "-9223372036854775808" },
+      "notes": "Minimum signed 64-bit integer."
+    },
+    {
+      "id": "parse-u64-overflow",
+      "function": "json_parse_u64",
+      "input": { "ascii": "18446744073709551616" },
+      "expect": { "status": 4 },
+      "notes": "One more than u64::MAX."
+    }
+  ]
+}

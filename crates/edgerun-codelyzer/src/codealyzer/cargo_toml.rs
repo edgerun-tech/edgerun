@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use crate::codealyzer::cargo_toml_projection::parse_cargo_toml_projection;
 use crate::codealyzer::crate_model::*;
 use crate::codealyzer::errors::Result;
 
@@ -8,65 +9,44 @@ pub fn parse_cargo_toml(path: &Path) -> Result<CrateIdentity> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| crate::codealyzer::errors::AnalyzerError::IoError(e.to_string()))?;
 
-    let toml = edgerun_json::from_toml_str(&content).map_err(|e| {
-        crate::codealyzer::errors::AnalyzerError::ParseError {
-            file: path.to_path_buf(),
-            message: e.to_string(),
-        }
-    })?;
-
-    let package = toml.get("package").ok_or_else(|| {
-        crate::codealyzer::errors::AnalyzerError::ParseError {
+    let projection = parse_cargo_toml_projection(&content);
+    if projection.package_name.is_none() {
+        return Err(crate::codealyzer::errors::AnalyzerError::ParseError {
             file: path.to_path_buf(),
             message: "No [package] section".into(),
-        }
-    })?;
+        });
+    }
 
-    let name = package
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown")
-        .to_string();
+    let name = projection
+        .package_name
+        .unwrap_or_else(|| "unknown".to_string());
 
-    let version = package
-        .get("version")
-        .and_then(|v| v.as_str())
-        .unwrap_or("0.0.0")
-        .to_string();
+    let version = projection
+        .package_version
+        .unwrap_or_else(|| "0.0.0".to_string());
 
-    let description = package
-        .get("description")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let license = package
-        .get("license")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let edition = package
-        .get("edition")
-        .and_then(|v| v.as_str())
-        .unwrap_or("2021")
-        .to_string();
-    let rust_version = package
-        .get("rust-version")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let description = projection.package_description;
+    let license = projection.package_license;
+    let edition = projection
+        .package_edition
+        .unwrap_or_else(|| "2021".to_string());
+    let rust_version = projection.package_rust_version;
+    let features = projection.feature_keys;
 
-    let features = package
-        .get("features")
-        .and_then(|f| f.as_table())
-        .map(|obj| obj.iter().map(|(name, _)| name.clone()).collect())
-        .unwrap_or_default();
+    let crate_dir =
+        path.parent()
+            .ok_or_else(|| crate::codealyzer::errors::AnalyzerError::ParseError {
+                file: path.to_path_buf(),
+                message: "Cargo.toml has no parent directory".into(),
+            })?;
+    let lib_target = projection.lib_present || crate_dir.join("src/lib.rs").exists();
 
-    let crate_dir = path.parent().unwrap();
-    let lib_target = is_lib_target(package, crate_dir);
-
-    let declared_bins = collect_declared_targets(&toml, "bin");
+    let declared_bins = collect_declared_targets(&projection.bin_targets);
     let auto_bins = collect_bin_targets(crate_dir);
     let bin_targets = merge_target_lists(&declared_bins, &auto_bins);
 
-    let test_targets = collect_declared_targets(&toml, "test");
-    let bench_targets = collect_declared_targets(&toml, "bench");
+    let test_targets = collect_declared_targets(&projection.test_targets);
+    let bench_targets = collect_declared_targets(&projection.bench_targets);
 
     let crate_type = if lib_target && !bin_targets.is_empty() {
         CrateType::LibraryAndBinary
@@ -98,52 +78,13 @@ pub fn parse_cargo_toml(path: &Path) -> Result<CrateIdentity> {
     })
 }
 
-fn is_lib_target(package: &edgerun_json::TomlValue, crate_dir: &Path) -> bool {
-    if package.get("lib").and_then(|v| v.as_table()).is_some() {
-        return true;
-    }
-
-    crate_dir.join("src/lib.rs").exists()
-}
-
-fn collect_declared_targets(toml: &edgerun_json::TomlValue, section: &str) -> Vec<String> {
-    let mut entries = Vec::new();
-    let Some(value) = toml.get(section) else {
-        return entries;
-    };
-
-    if let Some(array) = value.as_array() {
-        for entry in array {
-            if let Some(table) = entry.as_table() {
-                let mut name = None;
-                for (k, v) in table {
-                    if k == "name" {
-                        name = v.as_str().map(str::to_string);
-                        break;
-                    }
-                }
-                if let Some(name) = name {
-                    entries.push(name);
-                }
-            }
-        }
-        return entries;
-    }
-
-    if let Some(table) = value.as_table() {
-        let mut name = None;
-        for (k, v) in table {
-            if k == "name" {
-                name = v.as_str().map(str::to_string);
-                break;
-            }
-        }
-        if let Some(name) = name {
-            entries.push(name);
-        }
-    }
-
-    entries
+fn collect_declared_targets(
+    targets: &[crate::codealyzer::cargo_toml_projection::TargetProjection],
+) -> Vec<String> {
+    targets
+        .iter()
+        .filter_map(|target| target.name.clone())
+        .collect()
 }
 
 fn collect_bin_targets(crate_dir: &Path) -> Vec<String> {

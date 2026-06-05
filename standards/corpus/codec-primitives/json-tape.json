@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "json-tape",
+  "module": "json-tape.wat",
+  "cases": [
+    {
+      "id": "object-array-scalars",
+      "function": "json_tape_parse",
+      "input": { "ascii": "{\"a\":[1,true,null]}" },
+      "expect": { "status": 0, "token_count_min": 6 },
+      "notes": "Minimal nested object/array scalar document."
+    },
+    {
+      "id": "trailing-comma-array",
+      "function": "json_tape_parse",
+      "input": { "ascii": "[1,]" },
+      "expect": { "status": 3 },
+      "notes": "Trailing commas are rejected."
+    },
+    {
+      "id": "missing-comma-array",
+      "function": "json_tape_parse",
+      "input": { "ascii": "[1 2]" },
+      "expect": { "status": 3 },
+      "notes": "Adjacent array values require a comma."
+    },
+    {
+      "id": "invalid-object-key",
+      "function": "json_tape_parse",
+      "input": { "ascii": "{1:2}" },
+      "expect": { "status": 3 },
+      "notes": "Object keys must be strings."
+    },
+    {
+      "id": "trailing-junk",
+      "function": "json_tape_parse",
+      "input": { "ascii": "true false" },
+      "expect": { "status": 3 },
+      "notes": "A single top-level JSON value must consume the document."
+    }
+  ]
+}

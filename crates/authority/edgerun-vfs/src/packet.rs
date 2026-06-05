@@ -3,7 +3,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use edgerun_work::codec::{
-    blake3_hash, wire_bytes, wire_from_bytes, EdgeWire, WireCursor, WireWriter,
+    EdgeWire, WireCursor, WireWriter, blake3_hash, wire_bytes, wire_from_bytes,
 };
 use edgerun_work::preimage::{HashBuilder, PreimageBuilder};
 use edgerun_work::protocol::{Hash, WorkProtocolError};
@@ -301,6 +301,33 @@ pub enum VfsPacketError {
     DecompressFailed,
 }
 
+pub trait VfsRawDeflateWatAdapter {
+    fn deflate_stored_encode(&self, plaintext: &[u8]) -> Result<Vec<u8>, VfsPacketError>;
+
+    fn deflate_inflate_raw(
+        &self,
+        payload: &[u8],
+        plaintext_len: usize,
+    ) -> Result<Vec<u8>, VfsPacketError>;
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VfsRawDeflateWatUnavailable;
+
+impl VfsRawDeflateWatAdapter for VfsRawDeflateWatUnavailable {
+    fn deflate_stored_encode(&self, _plaintext: &[u8]) -> Result<Vec<u8>, VfsPacketError> {
+        Err(VfsPacketError::CompressFailed)
+    }
+
+    fn deflate_inflate_raw(
+        &self,
+        _payload: &[u8],
+        _plaintext_len: usize,
+    ) -> Result<Vec<u8>, VfsPacketError> {
+        Err(VfsPacketError::DecompressFailed)
+    }
+}
+
 pub fn hash_hex(hash: &Hash) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(hash.len() * 2);
@@ -463,17 +490,28 @@ pub fn file_ref_and_packets_to_entry(
 pub fn prepare_object_seal_request(bytes: &[u8]) -> Result<VfsObjectSealRequest, VfsPacketError> {
     let plaintext_object_id = vfs_object_id(bytes);
     let plaintext_len = u64::try_from(bytes.len()).map_err(|_| VfsPacketError::ObjectTooLarge)?;
-    let compressed = compress_object(bytes);
-    let compression_kind = if compressed.len() < bytes.len() {
-        VFS_OBJECT_COMPRESSION_DEFLATE_RAW
-    } else {
-        VFS_OBJECT_COMPRESSION_NONE
-    };
-    let payload = if compression_kind == VFS_OBJECT_COMPRESSION_DEFLATE_RAW {
-        compressed
-    } else {
-        bytes.to_vec()
-    };
+    let compression_kind = VFS_OBJECT_COMPRESSION_NONE;
+    let payload = bytes.to_vec();
+    let aad = object_seal_aad(&plaintext_object_id, plaintext_len, compression_kind);
+    Ok(VfsObjectSealRequest {
+        abi_version: VFS_WIRE_ABI_VERSION,
+        plaintext_object_id,
+        plaintext_len,
+        compression_kind,
+        seal_kind: VFS_OBJECT_SEAL_AES256_GCM,
+        aad,
+        payload,
+    })
+}
+
+pub fn prepare_object_seal_request_stored_deflate(
+    bytes: &[u8],
+    adapter: &impl VfsRawDeflateWatAdapter,
+) -> Result<VfsObjectSealRequest, VfsPacketError> {
+    let plaintext_object_id = vfs_object_id(bytes);
+    let plaintext_len = u64::try_from(bytes.len()).map_err(|_| VfsPacketError::ObjectTooLarge)?;
+    let compression_kind = VFS_OBJECT_COMPRESSION_DEFLATE_RAW;
+    let payload = adapter.deflate_stored_encode(bytes)?;
     let aad = object_seal_aad(&plaintext_object_id, plaintext_len, compression_kind);
     Ok(VfsObjectSealRequest {
         abi_version: VFS_WIRE_ABI_VERSION,
@@ -562,15 +600,21 @@ pub fn unsealed_payload_to_object(
     transform: &VfsObjectTransformRef,
     payload: &[u8],
 ) -> Result<Vec<u8>, VfsPacketError> {
+    unsealed_payload_to_object_with_deflate(transform, payload, &VfsRawDeflateWatUnavailable)
+}
+
+pub fn unsealed_payload_to_object_with_deflate(
+    transform: &VfsObjectTransformRef,
+    payload: &[u8],
+    adapter: &impl VfsRawDeflateWatAdapter,
+) -> Result<Vec<u8>, VfsPacketError> {
     validate_transform(transform)?;
     let bytes = match transform.compression_kind {
         VFS_OBJECT_COMPRESSION_NONE => payload.to_vec(),
-        VFS_OBJECT_COMPRESSION_DEFLATE_RAW => {
-            let limit = usize::try_from(transform.plaintext_len)
-                .map_err(|_| VfsPacketError::ObjectTooLarge)?;
-            edgerun_encoding::compression::deflate_raw_decompress_with_limit(payload, limit)
-                .map_err(|_| VfsPacketError::DecompressFailed)?
-        }
+        VFS_OBJECT_COMPRESSION_DEFLATE_RAW => adapter.deflate_inflate_raw(
+            payload,
+            usize::try_from(transform.plaintext_len).map_err(|_| VfsPacketError::ObjectTooLarge)?,
+        )?,
         _ => return Err(VfsPacketError::InvalidShape),
     };
     if transform.plaintext_object_id != vfs_object_id(&bytes)
@@ -766,10 +810,6 @@ fn object_seal_aad(
         .finish()
 }
 
-fn compress_object(bytes: &[u8]) -> Vec<u8> {
-    edgerun_encoding::compression::deflate_raw_compress(bytes, 6)
-}
-
 fn vfs_object_packet_id(packet: &VfsObjectPacket) -> Hash {
     HashBuilder::domain(VFS_OBJECT_PACKET_DOMAIN)
         .u16(packet.abi_version)
@@ -800,6 +840,25 @@ fn normalize_vfs_path(path: String) -> Result<String, VfsPacketError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct EchoStoredDeflate;
+
+    impl VfsRawDeflateWatAdapter for EchoStoredDeflate {
+        fn deflate_stored_encode(&self, plaintext: &[u8]) -> Result<Vec<u8>, VfsPacketError> {
+            Ok(plaintext.to_vec())
+        }
+
+        fn deflate_inflate_raw(
+            &self,
+            payload: &[u8],
+            plaintext_len: usize,
+        ) -> Result<Vec<u8>, VfsPacketError> {
+            if payload.len() != plaintext_len {
+                return Err(VfsPacketError::DecompressFailed);
+            }
+            Ok(payload.to_vec())
+        }
+    }
 
     #[test]
     fn object_packets_roundtrip() {
@@ -927,6 +986,43 @@ mod tests {
         assert_eq!(
             prepare_unseal_object_from_packets(&transform, &packets),
             Err(VfsPacketError::InvalidShape)
+        );
+    }
+
+    #[test]
+    fn raw_deflate_without_wat_adapter_fails_closed() {
+        let request = prepare_object_seal_request_stored_deflate(
+            b"secret source",
+            &VfsRawDeflateWatUnavailable,
+        );
+
+        assert_eq!(request, Err(VfsPacketError::CompressFailed));
+    }
+
+    #[test]
+    fn raw_deflate_wat_adapter_boundary_preserves_vfs_hash_checks() {
+        let bytes = b"secret source";
+        let request =
+            prepare_object_seal_request_stored_deflate(bytes, &EchoStoredDeflate).expect("request");
+        let (transform, _) =
+            sealed_object_to_packets(&request, &request.payload, 32).expect("transform");
+
+        assert_eq!(request.compression_kind, VFS_OBJECT_COMPRESSION_DEFLATE_RAW);
+        assert_eq!(
+            unsealed_payload_to_object_with_deflate(
+                &transform,
+                &request.payload,
+                &EchoStoredDeflate
+            )
+            .expect("unsealed"),
+            bytes
+        );
+
+        let mut tampered = request.payload.clone();
+        tampered.push(b'!');
+        assert_eq!(
+            unsealed_payload_to_object_with_deflate(&transform, &tampered, &EchoStoredDeflate),
+            Err(VfsPacketError::DecompressFailed)
         );
     }
 

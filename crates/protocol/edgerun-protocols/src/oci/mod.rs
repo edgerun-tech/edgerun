@@ -10,12 +10,11 @@ pub mod layer;
 pub mod linux_catalog;
 pub mod manifest;
 pub mod runtime_spec;
-mod runtime_spec_json;
 pub mod validation;
 
 pub use config::{
-    HistoryEntry, ImageConfig, ImageConfigInner, RootFs, parse_image_config, parse_json_bytes,
-    parse_manifest, parse_single_manifest,
+    HistoryEntry, ImageConfig, ImageConfigInner, OciObjectPresence, RootFs, parse_image_config,
+    parse_json_bytes, parse_manifest, parse_single_manifest,
 };
 pub use image_ref::ImageRef;
 pub use layer::{OciLayerCompression, OciWhiteout, layer_compression, parse_oci_whiteout};

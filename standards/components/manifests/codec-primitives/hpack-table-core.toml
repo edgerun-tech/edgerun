@@ -1,0 +1,25 @@
+id = "codec-hpack-table-core"
+name = "hpack-table-core"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300044
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/hpack-table-core.wat"
+runner = "standards/runners/hpack-table-core-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["scalars", "entry_sizes"]
+outputs = ["status", "packed_i64", "records"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "hpack_table_entry_size",
+  "hpack_table_insert_plan",
+  "hpack_table_resize_plan",
+]
+parity_sources = [
+  "crates/utility/edgerun-hpack/src/decoder.rs",
+  "crates/utility/edgerun-hpack/src/encoder.rs",
+]

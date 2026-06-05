@@ -13,11 +13,13 @@ pub use packet::{
     DEFAULT_OBJECT_PACKET_BYTES, VFS_OBJECT_COMPRESSION_DEFLATE_RAW, VFS_OBJECT_COMPRESSION_NONE,
     VFS_OBJECT_SEAL_AES256_GCM, VFS_WIRE_ABI_VERSION, VfsFileRef, VfsObjectPacket,
     VfsObjectSealRequest, VfsObjectTransformRef, VfsObjectUnsealRequest, VfsPacketError,
-    VfsTreeManifest, VfsWireRecord, file_ref_and_packets_to_entry, file_to_packets,
-    files_to_manifest, hash_hex, object_to_packets, packets_to_object, prepare_file_seal_request,
-    prepare_object_seal_request, prepare_unseal_object_from_packets, sealed_object_to_packets,
-    unsealed_file_payload_to_entry, unsealed_payload_to_object, vfs_from_file_packets,
-    vfs_wire_record_bytes, vfs_wire_record_from_bytes,
+    VfsRawDeflateWatAdapter, VfsRawDeflateWatUnavailable, VfsTreeManifest, VfsWireRecord,
+    file_ref_and_packets_to_entry, file_to_packets, files_to_manifest, hash_hex, object_to_packets,
+    packets_to_object, prepare_file_seal_request, prepare_object_seal_request,
+    prepare_object_seal_request_stored_deflate, prepare_unseal_object_from_packets,
+    sealed_object_to_packets, unsealed_file_payload_to_entry, unsealed_payload_to_object,
+    unsealed_payload_to_object_with_deflate, vfs_from_file_packets, vfs_wire_record_bytes,
+    vfs_wire_record_from_bytes,
 };
 pub use stats::MemoryStats;
 pub use virtual_fs::{Changeset, FileContent, FileMeta, VirtualFileSystem};

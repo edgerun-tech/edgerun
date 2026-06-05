@@ -6,6 +6,9 @@ use alloc::{string::String, vec::Vec};
 
 use crate::{CryptoError, Result};
 
+#[cfg(feature = "rsa")]
+use crate::pkcs1::EncodeRsaPublicKey;
+
 pub fn cert_and_key_from_pem(cert_pem: &str, key_pem: &str) -> Result<(Vec<u8>, Vec<u8>)> {
     let cert = cert_from_pem(cert_pem).ok_or(CryptoError::InvalidKey)?;
     let key = pem_block(key_pem, "PRIVATE KEY").ok_or(CryptoError::InvalidKey)?;
@@ -100,6 +103,229 @@ pub fn p256_csr_der_for_names(key: &crate::P256SigningKey, names: &[&str]) -> Ve
         sig_alg,
         bit_string(&signature),
     ]))
+}
+
+/// Generate a self-signed X.509 v3 certificate for an RSA-1024 key.
+///
+/// The resulting DER-encoded certificate is suitable for use as a Tor
+/// link certificate (type 2).
+#[cfg(feature = "rsa")]
+pub fn self_signed_rsa_der(key: &crate::rsa::RsaPrivateKey, common_name: &str) -> Vec<u8> {
+    use crate::rsa::traits::PublicKeyParts;
+
+    let subject = x509_name(common_name);
+    let issuer = subject.clone();
+
+    // Build SubjectPublicKeyInfo for RSA
+    let rsa_encryption_oid = oid(&[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]); // 1.2.840.113549.1.1.1
+    let null_param = alloc::vec![0x05, 0x00];
+    let spki_alg = seq(concat(&[rsa_encryption_oid, null_param.clone()]));
+
+    let pubkey: &crate::rsa::RsaPublicKey = key.as_ref();
+    let n_bytes = pubkey.n().to_bytes_be();
+    let e_bytes = pubkey.e().to_bytes_be();
+    let rsa_pubkey = seq(concat(&[integer(&n_bytes), integer(&e_bytes)]));
+    let spki = seq(concat(&[spki_alg, bit_string(&rsa_pubkey)]));
+
+    let serial = rsa_serial();
+    let not_before = rsa_timestamp().saturating_sub(60);
+    let not_after = not_before.saturating_add(10 * 365 * 24 * 60 * 60);
+
+    // sha256WithRSAEncryption OID = 1.2.840.113549.1.1.11
+    let sig_alg = seq(concat(&[
+        oid(&[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b]),
+        null_param.clone(),
+    ]));
+
+    let validity = seq(concat(&[utc_time(not_before), utc_time(not_after)]));
+
+    let tbs = seq(concat(&[
+        tagged(0xa0, integer(&[2])),
+        integer(&serial),
+        sig_alg.clone(),
+        issuer,
+        validity,
+        subject,
+        spki,
+    ]));
+
+    use crate::rsa::signature::{RandomizedSigner, SignatureEncoding as RsaSignatureEncoding};
+    use crate::rsa::pkcs1v15::SigningKey as RsaPkcs1v15SigningKey;
+    let signing_key = RsaPkcs1v15SigningKey::<crate::sha2::Sha256>::new(key.clone());
+    let mut rng = crate::rsa_rng::RsaRng;
+    let signature = signing_key.sign_with_rng(&mut rng, &tbs);
+    let sig_bytes: Vec<u8> = signature.to_bytes().to_vec();
+
+    seq(concat(&[tbs, sig_alg, bit_string(&sig_bytes)]))
+}
+
+/// Return the SHA-256 of the PKCS#1 DER-encoded RSA public key.
+///
+/// This is what Tor uses for the identity digest field
+/// (`tor_x509_cert_get_id_digests` returns SHA-256 of the RSA public key
+/// SubjectPublicKeyInfo / PKCS#1 `RSAPublicKey` DER, not the full cert DER).
+#[cfg(feature = "rsa")]
+pub fn rsa_public_key_id_digest(key: &crate::rsa::RsaPrivateKey) -> [u8; 32] {
+    let pub_key = key.to_public_key();
+    let doc = pub_key.to_pkcs1_der().expect("RSA PKCS#1 DER encoding");
+    crate::sha256(doc.as_bytes())
+}
+
+/// Given a DER-encoded RSA X.509 certificate, return the SHA-256 of its
+/// embedded RSA public key in PKCS#1 DER form.
+///
+/// Equivalent to Tor's `tor_x509_cert_get_id_digests` for a peer certificate.
+#[cfg(feature = "rsa")]
+pub fn extract_rsa_cert_id_digest(cert_der: &[u8]) -> Result<[u8; 32]> {
+    let pkcs1 = pkcs1_rsa_pubkey_from_cert(cert_der)?;
+    Ok(crate::sha256(&pkcs1))
+}
+
+#[cfg(feature = "rsa")]
+fn pkcs1_rsa_pubkey_from_cert(cert_der: &[u8]) -> Result<Vec<u8>> {
+    fn der_len(data: &[u8], pos: &mut usize) -> core::result::Result<usize, ()> {
+        if *pos >= data.len() {
+            return Err(());
+        }
+        let b = data[*pos];
+        *pos += 1;
+        if b < 0x80 {
+            return Ok(b as usize);
+        }
+        let n = (b & 0x7f) as usize;
+        if n > 4 || *pos + n > data.len() {
+            return Err(());
+        }
+        let mut v = 0usize;
+        for _ in 0..n {
+            v = (v << 8) | data[*pos] as usize;
+            *pos += 1;
+        }
+        Ok(v)
+    }
+
+    fn skip_tlv(data: &[u8], pos: &mut usize, expected: u8) -> core::result::Result<(), ()> {
+        if *pos >= data.len() {
+            return Err(());
+        }
+        let tag = data[*pos];
+        *pos += 1;
+        let l = der_len(data, pos)?;
+        if *pos + l > data.len() {
+            return Err(());
+        }
+        if tag != expected {
+            return Err(());
+        }
+        *pos += l;
+        Ok(())
+    }
+
+    fn expect_tag(data: &[u8], pos: &mut usize, expected: u8) -> core::result::Result<usize, ()> {
+        if *pos >= data.len() {
+            return Err(());
+        }
+        let tag = data[*pos];
+        *pos += 1;
+        let l = der_len(data, pos)?;
+        if *pos + l > data.len() {
+            return Err(());
+        }
+        if tag != expected {
+            return Err(());
+        }
+        Ok(l)
+    }
+
+    let mut pos = 0;
+
+    // Outer SEQUENCE (Certificate)
+    let _outer_len = expect_tag(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+
+    // tbsCertificate SEQUENCE
+    let tbs_len = expect_tag(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+    let tbs_end = pos + tbs_len;
+
+    // Skip [0] EXPLICIT (v3 version) if present
+    if pos < tbs_end && cert_der[pos] == 0xa0 {
+        skip_tlv(cert_der, &mut pos, 0xa0).map_err(|_| CryptoError::InternalError)?;
+    }
+
+    // Skip INTEGER (serialNumber)
+    skip_tlv(cert_der, &mut pos, 0x02).map_err(|_| CryptoError::InternalError)?;
+    // Skip SEQUENCE (signature algorithm)
+    skip_tlv(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+    // Skip SEQUENCE (issuer)
+    skip_tlv(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+    // Skip SEQUENCE (validity)
+    skip_tlv(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+    // Skip SEQUENCE (subject)
+    skip_tlv(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+
+    // Now at SubjectPublicKeyInfo
+    let _spki_len = expect_tag(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+
+    // Skip AlgorithmIdentifier SEQUENCE inside SPKI
+    skip_tlv(cert_der, &mut pos, 0x30).map_err(|_| CryptoError::InternalError)?;
+
+    // Read BIT STRING containing the PKCS#1 RSAPublicKey
+    let bs_len = expect_tag(cert_der, &mut pos, 0x03).map_err(|_| CryptoError::InternalError)?;
+    if pos >= cert_der.len() || cert_der[pos] != 0 {
+        return Err(CryptoError::InternalError);
+    }
+    // Skip unused-bits byte, return the PKCS#1 RSAPublicKey DER
+    Ok(cert_der[pos + 1..pos + bs_len].to_vec())
+}
+
+/// Extract the SIGNED_WITH_KEY Ed25519 identity key from a Tor type-4 cert.
+///
+/// The cert structure is (Trunnel format):
+///   version(1) | cert_type(1) | exp(4) | cert_key_type(1) |
+///   certified_key(32) | n_ext(1) |
+///   ext_len(2) | ext_type(1) | ext_flags(1) | ext_body(ext_len) |
+///   signature(64)
+///
+/// For the identity-type cert, the first extension is SIGNED_WITH_KEY (type 4)
+/// and its body is the 32-byte Ed25519 identity key.
+pub fn extract_ed25519_cert_id_key(cert: &[u8]) -> Result<[u8; 32]> {
+    if cert.len() < 44 + 32 {
+        return Err(CryptoError::InternalError);
+    }
+    let n_ext = cert[39];
+    if n_ext < 1 {
+        return Err(CryptoError::InternalError);
+    }
+    let ext_len = u16::from_be_bytes([cert[40], cert[41]]);
+    if ext_len != 32 {
+        return Err(CryptoError::InternalError);
+    }
+    if cert[42] != 4 {
+        // CERTEXT_SIGNED_WITH_KEY
+        return Err(CryptoError::InternalError);
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&cert[44..76]);
+    Ok(key)
+}
+
+/// Fixed serial for RSA certs (deterministic for testing).
+fn rsa_serial() -> Vec<u8> {
+    alloc::vec![0x01]
+}
+
+/// Plausible timestamp for ephemeral RSA certs.
+fn rsa_timestamp() -> u64 {
+    1_704_067_200
+}
+
+/// Build an X.509 Name (a SEQUENCE of SETs of AttributeTypeAndValue) for
+/// a single CommonName attribute.
+#[cfg(any(feature = "p256", feature = "rsa"))]
+fn x509_name(common_name: &str) -> Vec<u8> {
+    seq(concat(&[set(seq(concat(&[
+        oid(&[0x55, 0x04, 0x03]),
+        utf8_string(common_name),
+    ])))]))
 }
 
 #[cfg(feature = "p256")]
@@ -232,14 +458,6 @@ fn concat(parts: &[Vec<u8>]) -> Vec<u8> {
         out.extend_from_slice(part);
     }
     out
-}
-
-#[cfg(feature = "p256")]
-fn x509_name(common_name: &str) -> Vec<u8> {
-    seq(concat(&[set(seq(concat(&[
-        oid(&[0x55, 0x04, 0x03]),
-        utf8_string(common_name),
-    ])))]))
 }
 
 #[cfg(feature = "p256")]

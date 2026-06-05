@@ -2,20 +2,10 @@ use super::*;
 use crate::http::http2::frame::{
     DataFrame, Frame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame, WindowUpdateFrame,
 };
-use crate::http::http2::{Decoder, Encoder, FrameType};
+use crate::http::http2::{FrameType, HpackContext};
 
-fn h(name: &str, value: &str) -> (Vec<u8>, Vec<u8>) {
-    (name.as_bytes().to_vec(), value.as_bytes().to_vec())
-}
-
-fn make_headers_frame(
-    stream_id: u32,
-    headers: &[(Vec<u8>, Vec<u8>)],
-    end_stream: bool,
-    encoder: &mut Encoder,
-) -> Frame {
-    let block = encoder.encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())));
-    HeadersFrame::new(stream_id, block, end_stream).to_frame()
+fn make_headers_frame(stream_id: u32, header_block: &[u8], end_stream: bool) -> Frame {
+    HeadersFrame::new(stream_id, header_block.to_vec(), end_stream).to_frame()
 }
 
 // ── Server construction ──
@@ -273,72 +263,47 @@ fn test_handle_priority_stream_zero() {
 #[test]
 fn test_handle_headers_get_request() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
-    let headers = vec![h(":method", "GET"), h(":scheme", "https"), h(":path", "/")];
-    let frame = make_headers_frame(1, &headers, true, &mut encoder);
-
-    let action = server.handle_headers(&frame, &mut decoder, &mut encoder, &mut cont);
-
+    let frame = make_headers_frame(1, &[0x82, 0x87, 0x84], true);
+    let action = server.handle_headers(&frame, &mut hpack, &mut cont);
     match action {
-        FrameAction::WriteFrames(frames) => {
-            assert!(!frames.is_empty());
+        FrameAction::Goaway { error_code, .. } => {
+            assert_eq!(error_code, ErrorCode::CompressionError.to_u32());
         }
-        _ => panic!("expected WriteFrames for valid GET"),
+        other => panic!("expected COMPRESSION_ERROR while HPACK is NotYetRouted, got {other:?}"),
     }
 }
 
 #[test]
-fn test_handle_headers_missing_method() {
+fn test_handle_headers_decode_not_yet_routed_is_compression_error() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
-    let headers = vec![h(":scheme", "https"), h(":path", "/")];
-    let frame = make_headers_frame(1, &headers, true, &mut encoder);
-
-    let action = server.handle_headers(&frame, &mut decoder, &mut encoder, &mut cont);
-
+    let frame = make_headers_frame(1, &[0x87, 0x84], true);
+    let action = server.handle_headers(&frame, &mut hpack, &mut cont);
     match action {
-        FrameAction::WriteFrames(frames) => {
-            assert!(!frames.is_empty());
-            let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
-            assert_eq!(rst.stream_id, 1);
-            assert_eq!(rst.error_code, ErrorCode::ProtocolError.to_u32());
+        FrameAction::Goaway { error_code, .. } => {
+            assert_eq!(error_code, ErrorCode::CompressionError.to_u32());
         }
-        FrameAction::Goaway { .. } => {}
-        _ => panic!("expected error response for missing :method"),
+        other => panic!("expected COMPRESSION_ERROR while HPACK is NotYetRouted, got {other:?}"),
     }
 }
 
 #[test]
-fn test_handle_headers_connection_specific_rejected() {
+fn test_handle_headers_continuation_starts_without_decoding() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
-    let headers = vec![
-        h(":method", "GET"),
-        h(":scheme", "https"),
-        h(":path", "/"),
-        h("connection", "keep-alive"),
-    ];
-    let frame = make_headers_frame(1, &headers, true, &mut encoder);
-
-    let action = server.handle_headers(&frame, &mut decoder, &mut encoder, &mut cont);
-
-    match action {
-        FrameAction::WriteFrames(frames) => {
-            assert!(!frames.is_empty());
-            assert!(matches!(frames[0].frame_type, FrameType::RstStream));
-        }
-        FrameAction::Goaway { .. } => {}
-        _ => panic!("expected WriteFrames with RST_STREAM or Goaway"),
-    }
+    let mut frame = make_headers_frame(1, &[0x82], false);
+    frame.flags &= !crate::http::http2::frame::flags::HEADERS_END_HEADERS;
+    let action = server.handle_headers(&frame, &mut hpack, &mut cont);
+    assert!(matches!(action, FrameAction::None));
+    assert!(cont.expecting);
+    assert_eq!(cont.stream_id, 1);
 }
 
 // ── DATA handling ──
@@ -346,12 +311,9 @@ fn test_handle_headers_connection_specific_rejected() {
 #[test]
 fn test_handle_headers_self_referential_dependency() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
-    let headers = vec![h(":method", "GET"), h(":scheme", "https"), h(":path", "/")];
-    let block = encoder.encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())));
     let hf = HeadersFrame {
         stream_id: 1,
         end_stream: true,
@@ -359,11 +321,11 @@ fn test_handle_headers_self_referential_dependency() {
         stream_dependency: 1,
         weight: 16,
         padding: None,
-        header_block: block,
+        header_block: vec![0x82, 0x87, 0x84],
     };
     let frame = hf.to_frame();
 
-    let action = server.handle_headers(&frame, &mut decoder, &mut encoder, &mut cont);
+    let action = server.handle_headers(&frame, &mut hpack, &mut cont);
 
     match action {
         FrameAction::WriteFrames(frames) => {
@@ -379,10 +341,10 @@ fn test_handle_headers_self_referential_dependency() {
 #[test]
 fn test_handle_data_on_idle_stream() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
+    let mut hpack = HpackContext::new();
 
     let df = DataFrame::new(1, vec![0x00], true).to_frame();
-    let action = server.handle_data(&df, &mut encoder);
+    let action = server.handle_data(&df, &mut hpack);
 
     match action {
         FrameAction::Goaway { error_code, .. } => {
@@ -395,20 +357,16 @@ fn test_handle_data_on_idle_stream() {
 #[test]
 fn test_handle_data_flow_control_consumed() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
+    let mut hpack = HpackContext::new();
     let initial_window = server.flow_controller.window_size();
 
-    let mut enc = Encoder::new();
-    let mut dec = Decoder::new();
-    let mut cont = ContinuationState::new();
-
-    let headers = vec![h(":method", "POST"), h(":scheme", "https"), h(":path", "/")];
-    let hf = make_headers_frame(1, &headers, false, &mut enc);
-    server.handle_headers(&hf, &mut dec, &mut enc, &mut cont);
+    let _ = server.stream_manager.get_or_create_stream(1);
+    let stream = server.stream_manager.get_stream_mut(1).unwrap();
+    stream.open().unwrap();
 
     let data = vec![0x01, 0x02, 0x03];
     let df = DataFrame::new(1, data.clone(), true).to_frame();
-    let action = server.handle_data(&df, &mut encoder);
+    let _action = server.handle_data(&df, &mut hpack);
 
     let remaining = initial_window - data.len() as i64;
     assert_eq!(server.flow_controller.window_size(), remaining);
@@ -420,11 +378,10 @@ fn test_handle_data_flow_control_consumed() {
 fn test_continuation_not_expected() {
     let mut server = Http2Server::new();
     let mut cont = ContinuationState::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
 
     let frame = Frame::new(FrameType::Continuation, 0x04, 1, vec![0x82]);
-    let action = server.handle_continuation(&frame, &mut cont, &mut decoder, &mut encoder);
+    let action = server.handle_continuation(&frame, &mut cont, &mut hpack);
 
     match action {
         FrameAction::Goaway { error_code, .. } => {
@@ -439,15 +396,14 @@ fn test_continuation_not_expected() {
 #[test]
 fn test_stream_created_on_headers() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
     assert!(server.stream_manager.get_stream(1).is_none());
 
-    let headers = vec![h(":method", "GET"), h(":scheme", "https"), h(":path", "/")];
-    let frame = make_headers_frame(1, &headers, true, &mut encoder);
-    server.handle_headers(&frame, &mut decoder, &mut encoder, &mut cont);
+    let frame = make_headers_frame(1, &[0x82, 0x87, 0x84], true);
+    server.handle_headers(&frame, &mut hpack, &mut cont);
+    assert!(server.stream_manager.get_stream(1).is_some());
 }
 
 #[test]
@@ -455,13 +411,11 @@ fn test_last_processed_stream_id_updated() {
     let mut server = Http2Server::new();
     assert_eq!(server.last_processed_stream_id, 0);
 
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
-    let headers = vec![h(":method", "GET"), h(":scheme", "https"), h(":path", "/")];
-    let frame = make_headers_frame(5, &headers, true, &mut encoder);
-    server.handle_headers(&frame, &mut decoder, &mut encoder, &mut cont);
+    let frame = make_headers_frame(5, &[0x82, 0x87, 0x84], true);
+    server.handle_headers(&frame, &mut hpack, &mut cont);
 
     assert_eq!(server.last_processed_stream_id, 5);
 }
@@ -482,8 +436,7 @@ fn test_handle_client_goaway() {
 #[test]
 fn test_trailers_path_reachable() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
     // Manually create a HalfClosedRemote stream
@@ -509,24 +462,21 @@ fn test_trailers_path_reachable() {
         payload: vec![],
     };
 
-    let action = server.handle_headers(&trailers_frame, &mut decoder, &mut encoder, &mut cont);
-    // Trailers should be accepted silently
-    assert!(matches!(action, FrameAction::None));
-
-    // Stream should now be Closed
-    let stream = server.stream_manager.get_stream(1).unwrap();
-    assert_eq!(
-        stream.state,
-        crate::http::http2::stream::StreamState::Closed
-    );
-    assert!(server.is_closed_stream(1));
+    let action = server.handle_headers(&trailers_frame, &mut hpack, &mut cont);
+    match action {
+        FrameAction::Goaway { error_code, .. } => {
+            assert_eq!(error_code, ErrorCode::CompressionError.to_u32());
+        }
+        other => {
+            panic!("expected COMPRESSION_ERROR while trailer HPACK is NotYetRouted, got {other:?}")
+        }
+    }
 }
 
 #[test]
 fn test_trailers_without_end_stream_rejected() {
     let mut server = Http2Server::new();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut cont = ContinuationState::new();
 
     // Manually create a HalfClosedRemote stream
@@ -545,7 +495,7 @@ fn test_trailers_without_end_stream_rejected() {
         payload: vec![],
     };
 
-    let action = server.handle_headers(&trailers_frame, &mut decoder, &mut encoder, &mut cont);
+    let action = server.handle_headers(&trailers_frame, &mut hpack, &mut cont);
     // Should get RST_STREAM
     match action {
         FrameAction::WriteFrames(frames) => {

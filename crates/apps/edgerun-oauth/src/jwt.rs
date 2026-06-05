@@ -10,10 +10,10 @@
 //! - Signature creation (only verification)
 //! - Non-standard algorithms
 
+use crate::Jwk;
 use crate::errors::{OAuthError, OAuthResult};
 use crate::prelude::*;
 use edgerun_encoding::base64::base64url_decode;
-use edgerun_json::{JsonValue, Map};
 
 // ---------------------------------------------------------------------------
 // JWT Header
@@ -33,24 +33,14 @@ impl JwtHeader {
             .map_err(|e| OAuthError::JwtError(format!("header base64url decode: {e}")))?;
         let text = String::from_utf8(bytes)
             .map_err(|e| OAuthError::JwtError(format!("header UTF-8: {e}")))?;
-        let tape = edgerun_json::parse_json_tape(&text)
+        let value = crate::json_fixed::parse_object(&text)
             .map_err(|e| OAuthError::JwtError(format!("header JSON: {e}")))?;
-        let value = tape
-            .root(&text)
-            .ok_or_else(|| OAuthError::JwtError("header JSON: missing root value".into()))?;
         let alg = value
-            .get("alg")
-            .and_then(|v| v.as_str())
+            .str_field("alg")
             .ok_or_else(|| OAuthError::JwtError("missing 'alg' in JWT header".into()))?
             .to_string();
-        let typ = value
-            .get("typ")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let kid = value
-            .get("kid")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        let typ = value.str_field("typ");
+        let kid = value.str_field("kid");
         Ok(Self { alg, typ, kid })
     }
 }
@@ -79,8 +69,8 @@ pub struct JwtPayload {
     pub sid: Option<String>,
     /// Access token hash — present in code flow ID tokens (OIDC Core 1.0 §3.1.3.6).
     pub at_hash: Option<String>,
-    /// Any additional claims not mapped to known fields.
-    pub extra: Map,
+    /// Additional dynamic claims are intentionally not materialized.
+    pub extra: Vec<String>,
 }
 
 impl JwtPayload {
@@ -89,107 +79,31 @@ impl JwtPayload {
             .map_err(|e| OAuthError::JwtError(format!("payload base64url decode: {e}")))?;
         let text = String::from_utf8(bytes)
             .map_err(|e| OAuthError::JwtError(format!("payload UTF-8: {e}")))?;
-        let tape = edgerun_json::parse_json_tape(&text)
+        let value = crate::json_fixed::parse_object(&text)
             .map_err(|e| OAuthError::JwtError(format!("payload JSON: {e}")))?;
-        let value = tape
-            .root(&text)
-            .ok_or_else(|| OAuthError::JwtError("payload JSON: missing root value".into()))?;
 
-        let iss = value
-            .get("iss")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let sub = value
-            .get("sub")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let iss = value.str_field("iss").unwrap_or_default().to_string();
+        let sub = value.str_field("sub").unwrap_or_default().to_string();
 
-        // aud can be string or array
-        let aud = match value.get("aud") {
-            Some(v) if v.as_str().is_some() => vec![v.as_str().unwrap().to_string()],
-            Some(v) => v
-                .array_items()
-                .map(|arr| {
-                    arr.into_iter()
-                        .filter_map(|x| x.as_str().map(str::to_string))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            _ => vec![],
+        let aud = value.string_or_array_field("aud");
+        let exp = value.u64_field("exp").unwrap_or(0);
+        let iat = value.u64_field("iat").unwrap_or(0);
+        let auth_time = value.u64_field("auth_time");
+        let nonce = value.str_field("nonce");
+        let email = value.str_field("email");
+        let email_verified = value.bool_field("email_verified");
+        let name = value.str_field("name");
+        let picture = value.str_field("picture");
+        let azp = value.str_field("azp");
+        let acr = value.str_field("acr");
+        let amr_values = value.string_array_field("amr");
+        let amr = if amr_values.is_empty() {
+            None
+        } else {
+            Some(amr_values)
         };
-
-        let exp = value.get("exp").and_then(|v| v.as_u64()).unwrap_or(0);
-        let iat = value.get("iat").and_then(|v| v.as_u64()).unwrap_or(0);
-        let auth_time = value.get("auth_time").and_then(|v| v.as_u64());
-        let nonce = value
-            .get("nonce")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let email = value
-            .get("email")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let email_verified = value.get("email_verified").and_then(|v| v.as_bool());
-        let name = value
-            .get("name")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let picture = value
-            .get("picture")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let azp = value
-            .get("azp")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let acr = value
-            .get("acr")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let amr = value.get("amr").and_then(|v| v.array_items()).map(|arr| {
-            arr.into_iter()
-                .filter_map(|x| x.as_str())
-                .map(|s| s.to_string())
-                .collect()
-        });
-        let sid = value
-            .get("sid")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let at_hash = value
-            .get("at_hash")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        // Collect extra claims
-        let known_keys = [
-            "iss",
-            "sub",
-            "aud",
-            "exp",
-            "iat",
-            "auth_time",
-            "nonce",
-            "email",
-            "email_verified",
-            "name",
-            "picture",
-            "azp",
-            "acr",
-            "amr",
-            "sid",
-            "at_hash",
-        ];
-        let mut extra = Map::new();
-        if let Some(obj) = value.object_fields() {
-            for (k, v) in obj {
-                if !known_keys.contains(&k) {
-                    extra.insert(k.to_string(), v.to_json_value().unwrap_or(JsonValue::Null));
-                }
-            }
-        }
+        let sid = value.str_field("sid");
+        let at_hash = value.str_field("at_hash");
 
         Ok(Self {
             iss,
@@ -208,7 +122,7 @@ impl JwtPayload {
             amr,
             sid,
             at_hash,
-            extra,
+            extra: Vec::new(),
         })
     }
 
@@ -427,33 +341,30 @@ impl JwtVerifier {
 /// - `"kty": "EC"` with `"crv": "P-256"` → ES256
 /// - `"kty": "RSA"` → RS256
 /// - `"kty": "oct"` → HMAC
-pub fn verifier_from_jwk(jwk: &JsonValue) -> OAuthResult<(String, JwtVerifier)> {
-    let kty = jwk
-        .get("kty")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| OAuthError::JwtError("JWK missing 'kty'".into()))?;
-    let kid = jwk
-        .get("kid")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+pub fn verifier_from_jwk(jwk: &Jwk) -> OAuthResult<(String, JwtVerifier)> {
+    let kty = if jwk.kty.is_empty() {
+        return Err(OAuthError::JwtError("JWK missing 'kty'".into()));
+    } else {
+        jwk.kty.as_str()
+    };
+    let kid = jwk.kid.clone().unwrap_or_default();
 
     match kty {
         "EC" => {
             let crv = jwk
-                .get("crv")
-                .and_then(|v| v.as_str())
+                .crv
+                .as_deref()
                 .ok_or_else(|| OAuthError::JwtError("EC JWK missing 'crv'".into()))?;
             if crv != "P-256" {
                 return Err(OAuthError::JwtError(format!("unsupported EC curve: {crv}")));
             }
             let x = jwk
-                .get("x")
-                .and_then(|v| v.as_str())
+                .x
+                .as_deref()
                 .ok_or_else(|| OAuthError::JwtError("EC JWK missing 'x'".into()))?;
             let y = jwk
-                .get("y")
-                .and_then(|v| v.as_str())
+                .y
+                .as_deref()
                 .ok_or_else(|| OAuthError::JwtError("EC JWK missing 'y'".into()))?;
 
             let x_bytes = base64url_decode(x)
@@ -471,10 +382,10 @@ pub fn verifier_from_jwk(jwk: &JsonValue) -> OAuthResult<(String, JwtVerifier)> 
         }
         "RSA" => {
             let n = jwk
-                .get("n")
-                .and_then(|v| v.as_str())
+                .n
+                .as_deref()
                 .ok_or_else(|| OAuthError::JwtError("RSA JWK missing 'n'".into()))?;
-            let e = jwk.get("e").and_then(|v| v.as_str()).unwrap_or("AQAB");
+            let e = jwk.e.as_deref().unwrap_or("AQAB");
 
             let n_bytes = base64url_decode(n)
                 .map_err(|e| OAuthError::JwtError(format!("JWK n decode: {e}")))?;
@@ -491,8 +402,8 @@ pub fn verifier_from_jwk(jwk: &JsonValue) -> OAuthResult<(String, JwtVerifier)> 
         }
         "oct" => {
             let k = jwk
-                .get("k")
-                .and_then(|v| v.as_str())
+                .k
+                .as_deref()
                 .ok_or_else(|| OAuthError::JwtError("oct JWK missing 'k'".into()))?;
             let key_bytes = base64url_decode(k)
                 .map_err(|e| OAuthError::JwtError(format!("JWK k decode: {e}")))?;
@@ -780,12 +691,12 @@ mod tests {
     }
 
     #[test]
-    fn test_extra_claims_captured() {
+    fn test_extra_claims_are_not_materialized() {
         let header = base64url_nopad_encode(br#"{"alg":"HS256"}"#);
         let payload =
             base64url_nopad_encode(br#"{"sub":"u","exp":9999999999,"custom_key":"custom_val"}"#);
         let jwt = format!("{header}.{payload}.sig");
         let token = IdToken::parse_unverified(&jwt).unwrap();
-        assert!(token.payload.extra.get("custom_key").is_some());
+        assert!(token.payload.extra.is_empty());
     }
 }

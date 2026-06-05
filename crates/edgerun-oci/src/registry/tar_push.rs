@@ -5,10 +5,31 @@ use std::path::Path;
 
 /// Create a gzip-compressed tar from a directory.
 pub(crate) fn create_tar_from_dir(dir: &Path) -> io::Result<Vec<u8>> {
+    create_tar_from_dir_with_gzip(dir, &OciGzipWatUnavailable)
+}
+
+/// Create a gzip-compressed tar from a directory using an owner-supplied WAT
+/// compression adapter.
+#[cfg(feature = "gzip")]
+pub(crate) fn create_tar_from_dir_with_gzip(
+    dir: &Path,
+    adapter: &impl OciGzipWatAdapter,
+) -> io::Result<Vec<u8>> {
     let mut tar = Vec::new();
     append_tar_dir(&mut tar, dir, Path::new(""))?;
     tar.extend_from_slice(&[0u8; 1024]);
-    gzip_bytes(&tar)
+    gzip_bytes_with_adapter(&tar, adapter)
+}
+
+#[cfg(not(feature = "gzip"))]
+pub(crate) fn create_tar_from_dir_with_gzip(
+    _dir: &Path,
+    _adapter: &impl OciGzipWatAdapter,
+) -> io::Result<Vec<u8>> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "OCI gzip layer support is disabled",
+    ))
 }
 
 fn append_tar_dir(out: &mut Vec<u8>, dir: &Path, rel: &Path) -> io::Result<()> {
@@ -182,17 +203,73 @@ fn write_checksum(field: &mut [u8], value: u32) {
     field.copy_from_slice(encoded.as_bytes());
 }
 
-#[cfg(feature = "gzip")]
-fn gzip_bytes(data: &[u8]) -> io::Result<Vec<u8>> {
-    Ok(edgerun_encoding::compression::gzip_compress(data, 6))
+pub(crate) trait OciGzipWatAdapter {
+    /// Call `encoding-core.wat::crc32` over the uncompressed tar bytes.
+    fn crc32(&self, tar_bytes: &[u8]) -> io::Result<u32>;
+
+    /// Call `gzip-member.wat::gzip_member_write_header`.
+    fn gzip_member_write_header(&self, out: &mut Vec<u8>) -> io::Result<()>;
+
+    /// Call `deflate-stored.wat::deflate_stored_encode`.
+    fn deflate_stored_encode(&self, tar_bytes: &[u8], out: &mut Vec<u8>) -> io::Result<()>;
+
+    /// Call `gzip-member.wat::gzip_member_write_trailer`.
+    fn gzip_member_write_trailer(
+        &self,
+        crc32: u32,
+        input_size: u32,
+        out: &mut Vec<u8>,
+    ) -> io::Result<()>;
 }
 
-#[cfg(not(feature = "gzip"))]
-fn gzip_bytes(_data: &[u8]) -> io::Result<Vec<u8>> {
-    Err(io::Error::new(
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct OciGzipWatUnavailable;
+
+impl OciGzipWatAdapter for OciGzipWatUnavailable {
+    fn crc32(&self, _tar_bytes: &[u8]) -> io::Result<u32> {
+        Err(gzip_wat_unavailable())
+    }
+
+    fn gzip_member_write_header(&self, _out: &mut Vec<u8>) -> io::Result<()> {
+        Err(gzip_wat_unavailable())
+    }
+
+    fn deflate_stored_encode(&self, _tar_bytes: &[u8], _out: &mut Vec<u8>) -> io::Result<()> {
+        Err(gzip_wat_unavailable())
+    }
+
+    fn gzip_member_write_trailer(
+        &self,
+        _crc32: u32,
+        _input_size: u32,
+        _out: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        Err(gzip_wat_unavailable())
+    }
+}
+
+#[cfg(feature = "gzip")]
+fn gzip_bytes_with_adapter(data: &[u8], adapter: &impl OciGzipWatAdapter) -> io::Result<Vec<u8>> {
+    let input_size = u32::try_from(data.len()).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "tar input too large for gzip ISIZE",
+        )
+    })?;
+    let crc32 = adapter.crc32(data)?;
+
+    let mut out = Vec::new();
+    adapter.gzip_member_write_header(&mut out)?;
+    adapter.deflate_stored_encode(data, &mut out)?;
+    adapter.gzip_member_write_trailer(crc32, input_size, &mut out)?;
+    Ok(out)
+}
+
+fn gzip_wat_unavailable() -> io::Error {
+    io::Error::new(
         io::ErrorKind::Unsupported,
-        "OCI gzip layer support is disabled",
-    ))
+        "OCI gzip WAT adapter is not wired",
+    )
 }
 
 #[cfg(test)]

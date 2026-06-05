@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "tls-vector",
+  "module": "tls-vector.wat",
+  "cases": [
+    {
+      "id": "vector-u8-three-bytes",
+      "function": "tls_vector_u8_decode",
+      "input": { "hex": "03aabbcc" },
+      "expect": { "status": 0, "body_offset": 1, "body_len": 3 },
+      "notes": "TLS opaque vector with an 8-bit length prefix."
+    },
+    {
+      "id": "extension-alpn",
+      "function": "tls_extension_next",
+      "input": { "hex": "001000050003026833" },
+      "expect": { "status": 0, "extension_type": 16, "extension_len": 5 },
+      "notes": "Single ALPN extension carrying protocol h3."
+    },
+    {
+      "id": "alpn-next-h3",
+      "function": "tls_alpn_next",
+      "input": { "hex": "0003026833" },
+      "expect": { "status": 0, "protocol": "h3", "protocol_len": 2 },
+      "notes": "ALPN protocol list with h3."
+    },
+    {
+      "id": "alpn-zero-length-protocol",
+      "function": "tls_alpn_next",
+      "input": { "hex": "000100" },
+      "expect": { "status": 3 },
+      "notes": "ALPN protocol names must not be empty."
+    },
+    {
+      "id": "extension-list-truncated",
+      "function": "tls_extension_next",
+      "input": { "hex": "00100005aa" },
+      "expect": { "status": 5 },
+      "notes": "Declared extension data exceeds available bytes."
+    }
+  ]
+}

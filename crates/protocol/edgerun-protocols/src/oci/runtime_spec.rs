@@ -1,6 +1,4 @@
-//! OCI spec types with edgerun-json serialization.
-
-use edgerun_json::ToJson;
+//! OCI spec types and fixed JSON emission.
 
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -12,12 +10,12 @@ use alloc::vec::Vec;
 // ===========================================================================
 
 /// Parse an OCI spec from JSON bytes.
-pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
-    edgerun_json::from_json_slice(data).map_err(|err| err.to_string())
+pub fn parse_oci_spec(_data: &[u8]) -> Result<OciSpec, String> {
+    Err("OCI runtime spec parse requires json-tape.wat field projection".into())
 }
 
-pub fn parse_oci_process(data: &[u8]) -> Result<OciProcess, String> {
-    edgerun_json::from_json_slice(data).map_err(|err| err.to_string())
+pub fn parse_oci_process(_data: &[u8]) -> Result<OciProcess, String> {
+    Err("OCI process parse requires json-tape.wat field projection".into())
 }
 
 // ===========================================================================
@@ -56,12 +54,12 @@ pub struct OciPlatform {
 impl OciSpec {
     /// Serialize to compact JSON.
     pub fn to_json_string(&self) -> String {
-        edgerun_json::to_json_string(self).unwrap_or_default()
+        oci_spec_to_json(self, false)
     }
 
     /// Serialize to pretty-printed JSON.
     pub fn to_json_string_pretty(&self) -> String {
-        edgerun_json::to_string_pretty(&self.to_json()).unwrap_or_default()
+        oci_spec_to_json(self, true)
     }
 }
 
@@ -451,4 +449,356 @@ pub struct OciMount {
     pub uid_mappings: Option<Vec<OciIdMapping>>,
     /// GID mappings for idmapped mounts (OCI 1.1/1.2, Linux 5.12+).
     pub gid_mappings: Option<Vec<OciIdMapping>>,
+}
+
+fn oci_spec_to_json(spec: &OciSpec, pretty: bool) -> String {
+    let mut out = String::new();
+    let mut object = JsonObjectWriter::new(&mut out, pretty, 0);
+    object.string_field("ociVersion", &spec.version);
+    object.object_field("platform", spec.platform.as_ref(), write_platform);
+    object.object_field("process", spec.process.as_ref(), write_process);
+    object.object_field("root", spec.root.as_ref(), write_root);
+    object.string_opt_field("hostname", spec.hostname.as_deref());
+    object.string_opt_field("domainname", spec.domainname.as_deref());
+    object.object_field("linux", spec.linux.as_ref(), write_linux);
+    object.array_field("mounts", spec.mounts.as_deref(), write_mount);
+    object.string_map_field("annotations", spec.annotations.as_ref());
+    object.finish();
+    out
+}
+
+fn write_platform(out: &mut String, value: &OciPlatform, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.string_opt_field("os", value.os.as_deref());
+    object.string_opt_field("arch", value.arch.as_deref());
+    object.string_opt_field("os.version", value.os_version.as_deref());
+    object.string_array_field("os.features", value.os_features.as_deref());
+    object.finish();
+}
+
+fn write_process(out: &mut String, value: &OciProcess, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.bool_opt_field("terminal", value.terminal);
+    object.object_field("user", value.user.as_ref(), write_user);
+    object.object_field("consoleSize", value.console_size.as_ref(), write_box);
+    object.string_array_field("args", value.args.as_deref());
+    object.string_array_field("env", value.env.as_deref());
+    object.string_opt_field("cwd", value.cwd.as_deref());
+    object.object_field(
+        "capabilities",
+        value.capabilities.as_ref(),
+        write_capabilities,
+    );
+    object.array_field("rlimits", value.rlimits.as_deref(), write_rlimit);
+    object.bool_opt_field("noNewPrivileges", value.no_new_privileges);
+    object.i64_opt_field("oomScoreAdj", value.oom_score_adj);
+    object.string_opt_field("apparmorProfile", value.apparmor_profile.as_deref());
+    object.string_opt_field("selinuxLabel", value.selinux_label.as_deref());
+    object.finish();
+}
+
+fn write_user(out: &mut String, value: &OciUser, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.u32_opt_field("uid", value.uid);
+    object.u32_opt_field("gid", value.gid);
+    object.u32_array_field("additionalGids", value.additional_gids.as_deref());
+    object.u32_opt_field("umask", value.umask);
+    object.finish();
+}
+
+fn write_box(out: &mut String, value: &OciBox, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.u64_field("width", value.width);
+    object.u64_field("height", value.height);
+    object.finish();
+}
+
+fn write_capabilities(out: &mut String, value: &OciCapabilities, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.string_array_field("bounding", value.bounding.as_deref());
+    object.string_array_field("effective", value.effective.as_deref());
+    object.string_array_field("inheritable", value.inheritable.as_deref());
+    object.string_array_field("permitted", value.permitted.as_deref());
+    object.string_array_field("ambient", value.ambient.as_deref());
+    object.finish();
+}
+
+fn write_rlimit(out: &mut String, value: &OciRlimit, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.string_field("type", &value.ns_type);
+    object.u64_field("hard", value.hard);
+    object.u64_field("soft", value.soft);
+    object.finish();
+}
+
+fn write_root(out: &mut String, value: &OciRoot, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.string_field("path", &value.path);
+    object.bool_opt_field("readonly", value.readonly);
+    object.finish();
+}
+
+fn write_linux(out: &mut String, value: &OciLinux, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.array_field("namespaces", value.namespaces.as_deref(), write_namespace);
+    object.string_array_field("maskedPaths", value.masked_paths.as_deref());
+    object.string_array_field("readonlyPaths", value.readonly_paths.as_deref());
+    object.string_opt_field("cgroupsPath", value.cgroups_path.as_deref());
+    object.string_opt_field("mountLabel", value.mount_label.as_deref());
+    object.string_opt_field("rootfsPropagation", value.rootfs_propagation.as_deref());
+    object.string_map_field("sysctl", value.sysctl.as_ref());
+    object.object_field("resources", value.resources.as_ref(), write_resources);
+    object.finish();
+}
+
+fn write_namespace(out: &mut String, value: &OciNamespace, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.string_field("type", &value.ns_type);
+    object.string_opt_field("path", value.path.as_deref());
+    object.finish();
+}
+
+fn write_resources(out: &mut String, value: &OciLinuxResources, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.object_field("memory", value.memory.as_ref(), write_memory);
+    object.object_field("cpu", value.cpu.as_ref(), write_cpu);
+    object.object_field("pids", value.pids.as_ref(), write_pids);
+    object.finish();
+}
+
+fn write_memory(out: &mut String, value: &OciLinuxMemory, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.i64_opt_field("limit", value.limit);
+    object.i64_opt_field("reservation", value.reservation);
+    object.i64_opt_field("swap", value.swap);
+    object.i64_opt_field("kernel", value.kernel);
+    object.i64_opt_field("kernelTCP", value.kernel_tcp);
+    object.bool_opt_field("checkBeforeUpdate", value.check_before_update);
+    object.finish();
+}
+
+fn write_cpu(out: &mut String, value: &OciLinuxCpu, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.u64_opt_field("shares", value.shares);
+    object.i64_opt_field("quota", value.quota);
+    object.u64_opt_field("period", value.period);
+    object.i64_opt_field("realtimeRuntime", value.realtime_runtime);
+    object.u64_opt_field("realtimePeriod", value.realtime_period);
+    object.string_opt_field("cpus", value.cpus.as_deref());
+    object.string_opt_field("mems", value.mems.as_deref());
+    object.i64_opt_field("idle", value.idle);
+    object.i64_opt_field("burst", value.burst);
+    object.finish();
+}
+
+fn write_pids(out: &mut String, value: &OciLinuxPids, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.i64_field("limit", value.limit);
+    object.finish();
+}
+
+fn write_mount(out: &mut String, value: &OciMount, pretty: bool, depth: usize) {
+    let mut object = JsonObjectWriter::new(out, pretty, depth);
+    object.string_field("destination", &value.destination);
+    object.string_opt_field("type", value.mount_type.as_deref());
+    object.string_opt_field("source", value.source.as_deref());
+    object.string_array_field("options", value.options.as_deref());
+    object.string_opt_field("label", value.label.as_deref());
+    object.bool_opt_field("recursive", value.recursive);
+    object.finish();
+}
+
+struct JsonObjectWriter<'a> {
+    out: &'a mut String,
+    pretty: bool,
+    depth: usize,
+    first: bool,
+}
+
+impl<'a> JsonObjectWriter<'a> {
+    fn new(out: &'a mut String, pretty: bool, depth: usize) -> Self {
+        out.push('{');
+        Self {
+            out,
+            pretty,
+            depth,
+            first: true,
+        }
+    }
+
+    fn finish(mut self) {
+        if self.pretty && !self.first {
+            self.out.push('\n');
+            write_indent(self.out, self.depth);
+        }
+        self.out.push('}');
+    }
+
+    fn begin_field(&mut self, name: &str) {
+        if self.first {
+            self.first = false;
+        } else {
+            self.out.push(',');
+        }
+        if self.pretty {
+            self.out.push('\n');
+            write_indent(self.out, self.depth + 1);
+        }
+        write_json_string(self.out, name);
+        self.out.push(':');
+        if self.pretty {
+            self.out.push(' ');
+        }
+    }
+
+    fn string_field(&mut self, name: &str, value: &str) {
+        self.begin_field(name);
+        write_json_string(self.out, value);
+    }
+
+    fn string_opt_field(&mut self, name: &str, value: Option<&str>) {
+        if let Some(value) = value {
+            self.string_field(name, value);
+        }
+    }
+
+    fn bool_opt_field(&mut self, name: &str, value: Option<bool>) {
+        if let Some(value) = value {
+            self.begin_field(name);
+            self.out.push_str(if value { "true" } else { "false" });
+        }
+    }
+
+    fn i64_field(&mut self, name: &str, value: i64) {
+        self.begin_field(name);
+        self.out.push_str(&value.to_string());
+    }
+
+    fn i64_opt_field(&mut self, name: &str, value: Option<i64>) {
+        if let Some(value) = value {
+            self.i64_field(name, value);
+        }
+    }
+
+    fn u32_opt_field(&mut self, name: &str, value: Option<u32>) {
+        if let Some(value) = value {
+            self.begin_field(name);
+            self.out.push_str(&value.to_string());
+        }
+    }
+
+    fn u64_field(&mut self, name: &str, value: u64) {
+        self.begin_field(name);
+        self.out.push_str(&value.to_string());
+    }
+
+    fn u64_opt_field(&mut self, name: &str, value: Option<u64>) {
+        if let Some(value) = value {
+            self.u64_field(name, value);
+        }
+    }
+
+    fn string_array_field(&mut self, name: &str, value: Option<&[String]>) {
+        if let Some(value) = value {
+            self.begin_field(name);
+            write_string_array(self.out, value);
+        }
+    }
+
+    fn u32_array_field(&mut self, name: &str, value: Option<&[u32]>) {
+        if let Some(value) = value {
+            self.begin_field(name);
+            self.out.push('[');
+            for (index, item) in value.iter().enumerate() {
+                if index > 0 {
+                    self.out.push(',');
+                }
+                self.out.push_str(&item.to_string());
+            }
+            self.out.push(']');
+        }
+    }
+
+    fn string_map_field(&mut self, name: &str, value: Option<&BTreeMap<String, String>>) {
+        if let Some(value) = value {
+            self.begin_field(name);
+            let mut object = JsonObjectWriter::new(self.out, self.pretty, self.depth + 1);
+            for (key, value) in value {
+                object.string_field(key, value);
+            }
+            object.finish();
+        }
+    }
+
+    fn object_field<T>(
+        &mut self,
+        name: &str,
+        value: Option<&T>,
+        write: fn(&mut String, &T, bool, usize),
+    ) {
+        if let Some(value) = value {
+            self.begin_field(name);
+            write(self.out, value, self.pretty, self.depth + 1);
+        }
+    }
+
+    fn array_field<T>(
+        &mut self,
+        name: &str,
+        value: Option<&[T]>,
+        write: fn(&mut String, &T, bool, usize),
+    ) {
+        if let Some(value) = value {
+            self.begin_field(name);
+            self.out.push('[');
+            for (index, item) in value.iter().enumerate() {
+                if index > 0 {
+                    self.out.push(',');
+                }
+                if self.pretty {
+                    self.out.push('\n');
+                    write_indent(self.out, self.depth + 2);
+                }
+                write(self.out, item, self.pretty, self.depth + 2);
+            }
+            if self.pretty && !value.is_empty() {
+                self.out.push('\n');
+                write_indent(self.out, self.depth + 1);
+            }
+            self.out.push(']');
+        }
+    }
+}
+
+fn write_string_array(out: &mut String, values: &[String]) {
+    out.push('[');
+    for (index, value) in values.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        write_json_string(out, value);
+    }
+    out.push(']');
+}
+
+fn write_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch < ' ' => out.push_str("\\u0000"),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+}
+
+fn write_indent(out: &mut String, depth: usize) {
+    for _ in 0..depth {
+        out.push_str("  ");
+    }
 }

@@ -96,7 +96,7 @@ pub fn state_root_dir() -> PathBuf {
 }
 
 use alloc::collections::BTreeMap;
-use edgerun_json::ToJson;
+use core::fmt::Write as _;
 
 /// Container state matching the OCI runtime spec JSON format.
 #[derive(Debug, Clone)]
@@ -134,8 +134,7 @@ pub fn fifo_path(id: &str) -> PathBuf {
 pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = edgerun_json::to_string_pretty(&state.to_json())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    let json = state_to_json_string_pretty(state);
     fs::write(state_file_path(id), json)?;
     Ok(())
 }
@@ -156,51 +155,359 @@ pub fn load_state(id: &str) -> io::Result<ContainerState> {
 }
 
 pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
-    let tape = edgerun_json::parse_json_tape(data).map_err(|error| error.to_string())?;
-    let root = tape
-        .root(data)
-        .ok_or_else(|| "container state missing JSON root".to_string())?;
-    let annotations = root.get_object_fields("annotations").map(|fields| {
-        fields
-            .into_iter()
-            .filter_map(|(key, value)| {
-                value
-                    .as_str()
-                    .map(|value| (key.to_string(), value.to_string()))
-            })
-            .collect()
-    });
     Ok(ContainerState {
-        oci_version: root
-            .required_string("ociVersion")
-            .map_err(|_| "missing field `ociVersion`".to_string())?,
-        id: root
-            .required_string("id")
-            .map_err(|_| "missing field `id`".to_string())?,
-        status: root
-            .required_string("status")
-            .map_err(|_| "missing field `status`".to_string())?,
-        pid: root.get_u32("pid"),
-        bundle: root
-            .required_string("bundle")
-            .map_err(|_| "missing field `bundle`".to_string())?,
-        annotations,
+        oci_version: required_json_string_field(data, "ociVersion")?,
+        id: required_json_string_field(data, "id")?,
+        status: required_json_string_field(data, "status")?,
+        pid: optional_json_u32_field(data, "pid")?,
+        bundle: required_json_string_field(data, "bundle")?,
+        annotations: optional_json_string_map_field(data, "annotations")?,
     })
 }
 
-edgerun_json::impl_json_struct! {
-    ContainerState {
-        required {
-            oci_version: "ociVersion" => String,
-            id: "id" => String,
-            status: "status" => String,
-            bundle: "bundle" => String,
+fn state_to_json_string_pretty(state: &ContainerState) -> String {
+    let mut out = String::new();
+    out.push_str("{\n  \"ociVersion\": ");
+    write_json_string(&mut out, &state.oci_version);
+    out.push_str(",\n  \"id\": ");
+    write_json_string(&mut out, &state.id);
+    out.push_str(",\n  \"status\": ");
+    write_json_string(&mut out, &state.status);
+    if let Some(pid) = state.pid {
+        out.push_str(",\n  \"pid\": ");
+        write!(&mut out, "{pid}").expect("writing to String cannot fail");
+    }
+    out.push_str(",\n  \"bundle\": ");
+    write_json_string(&mut out, &state.bundle);
+    if let Some(annotations) = &state.annotations {
+        out.push_str(",\n  \"annotations\": {");
+        for (index, (key, value)) in annotations.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            out.push_str("\n    ");
+            write_json_string(&mut out, key);
+            out.push_str(": ");
+            write_json_string(&mut out, value);
         }
-        optional {
-            pid: "pid" => u32,
-            annotations: "annotations" => BTreeMap<String, String>,
+        if !annotations.is_empty() {
+            out.push('\n');
+            out.push_str("  ");
+        }
+        out.push('}');
+    }
+    out.push_str("\n}");
+    out
+}
+
+fn write_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch <= '\u{1f}' => {
+                write!(out, "\\u{:04x}", ch as u32).expect("writing to String cannot fail");
+            }
+            ch => out.push(ch),
         }
     }
+    out.push('"');
+}
+
+fn required_json_string_field(data: &str, name: &str) -> Result<String, String> {
+    match field_value_span(data, name)? {
+        Some((start, end)) => parse_string_value(&data[start..end]),
+        None => Err(format!("missing field `{name}`")),
+    }
+}
+
+fn optional_json_u32_field(data: &str, name: &str) -> Result<Option<u32>, String> {
+    let Some((start, end)) = field_value_span(data, name)? else {
+        return Ok(None);
+    };
+    let value = data[start..end].trim();
+    if value == "null" {
+        return Ok(None);
+    }
+    let parsed = value
+        .parse::<u32>()
+        .map_err(|_| format!("field `{name}` is not a u32"))?;
+    Ok(Some(parsed))
+}
+
+fn optional_json_string_map_field(
+    data: &str,
+    name: &str,
+) -> Result<Option<BTreeMap<String, String>>, String> {
+    let Some((start, end)) = field_value_span(data, name)? else {
+        return Ok(None);
+    };
+    let value = data[start..end].trim();
+    if value == "null" {
+        return Ok(None);
+    }
+    parse_string_map(value).map(Some)
+}
+
+fn field_value_span(data: &str, name: &str) -> Result<Option<(usize, usize)>, String> {
+    let bytes = data.as_bytes();
+    let mut index = skip_ws(bytes, 0);
+    if bytes.get(index) != Some(&b'{') {
+        return Err("container state root must be a JSON object".into());
+    }
+    index += 1;
+    loop {
+        index = skip_ws(bytes, index);
+        match bytes.get(index) {
+            Some(b'}') => return Ok(None),
+            Some(b'"') => {}
+            _ => return Err("expected JSON object key".into()),
+        }
+        let key_start = index;
+        let key = parse_json_string_at(data, &mut index)?;
+        index = skip_ws(bytes, index);
+        if bytes.get(index) != Some(&b':') {
+            return Err("expected `:` after JSON object key".into());
+        }
+        index += 1;
+        index = skip_ws(bytes, index);
+        let value_start = index;
+        skip_json_value(data, &mut index)?;
+        let value_end = index;
+        if key == name {
+            return Ok(Some((value_start, value_end)));
+        }
+        if key_start == index {
+            return Err("JSON parser made no progress".into());
+        }
+        index = skip_ws(bytes, index);
+        match bytes.get(index) {
+            Some(b',') => index += 1,
+            Some(b'}') => return Ok(None),
+            _ => return Err("expected `,` or `}` after JSON object value".into()),
+        }
+    }
+}
+
+fn parse_string_map(data: &str) -> Result<BTreeMap<String, String>, String> {
+    let bytes = data.as_bytes();
+    let mut index = skip_ws(bytes, 0);
+    if bytes.get(index) != Some(&b'{') {
+        return Err("annotations must be a JSON object".into());
+    }
+    index += 1;
+    let mut out = BTreeMap::new();
+    loop {
+        index = skip_ws(bytes, index);
+        match bytes.get(index) {
+            Some(b'}') => return Ok(out),
+            Some(b'"') => {}
+            _ => return Err("expected annotation key".into()),
+        }
+        let key = parse_json_string_at(data, &mut index)?;
+        index = skip_ws(bytes, index);
+        if bytes.get(index) != Some(&b':') {
+            return Err("expected `:` after annotation key".into());
+        }
+        index += 1;
+        index = skip_ws(bytes, index);
+        let value = parse_json_string_at(data, &mut index)?;
+        out.insert(key, value);
+        index = skip_ws(bytes, index);
+        match bytes.get(index) {
+            Some(b',') => index += 1,
+            Some(b'}') => return Ok(out),
+            _ => return Err("expected `,` or `}` after annotation value".into()),
+        }
+    }
+}
+
+fn parse_string_value(data: &str) -> Result<String, String> {
+    let mut index = skip_ws(data.as_bytes(), 0);
+    let value = parse_json_string_at(data, &mut index)?;
+    if skip_ws(data.as_bytes(), index) != data.len() {
+        return Err("unexpected bytes after JSON string".into());
+    }
+    Ok(value)
+}
+
+fn parse_json_string_at(data: &str, index: &mut usize) -> Result<String, String> {
+    let bytes = data.as_bytes();
+    if bytes.get(*index) != Some(&b'"') {
+        return Err("expected JSON string".into());
+    }
+    *index += 1;
+    let mut out = String::new();
+    while let Some(byte) = bytes.get(*index).copied() {
+        match byte {
+            b'"' => {
+                *index += 1;
+                return Ok(out);
+            }
+            b'\\' => {
+                *index += 1;
+                let escaped = bytes
+                    .get(*index)
+                    .copied()
+                    .ok_or_else(|| "truncated JSON escape".to_string())?;
+                *index += 1;
+                match escaped {
+                    b'"' => out.push('"'),
+                    b'\\' => out.push('\\'),
+                    b'/' => out.push('/'),
+                    b'b' => out.push('\u{08}'),
+                    b'f' => out.push('\u{0c}'),
+                    b'n' => out.push('\n'),
+                    b'r' => out.push('\r'),
+                    b't' => out.push('\t'),
+                    b'u' => {
+                        let code = parse_hex_u16(bytes, index)?;
+                        let ch = char::from_u32(code as u32)
+                            .ok_or_else(|| "invalid JSON unicode escape".to_string())?;
+                        out.push(ch);
+                    }
+                    _ => return Err("invalid JSON escape".into()),
+                }
+            }
+            0x00..=0x1f => return Err("unescaped control byte in JSON string".into()),
+            _ => {
+                let rest = data
+                    .get(*index..)
+                    .ok_or_else(|| "invalid string boundary".to_string())?;
+                let ch = rest
+                    .chars()
+                    .next()
+                    .ok_or_else(|| "truncated JSON string".to_string())?;
+                out.push(ch);
+                *index += ch.len_utf8();
+            }
+        }
+    }
+    Err("unterminated JSON string".into())
+}
+
+fn parse_hex_u16(bytes: &[u8], index: &mut usize) -> Result<u16, String> {
+    let mut value = 0u16;
+    for _ in 0..4 {
+        let byte = bytes
+            .get(*index)
+            .copied()
+            .ok_or_else(|| "truncated unicode escape".to_string())?;
+        *index += 1;
+        value = (value << 4)
+            | match byte {
+                b'0'..=b'9' => (byte - b'0') as u16,
+                b'a'..=b'f' => (byte - b'a' + 10) as u16,
+                b'A'..=b'F' => (byte - b'A' + 10) as u16,
+                _ => return Err("invalid unicode escape".into()),
+            };
+    }
+    Ok(value)
+}
+
+fn skip_json_value(data: &str, index: &mut usize) -> Result<(), String> {
+    let bytes = data.as_bytes();
+    *index = skip_ws(bytes, *index);
+    match bytes.get(*index).copied() {
+        Some(b'"') => parse_json_string_at(data, index).map(|_| ()),
+        Some(b'{') => skip_json_object(data, index),
+        Some(b'[') => skip_json_array(data, index),
+        Some(b't') if data[*index..].starts_with("true") => {
+            *index += 4;
+            Ok(())
+        }
+        Some(b'f') if data[*index..].starts_with("false") => {
+            *index += 5;
+            Ok(())
+        }
+        Some(b'n') if data[*index..].starts_with("null") => {
+            *index += 4;
+            Ok(())
+        }
+        Some(b'-' | b'0'..=b'9') => {
+            skip_json_number(bytes, index);
+            Ok(())
+        }
+        _ => Err("expected JSON value".into()),
+    }
+}
+
+fn skip_json_object(data: &str, index: &mut usize) -> Result<(), String> {
+    let bytes = data.as_bytes();
+    if bytes.get(*index) != Some(&b'{') {
+        return Err("expected JSON object".into());
+    }
+    *index += 1;
+    loop {
+        *index = skip_ws(bytes, *index);
+        if bytes.get(*index) == Some(&b'}') {
+            *index += 1;
+            return Ok(());
+        }
+        parse_json_string_at(data, index)?;
+        *index = skip_ws(bytes, *index);
+        if bytes.get(*index) != Some(&b':') {
+            return Err("expected `:` after JSON object key".into());
+        }
+        *index += 1;
+        skip_json_value(data, index)?;
+        *index = skip_ws(bytes, *index);
+        match bytes.get(*index) {
+            Some(b',') => *index += 1,
+            Some(b'}') => {
+                *index += 1;
+                return Ok(());
+            }
+            _ => return Err("expected `,` or object close".into()),
+        }
+    }
+}
+
+fn skip_json_array(data: &str, index: &mut usize) -> Result<(), String> {
+    let bytes = data.as_bytes();
+    if bytes.get(*index) != Some(&b'[') {
+        return Err("expected JSON array".into());
+    }
+    *index += 1;
+    loop {
+        *index = skip_ws(bytes, *index);
+        if bytes.get(*index) == Some(&b']') {
+            *index += 1;
+            return Ok(());
+        }
+        skip_json_value(data, index)?;
+        *index = skip_ws(bytes, *index);
+        match bytes.get(*index) {
+            Some(b',') => *index += 1,
+            Some(b']') => {
+                *index += 1;
+                return Ok(());
+            }
+            _ => return Err("expected `,` or array close".into()),
+        }
+    }
+}
+
+fn skip_json_number(bytes: &[u8], index: &mut usize) {
+    while matches!(
+        bytes.get(*index),
+        Some(b'-' | b'+' | b'.' | b'0'..=b'9' | b'e' | b'E')
+    ) {
+        *index += 1;
+    }
+}
+
+fn skip_ws(bytes: &[u8], mut index: usize) -> usize {
+    while matches!(bytes.get(index), Some(b' ' | b'\n' | b'\r' | b'\t')) {
+        index += 1;
+    }
+    index
 }
 
 /// Delete container state directory and all contents.

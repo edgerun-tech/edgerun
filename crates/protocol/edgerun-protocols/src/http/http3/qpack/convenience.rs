@@ -1,12 +1,12 @@
 //! Convenience QPACK encoder/decoder API for HTTP integrations.
 
+use super::buf::Cursor;
 use super::decoder::Decoder as InnerDecoder;
 use super::dynamic::DynamicTable;
 use super::encoder::Encoder as InnerEncoder;
-use super::{Decoded, DecoderError, EncoderError, HeaderField, decode_stateless, encode_stateless};
+use super::{decode_stateless, encode_stateless, Decoded, DecoderError, EncoderError, HeaderField};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use edgerun_encoding::buf::Cursor;
 
 /// QPACK encoder with optional dynamic table support.
 pub struct QpackEncoder {

@@ -1,0 +1,28 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "hpack-string",
+  "module": "hpack-string.wat",
+  "cases": [
+    {
+      "id": "raw-abc",
+      "function": "hpack_string_decode",
+      "input": { "hex": "03616263" },
+      "expect": { "status": 0, "ascii": "abc", "bytes_written": 3, "huffman": 0 },
+      "notes": "HPACK raw string literal with one-octet length."
+    },
+    {
+      "id": "huffman-o",
+      "function": "hpack_string_decode",
+      "input": { "hex": "813f" },
+      "expect": { "status": 0, "ascii": "o", "bytes_written": 1, "huffman": 1 },
+      "notes": "HPACK string with high Huffman flag and one encoded payload byte."
+    },
+    {
+      "id": "truncated-payload",
+      "function": "hpack_string_scan",
+      "input": { "hex": "036162" },
+      "expect": { "status": 1 },
+      "notes": "Declared string length exceeds available payload."
+    }
+  ]
+}

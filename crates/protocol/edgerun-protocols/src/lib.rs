@@ -9,6 +9,9 @@
 
 extern crate alloc;
 
+#[cfg(feature = "tls-tpm")]
+extern crate std;
+
 #[cfg(feature = "acme")]
 pub mod acme;
 #[cfg(feature = "block")]

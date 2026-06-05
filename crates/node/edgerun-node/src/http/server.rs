@@ -14,7 +14,7 @@ use crate::http::header::HeaderMap;
 use crate::http::http2::ErrorCode;
 use crate::http::http2::frame::{Frame, FrameType, flags};
 use crate::http::http2::headers::{validate_header_name_case, validate_request_headers};
-use crate::http::http2::hpack::{Decoder, Encoder};
+use crate::http::http2::hpack::HpackContext;
 use crate::http::http2::{FrameAction, Http2Server};
 use crate::http::method::Method;
 use crate::http::runtime::CancellationToken;
@@ -614,8 +614,7 @@ where
     }
 
     let mut rdwr = reader.into_inner();
-    let mut encoder = Encoder::new();
-    let mut decoder = Decoder::new();
+    let mut hpack = HpackContext::new();
     let mut server = Http2Server::new();
     let mut expecting_continuation: Option<(u32, Vec<u8>, bool)> = None;
     let mut pending_body_data: alloc::collections::BTreeMap<u32, Vec<u8>> =
@@ -681,7 +680,7 @@ where
                     for f in &frames {
                         write_frame(&mut rdwr, f).await?;
                     }
-                    decoder.set_max_table_size(server.client_settings.header_table_size as usize);
+                    hpack.set_max_table_size(server.client_settings.header_table_size as usize);
                 }
                 FrameAction::Goaway {
                     error_code,
@@ -785,8 +784,7 @@ where
                             sid,
                             &headers,
                             body,
-                            &mut decoder,
-                            &mut encoder,
+                            &mut hpack,
                             &mut server,
                             &handler,
                         )
@@ -835,7 +833,7 @@ where
                 let end_headers = frame.flags & flags::HEADERS_END_HEADERS != 0;
                 if end_headers {
                     // END_HEADERS is set — decode and process headers
-                    let headers = match decoder.decode(&hf.header_block) {
+                    let headers = match hpack.decode_header_block(&hf.header_block) {
                         Ok(h) => h,
                         Err(e) => {
                             write_goaway(
@@ -859,8 +857,7 @@ where
                         let action = process_request(
                             hf.stream_id,
                             &hf.header_block,
-                            &mut decoder,
-                            &mut encoder,
+                            &mut hpack,
                             &mut server,
                             &handler,
                         )
@@ -913,8 +910,7 @@ where
                             let action = process_request(
                                 stream_id,
                                 &block,
-                                &mut decoder,
-                                &mut encoder,
+                                &mut hpack,
                                 &mut server,
                                 &handler,
                             )
@@ -922,7 +918,7 @@ where
                             action
                         } else {
                             // Headers complete but need body — store as pending
-                            let headers = match decoder.decode(&block) {
+                            let headers = match hpack.decode_header_block(&block) {
                                 Ok(h) => h,
                                 Err(_) => {
                                     write_goaway(
@@ -1029,12 +1025,11 @@ where
 async fn process_request(
     stream_id: u32,
     header_block: &[u8],
-    decoder: &mut Decoder<'_>,
-    encoder: &mut Encoder<'_>,
+    hpack: &mut HpackContext,
     server: &mut Http2Server,
     handler: &dyn Handler,
 ) -> FrameAction {
-    let headers = match decoder.decode(header_block) {
+    let headers = match hpack.decode_header_block(header_block) {
         Ok(h) => h,
         Err(_) => {
             // RFC 9113 §4.3: HPACK decode error is a connection error (GOAWAY).
@@ -1045,16 +1040,7 @@ async fn process_request(
             };
         }
     };
-    process_request_with_body(
-        stream_id,
-        &headers,
-        Vec::new(),
-        decoder,
-        encoder,
-        server,
-        handler,
-    )
-    .await
+    process_request_with_body(stream_id, &headers, Vec::new(), hpack, server, handler).await
 }
 
 /// Process a complete HTTP/2 request with pre-decoded headers and accumulated body.
@@ -1062,8 +1048,7 @@ async fn process_request_with_body(
     stream_id: u32,
     headers: &[(Vec<u8>, Vec<u8>)],
     body: Vec<u8>,
-    decoder: &mut Decoder<'_>,
-    encoder: &mut Encoder<'_>,
+    hpack: &mut HpackContext,
     server: &mut Http2Server,
     handler: &dyn Handler,
 ) -> FrameAction {
@@ -1133,11 +1118,20 @@ async fn process_request_with_body(
             v.as_str().as_bytes().to_vec(),
         ));
     }
-    let resp_header_block = encoder.encode(
+    let resp_header_block = match hpack.encode_header_block(
         resp_headers
             .iter()
             .map(|(k, v)| (k.as_slice(), v.as_slice())),
-    );
+    ) {
+        Ok(block) => block,
+        Err(_) => {
+            return FrameAction::Goaway {
+                last_stream_id: server.last_processed_stream_id,
+                error_code: ErrorCode::COMPRESSION_ERROR.to_u32(),
+                debug_data: b"HPACK encode not yet routed".to_vec(),
+            };
+        }
+    };
     resp_frames.push(
         crate::http::http2::frame::HeadersFrame::new(
             stream_id,

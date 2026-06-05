@@ -1396,15 +1396,10 @@ fn extract_zip_entry(data: &[u8], entry: &ZipEntry) -> io::Result<Vec<u8>> {
             Ok(compressed.to_vec())
         }
         8 => {
-            let out = edgerun_encoding::compression::deflate_raw_decompress_with_limit(
-                compressed,
-                entry.uncompressed_size,
-            )
-            .map_err(|_| invalid("failed to inflate ZIP entry"))?;
-            if out.len() != entry.uncompressed_size {
-                return Err(invalid("inflated ZIP entry size mismatch"));
-            }
-            Ok(out)
+            let _ = compressed;
+            Err(invalid(
+                "ZIP method 8 requires the deflate-inflate.wat adapter",
+            ))
         }
         method => Err(invalid(format!(
             "unsupported ZIP compression method {method} for {}",

@@ -94,35 +94,22 @@ fn workspace_member_manifests(workspace_root: &Path) -> Result<Vec<PathBuf>, Str
 
     let metadata = std::str::from_utf8(&output.stdout)
         .map_err(|err| format!("cargo metadata output was not utf-8: {err}"))?;
-    let tape = edgerun_json::parse_json_tape(metadata)
-        .map_err(|err| format!("parse cargo metadata failed: {err}"))?;
-    let root = tape
-        .root(metadata)
-        .ok_or_else(|| "cargo metadata missing root JSON value".to_string())?;
-    let workspace_members = root
-        .get("workspace_members")
-        .and_then(|value| value.array_items())
+    let workspace_members = fixed_json_string_array_field(metadata, "workspace_members")
         .ok_or_else(|| "cargo metadata missing workspace_members".to_string())?
         .into_iter()
-        .filter_map(|member| member.as_str())
         .collect::<BTreeSet<_>>();
 
-    let packages = root
-        .get("packages")
-        .and_then(|value| value.array_items())
+    let packages = fixed_json_object_array_field(metadata, "packages")
         .ok_or_else(|| "cargo metadata missing packages".to_string())?;
     let mut manifests = Vec::new();
     for package in packages {
-        let Some(id) = package.get("id").and_then(|value| value.as_str()) else {
+        let Some(id) = fixed_json_string_field(package, "id") else {
             continue;
         };
-        if !workspace_members.contains(id) {
+        if !workspace_members.contains(&id) {
             continue;
         }
-        let Some(manifest) = package
-            .get("manifest_path")
-            .and_then(|value| value.as_str())
-        else {
+        let Some(manifest) = fixed_json_string_field(package, "manifest_path") else {
             continue;
         };
         manifests.push(canonical_path(Path::new(manifest))?);
@@ -151,4 +138,141 @@ fn manifest_has_package(path: &Path) -> Result<bool, String> {
 fn canonical_path(path: &Path) -> Result<PathBuf, String> {
     path.canonicalize()
         .map_err(|err| format!("canonicalize {} failed: {err}", path.display()))
+}
+
+fn fixed_json_string_field(input: &str, key: &str) -> Option<String> {
+    let value = fixed_json_field_value(input, key)?;
+    parse_json_string(value.trim_start()).map(|(value, _)| value)
+}
+
+fn fixed_json_string_array_field(input: &str, key: &str) -> Option<Vec<String>> {
+    let value = fixed_json_field_value(input, key)?.trim_start();
+    if !value.starts_with('[') {
+        return None;
+    }
+    let end = matching_json_end(value, '[', ']')?;
+    let array = &value[1..end - 1];
+    let mut items = Vec::new();
+    let mut rest = array.trim_start();
+    while !rest.is_empty() {
+        let (item, used) = parse_json_string(rest)?;
+        items.push(item);
+        rest = rest[used..].trim_start();
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+        } else if !rest.is_empty() {
+            return None;
+        }
+    }
+    Some(items)
+}
+
+fn fixed_json_object_array_field<'a>(input: &'a str, key: &str) -> Option<Vec<&'a str>> {
+    let value = fixed_json_field_value(input, key)?.trim_start();
+    if !value.starts_with('[') {
+        return None;
+    }
+    let end = matching_json_end(value, '[', ']')?;
+    let mut rest = value[1..end - 1].trim_start();
+    let mut objects = Vec::new();
+    while !rest.is_empty() {
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let object_end = matching_json_end(rest, '{', '}')?;
+        objects.push(&rest[..object_end]);
+        rest = rest[object_end..].trim_start();
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+        } else if !rest.is_empty() {
+            return None;
+        }
+    }
+    Some(objects)
+}
+
+fn fixed_json_field_value<'a>(input: &'a str, key: &str) -> Option<&'a str> {
+    let mut rest = input;
+    while let Some(pos) = rest.find('"') {
+        rest = &rest[pos..];
+        let (found, used) = parse_json_string(rest)?;
+        rest = &rest[used..];
+        let after_key = rest.trim_start();
+        if !after_key.starts_with(':') {
+            continue;
+        }
+        let value = after_key[1..].trim_start();
+        if found == key {
+            return Some(value);
+        }
+        rest = value;
+    }
+    None
+}
+
+fn parse_json_string(input: &str) -> Option<(String, usize)> {
+    let bytes = input.as_bytes();
+    if bytes.first().copied() != Some(b'"') {
+        return None;
+    }
+    let mut out = String::new();
+    let mut i = 1usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => return Some((out, i + 1)),
+            b'\\' => {
+                i += 1;
+                let escaped = *bytes.get(i)?;
+                match escaped {
+                    b'"' => out.push('"'),
+                    b'\\' => out.push('\\'),
+                    b'/' => out.push('/'),
+                    b'b' => out.push('\u{0008}'),
+                    b'f' => out.push('\u{000c}'),
+                    b'n' => out.push('\n'),
+                    b'r' => out.push('\r'),
+                    b't' => out.push('\t'),
+                    b'u' => {
+                        let hex = input.get(i + 1..i + 5)?;
+                        let scalar = u16::from_str_radix(hex, 16).ok()?;
+                        out.push(char::from_u32(scalar as u32)?);
+                        i += 4;
+                    }
+                    _ => return None,
+                }
+            }
+            byte => out.push(byte as char),
+        }
+        i += 1;
+    }
+    None
+}
+
+fn matching_json_end(input: &str, open: char, close: char) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (idx, ch) in input.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if ch == '"' {
+            in_string = true;
+        } else if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(idx + ch.len_utf8());
+            }
+        }
+    }
+    None
 }

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::clap::cli::Action;
 use crate::clap::{Arg, Command};
 use crate::cli::display::format_bytes;
+use crate::cli::json;
 use crate::cli::{default_images_dir, invalid_input, parse_cli_args};
 
 pub fn cmd_images(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -131,18 +132,21 @@ fn print_images_table(images: &[LocalImage]) {
 }
 
 fn print_images_json(images: &[LocalImage]) {
-    let entries = images
-        .iter()
-        .map(|image| {
-            let path = image.path.to_string_lossy();
-            edgerun_json::json!({
-                "repository": image.repository.as_str(),
-                "tag": image.tag.as_str(),
-                "size": image.size,
-                "path": path.as_ref()
-            })
-        })
-        .collect::<Vec<_>>();
-    let output = edgerun_json::JsonValue::Array(entries);
-    println!("{}", edgerun_json::to_string(&output).unwrap_or_default());
+    let mut out = String::new();
+    out.push('[');
+    for (index, image) in images.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let path = image.path.to_string_lossy();
+        let mut first = true;
+        out.push('{');
+        json::push_string_field(&mut out, &mut first, "repository", &image.repository);
+        json::push_string_field(&mut out, &mut first, "tag", &image.tag);
+        json::push_u64_field(&mut out, &mut first, "size", image.size);
+        json::push_string_field(&mut out, &mut first, "path", path.as_ref());
+        out.push('}');
+    }
+    out.push(']');
+    println!("{}", out);
 }

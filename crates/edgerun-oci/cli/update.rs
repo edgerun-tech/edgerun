@@ -11,7 +11,10 @@ use std::io::Read;
 use crate::clap::{Arg, Command};
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::spec::OciSpec;
-use crate::spec::{OciLinuxDeviceCgroup, OciLinuxResources};
+use crate::spec::{
+    OciLinuxBlockIO, OciLinuxCpu, OciLinuxDeviceCgroup, OciLinuxMemory, OciLinuxPids,
+    OciLinuxResources,
+};
 use crate::state::load_state;
 
 /// Parsed update options from CLI flags.
@@ -507,12 +510,462 @@ fn parse_update_resources(path: &str) -> io::Result<OciLinuxResources> {
         ));
     }
 
-    edgerun_json::from_json_slice(&data).map_err(|error| {
+    parse_resources_json(&data).map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("invalid resources payload: {error}"),
         )
     })
+}
+
+fn parse_resources_json(data: &[u8]) -> Result<OciLinuxResources, String> {
+    let text = core::str::from_utf8(data).map_err(|_| "resources payload is not utf-8")?;
+    ResourceJsonParser::new(text).parse_resources_root()
+}
+
+struct ResourceJsonParser<'a> {
+    data: &'a str,
+    index: usize,
+}
+
+impl<'a> ResourceJsonParser<'a> {
+    fn new(data: &'a str) -> Self {
+        Self { data, index: 0 }
+    }
+
+    fn parse_resources_root(&mut self) -> Result<OciLinuxResources, String> {
+        let resources = self.parse_resources_object()?;
+        self.skip_ws();
+        if !self.eof() {
+            return Err("trailing data after resources object".into());
+        }
+        Ok(resources)
+    }
+
+    fn parse_resources_object(&mut self) -> Result<OciLinuxResources, String> {
+        self.expect_byte(b'{')?;
+        let mut resources = OciLinuxResources::default();
+        if self.consume_byte(b'}') {
+            return Ok(resources);
+        }
+
+        loop {
+            let key = self.parse_string()?;
+            self.expect_byte(b':')?;
+            match key.as_str() {
+                "memory" => resources.memory = Some(self.parse_memory_object()?),
+                "cpu" => resources.cpu = Some(self.parse_cpu_object()?),
+                "pids" => resources.pids = Some(self.parse_pids_object()?),
+                "blockIO" => resources.block_io = Some(self.parse_block_io_object()?),
+                "devices" => resources.devices = Some(self.parse_devices_array()?),
+                _ => self.skip_value()?,
+            }
+            if self.consume_byte(b'}') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+
+        Ok(resources)
+    }
+
+    fn parse_memory_object(&mut self) -> Result<OciLinuxMemory, String> {
+        self.expect_byte(b'{')?;
+        let mut memory = OciLinuxMemory::default();
+        if self.consume_byte(b'}') {
+            return Ok(memory);
+        }
+
+        loop {
+            let key = self.parse_string()?;
+            self.expect_byte(b':')?;
+            match key.as_str() {
+                "limit" => memory.limit = Some(self.parse_i64()?),
+                "reservation" => memory.reservation = Some(self.parse_i64()?),
+                "swap" => memory.swap = Some(self.parse_i64()?),
+                _ => self.skip_value()?,
+            }
+            if self.consume_byte(b'}') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+
+        Ok(memory)
+    }
+
+    fn parse_cpu_object(&mut self) -> Result<OciLinuxCpu, String> {
+        self.expect_byte(b'{')?;
+        let mut cpu = OciLinuxCpu::default();
+        if self.consume_byte(b'}') {
+            return Ok(cpu);
+        }
+
+        loop {
+            let key = self.parse_string()?;
+            self.expect_byte(b':')?;
+            match key.as_str() {
+                "shares" => cpu.shares = Some(self.parse_u64()?),
+                "quota" => cpu.quota = Some(self.parse_i64()?),
+                "period" => cpu.period = Some(self.parse_u64()?),
+                "realtimeRuntime" => cpu.realtime_runtime = Some(self.parse_i64()?),
+                "realtimePeriod" => cpu.realtime_period = Some(self.parse_u64()?),
+                "cpus" => cpu.cpus = Some(self.parse_string()?),
+                "mems" => cpu.mems = Some(self.parse_string()?),
+                _ => self.skip_value()?,
+            }
+            if self.consume_byte(b'}') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+
+        Ok(cpu)
+    }
+
+    fn parse_pids_object(&mut self) -> Result<OciLinuxPids, String> {
+        self.expect_byte(b'{')?;
+        let mut pids = OciLinuxPids::default();
+        let mut saw_limit = false;
+        if self.consume_byte(b'}') {
+            return Err("pids.limit is required".into());
+        }
+
+        loop {
+            let key = self.parse_string()?;
+            self.expect_byte(b':')?;
+            match key.as_str() {
+                "limit" => {
+                    pids.limit = self.parse_i64()?;
+                    saw_limit = true;
+                }
+                _ => self.skip_value()?,
+            }
+            if self.consume_byte(b'}') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+
+        if !saw_limit {
+            return Err("pids.limit is required".into());
+        }
+        Ok(pids)
+    }
+
+    fn parse_block_io_object(&mut self) -> Result<OciLinuxBlockIO, String> {
+        self.expect_byte(b'{')?;
+        let mut block_io = OciLinuxBlockIO::default();
+        if self.consume_byte(b'}') {
+            return Ok(block_io);
+        }
+
+        loop {
+            let key = self.parse_string()?;
+            self.expect_byte(b':')?;
+            match key.as_str() {
+                "weight" => block_io.weight = Some(self.parse_u16()?),
+                _ => self.skip_value()?,
+            }
+            if self.consume_byte(b'}') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+
+        Ok(block_io)
+    }
+
+    fn parse_devices_array(&mut self) -> Result<Vec<OciLinuxDeviceCgroup>, String> {
+        self.expect_byte(b'[')?;
+        let mut devices = Vec::new();
+        if self.consume_byte(b']') {
+            return Ok(devices);
+        }
+
+        loop {
+            devices.push(self.parse_device_cgroup_object()?);
+            if self.consume_byte(b']') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+
+        Ok(devices)
+    }
+
+    fn parse_device_cgroup_object(&mut self) -> Result<OciLinuxDeviceCgroup, String> {
+        self.expect_byte(b'{')?;
+        let mut device = OciLinuxDeviceCgroup::default();
+        if self.consume_byte(b'}') {
+            return Ok(device);
+        }
+
+        loop {
+            let key = self.parse_string()?;
+            self.expect_byte(b':')?;
+            match key.as_str() {
+                "allow" => device.allow = Some(self.parse_bool()?),
+                "type" => device.ns_type = Some(self.parse_string()?),
+                "major" => device.major = Some(self.parse_i64()?),
+                "minor" => device.minor = Some(self.parse_i64()?),
+                "access" => device.access = Some(self.parse_string()?),
+                _ => self.skip_value()?,
+            }
+            if self.consume_byte(b'}') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+
+        Ok(device)
+    }
+
+    fn parse_string(&mut self) -> Result<String, String> {
+        self.skip_ws();
+        if self.next_byte() != Some(b'"') {
+            return Err("expected JSON string".into());
+        }
+        self.index += 1;
+        let mut out = String::new();
+        while let Some(byte) = self.next_byte() {
+            self.index += 1;
+            match byte {
+                b'"' => return Ok(out),
+                b'\\' => {
+                    let escaped = self
+                        .next_byte()
+                        .ok_or_else(|| "unterminated JSON string escape".to_string())?;
+                    self.index += 1;
+                    match escaped {
+                        b'"' => out.push('"'),
+                        b'\\' => out.push('\\'),
+                        b'/' => out.push('/'),
+                        b'b' => out.push('\u{08}'),
+                        b'f' => out.push('\u{0c}'),
+                        b'n' => out.push('\n'),
+                        b'r' => out.push('\r'),
+                        b't' => out.push('\t'),
+                        b'u' => {
+                            let code = self.parse_hex4()?;
+                            let ch = char::from_u32(code)
+                                .ok_or_else(|| "invalid JSON unicode escape".to_string())?;
+                            out.push(ch);
+                        }
+                        _ => return Err("invalid JSON string escape".into()),
+                    }
+                }
+                byte if byte < 0x20 => return Err("control character in JSON string".into()),
+                byte if byte < 0x80 => {
+                    out.push(byte as char);
+                }
+                _ => {
+                    let start = self.index - 1;
+                    let ch = self.data[start..]
+                        .chars()
+                        .next()
+                        .ok_or_else(|| "invalid utf-8 in JSON string".to_string())?;
+                    let end = start + ch.len_utf8();
+                    let text = core::str::from_utf8(&self.data.as_bytes()[start..end])
+                        .map_err(|_| "invalid utf-8 in JSON string")?;
+                    self.index = end;
+                    out.push_str(text);
+                }
+            }
+        }
+        Err("unterminated JSON string".into())
+    }
+
+    fn parse_hex4(&mut self) -> Result<u32, String> {
+        let bytes = self.data.as_bytes();
+        if self.index + 4 > bytes.len() {
+            return Err("truncated JSON unicode escape".into());
+        }
+        let mut value = 0u32;
+        for _ in 0..4 {
+            let digit = match bytes[self.index] {
+                b'0'..=b'9' => (bytes[self.index] - b'0') as u32,
+                b'a'..=b'f' => (bytes[self.index] - b'a' + 10) as u32,
+                b'A'..=b'F' => (bytes[self.index] - b'A' + 10) as u32,
+                _ => return Err("invalid JSON unicode escape".into()),
+            };
+            value = (value << 4) | digit;
+            self.index += 1;
+        }
+        Ok(value)
+    }
+
+    fn parse_i64(&mut self) -> Result<i64, String> {
+        let number = self.parse_integer_span()?;
+        number
+            .parse()
+            .map_err(|_| format!("integer out of range: {number}"))
+    }
+
+    fn parse_u64(&mut self) -> Result<u64, String> {
+        let number = self.parse_integer_span()?;
+        if number.starts_with('-') {
+            return Err(format!("expected unsigned integer, got {number}"));
+        }
+        number
+            .parse()
+            .map_err(|_| format!("integer out of range: {number}"))
+    }
+
+    fn parse_u16(&mut self) -> Result<u16, String> {
+        let value = self.parse_u64()?;
+        value
+            .try_into()
+            .map_err(|_| format!("integer out of range for u16: {value}"))
+    }
+
+    fn parse_integer_span(&mut self) -> Result<&'a str, String> {
+        self.skip_ws();
+        let start = self.index;
+        if self.next_byte() == Some(b'-') {
+            self.index += 1;
+        }
+        let digit_start = self.index;
+        while matches!(self.next_byte(), Some(b'0'..=b'9')) {
+            self.index += 1;
+        }
+        if self.index == digit_start {
+            return Err("expected JSON integer".into());
+        }
+        if matches!(self.next_byte(), Some(b'.' | b'e' | b'E')) {
+            return Err("resource integers must not be fractional or exponential".into());
+        }
+        Ok(&self.data[start..self.index])
+    }
+
+    fn parse_bool(&mut self) -> Result<bool, String> {
+        self.skip_ws();
+        if self.data[self.index..].starts_with("true") {
+            self.index += 4;
+            Ok(true)
+        } else if self.data[self.index..].starts_with("false") {
+            self.index += 5;
+            Ok(false)
+        } else {
+            Err("expected JSON boolean".into())
+        }
+    }
+
+    fn skip_value(&mut self) -> Result<(), String> {
+        self.skip_ws();
+        match self.next_byte() {
+            Some(b'{') => self.skip_object(),
+            Some(b'[') => self.skip_array(),
+            Some(b'"') => self.parse_string().map(|_| ()),
+            Some(b't') | Some(b'f') => self.parse_bool().map(|_| ()),
+            Some(b'n') => {
+                if self.data[self.index..].starts_with("null") {
+                    self.index += 4;
+                    Ok(())
+                } else {
+                    Err("invalid JSON literal".into())
+                }
+            }
+            Some(b'-' | b'0'..=b'9') => self.skip_number(),
+            _ => Err("expected JSON value".into()),
+        }
+    }
+
+    fn skip_object(&mut self) -> Result<(), String> {
+        self.expect_byte(b'{')?;
+        if self.consume_byte(b'}') {
+            return Ok(());
+        }
+        loop {
+            self.parse_string()?;
+            self.expect_byte(b':')?;
+            self.skip_value()?;
+            if self.consume_byte(b'}') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+        Ok(())
+    }
+
+    fn skip_array(&mut self) -> Result<(), String> {
+        self.expect_byte(b'[')?;
+        if self.consume_byte(b']') {
+            return Ok(());
+        }
+        loop {
+            self.skip_value()?;
+            if self.consume_byte(b']') {
+                break;
+            }
+            self.expect_byte(b',')?;
+        }
+        Ok(())
+    }
+
+    fn skip_number(&mut self) -> Result<(), String> {
+        self.skip_ws();
+        let start = self.index;
+        if self.next_byte() == Some(b'-') {
+            self.index += 1;
+        }
+        while matches!(self.next_byte(), Some(b'0'..=b'9')) {
+            self.index += 1;
+        }
+        if self.next_byte() == Some(b'.') {
+            self.index += 1;
+            while matches!(self.next_byte(), Some(b'0'..=b'9')) {
+                self.index += 1;
+            }
+        }
+        if matches!(self.next_byte(), Some(b'e' | b'E')) {
+            self.index += 1;
+            if matches!(self.next_byte(), Some(b'+' | b'-')) {
+                self.index += 1;
+            }
+            while matches!(self.next_byte(), Some(b'0'..=b'9')) {
+                self.index += 1;
+            }
+        }
+        if self.index == start {
+            return Err("expected JSON number".into());
+        }
+        Ok(())
+    }
+
+    fn expect_byte(&mut self, expected: u8) -> Result<(), String> {
+        self.skip_ws();
+        if self.next_byte() == Some(expected) {
+            self.index += 1;
+            Ok(())
+        } else {
+            Err(format!("expected '{}'", expected as char))
+        }
+    }
+
+    fn consume_byte(&mut self, expected: u8) -> bool {
+        self.skip_ws();
+        if self.next_byte() == Some(expected) {
+            self.index += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn skip_ws(&mut self) {
+        while matches!(self.next_byte(), Some(b' ' | b'\n' | b'\r' | b'\t')) {
+            self.index += 1;
+        }
+    }
+
+    fn next_byte(&self) -> Option<u8> {
+        self.data.as_bytes().get(self.index).copied()
+    }
+
+    fn eof(&self) -> bool {
+        self.index >= self.data.len()
+    }
 }
 
 fn apply_resource_updates(opts: &mut UpdateOpts, resources: OciLinuxResources) -> io::Result<()> {

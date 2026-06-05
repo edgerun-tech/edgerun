@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::JSONRPCNotification;
 use crate::JSONRPCRequest;
+use crate::RawJson;
 use crate::RequestId;
 use crate::export::GeneratedSchema;
 use crate::export::write_json_schema;
@@ -10,19 +11,10 @@ use crate::protocol::v1;
 use crate::protocol::v2;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
+use std::fmt;
 
 /// Authentication mode for OpenAI-backed providers.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Display,
-    JsonSchema,
-    edgerun_json::ToJson,
-    edgerun_json::FromJson,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema)]
 #[schemars(rename_all = "lowercase")]
 pub enum AuthMode {
     /// OpenAI API key provided by the caller and stored by Codex.
@@ -139,6 +131,113 @@ pub struct ProtocolTypeEntry {
     pub response: Option<&'static str>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JsonrpcProtocolProjectionError {
+    UnknownMethod {
+        direction: ProtocolTypeDirection,
+        method: String,
+    },
+    NotYetProjected {
+        direction: ProtocolTypeDirection,
+        method: String,
+        params_type: Option<&'static str>,
+        expected_fields: &'static [&'static str],
+        raw_params_len: Option<usize>,
+    },
+    NotYetEmitted {
+        direction: ProtocolTypeDirection,
+        method: String,
+        payload_type: &'static str,
+        expected_fields: &'static [&'static str],
+    },
+}
+
+impl JsonrpcProtocolProjectionError {
+    fn unknown_method(direction: ProtocolTypeDirection, method: String) -> Self {
+        Self::UnknownMethod { direction, method }
+    }
+
+    fn not_yet_projected(
+        direction: ProtocolTypeDirection,
+        method: String,
+        params_type: Option<&'static str>,
+        expected_fields: &'static [&'static str],
+        raw_params: Option<&RawJson>,
+    ) -> Self {
+        Self::NotYetProjected {
+            direction,
+            method,
+            params_type,
+            expected_fields,
+            raw_params_len: raw_params.map(|params| params.as_str().len()),
+        }
+    }
+
+    fn not_yet_emitted(
+        direction: ProtocolTypeDirection,
+        method: String,
+        payload_type: &'static str,
+        expected_fields: &'static [&'static str],
+    ) -> Self {
+        Self::NotYetEmitted {
+            direction,
+            method,
+            payload_type,
+            expected_fields,
+        }
+    }
+}
+
+impl fmt::Display for JsonrpcProtocolProjectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownMethod { direction, method } => {
+                write!(f, "unknown JSON-RPC {direction:?} method `{method}`")
+            }
+            Self::NotYetProjected {
+                direction,
+                method,
+                params_type,
+                expected_fields,
+                raw_params_len,
+            } => {
+                write!(
+                    f,
+                    "JSON-RPC {direction:?} method `{method}` params are not yet projected"
+                )?;
+                if let Some(params_type) = params_type {
+                    write!(f, " into {params_type}")?;
+                }
+                match raw_params_len {
+                    Some(len) => write!(f, " from raw params span ({len} bytes)")?,
+                    None => f.write_str("; params were absent")?,
+                }
+                if !expected_fields.is_empty() {
+                    write!(f, "; expected fields: {}", expected_fields.join(", "))?;
+                }
+                Ok(())
+            }
+            Self::NotYetEmitted {
+                direction,
+                method,
+                payload_type,
+                expected_fields,
+            } => {
+                write!(
+                    f,
+                    "JSON-RPC {direction:?} method `{method}` payload `{payload_type}` is not yet emitted"
+                )?;
+                if !expected_fields.is_empty() {
+                    write!(f, "; expected fields: {}", expected_fields.join(", "))?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl std::error::Error for JsonrpcProtocolProjectionError {}
+
 fn lower_camel_variant_name(variant: &str) -> String {
     let mut chars = variant.chars();
     let Some(first) = chars.next() else {
@@ -241,7 +340,7 @@ macro_rules! client_request_definitions {
         ),* $(,)?
     ) => {
         /// Request from the client to the server.
-        #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[derive(Debug, Clone, PartialEq, JsonSchema)]
         #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ClientRequest {
             $(
@@ -295,7 +394,7 @@ macro_rules! client_request_definitions {
         }
 
         /// Typed response from the server to the client.
-        #[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[derive(Debug, Clone)]
         #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ClientResponse {
             $(
@@ -322,11 +421,17 @@ macro_rules! client_request_definitions {
             }
 
             pub fn into_jsonrpc_parts(
-                self) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
+                self) -> std::result::Result<(RequestId, crate::Result), JsonrpcProtocolProjectionError> {
                 match self {
                     $(
                         Self::$variant { request_id, response } => {
-                            Ok((request_id, edgerun_json::to_value(&response)))
+                            let _ = response;
+                            Err(JsonrpcProtocolProjectionError::not_yet_emitted(
+                                ProtocolTypeDirection::ClientRequest,
+                                protocol_method_name!($variant $(=> $wire)?),
+                                stringify!($response),
+                                &[],
+                            ))
                         }
                     )*
                 }
@@ -345,17 +450,28 @@ macro_rules! client_request_definitions {
                 self,
                 request_id: RequestId) -> std::result::Result<
                 (RequestId, crate::Result, Option<ClientResponsePayload>),
-                edgerun_json::Error,
+                JsonrpcProtocolProjectionError,
             > {
                 match self {
                     $(
                         Self::$variant(response) => {
-                            let result = edgerun_json::to_value(&response);
-                            Ok((request_id, result, Some(Self::$variant(response))))
+                            let _ = response;
+                            Err(JsonrpcProtocolProjectionError::not_yet_emitted(
+                                ProtocolTypeDirection::ClientRequest,
+                                protocol_method_name!($variant $(=> $wire)?),
+                                stringify!($response),
+                                &[],
+                            ))
                         }
                     )*
                     Self::InterruptConversation(response) => {
-                        Ok((request_id, edgerun_json::to_value(&response), None))
+                        let _ = response;
+                        Err(JsonrpcProtocolProjectionError::not_yet_emitted(
+                            ProtocolTypeDirection::ClientRequest,
+                            "interruptConversation".to_string(),
+                            "v1::InterruptConversationResponse",
+                            &[],
+                        ))
                     }
                 }
             }
@@ -376,21 +492,33 @@ macro_rules! client_request_definitions {
 
             pub fn into_jsonrpc_parts(
                 self,
-                request_id: RequestId) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
+                request_id: RequestId) -> std::result::Result<(RequestId, crate::Result), JsonrpcProtocolProjectionError> {
                 self.to_jsonrpc_parts(request_id)
             }
 
             pub fn to_jsonrpc_parts(
                 &self,
-                request_id: RequestId) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
+                request_id: RequestId) -> std::result::Result<(RequestId, crate::Result), JsonrpcProtocolProjectionError> {
                 match self {
                     $(
                         Self::$variant(response) => {
-                            Ok((request_id, edgerun_json::to_value(response)))
+                            let _ = response;
+                            Err(JsonrpcProtocolProjectionError::not_yet_emitted(
+                                ProtocolTypeDirection::ClientRequest,
+                                protocol_method_name!($variant $(=> $wire)?),
+                                stringify!($response),
+                                &[],
+                            ))
                         }
                     )*
                     Self::InterruptConversation(response) => {
-                        Ok((request_id, edgerun_json::to_value(response)))
+                        let _ = response;
+                        Err(JsonrpcProtocolProjectionError::not_yet_emitted(
+                            ProtocolTypeDirection::ClientRequest,
+                            "interruptConversation".to_string(),
+                            "v1::InterruptConversationResponse",
+                            &[],
+                        ))
                     }
                 }
             }
@@ -1047,7 +1175,7 @@ macro_rules! server_request_definitions {
         ),* $(,)?
     ) => {
         /// Request initiated from the server and sent to the client.
-        #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[derive(Debug, Clone, PartialEq, JsonSchema)]
         #[allow(clippy::large_enum_variant)]
         #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ServerRequest {
@@ -1070,15 +1198,18 @@ macro_rules! server_request_definitions {
 
             pub fn response_from_result(
                 &self,
-                result: crate::Result) -> edgerun_json::Result<ServerResponse> {
+                result: crate::Result) -> std::result::Result<ServerResponse, JsonrpcProtocolProjectionError> {
                 match self {
                     $(
                         Self::$variant { request_id, .. } => {
-                            let response = edgerun_json::from_json_value::<$response>(result)?;
-                            Ok(ServerResponse::$variant {
-                                request_id: request_id.clone(),
-                                response,
-                            })
+                            let _ = request_id;
+                            Err(JsonrpcProtocolProjectionError::not_yet_projected(
+                                ProtocolTypeDirection::ServerRequest,
+                                protocol_method_name!($variant $(=> $wire)?),
+                                Some(stringify!($response)),
+                                &[],
+                                Some(&result),
+                            ))
                         }
                     )*
                 }
@@ -1086,7 +1217,7 @@ macro_rules! server_request_definitions {
         }
 
         /// Typed response from the client to the server.
-        #[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[derive(Debug, Clone)]
         #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ServerResponse {
             $(
@@ -1176,7 +1307,7 @@ macro_rules! server_notification_definitions {
         ),* $(,)?
     ) => {
         /// Notification sent from the server to the client.
-        #[derive(Debug, Clone, JsonSchema, Display, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[derive(Debug, Clone, JsonSchema, Display)]
         #[allow(clippy::large_enum_variant)]
         #[schemars(tag = "method", content = "params", rename_all = "camelCase")]
         #[strum(serialize_all = "camelCase")]
@@ -1188,9 +1319,17 @@ macro_rules! server_notification_definitions {
         }
 
         impl ServerNotification {
-            pub fn to_params(self) -> Result<edgerun_json::Value, edgerun_json::Error> {
+            pub fn to_params(self) -> std::result::Result<RawJson, JsonrpcProtocolProjectionError> {
                 match self {
-                    $(Self::$variant(params) => Ok(edgerun_json::to_value(&params)),)*
+                    $(Self::$variant(params) => {
+                        let _ = params;
+                        Err(JsonrpcProtocolProjectionError::not_yet_emitted(
+                            ProtocolTypeDirection::ServerNotification,
+                            protocol_method_name!($variant $(=> $wire)?),
+                            stringify!($payload),
+                            &[],
+                        ))
+                    },)*
                 }
             }
         }
@@ -1221,10 +1360,27 @@ macro_rules! server_notification_definitions {
         }
 
         impl TryFrom<JSONRPCNotification> for ServerNotification {
-            type Error = edgerun_json::Error;
+            type Error = JsonrpcProtocolProjectionError;
 
-            fn try_from(value: JSONRPCNotification) -> Result<Self, edgerun_json::Error> {
-                edgerun_json::from_json_value(edgerun_json::to_value(&value)).map_err(Into::into)
+            fn try_from(value: JSONRPCNotification) -> Result<Self, Self::Error> {
+                let JSONRPCNotification { method, params } = value;
+                match method.as_str() {
+                    $(
+                        method if method == protocol_method_name!($variant $(=> $wire)?) => {
+                            Err(JsonrpcProtocolProjectionError::not_yet_projected(
+                                ProtocolTypeDirection::ServerNotification,
+                                method.to_string(),
+                                Some(stringify!($payload)),
+                                &[],
+                                params.as_ref(),
+                            ))
+                        }
+                    )*
+                    _ => Err(JsonrpcProtocolProjectionError::unknown_method(
+                        ProtocolTypeDirection::ServerNotification,
+                        method,
+                    )),
+                }
             }
         }
 
@@ -1245,7 +1401,7 @@ macro_rules! client_notification_definitions {
             $variant:ident $( ( $payload:ty ) )?
         ),* $(,)?
     ) => {
-        #[derive(Debug, Clone, JsonSchema, Display, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[derive(Debug, Clone, JsonSchema, Display)]
         #[schemars(tag = "method", content = "params", rename_all = "camelCase")]
         #[strum(serialize_all = "camelCase")]
         pub enum ClientNotification {
@@ -1285,11 +1441,154 @@ macro_rules! client_notification_payload_type {
     };
 }
 
+const COMMAND_EXECUTION_REQUEST_APPROVAL_FIELDS: &[&str] = &[
+    "threadId",
+    "turnId",
+    "itemId",
+    "startedAtMs",
+    "approvalId?",
+    "reason?",
+    "networkApprovalContext?",
+    "command?",
+    "cwd?",
+    "commandActions?",
+    "proposedExecpolicyAmendment?",
+    "proposedNetworkPolicyAmendments?",
+    "availableDecisions?",
+    "additionalPermissions?",
+];
+const FILE_CHANGE_REQUEST_APPROVAL_FIELDS: &[&str] = &[
+    "threadId",
+    "turnId",
+    "itemId",
+    "startedAtMs",
+    "reason?",
+    "grantRoot?",
+];
+const TOOL_REQUEST_USER_INPUT_FIELDS: &[&str] = &["threadId", "turnId", "itemId", "questions[]"];
+const MCP_SERVER_ELICITATION_REQUEST_FIELDS: &[&str] = &[
+    "threadId",
+    "turnId?",
+    "serverName",
+    "method",
+    "params",
+    "requestedSchema",
+];
+const DYNAMIC_TOOL_CALL_FIELDS: &[&str] = &[
+    "threadId",
+    "turnId",
+    "callId",
+    "namespace?",
+    "tool",
+    "arguments",
+];
+const CHATGPT_AUTH_TOKENS_REFRESH_FIELDS: &[&str] = &["reason", "previousAccountId?"];
+const APPLY_PATCH_APPROVAL_FIELDS: &[&str] = &[
+    "conversationId",
+    "callId",
+    "fileChanges",
+    "reason?",
+    "grantRoot?",
+];
+const EXEC_COMMAND_APPROVAL_FIELDS: &[&str] = &[
+    "conversationId",
+    "callId",
+    "approvalId?",
+    "command[]",
+    "cwd",
+    "reason?",
+    "parsedCmd[]",
+];
+
+fn server_request_projection_error(
+    method: &str,
+    params_type: &'static str,
+    expected_fields: &'static [&'static str],
+    params: Option<&RawJson>,
+) -> JsonrpcProtocolProjectionError {
+    JsonrpcProtocolProjectionError::not_yet_projected(
+        ProtocolTypeDirection::ServerRequest,
+        method.to_string(),
+        Some(params_type),
+        expected_fields,
+        params,
+    )
+}
+
 impl TryFrom<JSONRPCRequest> for ServerRequest {
-    type Error = edgerun_json::Error;
+    type Error = JsonrpcProtocolProjectionError;
 
     fn try_from(value: JSONRPCRequest) -> Result<Self, Self::Error> {
-        edgerun_json::from_json_value(edgerun_json::to_value(&value)).map_err(Into::into)
+        let JSONRPCRequest {
+            id: _,
+            method,
+            params,
+            trace: _,
+        } = value;
+        match method.as_str() {
+            method if method == "item/commandExecution/requestApproval" => {
+                Err(server_request_projection_error(
+                    method,
+                    "v2::CommandExecutionRequestApprovalParams",
+                    COMMAND_EXECUTION_REQUEST_APPROVAL_FIELDS,
+                    params.as_ref(),
+                ))
+            }
+            method if method == "item/fileChange/requestApproval" => {
+                Err(server_request_projection_error(
+                    method,
+                    "v2::FileChangeRequestApprovalParams",
+                    FILE_CHANGE_REQUEST_APPROVAL_FIELDS,
+                    params.as_ref(),
+                ))
+            }
+            method if method == "item/tool/requestUserInput" => {
+                Err(server_request_projection_error(
+                    method,
+                    "v2::ToolRequestUserInputParams",
+                    TOOL_REQUEST_USER_INPUT_FIELDS,
+                    params.as_ref(),
+                ))
+            }
+            method if method == "mcpServer/elicitation/request" => {
+                Err(server_request_projection_error(
+                    method,
+                    "v2::McpServerElicitationRequestParams",
+                    MCP_SERVER_ELICITATION_REQUEST_FIELDS,
+                    params.as_ref(),
+                ))
+            }
+            method if method == "item/tool/call" => Err(server_request_projection_error(
+                method,
+                "v2::DynamicToolCallParams",
+                DYNAMIC_TOOL_CALL_FIELDS,
+                params.as_ref(),
+            )),
+            method if method == "account/chatgptAuthTokens/refresh" => {
+                Err(server_request_projection_error(
+                    method,
+                    "v2::ChatgptAuthTokensRefreshParams",
+                    CHATGPT_AUTH_TOKENS_REFRESH_FIELDS,
+                    params.as_ref(),
+                ))
+            }
+            method if method == "applyPatchApproval" => Err(server_request_projection_error(
+                method,
+                "v1::ApplyPatchApprovalParams",
+                APPLY_PATCH_APPROVAL_FIELDS,
+                params.as_ref(),
+            )),
+            method if method == "execCommandApproval" => Err(server_request_projection_error(
+                method,
+                "v1::ExecCommandApprovalParams",
+                EXEC_COMMAND_APPROVAL_FIELDS,
+                params.as_ref(),
+            )),
+            _ => Err(JsonrpcProtocolProjectionError::unknown_method(
+                ProtocolTypeDirection::ServerRequest,
+                method,
+            )),
+        }
     }
 }
 
@@ -1347,7 +1646,7 @@ server_request_definitions! {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchParams {
     pub query: String,
@@ -1357,7 +1656,7 @@ pub struct FuzzyFileSearchParams {
 }
 
 /// Superset of [`codex_file_search::FileMatch`]
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 pub struct FuzzyFileSearchResult {
     pub root: String,
     pub path: String,
@@ -1367,56 +1666,48 @@ pub struct FuzzyFileSearchResult {
     pub indices: Option<Vec<u32>>,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[schemars(rename_all = "camelCase")]
 pub enum FuzzyFileSearchMatchType {
     File,
     Directory,
 }
 
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 pub struct FuzzyFileSearchResponse {
     pub files: Vec<FuzzyFileSearchResult>,
 }
 
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionStartParams {
     pub session_id: String,
     pub roots: Vec<String>,
 }
 
-#[derive(
-    Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson,
-)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, Default)]
 pub struct FuzzyFileSearchSessionStartResponse {}
 
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionUpdateParams {
     pub session_id: String,
     pub query: String,
 }
 
-#[derive(
-    Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson,
-)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, Default)]
 pub struct FuzzyFileSearchSessionUpdateResponse {}
 
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionStopParams {
     pub session_id: String,
 }
 
-#[derive(
-    Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson,
-)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, Default)]
 pub struct FuzzyFileSearchSessionStopResponse {}
 
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionUpdatedNotification {
     pub session_id: String,
@@ -1424,7 +1715,7 @@ pub struct FuzzyFileSearchSessionUpdatedNotification {
     pub files: Vec<FuzzyFileSearchResult>,
 }
 
-#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionCompletedNotification {
     pub session_id: String,

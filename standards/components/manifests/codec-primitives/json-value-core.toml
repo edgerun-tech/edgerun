@@ -1,0 +1,27 @@
+id = "codec-json-value-core"
+name = "json-value-core"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300041
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/json-value-core.wat"
+runner = "standards/runners/json-value-core-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "token_records", "scalars"]
+outputs = ["status", "packed_i64", "records", "scalars"]
+depends_on = ["codec-json-scalar", "codec-json-tape"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "json_value_variant_for_tape_kind",
+  "json_value_can_convert",
+  "json_number_caps",
+  "json_object_find_field",
+]
+parity_sources = [
+  "crates/utility/edgerun-json/src/value.rs",
+  "crates/utility/edgerun-json/src/parse.rs",
+  "crates/utility/edgerun-json/src/tape.rs",
+]

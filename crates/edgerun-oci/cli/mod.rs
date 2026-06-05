@@ -14,6 +14,7 @@ mod exec;
 mod features;
 mod images;
 mod inspect;
+mod json;
 mod kill;
 mod list;
 mod logs;

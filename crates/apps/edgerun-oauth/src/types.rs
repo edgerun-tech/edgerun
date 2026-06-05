@@ -2,7 +2,6 @@
 
 use crate::oauth_client::percent_encode;
 use crate::prelude::*;
-use edgerun_json::{JsonValue, to_string};
 pub use edgerun_protocols::oauth::types::{GrantType, Scope};
 
 // ---------------------------------------------------------------------------
@@ -175,73 +174,49 @@ pub struct TokenResponse {
 impl TokenResponse {
     /// Parse from a JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let tape = edgerun_json::parse_json_tape(json_str)
-            .map_err(|e| format!("JSON parse error: {e}"))?;
-        let value = tape
-            .root(json_str)
-            .ok_or_else(|| "JSON parse error: missing root value".to_string())?;
+        let value = crate::json_fixed::parse_object(json_str)?;
         Ok(Self {
-            access_token: value
-                .get("access_token")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            token_type: value
-                .get("token_type")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            expires_in: value.get("expires_in").and_then(|v| v.as_u64()),
-            refresh_token: value
-                .get("refresh_token")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            id_token: value
-                .get("id_token")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            scope: value
-                .get("scope")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            error: value
-                .get("error")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            error_description: value
-                .get("error_description")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
+            access_token: value.str_field("access_token"),
+            token_type: value.str_field("token_type"),
+            expires_in: value.u64_field("expires_in"),
+            refresh_token: value.str_field("refresh_token"),
+            id_token: value.str_field("id_token"),
+            scope: value.str_field("scope"),
+            error: value.str_field("error"),
+            error_description: value.str_field("error_description"),
         })
     }
 
     /// Serialize to JSON.
     pub fn to_json(&self) -> String {
-        let mut obj: Vec<(String, JsonValue)> = Vec::new();
+        let mut out = String::from("{");
+        let mut first = true;
         if let Some(ref v) = self.access_token {
-            obj.push(("access_token".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "access_token", v);
         }
         if let Some(ref v) = self.token_type {
-            obj.push(("token_type".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "token_type", v);
         }
         if let Some(v) = self.expires_in {
-            obj.push(("expires_in".into(), JsonValue::Number(v.into())));
+            crate::json_fixed::write_u64_field(&mut out, &mut first, "expires_in", v);
         }
         if let Some(ref v) = self.refresh_token {
-            obj.push(("refresh_token".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "refresh_token", v);
         }
         if let Some(ref v) = self.id_token {
-            obj.push(("id_token".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "id_token", v);
         }
         if let Some(ref v) = self.scope {
-            obj.push(("scope".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "scope", v);
         }
         if let Some(ref v) = self.error {
-            obj.push(("error".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "error", v);
         }
         if let Some(ref v) = self.error_description {
-            obj.push(("error_description".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "error_description", v);
         }
-        let val = JsonValue::Object(edgerun_json::Map::from_iter(obj));
-        to_string(&val).unwrap_or_else(|_| "{}".into())
+        out.push('}');
+        out
     }
 
     /// Convert to `Credentials` using runtime-provided `now_secs`.
@@ -297,36 +272,19 @@ pub struct DeviceAuthorizationResponse {
 impl DeviceAuthorizationResponse {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let tape = edgerun_json::parse_json_tape(json_str)
-            .map_err(|e| format!("JSON parse error: {e}"))?;
-        let value = tape
-            .root(json_str)
-            .ok_or_else(|| "JSON parse error: missing root value".to_string())?;
+        let value = crate::json_fixed::parse_object(json_str)?;
         let device_code = value
-            .get("device_code")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'device_code'")?
-            .to_string();
-        let user_code = value
-            .get("user_code")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'user_code'")?
-            .to_string();
+            .str_field("device_code")
+            .ok_or("Missing 'device_code'")?;
+        let user_code = value.str_field("user_code").ok_or("Missing 'user_code'")?;
         let verification_uri = value
-            .get("verification_uri")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'verification_uri'")?
-            .to_string();
+            .str_field("verification_uri")
+            .ok_or("Missing 'verification_uri'")?;
         let verification_uri_complete = value
-            .get("verification_uri_complete")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'verification_uri_complete'")?
-            .to_string();
-        let expires_in = value
-            .get("expires_in")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(600);
-        let interval = value.get("interval").and_then(|v| v.as_u64()).unwrap_or(5);
+            .str_field("verification_uri_complete")
+            .ok_or("Missing 'verification_uri_complete'")?;
+        let expires_in = value.u64_field("expires_in").unwrap_or(600);
+        let interval = value.u64_field("interval").unwrap_or(5);
         Ok(Self {
             device_code,
             user_code,

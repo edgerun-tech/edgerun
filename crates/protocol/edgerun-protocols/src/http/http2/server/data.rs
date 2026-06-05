@@ -5,12 +5,12 @@ use super::Http2Server;
 use super::response;
 use crate::http::http2::ErrorCode;
 use crate::http::http2::frame::{DataFrame, Frame};
-use crate::http::http2::hpack::Encoder;
+use crate::http::http2::hpack::HpackContext;
 use alloc::vec;
 
 impl Http2Server {
     /// Process an incoming DATA frame.
-    pub fn handle_data(&mut self, frame: &Frame, encoder: &mut Encoder) -> FrameAction {
+    pub fn handle_data(&mut self, frame: &Frame, hpack: &mut HpackContext) -> FrameAction {
         let df = match DataFrame::from_frame(frame) {
             Ok(df) => df,
             Err(_) => {
@@ -102,7 +102,7 @@ impl Http2Server {
 
         if df.end_stream {
             let _headers = self.pending_headers.remove(&sid).unwrap_or_default();
-            match response::respond_with_200(sid, encoder) {
+            match response::respond_with_200(sid, hpack, self.last_processed_stream_id) {
                 FrameAction::WriteFrames(mut frames) => actions.append(&mut frames),
                 FrameAction::Goaway { .. } => {
                     self.goaway_sent = true;

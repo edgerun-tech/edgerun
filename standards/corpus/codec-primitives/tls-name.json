@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "tls-name",
+  "module": "tls-name.wat",
+  "cases": [
+    {
+      "id": "normalize-trailing-dot-uppercase",
+      "function": "tls_dns_name_normalize",
+      "input": { "ascii": "Example.COM." },
+      "expect": { "status": 0, "ascii": "example.com" },
+      "notes": "Normalization lowercases ASCII and trims one trailing dot."
+    },
+    {
+      "id": "reject-single-label",
+      "function": "tls_dns_name_normalize",
+      "input": { "ascii": "localhost" },
+      "expect": { "status": 3 },
+      "notes": "Certificate DNS names require at least two labels."
+    },
+    {
+      "id": "reject-ip-literal",
+      "function": "tls_dns_name_normalize",
+      "input": { "ascii": "127.0.0.1" },
+      "expect": { "status": 3 },
+      "notes": "DNS name matcher does not accept IP literals."
+    },
+    {
+      "id": "wildcard-single-label-match",
+      "function": "tls_dns_name_matches",
+      "input": { "pattern_ascii": "*.example.com", "name_ascii": "www.example.com" },
+      "expect": { "status": 0, "matches": true },
+      "notes": "Wildcard covers exactly one left-most label."
+    },
+    {
+      "id": "wildcard-multilabel-reject",
+      "function": "tls_dns_name_matches",
+      "input": { "pattern_ascii": "*.example.com", "name_ascii": "a.b.example.com" },
+      "expect": { "status": 0, "matches": false },
+      "notes": "Wildcard does not cover multiple labels."
+    }
+  ]
+}

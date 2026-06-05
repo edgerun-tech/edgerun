@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 codex-core = { workspace = true, features = ["native-transport"] }
+codex-client = { workspace = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "x25519", "aead", "hmac"] }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true }

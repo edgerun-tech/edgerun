@@ -1,0 +1,26 @@
+id = "codec-http-date"
+name = "http-date"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300103
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/http-date.wat"
+runner = "standards/runners/http-date-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "http_date_parse",
+  "http_date_format",
+  "http_date_validate_parts",
+]
+notes = "HTTP date parser and canonical IMF-fixdate formatter. Parses IMF-fixdate, obsolete RFC850 two-digit year dates, and obsolete asctime dates; validates date/weekday consistency and emits exact 29-byte canonical GMT form."
+parity_sources = [
+  "crates/utility/edgerun-httpdate/src/lib.rs",
+  "crates/utility/edgerun-httpdate/src/date.rs",
+]

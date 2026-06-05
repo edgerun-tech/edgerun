@@ -1,0 +1,27 @@
+id = "codec-length-frame"
+name = "length-frame"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300056
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/length-frame.wat"
+runner = "standards/runners/length-frame-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "frame_header_decode_u16_be",
+  "frame_header_encode_u16_be",
+  "frame_header_decode_u64_be",
+  "frame_header_encode_u64_be",
+  "frame_header_decode_u64_le",
+  "frame_header_encode_u64_le",
+]
+parity_sources = [
+  "crates/utility/edgerun-encoding/src/frame.rs",
+]

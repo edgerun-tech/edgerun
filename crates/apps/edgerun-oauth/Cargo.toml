@@ -12,7 +12,6 @@ description = "OAuth helpers for Edgerun service authentication"
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "p256", "rsa"] }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["client", "tls"] }
 edgerun-log = { workspace = true }
-edgerun-json = { workspace = true }
 edgerun-secret-service = { workspace = true }
 edgerun-encoding = { workspace = true, default-features = false }
 edgerun-protocols = { workspace = true, default-features = false, features = ["oauth"] }

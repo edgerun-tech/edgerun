@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "http3-frame",
+  "module": "http3-frame.wat",
+  "cases": [
+    {
+      "id": "data-empty",
+      "function": "http3_frame_header_decode",
+      "input": { "hex": "0000" },
+      "expect": { "status": 0, "frame_type": 0, "payload_len": 0, "classification": "DATA" },
+      "notes": "HTTP/3 DATA frame header with empty payload."
+    },
+    {
+      "id": "headers-empty",
+      "function": "http3_frame_header_decode",
+      "input": { "hex": "0100" },
+      "expect": { "status": 0, "frame_type": 1, "payload_len": 0, "classification": "HEADERS" },
+      "notes": "HTTP/3 HEADERS frame header with empty payload."
+    },
+    {
+      "id": "reserved-grease",
+      "function": "http3_frame_type_classify",
+      "input": { "value": 33 },
+      "expect": { "status": 0, "classification": "reserved" },
+      "notes": "0x21 is in the HTTP/3 reserved greasing sequence."
+    },
+    {
+      "id": "truncated-varint",
+      "function": "http3_frame_header_decode",
+      "input": { "hex": "40" },
+      "expect": { "status": 5 },
+      "notes": "Two-byte QUIC varint prefix without the second octet."
+    },
+    {
+      "id": "incomplete-payload",
+      "function": "http3_frame_header_decode",
+      "input": { "hex": "00056869" },
+      "expect": { "status": 1 },
+      "notes": "Declared length five but only two payload octets are present."
+    }
+  ]
+}

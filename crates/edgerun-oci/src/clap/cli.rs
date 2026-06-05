@@ -5,9 +5,9 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::{self, Write};
-use edgerun_json::{JsonNumber, Value};
 
 pub struct Command {
     name: String,
@@ -122,24 +122,23 @@ impl Command {
                 }) {
                     match a.action {
                         Some(Action::StoreTrue) => {
-                            matches.map.insert(a.name.clone(), Value::Bool(true));
+                            matches.map.insert(a.name.clone(), ArgValue::Bool(true));
                         }
                         Some(Action::StoreFalse) => {
-                            matches.map.insert(a.name.clone(), Value::Bool(false));
+                            matches.map.insert(a.name.clone(), ArgValue::Bool(false));
                         }
                         Some(Action::Count) => {
                             let current = matches
                                 .map
                                 .get(&a.name)
                                 .and_then(|v| match v {
-                                    Value::Number(n) => n.as_i64(),
+                                    ArgValue::Count(n) => Some(*n),
                                     _ => None,
                                 })
                                 .unwrap_or(0);
-                            matches.map.insert(
-                                a.name.clone(),
-                                Value::Number(JsonNumber::I64(current + 1)),
-                            );
+                            matches
+                                .map
+                                .insert(a.name.clone(), ArgValue::Count(current + 1));
                         }
                         Some(Action::Append) => {
                             if let Some(value) = option_value_arg(
@@ -178,16 +177,14 @@ impl Command {
                                     }
                                 }
                                 if values.len() == 1 {
-                                    matches
-                                        .map
-                                        .insert(a.name.clone(), Value::String(values[0].clone()));
-                                } else if values.len() > 1 {
                                     matches.map.insert(
                                         a.name.clone(),
-                                        Value::Array(
-                                            values.into_iter().map(Value::String).collect(),
-                                        ),
+                                        ArgValue::String(values[0].clone()),
                                     );
+                                } else if values.len() > 1 {
+                                    matches
+                                        .map
+                                        .insert(a.name.clone(), ArgValue::Strings(values));
                                 }
                             } else {
                                 let value_arg = if let Some(value) = inline_value {
@@ -212,20 +209,17 @@ impl Command {
                                         if values.len() == 1 {
                                             matches.map.insert(
                                                 a.name.clone(),
-                                                Value::String(values[0].clone()),
+                                                ArgValue::String(values[0].clone()),
                                             );
                                         } else {
-                                            matches.map.insert(
-                                                a.name.clone(),
-                                                Value::Array(
-                                                    values.into_iter().map(Value::String).collect(),
-                                                ),
-                                            );
+                                            matches
+                                                .map
+                                                .insert(a.name.clone(), ArgValue::Strings(values));
                                         }
                                     } else {
                                         matches.map.insert(
                                             a.name.clone(),
-                                            Value::String(value.to_string()),
+                                            ArgValue::String(value.to_string()),
                                         );
                                     }
                                 }
@@ -254,7 +248,7 @@ impl Command {
                 } else if !matches.map.contains_key(&arg.name) {
                     matches
                         .map
-                        .insert(arg.name.clone(), Value::String(default.clone()));
+                        .insert(arg.name.clone(), ArgValue::String(default.clone()));
                 }
             }
         }
@@ -474,10 +468,17 @@ impl Arg {
 }
 
 pub struct ArgMatches {
-    pub(crate) map: alloc::collections::BTreeMap<String, Value>,
+    pub(crate) map: alloc::collections::BTreeMap<String, ArgValue>,
     pub positional: alloc::vec::Vec<String>,
     unknown: alloc::vec::Vec<String>,
     missing_values: alloc::vec::Vec<String>,
+}
+
+pub(crate) enum ArgValue {
+    String(String),
+    Strings(Vec<String>),
+    Bool(bool),
+    Count(i64),
 }
 
 impl Default for ArgMatches {
@@ -502,12 +503,12 @@ impl ArgMatches {
     {
         if let Some(v) = self.map.get(name) {
             match v {
-                Value::String(s) => {
+                ArgValue::String(s) => {
                     let result = s.parse::<T>();
                     result.ok()
                 }
-                Value::Number(n) => n.to_string().parse().ok(),
-                Value::Bool(b) => {
+                ArgValue::Count(n) => n.to_string().parse().ok(),
+                ArgValue::Bool(b) => {
                     if *b {
                         Some(T::from_str("true").ok()?)
                     } else {
@@ -526,13 +527,18 @@ impl ArgMatches {
 
         match self.map.entry(name.to_string()) {
             Entry::Vacant(entry) => {
-                entry.insert(Value::Array(alloc::vec![Value::String(value)]));
+                entry.insert(ArgValue::Strings(vec![value]));
             }
             Entry::Occupied(mut entry) => match entry.get_mut() {
-                Value::Array(values) => values.push(Value::String(value)),
+                ArgValue::Strings(values) => values.push(value),
                 existing => {
-                    let previous = core::mem::replace(existing, Value::Null);
-                    *existing = Value::Array(alloc::vec![previous, Value::String(value)]);
+                    let previous = core::mem::replace(existing, ArgValue::Strings(Vec::new()));
+                    let mut values = Vec::new();
+                    if let ArgValue::String(previous) = previous {
+                        values.push(previous);
+                    }
+                    values.push(value);
+                    *existing = ArgValue::Strings(values);
                 }
             },
         }
@@ -543,13 +549,11 @@ impl ArgMatches {
         <T as core::str::FromStr>::Err: core::fmt::Debug,
     {
         self.map.get(name).and_then(|v| match v {
-            Value::Array(arr) => {
+            ArgValue::Strings(arr) => {
                 let mut result = alloc::vec::Vec::new();
                 for item in arr {
-                    if let Value::String(s) = item {
-                        if let Ok(parsed) = s.parse::<T>() {
-                            result.push(parsed);
-                        }
+                    if let Ok(parsed) = item.parse::<T>() {
+                        result.push(parsed);
                     }
                 }
                 if result.is_empty() {
@@ -558,7 +562,7 @@ impl ArgMatches {
                     Some(result)
                 }
             }
-            Value::String(s) => s.parse::<T>().ok().map(|v| alloc::vec![v]),
+            ArgValue::String(s) => s.parse::<T>().ok().map(|v| vec![v]),
             _ => None,
         })
     }
@@ -579,8 +583,8 @@ impl ArgMatches {
         self.map
             .get(name)
             .and_then(|v| match v {
-                Value::Bool(b) => Some(*b),
-                Value::Number(n) => n.as_i64().map(|n| n != 0),
+                ArgValue::Bool(b) => Some(*b),
+                ArgValue::Count(n) => Some(*n != 0),
                 _ => None,
             })
             .unwrap_or(false)

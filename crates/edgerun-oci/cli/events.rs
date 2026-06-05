@@ -5,9 +5,9 @@ use std::fs;
 use std::io::{self, Write};
 
 use crate::clap::{Arg, Command};
+use crate::cli::json;
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::load_state;
-use edgerun_json::{JsonValue, Map};
 
 pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
@@ -137,99 +137,125 @@ fn read_cgroup_file(cgroup_dir: &std::path::Path, file: &str) -> Option<String> 
 }
 
 fn read_cgroup_stats(cgroup_dir: &std::path::Path, pid: u32) -> io::Result<String> {
-    let mut root = Map::new();
-    root.push_field("pid", pid);
+    let mut root = String::new();
+    let mut first_root = true;
+    root.push('{');
+    json::push_u64_field(&mut root, &mut first_root, "pid", u64::from(pid));
 
     // Memory stats
     if let Some(mem_current) = read_cgroup_file(cgroup_dir, "memory.current") {
-        let mut memory = Map::new();
+        let mut memory = String::new();
+        let mut first_memory = true;
+        memory.push('{');
         if let Ok(current) = mem_current.trim().parse::<u64>() {
-            memory.push_field("current", current);
+            json::push_u64_field(&mut memory, &mut first_memory, "current", current);
         }
         for part in mem_current.split_whitespace() {
             if let Some((key, val)) = part.split_once('=') {
-                memory.push_field(key, number_or_string(val));
+                push_number_or_string_field(&mut memory, &mut first_memory, key, val);
             }
         }
         // Add memory.peak if available
         if let Some(peak) = read_cgroup_file(cgroup_dir, "memory.peak") {
-            memory.push_field("peak", number_or_string(&peak));
+            push_number_or_string_field(&mut memory, &mut first_memory, "peak", &peak);
         }
         // Add memory.events if available
         if let Some(events) = read_cgroup_file(cgroup_dir, "memory.events") {
-            let mut event_fields = Map::new();
+            let mut event_fields = String::new();
+            let mut first_event = true;
+            event_fields.push('{');
             for line in events.lines() {
                 if let Some((key, val)) = line.split_once(' ') {
-                    event_fields.push_field(key, number_or_string(val));
+                    push_number_or_string_field(&mut event_fields, &mut first_event, key, val);
                 }
             }
-            memory.push_field("events", JsonValue::Object(event_fields));
+            event_fields.push('}');
+            json::push_field_prefix(&mut memory, &mut first_memory, "events");
+            memory.push_str(&event_fields);
         }
-        root.push_field("memory", JsonValue::Object(memory));
+        memory.push('}');
+        json::push_field_prefix(&mut root, &mut first_root, "memory");
+        root.push_str(&memory);
     }
 
     // CPU stats
     if let Some(cpu_max) = read_cgroup_file(cgroup_dir, "cpu.max") {
-        let mut cpu = Map::new();
+        let mut cpu = String::new();
+        let mut first_cpu = true;
+        cpu.push('{');
         if let Some((quota, period)) = cpu_max.split_once(' ') {
-            cpu.push_field("max_quota", quota);
-            cpu.push_field("max_period", period);
+            json::push_string_field(&mut cpu, &mut first_cpu, "max_quota", quota);
+            json::push_string_field(&mut cpu, &mut first_cpu, "max_period", period);
         }
         // Add cpu.weight
         if let Some(weight) = read_cgroup_file(cgroup_dir, "cpu.weight") {
             if let Ok(w) = weight.trim().parse::<u64>() {
-                cpu.push_field("weight", w);
+                json::push_u64_field(&mut cpu, &mut first_cpu, "weight", w);
             }
         }
         // Add cpu.stat
         if let Some(stat) = read_cgroup_file(cgroup_dir, "cpu.stat") {
-            let mut stat_fields = Map::new();
+            let mut stat_fields = String::new();
+            let mut first_stat = true;
+            stat_fields.push('{');
             for line in stat.lines() {
                 if let Some((key, val)) = line.split_once(' ') {
-                    stat_fields.push_field(key, val);
+                    json::push_string_field(&mut stat_fields, &mut first_stat, key, val);
                 }
             }
-            cpu.push_field("stat", JsonValue::Object(stat_fields));
+            stat_fields.push('}');
+            json::push_field_prefix(&mut cpu, &mut first_cpu, "stat");
+            cpu.push_str(&stat_fields);
         }
-        root.push_field("cpu", JsonValue::Object(cpu));
+        cpu.push('}');
+        json::push_field_prefix(&mut root, &mut first_root, "cpu");
+        root.push_str(&cpu);
     }
 
     // PIDs stats
     if let Some(pids_current) = read_cgroup_file(cgroup_dir, "pids.current") {
         if let Ok(current) = pids_current.trim().parse::<u64>() {
-            let mut pids = Map::new();
-            pids.push_field("current", current);
+            let mut pids = String::new();
+            let mut first_pids = true;
+            pids.push('{');
+            json::push_u64_field(&mut pids, &mut first_pids, "current", current);
             if let Some(pids_max) = read_cgroup_file(cgroup_dir, "pids.max") {
                 let pids_max = pids_max.trim();
                 if pids_max != "max" {
                     if let Ok(max) = pids_max.parse::<u64>() {
-                        pids.push_field("max", max);
+                        json::push_u64_field(&mut pids, &mut first_pids, "max", max);
                     } else {
-                        pids.push_field("max", "max");
+                        json::push_string_field(&mut pids, &mut first_pids, "max", "max");
                     }
                 } else {
-                    pids.push_field("max", "max");
+                    json::push_string_field(&mut pids, &mut first_pids, "max", "max");
                 }
             }
-            root.push_field("pids", JsonValue::Object(pids));
+            pids.push('}');
+            json::push_field_prefix(&mut root, &mut first_root, "pids");
+            root.push_str(&pids);
         }
     }
 
     // IO stats
     if let Some(io_stat) = read_cgroup_file(cgroup_dir, "io.stat") {
-        let mut io = Map::new();
-        io.push_field("stat", io_stat);
-        root.push_field("io", JsonValue::Object(io));
+        let mut io = String::new();
+        let mut first_io = true;
+        io.push('{');
+        json::push_string_field(&mut io, &mut first_io, "stat", &io_stat);
+        io.push('}');
+        json::push_field_prefix(&mut root, &mut first_root, "io");
+        root.push_str(&io);
     }
 
-    edgerun_json::to_string(&JsonValue::Object(root))
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))
+    root.push('}');
+    Ok(root)
 }
 
-fn number_or_string(value: &str) -> JsonValue {
-    value
-        .trim()
-        .parse::<u64>()
-        .map(JsonValue::from)
-        .unwrap_or_else(|_| JsonValue::from(value))
+fn push_number_or_string_field(out: &mut String, first: &mut bool, name: &str, value: &str) {
+    json::push_field_prefix(out, first, name);
+    match value.trim().parse::<u64>() {
+        Ok(number) => out.push_str(&number.to_string()),
+        Err(_) => json::write_string(out, value),
+    }
 }

@@ -101,7 +101,13 @@ name = "HPACK"
 file = "protocols/hpack.toml"
 layer = "presentation"
 runs_over = ["HTTP/2"]
-implementation_crates = ["crates/utility/edgerun-hpack"]
+implementation_crates = [
+  "standards/build/wasm/codec-primitives/http-prefix-int.wat",
+  "standards/build/wasm/codec-primitives/hpack-string.wat",
+  "standards/build/wasm/codec-primitives/hpack-huffman.wat",
+  "standards/build/wasm/codec-primitives/hpack-header-block.wat",
+  "standards/build/wasm/codec-primitives/hpack-table-core.wat",
+]
 
 [[protocol]]
 id = "http"

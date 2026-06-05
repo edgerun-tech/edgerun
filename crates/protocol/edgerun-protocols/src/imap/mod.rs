@@ -4,6 +4,7 @@
 //! types, and session state transitions. It does not own sockets, TLS,
 //! authentication stores, mailbox storage, or filesystem access.
 
+pub(crate) mod io;
 pub mod message;
 pub mod parser;
 pub mod session_core;

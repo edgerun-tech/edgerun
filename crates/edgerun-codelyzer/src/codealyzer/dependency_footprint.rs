@@ -5,7 +5,6 @@ use std::process::Command;
 use std::time::SystemTime;
 
 use crate::codealyzer::errors::AnalyzerError;
-use edgerun_json::impl_json_struct;
 
 #[derive(Clone)]
 struct CargoMetadata {
@@ -51,83 +50,6 @@ struct CargoResolveNode {
 #[derive(Clone)]
 struct CargoResolveDep {
     pkg: String,
-}
-
-impl_json_struct! {
-    CargoMetadata {
-        required {
-            packages: "packages" => Vec<CargoPackage>,
-            workspace_members: "workspace_members" => Vec<String>,
-        }
-        optional {
-            resolve: "resolve" => CargoResolve,
-        }
-    }
-}
-
-impl_json_struct! {
-    CargoPackage {
-        required {
-            id: "id" => String,
-            name: "name" => String,
-            version: "version" => String,
-            manifest_path: "manifest_path" => String,
-        }
-        optional {
-            source: "source" => String,
-            path: "path" => String,
-            dependencies: "dependencies" => Vec<CargoDependency>,
-            targets: "targets" => Vec<CargoPackageTarget>,
-        }
-    }
-}
-
-impl_json_struct! {
-    CargoDependency {
-        required {
-            name: "name" => String,
-        }
-        optional {}
-    }
-}
-
-impl_json_struct! {
-    CargoPackageTarget {
-        required {
-            kind: "kind" => Vec<String>,
-        }
-        optional {}
-    }
-}
-
-impl_json_struct! {
-    CargoResolve {
-        required {
-            nodes: "nodes" => Vec<CargoResolveNode>,
-        }
-        optional {}
-    }
-}
-
-impl_json_struct! {
-    CargoResolveNode {
-        required {
-            id: "id" => String,
-        }
-        optional {
-            dependencies: "dependencies" => Vec<String>,
-            deps: "deps" => Vec<CargoResolveDep>,
-        }
-    }
-}
-
-impl_json_struct! {
-    CargoResolveDep {
-        required {
-            pkg: "pkg" => String,
-        }
-        optional {}
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -545,12 +467,254 @@ fn load_cargo_metadata(workspace_root: &Path) -> Result<CargoMetadata, AnalyzerE
         message: error.to_string(),
     })?;
 
-    edgerun_json::from_json_str::<CargoMetadata>(&output).map_err(|error| {
-        AnalyzerError::ParseError {
-            file: workspace_manifest.clone(),
-            message: error.to_string(),
-        }
+    parse_cargo_metadata_projection(&output).map_err(|message| AnalyzerError::ParseError {
+        file: workspace_manifest,
+        message,
     })
+}
+
+fn parse_cargo_metadata_projection(input: &str) -> Result<CargoMetadata, String> {
+    let package_objects = fixed_json_object_array_field(input, "packages")
+        .ok_or("cargo metadata missing packages")?;
+    let mut packages = Vec::new();
+    for package in package_objects {
+        packages.push(project_cargo_package(package)?);
+    }
+
+    let workspace_members = fixed_json_string_array_field(input, "workspace_members")
+        .ok_or("cargo metadata missing workspace_members")?;
+    let resolve = fixed_json_object_field(input, "resolve").and_then(project_cargo_resolve);
+
+    Ok(CargoMetadata {
+        packages,
+        workspace_members,
+        resolve,
+    })
+}
+
+fn project_cargo_package(input: &str) -> Result<CargoPackage, String> {
+    let id = fixed_json_string_field(input, "id").ok_or("cargo package missing id")?;
+    let name = fixed_json_string_field(input, "name").ok_or("cargo package missing name")?;
+    let version =
+        fixed_json_string_field(input, "version").ok_or("cargo package missing version")?;
+    let manifest_path = fixed_json_string_field(input, "manifest_path")
+        .ok_or("cargo package missing manifest_path")?;
+    let source = fixed_json_optional_string_field(input, "source");
+    let path = fixed_json_optional_string_field(input, "path");
+    let dependencies = fixed_json_object_array_field(input, "dependencies").map(|objects| {
+        objects
+            .into_iter()
+            .filter_map(|object| fixed_json_string_field(object, "name"))
+            .map(|name| CargoDependency { name })
+            .collect::<Vec<_>>()
+    });
+    let targets = fixed_json_object_array_field(input, "targets").map(|objects| {
+        objects
+            .into_iter()
+            .filter_map(|object| {
+                fixed_json_string_array_field(object, "kind")
+                    .map(|kind| CargoPackageTarget { kind })
+            })
+            .collect::<Vec<_>>()
+    });
+
+    Ok(CargoPackage {
+        id,
+        name,
+        version,
+        manifest_path,
+        source,
+        path,
+        dependencies,
+        targets,
+    })
+}
+
+fn project_cargo_resolve(input: &str) -> Option<CargoResolve> {
+    let nodes = fixed_json_object_array_field(input, "nodes")?
+        .into_iter()
+        .filter_map(project_cargo_resolve_node)
+        .collect::<Vec<_>>();
+    Some(CargoResolve { nodes })
+}
+
+fn project_cargo_resolve_node(input: &str) -> Option<CargoResolveNode> {
+    let id = fixed_json_string_field(input, "id")?;
+    let dependencies = fixed_json_string_array_field(input, "dependencies");
+    let deps = fixed_json_object_array_field(input, "deps").map(|objects| {
+        objects
+            .into_iter()
+            .filter_map(|object| fixed_json_string_field(object, "pkg"))
+            .map(|pkg| CargoResolveDep { pkg })
+            .collect::<Vec<_>>()
+    });
+    Some(CargoResolveNode {
+        id,
+        dependencies,
+        deps,
+    })
+}
+
+fn fixed_json_optional_string_field(input: &str, key: &str) -> Option<String> {
+    let value = fixed_json_field_value(input, key)?.trim_start();
+    if value.starts_with("null") {
+        None
+    } else {
+        parse_json_string(value).map(|(value, _)| value)
+    }
+}
+
+fn fixed_json_string_field(input: &str, key: &str) -> Option<String> {
+    let value = fixed_json_field_value(input, key)?;
+    parse_json_string(value.trim_start()).map(|(value, _)| value)
+}
+
+fn fixed_json_string_array_field(input: &str, key: &str) -> Option<Vec<String>> {
+    let value = fixed_json_field_value(input, key)?.trim_start();
+    if !value.starts_with('[') {
+        return None;
+    }
+    let end = matching_json_end(value, '[', ']')?;
+    let mut rest = value[1..end - 1].trim_start();
+    let mut items = Vec::new();
+    while !rest.is_empty() {
+        let (item, used) = parse_json_string(rest)?;
+        items.push(item);
+        rest = rest[used..].trim_start();
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+        } else if !rest.is_empty() {
+            return None;
+        }
+    }
+    Some(items)
+}
+
+fn fixed_json_object_field<'a>(input: &'a str, key: &str) -> Option<&'a str> {
+    let value = fixed_json_field_value(input, key)?.trim_start();
+    if !value.starts_with('{') {
+        return None;
+    }
+    let end = matching_json_end(value, '{', '}')?;
+    Some(&value[..end])
+}
+
+fn fixed_json_object_array_field<'a>(input: &'a str, key: &str) -> Option<Vec<&'a str>> {
+    let value = fixed_json_field_value(input, key)?.trim_start();
+    if !value.starts_with('[') {
+        return None;
+    }
+    let end = matching_json_end(value, '[', ']')?;
+    let mut rest = value[1..end - 1].trim_start();
+    let mut objects = Vec::new();
+    while !rest.is_empty() {
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let object_end = matching_json_end(rest, '{', '}')?;
+        objects.push(&rest[..object_end]);
+        rest = rest[object_end..].trim_start();
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+        } else if !rest.is_empty() {
+            return None;
+        }
+    }
+    Some(objects)
+}
+
+fn fixed_json_field_value<'a>(input: &'a str, key: &str) -> Option<&'a str> {
+    let mut rest = input;
+    while let Some(pos) = rest.find('"') {
+        rest = &rest[pos..];
+        let (found, used) = parse_json_string(rest)?;
+        rest = &rest[used..];
+        let after_key = rest.trim_start();
+        if !after_key.starts_with(':') {
+            continue;
+        }
+        let value = after_key[1..].trim_start();
+        if found == key {
+            return Some(value);
+        }
+        rest = value;
+    }
+    None
+}
+
+fn parse_json_string(input: &str) -> Option<(String, usize)> {
+    let bytes = input.as_bytes();
+    if bytes.first().copied() != Some(b'"') {
+        return None;
+    }
+    let mut out = String::new();
+    let mut i = 1usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => return Some((out, i + 1)),
+            b'\\' => {
+                i += 1;
+                let escaped = *bytes.get(i)?;
+                match escaped {
+                    b'"' => out.push('"'),
+                    b'\\' => out.push('\\'),
+                    b'/' => out.push('/'),
+                    b'b' => out.push('\u{0008}'),
+                    b'f' => out.push('\u{000c}'),
+                    b'n' => out.push('\n'),
+                    b'r' => out.push('\r'),
+                    b't' => out.push('\t'),
+                    b'u' => {
+                        let hex = input.get(i + 1..i + 5)?;
+                        let code = u16::from_str_radix(hex, 16).ok()? as u32;
+                        out.push(char::from_u32(code)?);
+                        i += 4;
+                    }
+                    _ => return None,
+                }
+            }
+            byte if byte < 0x20 => return None,
+            byte => out.push(byte as char),
+        }
+        i += 1;
+    }
+    None
+}
+
+fn matching_json_end(input: &str, open: char, close: char) -> Option<usize> {
+    let bytes = input.as_bytes();
+    if !input.starts_with(open) {
+        return None;
+    }
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escape = false;
+    for (index, byte) in bytes.iter().enumerate() {
+        if in_string {
+            if escape {
+                escape = false;
+            } else if *byte == b'\\' {
+                escape = true;
+            } else if *byte == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if *byte == b'"' {
+            in_string = true;
+            continue;
+        }
+        let ch = *byte as char;
+        if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(index + 1);
+            }
+        }
+    }
+    None
 }
 
 fn collect_packages(

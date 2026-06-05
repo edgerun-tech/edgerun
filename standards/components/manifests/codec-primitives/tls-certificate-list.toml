@@ -1,0 +1,25 @@
+id = "codec-tls-certificate-list"
+name = "tls-certificate-list"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300024
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/tls-certificate-list.wat"
+runner = "standards/runners/tls-certificate-list-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "offsets"]
+outputs = ["status", "records"]
+depends_on = ["codec-tls-vector", "codec-der-tlv", "codec-pem-rfc7468"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "tls_certificate_list_scan",
+  "tls_certificate_entry_next",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/tls/certificate.rs",
+  "crates/protocol/edgerun-protocols/src/tls/server/message_builder.rs",
+]
+

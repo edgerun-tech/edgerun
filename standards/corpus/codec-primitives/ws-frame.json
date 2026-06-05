@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "ws-frame",
+  "module": "ws-frame.wat",
+  "cases": [
+    {
+      "id": "text-fin-unmasked",
+      "function": "ws_decode_prefix",
+      "input": { "hex": "8105" },
+      "expect": { "status": 0, "fin": true, "opcode": 1, "masked": false, "payload_len": 5 },
+      "notes": "Small unmasked text frame prefix."
+    },
+    {
+      "id": "binary-extended-126",
+      "function": "ws_decode_prefix",
+      "input": { "hex": "827e0100" },
+      "expect": { "status": 0, "opcode": 2, "payload_len": 256, "header_len": 4 },
+      "notes": "Payload length requiring the 16-bit extended form."
+    },
+    {
+      "id": "nonminimal-extended-126",
+      "function": "ws_decode_prefix",
+      "input": { "hex": "817e007d" },
+      "expect": { "status": 3 },
+      "notes": "Length 125 must use the short form, not 126 extension."
+    },
+    {
+      "id": "fragmented-control",
+      "function": "ws_decode_prefix",
+      "input": { "hex": "0900" },
+      "expect": { "status": 3 },
+      "notes": "Control frames must have FIN set."
+    },
+    {
+      "id": "length-high-bit-set",
+      "function": "ws_decode_prefix",
+      "input": { "hex": "82ff8000000000000000" },
+      "expect": { "status": 4 },
+      "notes": "WebSocket 64-bit payload lengths must not set the high bit."
+    }
+  ]
+}

@@ -69,8 +69,9 @@ mod wire;
 // Explicit public API — no glob re-exports
 pub use acpi::{AcpiTpm2Info, discover_tpm2_info, parse_tpm2_table};
 pub use constants::{
-    TPM_ALG_ECC, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_GET_RANDOM, TPM_CC_SIGN, TPM_ECC_NIST_P256,
-    TPM_RC_SUCCESS, TPM_RH_NULL, TPM_RS_PW, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
+    TPM_ALG_ECC, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_GET_RANDOM,
+    TPM_CC_SIGN, TPM_ECC_NIST_P256, TPM_RC_SUCCESS, TPM_RH_NULL,
+    TPM_RS_PW, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
 };
 pub use crb::CrbTpmTransport;
 pub use device::TpmDevice;
@@ -85,19 +86,21 @@ pub use tis::TisTpmTransport;
 pub use traits::{FixedTpmTransport, TpmSigningKey, TpmTransport};
 pub use types::{
     TpmAssuranceLevel, TpmAuthCommand, TpmAuthValueSession, TpmEccCurve, TpmError, TpmHandle,
-    TpmHashParams, TpmKeyInfo, TpmNameAlgorithm, TpmParsedSignature, TpmPolicySession,
-    TpmPublicAreaInfo, TpmPublicObjectType, TpmReadPublicInfo, TpmSignCommandParams,
-    TpmSignatureAlgorithm, TpmSignatureScheme,
+    TpmHashParams, TpmKeyInfo, TpmNameAlgorithm,
+    TpmParsedSignature, TpmPolicySession, TpmPublicAreaInfo, TpmPublicObjectType, TpmReadPublicInfo,
+    TpmSignCommandParams, TpmSignatureAlgorithm, TpmSignatureScheme,
 };
 pub use wire::commands::{
-    build_get_random_command, build_hash_command, build_policy_authorize_command,
+    build_get_random_command, build_hash_command,
+    build_policy_authorize_command,
     build_policy_command_code_command, build_policy_pcr_command, build_read_public_command,
     build_sign_command, build_sign_command_with_auth_value, build_sign_command_with_policy_session,
     build_start_auth_session_command, build_startup_command, build_verify_signature_command,
 };
 pub use wire::parse::{
     ensure_success_response, infer_signature_algorithm, key_info_from_read_public,
-    parse_get_random_response, parse_hash_response, parse_public_area, parse_read_public_response,
+    parse_get_random_response, parse_hash_response,
+    parse_public_area, parse_read_public_response,
     parse_response_header, parse_sign_response, parse_start_auth_session_response,
 };
 pub use wire::{

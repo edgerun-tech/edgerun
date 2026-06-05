@@ -1,0 +1,28 @@
+id = "codec-json-emit"
+name = "json-emit"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300043
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/json-emit.wat"
+runner = "standards/runners/json-emit-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars", "output_buffer"]
+outputs = ["status", "packed_i64", "bytes"]
+depends_on = ["codec-json-scalar", "codec-json-tape"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "json_emit_literal",
+  "json_emit_u64",
+  "json_emit_i64",
+  "json_emit_string",
+  "json_emit_token",
+  "json_emit_key",
+]
+parity_sources = [
+  "crates/utility/edgerun-json/src/ser.rs",
+  "crates/utility/edgerun-json/src/value.rs",
+]

@@ -1,0 +1,49 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "dns-name",
+  "module": "dns-name.wat",
+  "cases": [
+    {
+      "id": "root-name",
+      "function": "dns_name_scan",
+      "input": { "hex": "00" },
+      "expect": { "status": 0, "consumed": 1, "labels": 0, "name_len": 0 },
+      "notes": "The DNS root name is a single zero-length label."
+    },
+    {
+      "id": "example-com",
+      "function": "dns_name_to_lower_ascii",
+      "input": { "hex": "074578616d706c6503434f4d00" },
+      "expect": { "status": 0, "ascii": "example.com" },
+      "notes": "Uncompressed wire labels are emitted as lowercase dotted ASCII."
+    },
+    {
+      "id": "max-label",
+      "function": "dns_name_scan",
+      "input": { "ascii_wire_labels": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "com"] },
+      "expect": { "status": 0 },
+      "notes": "A 63-octet label is accepted."
+    },
+    {
+      "id": "too-long-label",
+      "function": "dns_name_scan",
+      "input": { "label_len": 64 },
+      "expect": { "status": 3 },
+      "notes": "Labels over 63 octets are invalid."
+    },
+    {
+      "id": "compression-pointer-rejected",
+      "function": "dns_name_scan",
+      "input": { "hex": "c00c" },
+      "expect": { "status": 3 },
+      "notes": "This standalone scanner detects but rejects compression pointers."
+    },
+    {
+      "id": "total-length-too-long",
+      "function": "dns_name_scan",
+      "input": { "repeat_label": "a", "repeat_count": 128 },
+      "expect": { "status": 6 },
+      "notes": "Wire names longer than 255 octets are rejected."
+    }
+  ]
+}

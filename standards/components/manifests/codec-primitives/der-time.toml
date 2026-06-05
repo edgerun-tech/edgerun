@@ -1,0 +1,24 @@
+id = "codec-der-time"
+name = "der-time"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300029
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/der-time.wat"
+runner = "standards/runners/der-time-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes"]
+outputs = ["status", "records"]
+depends_on = ["codec-der-tlv"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "der_time_decode",
+]
+parity_sources = [
+  "crates/utility/edgerun-crypto/src/der/datetime.rs",
+  "crates/utility/edgerun-crypto/src/der/asn1/utc_time.rs",
+  "crates/utility/edgerun-crypto/src/der/asn1/generalized_time.rs",
+]

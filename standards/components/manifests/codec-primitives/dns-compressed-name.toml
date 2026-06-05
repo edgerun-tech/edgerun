@@ -1,0 +1,26 @@
+id = "codec-dns-compressed-name"
+name = "dns-compressed-name"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300033
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/dns-compressed-name.wat"
+runner = "standards/runners/dns-compressed-name-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "offsets"]
+outputs = ["status", "packed_i64", "records", "bytes"]
+depends_on = ["codec-dns-name"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "dns_name_wire_len",
+  "dns_name_follow",
+  "dns_name_to_lower_ascii_compressed",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/dns/name.rs",
+  "crates/protocol/edgerun-protocols/src/dns/record.rs",
+  "crates/protocol/edgerun-protocols/src/dns/message.rs",
+]

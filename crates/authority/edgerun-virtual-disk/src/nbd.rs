@@ -1,3 +1,5 @@
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
+use crate::io::{Read, Write};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -5,19 +7,17 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-use edgerun_encoding::io::{Read, Write};
-use edgerun_protocols::block::{BlockBackend, BlockDeviceInfo, BlockError, checked_len_bytes};
+use edgerun_protocols::block::{checked_len_bytes, BlockBackend, BlockDeviceInfo, BlockError};
 use edgerun_protocols::nbd::{
-    NBD_CLIENT_FLAGS_LEN, NBD_CMD_DISC, NBD_CMD_READ, NBD_CMD_WRITE, NBD_EXPORT_INFO_LEN,
-    NBD_FLAG_FIXED_NEWSTYLE, NBD_FLAG_READ_ONLY, NBD_OPT_ABORT, NBD_OPT_EXPORT_NAME, NBD_OPT_LIST,
-    NBD_OPTION_HEADER_LEN, NBD_OPTION_REPLY_HEADER_LEN, NBD_REP_ACK, NBD_REP_SERVER,
-    NBD_REPLY_HEADER_LEN, NBD_REQUEST_HEADER_LEN, NbdBlockCommand, NbdOptionRequest,
     decode_client_flags, decode_export_info, decode_option_header, decode_option_reply_header,
     decode_option_request, decode_reply_header, decode_request_header, decode_server_handshake,
     encode_client_flags, encode_export_info, encode_option_reply, encode_option_request,
     encode_request_header, encode_server_handshake, encode_simple_reply, map_nbd_error,
-    request_to_block_command,
+    request_to_block_command, NbdBlockCommand, NbdOptionRequest, NBD_CLIENT_FLAGS_LEN,
+    NBD_CMD_DISC, NBD_CMD_READ, NBD_CMD_WRITE, NBD_EXPORT_INFO_LEN, NBD_FLAG_FIXED_NEWSTYLE,
+    NBD_FLAG_READ_ONLY, NBD_OPTION_HEADER_LEN, NBD_OPTION_REPLY_HEADER_LEN, NBD_OPT_ABORT,
+    NBD_OPT_EXPORT_NAME, NBD_OPT_LIST, NBD_REPLY_HEADER_LEN, NBD_REP_ACK, NBD_REP_SERVER,
+    NBD_REQUEST_HEADER_LEN,
 };
 pub use edgerun_protocols::nbd::{NbdExport, NbdNegotiatedExport};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]

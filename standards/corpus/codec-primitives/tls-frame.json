@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "tls-frame",
+  "module": "tls-frame.wat",
+  "cases": [
+    {
+      "id": "record-application-data-empty",
+      "function": "tls_record_header_decode",
+      "input": { "hex": "1703030000" },
+      "expect": { "status": 0, "content_type": 23, "legacy_version": "0303", "length": 0 },
+      "notes": "TLS application_data record header."
+    },
+    {
+      "id": "record-unknown-type",
+      "function": "tls_record_header_decode",
+      "input": { "hex": "6303030000" },
+      "expect": { "status": 3 },
+      "notes": "Unknown content type is rejected by the WAT primitive."
+    },
+    {
+      "id": "record-length-over-limit",
+      "function": "tls_record_header_decode",
+      "input": { "hex": "1703034001" },
+      "expect": { "status": 4 },
+      "notes": "Record fragment length above 16 KiB is rejected."
+    },
+    {
+      "id": "handshake-client-hello",
+      "function": "tls_handshake_header_decode",
+      "input": { "hex": "01000020" },
+      "expect": { "status": 0, "handshake_type": 1, "body_len": 32 },
+      "notes": "TLS ClientHello handshake header."
+    },
+    {
+      "id": "handshake-short",
+      "function": "tls_handshake_header_decode",
+      "input": { "hex": "010000" },
+      "expect": { "status": 1 },
+      "notes": "Handshake header needs four octets."
+    }
+  ]
+}

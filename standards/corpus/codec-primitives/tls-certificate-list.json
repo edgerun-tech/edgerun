@@ -1,0 +1,51 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "tls-certificate-list",
+  "module": "tls-certificate-list.wat",
+  "cases": [
+    {
+      "id": "single-der-empty-context",
+      "function": "tls_certificate_list_scan",
+      "input": { "hex": "0000000a00000530030201010000" },
+      "expect": {
+        "status": 0,
+        "context_len": 0,
+        "list_len": 10
+      },
+      "notes": "TLS 1.3 Certificate body with empty context and one DER blob."
+    },
+    {
+      "id": "next-certificate-entry",
+      "function": "tls_certificate_entry_next",
+      "input": { "hex": "00000530030201010000" },
+      "expect": {
+        "status": 0,
+        "cert_len": 5,
+        "extensions_len": 0
+      },
+      "notes": "CertificateEntry with a five-byte DER value and no per-certificate extensions."
+    },
+    {
+      "id": "truncated-certificate-list",
+      "function": "tls_certificate_list_scan",
+      "input": { "hex": "0000000a000005300302010100" },
+      "expect": { "status": 5 },
+      "notes": "Declared certificate_list length exceeds available body bytes."
+    },
+    {
+      "id": "truncated-certificate-entry",
+      "function": "tls_certificate_entry_next",
+      "input": { "hex": "0000053003" },
+      "expect": { "status": 5 },
+      "notes": "Declared DER length exceeds available CertificateEntry bytes."
+    },
+    {
+      "id": "extension-list-length-mismatch",
+      "function": "tls_certificate_entry_next",
+      "input": { "hex": "00000530030201010003aa" },
+      "expect": { "status": 5 },
+      "notes": "Per-certificate extension list length exceeds available bytes."
+    }
+  ]
+}
+

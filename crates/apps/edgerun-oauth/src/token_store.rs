@@ -2,7 +2,6 @@
 
 use crate::prelude::*;
 use crate::types::Credentials;
-use edgerun_json::{JsonValue, Map, to_string};
 use edgerun_secret_service::Backend;
 #[cfg(not(target_os = "none"))]
 use std::eprintln;
@@ -90,65 +89,40 @@ impl TokenStore {
 }
 
 fn credentials_to_json(creds: &Credentials) -> String {
-    let mut obj: Vec<(String, JsonValue)> = Vec::new();
+    let mut out = String::from("{");
+    let mut first = true;
     if let Some(ref v) = creds.access_token {
-        obj.push(("access_token".into(), JsonValue::String(v.clone())));
+        crate::json_fixed::write_string_field(&mut out, &mut first, "access_token", v);
     }
     if let Some(ref v) = creds.refresh_token {
-        obj.push(("refresh_token".into(), JsonValue::String(v.clone())));
+        crate::json_fixed::write_string_field(&mut out, &mut first, "refresh_token", v);
     }
     if let Some(ref v) = creds.id_token {
-        obj.push(("id_token".into(), JsonValue::String(v.clone())));
+        crate::json_fixed::write_string_field(&mut out, &mut first, "id_token", v);
     }
     if let Some(ref v) = creds.token_type {
-        obj.push(("token_type".into(), JsonValue::String(v.clone())));
+        crate::json_fixed::write_string_field(&mut out, &mut first, "token_type", v);
     }
     if let Some(v) = creds.expiry_date {
-        obj.push(("expiry_date".into(), JsonValue::Number(v.into())));
+        crate::json_fixed::write_u64_field(&mut out, &mut first, "expiry_date", v);
     }
     if let Some(ref v) = creds.scope {
-        obj.push(("scope".into(), JsonValue::String(v.clone())));
+        crate::json_fixed::write_string_field(&mut out, &mut first, "scope", v);
     }
-    let val = JsonValue::Object(Map::from_iter(obj));
-    to_string(&val).unwrap_or_else(|_| "{}".into())
+    out.push('}');
+    out
 }
 
 fn credentials_from_json(s: &str) -> Result<Credentials, String> {
-    let tape = edgerun_json::parse_json_tape(s).map_err(|e| format!("JSON parse: {e}"))?;
-    let value = tape
-        .root(s)
-        .ok_or_else(|| "JSON parse: missing root value".to_string())?;
-
-    let access_token = value
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let refresh_token = value
-        .get("refresh_token")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let id_token = value
-        .get("id_token")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let token_type = value
-        .get("token_type")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let scope = value
-        .get("scope")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let expiry_date = value.get("expiry_date").and_then(|v| v.as_u64());
+    let value = crate::json_fixed::parse_object(s)?;
 
     Ok(Credentials {
-        access_token,
-        refresh_token,
-        id_token,
-        token_type,
-        expiry_date,
-        scope,
+        access_token: value.str_field("access_token"),
+        refresh_token: value.str_field("refresh_token"),
+        id_token: value.str_field("id_token"),
+        token_type: value.str_field("token_type"),
+        expiry_date: value.u64_field("expiry_date"),
+        scope: value.str_field("scope"),
     })
 }
 

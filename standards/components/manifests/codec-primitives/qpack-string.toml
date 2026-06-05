@@ -1,0 +1,25 @@
+id = "codec-qpack-string"
+name = "qpack-string"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300020
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/qpack-string.wat"
+runner = "standards/runners/qpack-string-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "packed_i64", "bytes", "record"]
+depends_on = ["hpack-huffman", "http-prefix-int"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "qpack_string_scan",
+  "qpack_string_decode",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/http/http3/qpack/prefix_string/mod.rs",
+  "crates/protocol/edgerun-protocols/src/http/http3/qpack/prefix_int.rs",
+  "crates/protocol/edgerun-protocols/src/http/http3/qpack/prefix_string/decode.rs",
+]

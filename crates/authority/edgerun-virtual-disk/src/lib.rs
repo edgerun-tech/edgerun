@@ -4,6 +4,109 @@ extern crate alloc;
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 extern crate std;
 
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
+pub(crate) mod io {
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
+    use core::fmt;
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum ErrorKind {
+        UnexpectedEof,
+        WriteZero,
+        InvalidData,
+        Other,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct Error {
+        kind: ErrorKind,
+        message: String,
+    }
+
+    impl Error {
+        pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
+            Self {
+                kind,
+                message: message.into(),
+            }
+        }
+
+        pub fn kind(&self) -> ErrorKind {
+            self.kind.clone()
+        }
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(&self.message)
+        }
+    }
+
+    pub type Result<T> = core::result::Result<T, Error>;
+
+    pub trait Read {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+
+        fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
+            while !buf.is_empty() {
+                match self.read(buf)? {
+                    0 => {
+                        return Err(Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "failed to fill whole buffer",
+                        ));
+                    }
+                    n => {
+                        let tmp = buf;
+                        buf = &mut tmp[n..];
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+
+    pub trait Write {
+        fn write(&mut self, buf: &[u8]) -> Result<usize>;
+
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
+            while !buf.is_empty() {
+                match self.write(buf)? {
+                    0 => {
+                        return Err(Error::new(
+                            ErrorKind::WriteZero,
+                            "failed to write whole buffer",
+                        ))
+                    }
+                    n => buf = &buf[n..],
+                }
+            }
+            Ok(())
+        }
+    }
+
+    impl Read for &[u8] {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+            let n = buf.len().min(self.len());
+            buf[..n].copy_from_slice(&self[..n]);
+            *self = &self[n..];
+            Ok(n)
+        }
+    }
+
+    impl Write for Vec<u8> {
+        fn write(&mut self, buf: &[u8]) -> Result<usize> {
+            self.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+    }
+}
+
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 pub mod image;
 #[cfg(any(target_os = "none", target_arch = "wasm32"))]
@@ -134,16 +237,16 @@ pub mod nbd;
 pub mod remote;
 
 pub use image::{
-    Result as VirtualDiskResult, VirtualDiskError, VirtualDiskFormat, VirtualDiskInfo,
-    VirtualDiskSpec, clone, create, detect_format, info, remove, resize,
+    clone, create, detect_format, info, remove, resize, Result as VirtualDiskResult,
+    VirtualDiskError, VirtualDiskFormat, VirtualDiskInfo, VirtualDiskSpec,
 };
 pub use nbd::{
-    LinuxNbdAttachSpec, NbdExport, NbdExportEntry, NbdNegotiatedExport, attach_nbd, detach_nbd,
-    negotiate_nbd_export, serve_nbd_connection, serve_nbd_connection_multi,
+    attach_nbd, detach_nbd, negotiate_nbd_export, serve_nbd_connection, serve_nbd_connection_multi,
+    LinuxNbdAttachSpec, NbdExport, NbdExportEntry, NbdNegotiatedExport,
 };
 pub use remote::{
-    BlockClient, BlockServer, FileBlockBackend, MemoryBlockBackend, receive_request,
-    receive_response, send_request, send_response,
+    receive_request, receive_response, send_request, send_response, BlockClient, BlockServer,
+    FileBlockBackend, MemoryBlockBackend,
 };
 
 #[cfg(test)]
@@ -155,8 +258,8 @@ mod tests {
     use alloc::sync::Arc;
     use alloc::vec;
     use edgerun_protocols::block::{
-        BLOCK_PROTOCOL_VERSION, BlockBackend, BlockDeviceInfo, BlockError, BlockRequest,
-        BlockResponse, RequestId, handle_request, validate_range,
+        handle_request, validate_range, BlockBackend, BlockDeviceInfo, BlockError, BlockRequest,
+        BlockResponse, RequestId, BLOCK_PROTOCOL_VERSION,
     };
 
     // Tests for re-exported types from the image module

@@ -1,3 +1,4 @@
+use crate::codealyzer::cargo_toml_projection::parse_standard_statuses;
 use crate::codealyzer::crate_model::StandardCoverage;
 use std::path::Path;
 
@@ -21,25 +22,15 @@ pub fn load_standards_matrix(crate_dir: &Path, _workspace_root: &Path) -> Vec<St
             let path = entry.path();
             if path.extension().map(|e| e == "toml").unwrap_or(false) {
                 if let Ok(content) = std::fs::read_to_string(&path) {
-                    if let Ok(toml) = edgerun_json::from_toml_str(&content) {
-                        if let Some(obj) = toml.as_table() {
-                            for (key, value) in obj {
-                                let status = value
-                                    .get("status")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("unknown")
-                                    .to_string();
-                                standards.push(StandardCoverage {
-                                    standard: key.clone(),
-                                    status,
-                                    code_refs: Vec::new(),
-                                    tests: Vec::new(),
-                                    confidence:
-                                        crate::codealyzer::crate_model::Confidence::Ambiguous,
-                                    notes: None,
-                                });
-                            }
-                        }
+                    for (standard, status) in parse_standard_statuses(&content) {
+                        standards.push(StandardCoverage {
+                            standard,
+                            status,
+                            code_refs: Vec::new(),
+                            tests: Vec::new(),
+                            confidence: crate::codealyzer::crate_model::Confidence::Ambiguous,
+                            notes: None,
+                        });
                     }
                 }
             }

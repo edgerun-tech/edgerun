@@ -1,0 +1,29 @@
+id = "codec-http1-scan"
+name = "http1-scan"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300003
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/http1-scan.wat"
+runner = "standards/runners/http1-scan-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "offsets"]
+outputs = ["status", "packed_i64", "records"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "http_find_crlf",
+  "http_find_double_crlf",
+  "http_validate_header_name",
+  "http_validate_header_value",
+  "http_value_has_token",
+  "http_parse_chunk_step",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/http/header.rs",
+  "crates/protocol/edgerun-protocols/src/http/chunked.rs",
+]
+

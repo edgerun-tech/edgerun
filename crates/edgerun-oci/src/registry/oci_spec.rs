@@ -1,4 +1,4 @@
-//! OCI spec generation from image config — produces JSON via edgerun-json.
+//! OCI spec generation from image config.
 
 use crate::prelude::*;
 use crate::validate::{default_process_args, default_process_env};

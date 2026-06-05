@@ -40,7 +40,7 @@ pub use edgerun_protocols::http::http2::server::{FrameAction, Http2Server};
 pub use flow_control::FlowController;
 pub use frame::{Frame, FrameType};
 pub use headers::{validate_header_name_case, validate_request_headers};
-pub use hpack::{Decoder, Encoder};
+pub use hpack::{HpackContext, HpackDecodeError, HpackEncodeError, HpackHeaderList};
 pub use settings::Settings;
 pub use stream::Stream;
 
@@ -146,9 +146,15 @@ impl From<edgerun_protocols::http::http2::Http2Error> for Http2Error {
     }
 }
 
-impl From<edgerun_hpack::DecoderError> for Http2Error {
-    fn from(err: edgerun_hpack::DecoderError) -> Self {
-        Http2Error::HpackDecode(format!("{:?}", err))
+impl From<edgerun_protocols::http::http2::hpack::HpackDecodeError> for Http2Error {
+    fn from(err: edgerun_protocols::http::http2::hpack::HpackDecodeError) -> Self {
+        Http2Error::HpackDecode(format!("{err:?}"))
+    }
+}
+
+impl From<edgerun_protocols::http::http2::hpack::HpackEncodeError> for Http2Error {
+    fn from(err: edgerun_protocols::http::http2::hpack::HpackEncodeError) -> Self {
+        Http2Error::HpackEncode(format!("{err:?}"))
     }
 }
 

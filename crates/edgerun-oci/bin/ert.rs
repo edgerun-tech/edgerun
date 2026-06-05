@@ -368,8 +368,38 @@ fn cleanup_dead_run_states(root: &mut std::path::PathBuf) {
 }
 
 fn extract_json_pid(data: &str) -> Option<i32> {
-    let tape = edgerun_json::parse_json_tape(data).ok()?;
-    tape.root(data)?.get("pid")?.as_i32()
+    let value = json_field_span(data, "pid")?;
+    value.trim().parse::<i32>().ok()
+}
+
+fn json_field_span<'a>(data: &'a str, name: &str) -> Option<&'a str> {
+    let needle = format!("\"{name}\"");
+    let key = data.find(&needle)?;
+    let mut index = key + needle.len();
+    skip_json_ws(data, &mut index);
+    if data.as_bytes().get(index) != Some(&b':') {
+        return None;
+    }
+    index += 1;
+    skip_json_ws(data, &mut index);
+    let start = index;
+    while let Some(byte) = data.as_bytes().get(index) {
+        if matches!(byte, b',' | b'}' | b']') {
+            break;
+        }
+        index += 1;
+    }
+    Some(&data[start..index])
+}
+
+fn skip_json_ws(data: &str, index: &mut usize) {
+    while data
+        .as_bytes()
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_whitespace())
+    {
+        *index += 1;
+    }
 }
 
 fn pid_alive(pid: i32) -> bool {

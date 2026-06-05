@@ -1,0 +1,27 @@
+id = "codec-url-scan"
+name = "url-scan"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300104
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/url-scan.wat"
+runner = "standards/runners/url-scan-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes"]
+outputs = ["status", "spans", "u16"]
+depends_on = [
+  "codec-host-port",
+  "codec-percent-url-form",
+]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "url_scan",
+  "url_scheme_validate",
+]
+notes = "Scans the edgerun-url absolute-URL subset: scheme, authority, host, optional u16 port, path, query, and fragment. Query pair construction composes with percent-url-form.wat. Userinfo and bracketed IPv6 are explicit unsupported syntax."
+parity_sources = [
+  "crates/utility/edgerun-url/src/lib.rs",
+]

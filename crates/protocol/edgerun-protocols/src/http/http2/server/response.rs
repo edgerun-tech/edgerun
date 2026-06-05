@@ -4,7 +4,7 @@ use super::FrameAction;
 use crate::http::http2::frame::{
     Frame, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
-use crate::http::http2::hpack::Encoder;
+use crate::http::http2::hpack::HpackContext;
 use crate::http::http2::stream::StreamManager;
 use alloc::vec;
 
@@ -13,18 +13,31 @@ pub fn write_frame(frame: Frame) -> FrameAction {
 }
 
 /// Send a 200 OK response.
-pub fn respond_with_200(stream_id: u32, encoder: &mut Encoder) -> FrameAction {
+pub fn respond_with_200(
+    stream_id: u32,
+    hpack: &mut HpackContext,
+    last_processed_stream_id: u32,
+) -> FrameAction {
     let response_headers = [
         (b":status".to_vec(), b"200".to_vec()),
         (b"content-type".to_vec(), b"text/plain".to_vec()),
         (b"content-length".to_vec(), b"2".to_vec()),
     ];
 
-    let header_block = encoder.encode(
+    let header_block = match hpack.encode_header_block(
         response_headers
             .iter()
             .map(|(k, v)| (k.as_slice(), v.as_slice())),
-    );
+    ) {
+        Ok(header_block) => header_block,
+        Err(_) => {
+            return send_goaway(
+                last_processed_stream_id,
+                crate::http::http2::ErrorCode::CompressionError.to_u32(),
+                b"HPACK response encode failed",
+            );
+        }
+    };
 
     let hf = HeadersFrame::new(stream_id, header_block, true);
     write_frame(hf.to_frame())

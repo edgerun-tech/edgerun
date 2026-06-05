@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "http1-body",
+  "module": "http1-body.wat",
+  "cases": [
+    {
+      "id": "content-length-zero",
+      "function": "http_parse_content_length",
+      "input": { "ascii": "0" },
+      "expect": { "status": 0, "value": 0 },
+      "notes": "Zero-length body is valid."
+    },
+    {
+      "id": "content-length-overflow",
+      "function": "http_parse_content_length",
+      "input": { "ascii": "18446744073709551616" },
+      "expect": { "status": 4 },
+      "notes": "One more than u64::MAX."
+    },
+    {
+      "id": "transfer-token-chunked-mixed-case",
+      "function": "http_has_transfer_token",
+      "input": { "ascii": "gzip, Chunked" },
+      "expect": { "status": 0, "found": true },
+      "notes": "Transfer-coding token scan is ASCII case-insensitive."
+    },
+    {
+      "id": "body-framing-duplicate-cl-same",
+      "function": "http_classify_body_framing",
+      "input": { "ascii": "Content-Length: 5\r\nContent-Length: 5\r\n\r\n" },
+      "expect": { "status": 0, "framing": "content-length", "length": 5 },
+      "notes": "Duplicate equal Content-Length values are accepted."
+    },
+    {
+      "id": "body-framing-duplicate-cl-different",
+      "function": "http_classify_body_framing",
+      "input": { "ascii": "Content-Length: 5\r\nContent-Length: 6\r\n\r\n" },
+      "expect": { "status": 3 },
+      "notes": "Conflicting Content-Length values are rejected."
+    }
+  ]
+}

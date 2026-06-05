@@ -1,0 +1,22 @@
+id = "codec-ws-accept"
+name = "ws-accept"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300048
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/ws-accept.wat"
+runner = "standards/runners/ws-accept-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "ws_accept_key",
+]
+parity_sources = [
+  "crates/protocol/edgerun-work/src/ws_channel.rs",
+]

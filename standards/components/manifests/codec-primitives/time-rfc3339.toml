@@ -1,0 +1,24 @@
+id = "codec-time-rfc3339"
+name = "time-rfc3339"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300053
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/time-rfc3339.wat"
+runner = "standards/runners/time-rfc3339-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "rfc3339_parse",
+  "rfc3339_emit_utc",
+]
+notes = "Parser writes source fields, signed offset minutes, and normalized signed Unix seconds split low/high. Emitter writes canonical UTC Z form and preserves fractional nanoseconds when nonzero."
+parity_sources = [
+  "crates/utility/edgerun-encoding/src/rfc3339.rs",
+]

@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::convert::TryInto;
 
-use edgerun_encoding::buf::{Buf, BufMut};
+use super::buf::{Buf, BufMut};
 
 use super::{
     parse_error::ParseError,
@@ -328,8 +328,8 @@ mod test {
     use alloc::vec;
     use alloc::vec::Vec;
 
+    use super::buf::Cursor;
     use super::*;
-    use edgerun_encoding::buf::Cursor;
 
     #[test]
     fn insert_with_name_ref() {

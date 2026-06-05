@@ -13,7 +13,7 @@ default = ["std"]
 std = []
 
 [dependencies]
-edgerun-encoding = { workspace = true, features = ["compression"] }
+edgerun-encoding = { workspace = true }
 edgerun-work = { workspace = true, default-features = false }
 
 [lints]

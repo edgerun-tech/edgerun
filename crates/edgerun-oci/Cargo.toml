@@ -9,7 +9,6 @@ homepage.workspace = true
 description = "OCI container runtime and registry client — pull, push, login, create, start, exec containers"
 
 [dependencies]
-edgerun-json = { workspace = true, default-features = false }
 edgerun-crypto = { workspace = true, default-features = false, features = ["digest"] }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["https"], optional = true }
 edgerun-storage = { workspace = true, optional = true }
@@ -21,7 +20,7 @@ edgerun-encoding = { workspace = true }
 default = []
 registry-client = ["dep:edgerun-node", "edgerun-protocols/http"]
 edgefs = ["dep:edgerun-storage"]
-gzip = ["edgerun-encoding/compression"]
+gzip = []
 std = [
     "registry-client",
     "dep:edgerun-secret-service",

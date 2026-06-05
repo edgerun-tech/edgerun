@@ -1,0 +1,212 @@
+(module
+  (memory (export "memory") 1)
+
+  (func (export "proto_abi_version") (result i32)
+    i32.const 2)
+
+  (func (export "proto_standard_id") (result i32)
+    i32.const 300022)
+
+  (func $is_supported_tag (param $tag i32) (result i32)
+    (if (i32.and (i32.ge_u (local.get $tag) (i32.const 64)) (i32.le_u (local.get $tag) (i32.const 126)))
+      (then (return (i32.const 1))))
+    (if (i32.and (i32.ge_u (local.get $tag) (i32.const 128)) (i32.le_u (local.get $tag) (i32.const 190)))
+      (then (return (i32.const 1))))
+    (if (i32.and (i32.ge_u (local.get $tag) (i32.const 192)) (i32.le_u (local.get $tag) (i32.const 254)))
+      (then (return (i32.const 1))))
+    (if (i32.or
+          (i32.or
+            (i32.or
+              (i32.or
+                (i32.or
+                  (i32.eq (local.get $tag) (i32.const 1))
+                  (i32.eq (local.get $tag) (i32.const 2)))
+                (i32.or
+                  (i32.eq (local.get $tag) (i32.const 3))
+                  (i32.eq (local.get $tag) (i32.const 4))))
+              (i32.or
+                (i32.eq (local.get $tag) (i32.const 5))
+                (i32.eq (local.get $tag) (i32.const 6))))
+            (i32.or
+              (i32.eq (local.get $tag) (i32.const 12))
+              (i32.eq (local.get $tag) (i32.const 48))))
+          (i32.eq (local.get $tag) (i32.const 49)))
+      (then (return (i32.const 1))))
+    i32.const 0)
+
+  ;; Internal DER header decoder.
+  ;; Return bits: low16=status, next16=header_len, next8=tag, high24=length.
+  (func $header_decode (param $ptr i32) (param $len i32) (result i64)
+    (local $tag i32)
+    (local $first i32)
+    (local $len_len i32)
+    (local $i i32)
+    (local $value i64)
+    (local $consumed i32)
+    (if (i32.lt_u (local.get $len) (i32.const 2))
+      (then (return (i64.const 1))))
+    (local.set $tag (i32.load8_u (local.get $ptr)))
+    (if (i32.eqz (call $is_supported_tag (local.get $tag)))
+      (then (return (i64.const 3))))
+    (local.set $first (i32.load8_u (i32.add (local.get $ptr) (i32.const 1))))
+    (if (i32.lt_u (local.get $first) (i32.const 128))
+      (then
+        (return
+          (i64.or
+            (i64.or
+              (i64.shl (i64.extend_i32_u (local.get $first)) (i64.const 40))
+              (i64.shl (i64.extend_i32_u (local.get $tag)) (i64.const 32)))
+            (i64.const 131072)))))
+    (if (i32.eq (local.get $first) (i32.const 128))
+      (then (return (i64.const 3))))
+    (local.set $len_len (i32.and (local.get $first) (i32.const 127)))
+    (if (i32.gt_u (local.get $len_len) (i32.const 4))
+      (then (return (i64.const 3))))
+    (if (i32.lt_u (local.get $len) (i32.add (i32.const 2) (local.get $len_len)))
+      (then (return (i64.const 1))))
+    (if (i32.eqz (i32.load8_u (i32.add (local.get $ptr) (i32.const 2))))
+      (then (return (i64.const 3))))
+    (local.set $i (i32.const 0))
+    (local.set $value (i64.const 0))
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len_len)))
+        (local.set $value
+          (i64.or
+            (i64.shl (local.get $value) (i64.const 8))
+            (i64.extend_i32_u
+              (i32.load8_u
+                (i32.add (i32.add (local.get $ptr) (i32.const 2)) (local.get $i))))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop)))
+    (if (i64.lt_u (local.get $value) (i64.const 128))
+      (then (return (i64.const 3))))
+    (if (i64.gt_u (local.get $value) (i64.const 16777215))
+      (then (return (i64.const 4))))
+    (local.set $consumed (i32.add (local.get $len_len) (i32.const 2)))
+    (i64.or
+      (i64.or
+        (i64.or
+          (i64.shl (local.get $value) (i64.const 40))
+          (i64.shl (i64.extend_i32_u (local.get $tag)) (i64.const 32)))
+        (i64.shl (i64.extend_i32_u (local.get $consumed)) (i64.const 16)))
+      (i64.const 0)))
+
+  (func $write_span (param $out i32) (param $value_ptr i32) (param $value_len i32) (param $header_len i32) (param $total_len i32)
+    (i32.store (local.get $out) (local.get $value_ptr))
+    (i32.store (i32.add (local.get $out) (i32.const 4)) (local.get $value_len))
+    (i32.store (i32.add (local.get $out) (i32.const 8)) (local.get $header_len))
+    (i32.store (i32.add (local.get $out) (i32.const 12)) (local.get $total_len)))
+
+  ;; out record: value_ptr:u32, value_len:u32, header_len:u32, total_len:u32, negative:u32.
+  (func (export "der_asn1_integer_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
+    (local $vptr i32) (local $first i32) (local $second i32)
+    (local.set $h (call $header_decode (local.get $ptr) (local.get $len)))
+    (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
+    (if (local.get $status) (then (return (local.get $status))))
+    (local.set $hdr (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 16)) (i64.const 65535))))
+    (local.set $tag (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 32)) (i64.const 255))))
+    (local.set $vlen (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 40)) (i64.const 16777215))))
+    (if (i32.ne (local.get $tag) (i32.const 2)) (then (return (i32.const 3))))
+    (if (i32.eqz (local.get $vlen)) (then (return (i32.const 3))))
+    (if (i32.lt_u (local.get $len) (i32.add (local.get $hdr) (local.get $vlen))) (then (return (i32.const 1))))
+    (local.set $vptr (i32.add (local.get $ptr) (local.get $hdr)))
+    (local.set $first (i32.load8_u (local.get $vptr)))
+    (if (i32.gt_u (local.get $vlen) (i32.const 1))
+      (then
+        (local.set $second (i32.load8_u (i32.add (local.get $vptr) (i32.const 1))))
+        (if (i32.and (i32.eqz (local.get $first)) (i32.eqz (i32.and (local.get $second) (i32.const 128))))
+          (then (return (i32.const 3))))
+        (if (i32.and
+              (i32.eq (local.get $first) (i32.const 255))
+              (i32.ne (i32.and (local.get $second) (i32.const 128)) (i32.const 0)))
+          (then (return (i32.const 3))))))
+    (call $write_span (local.get $out) (local.get $vptr) (local.get $vlen) (local.get $hdr) (i32.add (local.get $hdr) (local.get $vlen)))
+    (i32.store (i32.add (local.get $out) (i32.const 16)) (select (i32.const 1) (i32.const 0) (i32.and (local.get $first) (i32.const 128))))
+    i32.const 0)
+
+  ;; out record: payload_ptr:u32, payload_len:u32, header_len:u32, total_len:u32, unused_bits:u32.
+  (func (export "der_asn1_bit_string_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
+    (local $vptr i32) (local $unused i32)
+    (local.set $h (call $header_decode (local.get $ptr) (local.get $len)))
+    (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
+    (if (local.get $status) (then (return (local.get $status))))
+    (local.set $hdr (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 16)) (i64.const 65535))))
+    (local.set $tag (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 32)) (i64.const 255))))
+    (local.set $vlen (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 40)) (i64.const 16777215))))
+    (if (i32.ne (local.get $tag) (i32.const 3)) (then (return (i32.const 3))))
+    (if (i32.eqz (local.get $vlen)) (then (return (i32.const 3))))
+    (if (i32.lt_u (local.get $len) (i32.add (local.get $hdr) (local.get $vlen))) (then (return (i32.const 1))))
+    (local.set $vptr (i32.add (local.get $ptr) (local.get $hdr)))
+    (local.set $unused (i32.load8_u (local.get $vptr)))
+    (if (i32.gt_u (local.get $unused) (i32.const 7)) (then (return (i32.const 3))))
+    (if (i32.and (i32.ne (local.get $unused) (i32.const 0)) (i32.eq (local.get $vlen) (i32.const 1)))
+      (then (return (i32.const 3))))
+    (call $write_span (local.get $out) (i32.add (local.get $vptr) (i32.const 1)) (i32.sub (local.get $vlen) (i32.const 1)) (local.get $hdr) (i32.add (local.get $hdr) (local.get $vlen)))
+    (i32.store (i32.add (local.get $out) (i32.const 16)) (local.get $unused))
+    i32.const 0)
+
+  (func (export "der_asn1_octet_string_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
+    (local.set $h (call $header_decode (local.get $ptr) (local.get $len)))
+    (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
+    (if (local.get $status) (then (return (local.get $status))))
+    (local.set $hdr (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 16)) (i64.const 65535))))
+    (local.set $tag (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 32)) (i64.const 255))))
+    (local.set $vlen (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 40)) (i64.const 16777215))))
+    (if (i32.ne (local.get $tag) (i32.const 4)) (then (return (i32.const 3))))
+    (if (i32.lt_u (local.get $len) (i32.add (local.get $hdr) (local.get $vlen))) (then (return (i32.const 1))))
+    (call $write_span (local.get $out) (i32.add (local.get $ptr) (local.get $hdr)) (local.get $vlen) (local.get $hdr) (i32.add (local.get $hdr) (local.get $vlen)))
+    i32.const 0)
+
+  (func (export "der_asn1_null_decode") (param $ptr i32) (param $len i32) (result i32)
+    (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
+    (local.set $h (call $header_decode (local.get $ptr) (local.get $len)))
+    (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
+    (if (local.get $status) (then (return (local.get $status))))
+    (local.set $hdr (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 16)) (i64.const 65535))))
+    (local.set $tag (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 32)) (i64.const 255))))
+    (local.set $vlen (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 40)) (i64.const 16777215))))
+    (if (i32.ne (local.get $tag) (i32.const 5)) (then (return (i32.const 3))))
+    (if (i32.ne (local.get $vlen) (i32.const 0)) (then (return (i32.const 3))))
+    (if (i32.lt_u (local.get $len) (local.get $hdr)) (then (return (i32.const 1))))
+    i32.const 0)
+
+  ;; out record: body_ptr:u32, body_len:u32, header_len:u32, total_len:u32.
+  (func (export "der_asn1_sequence_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
+    (local.set $h (call $header_decode (local.get $ptr) (local.get $len)))
+    (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
+    (if (local.get $status) (then (return (local.get $status))))
+    (local.set $hdr (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 16)) (i64.const 65535))))
+    (local.set $tag (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 32)) (i64.const 255))))
+    (local.set $vlen (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 40)) (i64.const 16777215))))
+    (if (i32.ne (local.get $tag) (i32.const 48)) (then (return (i32.const 3))))
+    (if (i32.lt_u (local.get $len) (i32.add (local.get $hdr) (local.get $vlen))) (then (return (i32.const 1))))
+    (call $write_span (local.get $out) (i32.add (local.get $ptr) (local.get $hdr)) (local.get $vlen) (local.get $hdr) (i32.add (local.get $hdr) (local.get $vlen)))
+    i32.const 0)
+
+  ;; Iterate one DER child inside a decoded sequence body.
+  ;; out record: tag:u32, header_len:u32, value_ptr:u32, value_len:u32, total_len:u32, next_offset:u32.
+  (func (export "der_asn1_sequence_next_child") (param $body_ptr i32) (param $body_len i32) (param $offset i32) (param $out i32) (result i32)
+    (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32) (local $remaining i32)
+    (if (i32.eq (local.get $offset) (local.get $body_len)) (then (return (i32.const 5))))
+    (if (i32.gt_u (local.get $offset) (local.get $body_len)) (then (return (i32.const 3))))
+    (local.set $remaining (i32.sub (local.get $body_len) (local.get $offset)))
+    (local.set $h (call $header_decode (i32.add (local.get $body_ptr) (local.get $offset)) (local.get $remaining)))
+    (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
+    (if (local.get $status) (then (return (local.get $status))))
+    (local.set $hdr (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 16)) (i64.const 65535))))
+    (local.set $tag (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 32)) (i64.const 255))))
+    (local.set $vlen (i32.wrap_i64 (i64.and (i64.shr_u (local.get $h) (i64.const 40)) (i64.const 16777215))))
+    (if (i32.lt_u (local.get $remaining) (i32.add (local.get $hdr) (local.get $vlen))) (then (return (i32.const 1))))
+    (i32.store (local.get $out) (local.get $tag))
+    (i32.store (i32.add (local.get $out) (i32.const 4)) (local.get $hdr))
+    (i32.store (i32.add (local.get $out) (i32.const 8)) (i32.add (i32.add (local.get $body_ptr) (local.get $offset)) (local.get $hdr)))
+    (i32.store (i32.add (local.get $out) (i32.const 12)) (local.get $vlen))
+    (i32.store (i32.add (local.get $out) (i32.const 16)) (i32.add (local.get $hdr) (local.get $vlen)))
+    (i32.store (i32.add (local.get $out) (i32.const 20)) (i32.add (local.get $offset) (i32.add (local.get $hdr) (local.get $vlen))))
+    i32.const 0)
+)

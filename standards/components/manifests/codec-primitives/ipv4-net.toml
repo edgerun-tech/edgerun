@@ -1,0 +1,26 @@
+id = "codec-ipv4-net"
+name = "ipv4-net"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300055
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/ipv4-net.wat"
+runner = "standards/runners/ipv4-net-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "u32"]
+outputs = ["status", "packed_i64", "u32", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "ipv4_to_u32",
+  "ipv4_from_u32",
+  "ipv4_broadcast",
+  "ipv4_network",
+  "ipv4_in_network",
+]
+parity_sources = [
+  "crates/utility/edgerun-encoding/src/ip.rs",
+]

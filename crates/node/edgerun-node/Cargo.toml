@@ -60,7 +60,7 @@ client = ["http1", "http2", "runtime"]
 connection-middleware = []
 http-compression = ["edgerun-protocols/http-compression"]
 http1 = ["http", "runtime"]
-http2 = ["http", "runtime", "edgerun-protocols/http2-server", "dep:edgerun-hpack"]
+http2 = ["http", "runtime", "edgerun-protocols/http2-server"]
 http3 = [
     "client",
     "server",
@@ -169,7 +169,6 @@ edgerun-work = { workspace = true, default-features = false, features = ["std"],
 edgerun-codelyzer = { version = "0.1", path = "../../edgerun-codelyzer", default-features = false, optional = true }
 edgerun-ui-core = { workspace = true, optional = true }
 rkyv = { workspace = true, optional = true }
-edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif", optional = true }

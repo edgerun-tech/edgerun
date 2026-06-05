@@ -1,5 +1,4 @@
 use crate::codealyzer::crate_model::*;
-use edgerun_json::{JsonValue, Map};
 use std::path::Path;
 
 pub fn generate_issue_link(
@@ -58,26 +57,48 @@ pub fn generate_local_issue(
     line: Option<usize>,
     severity: Option<&Severity>,
     recommendation: Option<&str>,
-) -> JsonValue {
-    let mut issue = Map::new();
-    issue.insert("crate".into(), JsonValue::String(crate_name.into()));
+) -> String {
+    let mut fields = Vec::new();
+    fields.push(json_field("crate", &json_string(crate_name)));
     if let Some(id) = finding_id {
-        issue.insert("finding_id".into(), JsonValue::String(id.into()));
+        fields.push(json_field("finding_id", &json_string(id)));
     }
     if let Some(f) = file {
-        issue.insert("file".into(), JsonValue::String(f.to_string_lossy().into()));
+        fields.push(json_field("file", &json_string(&f.to_string_lossy())));
     }
     if let Some(l) = line {
-        issue.insert("line".into(), JsonValue::Number((l as u64).into()));
+        fields.push(json_field("line", &l.to_string()));
     }
     if let Some(s) = severity {
-        issue.insert("severity".into(), JsonValue::String(format!("{:?}", s)));
+        fields.push(json_field("severity", &json_string(&format!("{:?}", s))));
     }
     if let Some(r) = recommendation {
-        issue.insert("recommendation".into(), JsonValue::String(r.into()));
+        fields.push(json_field("recommendation", &json_string(r)));
     }
-    issue.insert("status".into(), JsonValue::String("pending".into()));
-    JsonValue::Object(issue)
+    fields.push(json_field("status", &json_string("pending")));
+    format!("{{{}}}", fields.join(","))
+}
+
+fn json_field(name: &str, value: &str) -> String {
+    format!("{}:{}", json_string(name), value)
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 fn urlencode(s: &str) -> String {

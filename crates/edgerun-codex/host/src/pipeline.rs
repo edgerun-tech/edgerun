@@ -2,11 +2,31 @@ use std::error::Error;
 
 use codex_core::protocol::models::ContentItem;
 use codex_core::protocol::models::ResponseItem;
-use codex_core::ModelClient;
 use codex_core::Prompt;
 use codex_core::TurnRequest;
+use codex_core::TurnOutput;
 
 pub type BoxError = Box<dyn Error>;
+
+pub trait PipelineModelClient {
+    fn collect_turn_text(
+        &self,
+        runtime: &edgerun_tokio::runtime::Runtime,
+        request: TurnRequest,
+    ) -> Result<TurnOutput, BoxError>;
+}
+
+impl PipelineModelClient for codex_core::ModelClient {
+    fn collect_turn_text(
+        &self,
+        runtime: &edgerun_tokio::runtime::Runtime,
+        request: TurnRequest,
+    ) -> Result<TurnOutput, BoxError> {
+        Ok(runtime
+            .block_on(self.collect_turn(request))
+            .map_err(|error| format!("collect_turn failed: {error}"))?)
+    }
+}
 
 const ROUTER_STAGE_INDEX: usize = 0;
 const SUMMARIZER_STAGE_INDEX: usize = 6;
@@ -257,7 +277,7 @@ OpenRisks:"#,
 
 pub fn run_pipeline(
     runtime: &edgerun_tokio::runtime::Runtime,
-    client: &ModelClient,
+    client: &dyn PipelineModelClient,
     user_request: &str,
     prior_history: &[ResponseItem],
     repo_context: &str,
@@ -354,7 +374,7 @@ pub fn run_mock_pipeline(
 #[allow(clippy::too_many_arguments)]
 fn run_stage(
     runtime: &edgerun_tokio::runtime::Runtime,
-    client: &ModelClient,
+    client: &dyn PipelineModelClient,
     user_request: &str,
     prior_history: &[ResponseItem],
     repo_context: &str,
@@ -379,10 +399,12 @@ fn run_stage(
             stage_outputs,
             &stage,
         );
-        let output = runtime.block_on(client.collect_turn(turn_request(vec![
+        let output = client.collect_turn_text(
+            runtime,
+            turn_request(vec![
             message_item("system", stage.prompt),
             message_item("user", &handoff),
-        ])))?;
+        ]))?;
         text = normalize_output(output.output_text);
 
         let requests = reveal_requests(&text);

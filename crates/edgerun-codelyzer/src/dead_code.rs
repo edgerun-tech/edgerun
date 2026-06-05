@@ -778,33 +778,20 @@ fn load_workspace_memory(workspace_root: &Path) -> Result<WorkspaceMemory, Strin
 fn index_workspace_manifests(
     vfs: &crate::vfs::VirtualFileSystem,
 ) -> Result<Vec<MetadataPackage>, String> {
+    use crate::codealyzer::cargo_toml_projection::parse_cargo_toml_projection;
+
     let root_manifest = vfs
         .read_str("Cargo.toml")
         .ok_or_else(|| "workspace Cargo.toml not loaded in VFS".to_string())?;
-    let root_toml = edgerun_json::from_toml_str(root_manifest)
-        .map_err(|err| format!("parse Cargo.toml failed: {err}"))?;
-    let workspace = root_toml
-        .get("workspace")
-        .and_then(|value| value.as_table())
-        .ok_or_else(|| "root Cargo.toml has no [workspace] table".to_string())?;
-    let member_patterns = table_get(workspace, "members")
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|value| value.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let default_patterns = table_get(workspace, "default-members")
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|value| value.as_str().map(str::to_string))
-                .collect::<BTreeSet<_>>()
-        })
-        .unwrap_or_default();
+    let root_projection = parse_cargo_toml_projection(root_manifest);
+    if root_projection.workspace_members.is_empty() {
+        return Err("root Cargo.toml has no [workspace].members projection".to_string());
+    }
+    let member_patterns = root_projection.workspace_members;
+    let default_patterns = root_projection
+        .workspace_default_members
+        .into_iter()
+        .collect::<BTreeSet<_>>();
 
     let mut member_dirs = BTreeSet::new();
     for pattern in &member_patterns {
@@ -817,22 +804,12 @@ fn index_workspace_manifests(
         let Some(manifest) = vfs.read_str(&manifest_path) else {
             continue;
         };
-        let Ok(toml) = edgerun_json::from_toml_str(manifest) else {
+        let projection = parse_cargo_toml_projection(manifest);
+        let Some(name) = projection.package_name.clone() else {
             continue;
         };
-        let Some(package) = toml.get("package").and_then(|value| value.as_table()) else {
-            continue;
-        };
-        let name = table_get(package, "name")
-            .and_then(|value| value.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let features = toml
-            .get("features")
-            .and_then(|value| value.as_table())
-            .map(|features| features.iter().map(|(name, _)| name.clone()).collect())
-            .unwrap_or_default();
-        let dependency_names = collect_manifest_dependencies(&toml);
+        let features = projection.feature_keys.clone();
+        let dependency_names = collect_manifest_dependencies(&projection);
         let (build_cfg_symbols, build_cfg_values) = read_build_cfgs(vfs, &dir);
         packages.push(MetadataPackage {
             name,
@@ -951,15 +928,6 @@ fn read_build_cfgs(
     (symbols, values)
 }
 
-fn table_get<'a>(
-    table: &'a [(String, edgerun_json::TomlValue)],
-    key: &str,
-) -> Option<&'a edgerun_json::TomlValue> {
-    table
-        .iter()
-        .find_map(|(name, value)| (name == key).then_some(value))
-}
-
 fn expand_member_pattern(
     vfs: &crate::vfs::VirtualFileSystem,
     pattern: &str,
@@ -982,14 +950,18 @@ fn expand_member_pattern(
     }
 }
 
-fn collect_manifest_dependencies(toml: &edgerun_json::TomlValue) -> Vec<String> {
+fn collect_manifest_dependencies(
+    projection: &crate::codealyzer::cargo_toml_projection::CargoTomlProjection,
+) -> Vec<String> {
     let mut names = BTreeSet::new();
-    for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
-        if let Some(table) = toml.get(section).and_then(|value| value.as_table()) {
-            for (name, _) in table {
-                names.insert(name.clone());
-            }
-        }
+    for row in &projection.dependencies {
+        names.insert(row.name.clone());
+    }
+    for row in &projection.dev_dependencies {
+        names.insert(row.name.clone());
+    }
+    for row in &projection.build_dependencies {
+        names.insert(row.name.clone());
     }
     names.into_iter().collect()
 }

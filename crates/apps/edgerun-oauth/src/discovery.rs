@@ -3,7 +3,6 @@
 use crate::errors::OAuthError;
 use crate::prelude::*;
 use crate::types::Scope;
-use edgerun_json::JsonValue;
 
 /// OIDC Discovery document (`.well-known/openid-configuration`).
 #[derive(Debug, Clone)]
@@ -28,125 +27,124 @@ pub struct OidcDiscoveryDocument {
 impl OidcDiscoveryDocument {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let tape =
-            edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
-        let root = tape
-            .root(json_str)
-            .ok_or_else(|| "JSON parse: missing root value".to_string())?;
-
-        let str_field = |key: &str| {
-            root.get(key)
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string())
-        };
-        let str_array = |key: &str| -> Vec<String> {
-            root.get(key)
-                .and_then(|x| x.array_items())
-                .map(|arr| {
-                    arr.into_iter()
-                        .filter_map(|x| x.as_str())
-                        .map(|s| s.to_string())
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-
-        let scopes_supported = str_array("scopes_supported")
+        let root = crate::json_fixed::parse_object(json_str)?;
+        let scopes_supported = root
+            .string_array_field("scopes_supported")
             .into_iter()
             .map(Scope)
             .collect();
 
         Ok(Self {
-            issuer: str_field("issuer").unwrap_or_default(),
-            authorization_endpoint: str_field("authorization_endpoint").unwrap_or_default(),
-            token_endpoint: str_field("token_endpoint").unwrap_or_default(),
-            userinfo_endpoint: str_field("userinfo_endpoint"),
-            jwks_uri: str_field("jwks_uri").unwrap_or_default(),
-            device_authorization_endpoint: str_field("device_authorization_endpoint"),
-            introspection_endpoint: str_field("introspection_endpoint"),
-            revocation_endpoint: str_field("revocation_endpoint"),
-            response_types_supported: str_array("response_types_supported"),
-            grant_types_supported: str_array("grant_types_supported"),
+            issuer: root.str_field("issuer").unwrap_or_default(),
+            authorization_endpoint: root.str_field("authorization_endpoint").unwrap_or_default(),
+            token_endpoint: root.str_field("token_endpoint").unwrap_or_default(),
+            userinfo_endpoint: root.str_field("userinfo_endpoint"),
+            jwks_uri: root.str_field("jwks_uri").unwrap_or_default(),
+            device_authorization_endpoint: root.str_field("device_authorization_endpoint"),
+            introspection_endpoint: root.str_field("introspection_endpoint"),
+            revocation_endpoint: root.str_field("revocation_endpoint"),
+            response_types_supported: root.string_array_field("response_types_supported"),
+            grant_types_supported: root.string_array_field("grant_types_supported"),
             scopes_supported,
-            subject_types_supported: str_array("subject_types_supported"),
-            id_token_signing_alg_values_supported: str_array(
-                "id_token_signing_alg_values_supported",
-            ),
-            code_challenge_methods_supported: str_array("code_challenge_methods_supported"),
-            token_endpoint_auth_methods_supported: str_array(
-                "token_endpoint_auth_methods_supported",
-            ),
+            subject_types_supported: root.string_array_field("subject_types_supported"),
+            id_token_signing_alg_values_supported: root
+                .string_array_field("id_token_signing_alg_values_supported"),
+            code_challenge_methods_supported: root
+                .string_array_field("code_challenge_methods_supported"),
+            token_endpoint_auth_methods_supported: root
+                .string_array_field("token_endpoint_auth_methods_supported"),
         })
     }
 
     /// Serialize to JSON string.
     pub fn to_json(&self) -> String {
-        use edgerun_json::{JsonValue, Map, to_string};
-        let mut obj: Vec<(String, JsonValue)> = Vec::new();
-        obj.push(("issuer".into(), JsonValue::String(self.issuer.clone())));
-        obj.push((
-            "authorization_endpoint".into(),
-            JsonValue::String(self.authorization_endpoint.clone()),
-        ));
-        obj.push((
-            "token_endpoint".into(),
-            JsonValue::String(self.token_endpoint.clone()),
-        ));
+        let mut out = String::from("{");
+        let mut first = true;
+        crate::json_fixed::write_string_field(&mut out, &mut first, "issuer", &self.issuer);
+        crate::json_fixed::write_string_field(
+            &mut out,
+            &mut first,
+            "authorization_endpoint",
+            &self.authorization_endpoint,
+        );
+        crate::json_fixed::write_string_field(
+            &mut out,
+            &mut first,
+            "token_endpoint",
+            &self.token_endpoint,
+        );
         if let Some(ref v) = self.userinfo_endpoint {
-            obj.push(("userinfo_endpoint".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "userinfo_endpoint", v);
         }
-        obj.push(("jwks_uri".into(), JsonValue::String(self.jwks_uri.clone())));
+        crate::json_fixed::write_string_field(&mut out, &mut first, "jwks_uri", &self.jwks_uri);
         if let Some(ref v) = self.device_authorization_endpoint {
-            obj.push((
-                "device_authorization_endpoint".into(),
-                JsonValue::String(v.clone()),
-            ));
+            crate::json_fixed::write_string_field(
+                &mut out,
+                &mut first,
+                "device_authorization_endpoint",
+                v,
+            );
         }
         if let Some(ref v) = self.introspection_endpoint {
-            obj.push((
-                "introspection_endpoint".into(),
-                JsonValue::String(v.clone()),
-            ));
+            crate::json_fixed::write_string_field(
+                &mut out,
+                &mut first,
+                "introspection_endpoint",
+                v,
+            );
         }
         if let Some(ref v) = self.revocation_endpoint {
-            obj.push(("revocation_endpoint".into(), JsonValue::String(v.clone())));
+            crate::json_fixed::write_string_field(&mut out, &mut first, "revocation_endpoint", v);
         }
-        obj.push((
-            "response_types_supported".into(),
-            str_array(&self.response_types_supported),
-        ));
-        obj.push((
-            "grant_types_supported".into(),
-            str_array(&self.grant_types_supported),
-        ));
-        obj.push((
-            "scopes_supported".into(),
-            str_array(
-                &self
-                    .scopes_supported
-                    .iter()
-                    .map(|s| s.0.clone())
-                    .collect::<Vec<_>>(),
-            ),
-        ));
-        obj.push((
-            "subject_types_supported".into(),
-            str_array(&self.subject_types_supported),
-        ));
-        obj.push((
-            "id_token_signing_alg_values_supported".into(),
-            str_array(&self.id_token_signing_alg_values_supported),
-        ));
-        obj.push((
-            "code_challenge_methods_supported".into(),
-            str_array(&self.code_challenge_methods_supported),
-        ));
-        obj.push((
-            "token_endpoint_auth_methods_supported".into(),
-            str_array(&self.token_endpoint_auth_methods_supported),
-        ));
-        let val = JsonValue::Object(Map::from_iter(obj));
-        to_string(&val).unwrap_or_else(|_| "{}".into())
+        crate::json_fixed::write_string_array_field(
+            &mut out,
+            &mut first,
+            "response_types_supported",
+            &self.response_types_supported,
+        );
+        crate::json_fixed::write_string_array_field(
+            &mut out,
+            &mut first,
+            "grant_types_supported",
+            &self.grant_types_supported,
+        );
+        let scopes_supported = self
+            .scopes_supported
+            .iter()
+            .map(|s| s.0.clone())
+            .collect::<Vec<_>>();
+        crate::json_fixed::write_string_array_field(
+            &mut out,
+            &mut first,
+            "scopes_supported",
+            &scopes_supported,
+        );
+        crate::json_fixed::write_string_array_field(
+            &mut out,
+            &mut first,
+            "subject_types_supported",
+            &self.subject_types_supported,
+        );
+        crate::json_fixed::write_string_array_field(
+            &mut out,
+            &mut first,
+            "id_token_signing_alg_values_supported",
+            &self.id_token_signing_alg_values_supported,
+        );
+        crate::json_fixed::write_string_array_field(
+            &mut out,
+            &mut first,
+            "code_challenge_methods_supported",
+            &self.code_challenge_methods_supported,
+        );
+        crate::json_fixed::write_string_array_field(
+            &mut out,
+            &mut first,
+            "token_endpoint_auth_methods_supported",
+            &self.token_endpoint_auth_methods_supported,
+        );
+        out.push('}');
+        out
     }
 
     /// Discover from a base URL by fetching the well-known endpoint.
@@ -193,41 +191,31 @@ pub struct Jwk {
     pub e: Option<String>,
     /// For symmetric keys
     pub k: Option<String>,
-    /// Raw JSON for extensibility
-    pub raw: JsonValue,
+    /// Raw object span for audit and future extension projection.
+    pub raw_json: String,
 }
 
 impl JwksDocument {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let tape =
-            edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
-        let root = tape
-            .root(json_str)
-            .ok_or_else(|| "JSON parse: missing root value".to_string())?;
-        let keys_array = root.get_array("keys").unwrap_or_default();
+        let root = crate::json_fixed::parse_object(json_str)?;
+        let keys_array = root.object_array_field("keys");
         let mut keys = Vec::new();
 
         for key_json in keys_array {
-            let str_field = |k: &str| {
-                key_json
-                    .get(k)
-                    .and_then(|x| x.as_str())
-                    .map(|s| s.to_string())
-            };
-
+            let key = crate::json_fixed::parse_object(key_json)?;
             keys.push(Jwk {
-                kid: str_field("kid"),
-                kty: str_field("kty").unwrap_or_default(),
-                alg: str_field("alg"),
-                use_: str_field("use"),
-                crv: str_field("crv"),
-                x: str_field("x"),
-                y: str_field("y"),
-                n: str_field("n"),
-                e: str_field("e"),
-                k: str_field("k"),
-                raw: key_json.to_json_value().unwrap_or(JsonValue::Null),
+                kid: key.str_field("kid"),
+                kty: key.str_field("kty").unwrap_or_default(),
+                alg: key.str_field("alg"),
+                use_: key.str_field("use"),
+                crv: key.str_field("crv"),
+                x: key.str_field("x"),
+                y: key.str_field("y"),
+                n: key.str_field("n"),
+                e: key.str_field("e"),
+                k: key.str_field("k"),
+                raw_json: key_json.to_string(),
             });
         }
 
@@ -236,11 +224,15 @@ impl JwksDocument {
 
     /// Serialize to JSON string.
     pub fn to_json(&self) -> String {
-        use edgerun_json::{JsonValue, Map, to_string};
-        let keys_arr: Vec<JsonValue> = self.keys.iter().map(|k| k.raw.clone()).collect();
-        let obj: Vec<(String, JsonValue)> = vec![("keys".into(), JsonValue::Array(keys_arr))];
-        let val = JsonValue::Object(Map::from_iter(obj));
-        to_string(&val).unwrap_or_else(|_| "{}".into())
+        let mut out = String::from("{\"keys\":[");
+        for (idx, key) in self.keys.iter().enumerate() {
+            if idx != 0 {
+                out.push(',');
+            }
+            out.push_str(&key.to_json());
+        }
+        out.push_str("]}");
+        out
     }
 
     /// Fetch JWKS from a URL.
@@ -266,14 +258,41 @@ impl JwksDocument {
     }
 }
 
-fn str_array(strings: &[String]) -> JsonValue {
-    use edgerun_json::JsonValue;
-    JsonValue::Array(
-        strings
-            .iter()
-            .map(|s| JsonValue::String(s.clone()))
-            .collect(),
-    )
+impl Jwk {
+    pub fn to_json(&self) -> String {
+        let mut out = String::from("{");
+        let mut first = true;
+        if let Some(ref v) = self.kid {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "kid", v);
+        }
+        crate::json_fixed::write_string_field(&mut out, &mut first, "kty", &self.kty);
+        if let Some(ref v) = self.alg {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "alg", v);
+        }
+        if let Some(ref v) = self.use_ {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "use", v);
+        }
+        if let Some(ref v) = self.crv {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "crv", v);
+        }
+        if let Some(ref v) = self.x {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "x", v);
+        }
+        if let Some(ref v) = self.y {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "y", v);
+        }
+        if let Some(ref v) = self.n {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "n", v);
+        }
+        if let Some(ref v) = self.e {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "e", v);
+        }
+        if let Some(ref v) = self.k {
+            crate::json_fixed::write_string_field(&mut out, &mut first, "k", v);
+        }
+        out.push('}');
+        out
+    }
 }
 
 // ===========================================================================

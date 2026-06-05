@@ -1,9 +1,11 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::codealyzer::cargo_toml_projection::{
+    DependencyProjection, DependencyValue, parse_cargo_toml_projection,
+};
 use crate::codealyzer::crate_model::*;
 use crate::codealyzer::errors::Result;
-use edgerun_json::TomlValue;
 
 pub fn analyze_dependencies(
     cargo_toml_path: &Path,
@@ -13,84 +15,46 @@ pub fn analyze_dependencies(
     let content = std::fs::read_to_string(cargo_toml_path)
         .map_err(|e| crate::codealyzer::errors::AnalyzerError::IoError(e.to_string()))?;
 
-    let toml = edgerun_json::from_toml_str(&content).map_err(|e| {
-        crate::codealyzer::errors::AnalyzerError::ParseError {
-            file: cargo_toml_path.to_path_buf(),
-            message: e.to_string(),
-        }
-    })?;
-
+    let projection = parse_cargo_toml_projection(&content);
     let workspace_members = load_workspace_members(workspace_root);
     let mut deps = Vec::new();
 
-    if let Some(deps_obj) = toml.get("dependencies").and_then(|d| d.as_table()) {
-        append_dependencies(
-            &mut deps,
-            deps_obj,
-            DependencyKind::Normal,
-            &workspace_members,
-            visible_files,
-        );
-    }
-
-    if let Some(deps_obj) = toml.get("dev-dependencies").and_then(|d| d.as_table()) {
-        append_dependencies(
-            &mut deps,
-            deps_obj,
-            DependencyKind::Dev,
-            &workspace_members,
-            visible_files,
-        );
-    }
-
-    if let Some(deps_obj) = toml.get("build-dependencies").and_then(|d| d.as_table()) {
-        append_dependencies(
-            &mut deps,
-            deps_obj,
-            DependencyKind::Build,
-            &workspace_members,
-            visible_files,
-        );
-    }
+    append_dependencies(
+        &mut deps,
+        &projection.dependencies,
+        DependencyKind::Normal,
+        &workspace_members,
+        visible_files,
+    );
+    append_dependencies(
+        &mut deps,
+        &projection.dev_dependencies,
+        DependencyKind::Dev,
+        &workspace_members,
+        visible_files,
+    );
+    append_dependencies(
+        &mut deps,
+        &projection.build_dependencies,
+        DependencyKind::Build,
+        &workspace_members,
+        visible_files,
+    );
 
     Ok(deps)
 }
 
-#[derive(Default)]
-struct DependencySpec {
-    direct: Option<TomlValue>,
-    properties: Vec<(String, TomlValue)>,
-}
-
 fn append_dependencies(
     deps: &mut Vec<Dependency>,
-    deps_obj: &Vec<(String, TomlValue)>,
+    deps_obj: &[DependencyProjection],
     kind: DependencyKind,
     workspace_members: &HashSet<String>,
     visible_files: &[PathBuf],
 ) {
-    let mut grouped: HashMap<String, DependencySpec> = HashMap::new();
-
-    for (name, value) in deps_obj {
-        if let Some((canonical_name, field)) = name.split_once('.') {
-            grouped
-                .entry(canonical_name.to_string())
-                .or_default()
-                .properties
-                .push((field.to_string(), value.clone()));
-        } else {
-            grouped
-                .entry(name.to_string())
-                .or_default()
-                .direct
-                .replace(value.clone());
-        }
-    }
-
-    for (name, spec) in grouped {
-        let dependency_value = build_dependency_value(spec);
+    for row in deps_obj {
+        let dependency_value = build_dependency_value(row);
         deps.push(parse_dependency(
-            &name,
+            &row.name,
             &dependency_value,
             kind,
             workspace_members,
@@ -99,32 +63,34 @@ fn append_dependencies(
     }
 }
 
-fn build_dependency_value(spec: DependencySpec) -> TomlValue {
-    if spec.properties.is_empty() {
-        return spec.direct.unwrap_or(TomlValue::String(String::new()));
+fn build_dependency_value(row: &DependencyProjection) -> DependencyValue {
+    if row.properties.is_empty() {
+        return row.value.clone();
     }
 
     let mut table = Vec::new();
-    if let Some(direct) = spec.direct {
-        match direct {
-            TomlValue::Table(value) => {
-                table.extend(value);
-            }
-            TomlValue::String(value) => {
-                table.push(("version".to_string(), TomlValue::String(value)));
-            }
-            other => {
-                table.push(("version".to_string(), other));
-            }
+    match &row.value {
+        DependencyValue::InlineTable(value) => {
+            table.extend(value.clone());
+        }
+        DependencyValue::String(value) => {
+            table.push((
+                "version".to_string(),
+                DependencyValue::String(value.clone()),
+            ));
+        }
+        DependencyValue::Bare(value) if value.is_empty() => {}
+        other => {
+            table.push(("version".to_string(), other.clone()));
         }
     }
-    table.extend(spec.properties);
-    TomlValue::Table(table)
+    table.extend(row.properties.clone());
+    DependencyValue::InlineTable(table)
 }
 
 fn parse_dependency(
     name: &str,
-    value: &TomlValue,
+    value: &DependencyValue,
     kind: DependencyKind,
     workspace_members: &HashSet<String>,
     visible_files: &[PathBuf],
@@ -147,10 +113,12 @@ fn parse_dependency(
         dependency_source = parsed.dependency_source;
         source_ref = parsed.source_ref;
         workspace_declared = parsed.workspace_declared;
-    } else if let TomlValue::String(v) = value {
-        version_req = Some(strip_toml_quoted(v));
-        dependency_source = DependencySource::CratesIo;
-    } else if let TomlValue::Table(obj) = value {
+    } else if let DependencyValue::String(v) | DependencyValue::Bare(v) = value {
+        if !v.is_empty() {
+            version_req = Some(strip_toml_quoted(v));
+            dependency_source = DependencySource::CratesIo;
+        }
+    } else if let DependencyValue::InlineTable(obj) = value {
         let parsed = parse_dependency_table(name, obj);
         package_name = parsed.package_name;
         version_req = parsed.version_req;
@@ -216,7 +184,7 @@ impl Default for DependencyConfig {
     }
 }
 
-fn parse_dependency_table(name: &str, table: &Vec<(String, TomlValue)>) -> DependencyConfig {
+fn parse_dependency_table(name: &str, table: &[(String, DependencyValue)]) -> DependencyConfig {
     let mut config = DependencyConfig {
         package_name: name.to_string(),
         dependency_source: DependencySource::Unknown,
@@ -248,13 +216,8 @@ fn parse_dependency_table(name: &str, table: &Vec<(String, TomlValue)>) -> Depen
     config.features = table
         .iter()
         .find(|(k, _)| k == &"features")
-        .and_then(|(_, v)| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str())
-                .map(strip_toml_quoted)
-                .collect()
-        })
+        .and_then(|(_, v)| v.as_string_array())
+        .map(|arr| arr.iter().map(|v| strip_toml_quoted(v)).collect())
         .unwrap_or_default();
 
     if let Some(v) = table
@@ -283,7 +246,7 @@ fn parse_dependency_table(name: &str, table: &Vec<(String, TomlValue)>) -> Depen
     config
 }
 
-fn parse_dependency_inline_table(value: &str) -> Option<Vec<(String, TomlValue)>> {
+fn parse_dependency_inline_table(value: &str) -> Option<Vec<(String, DependencyValue)>> {
     let value = value.trim();
     if !(value.starts_with('{') && value.ends_with('}')) {
         return None;
@@ -315,23 +278,23 @@ fn parse_dependency_inline_table(value: &str) -> Option<Vec<(String, TomlValue)>
     Some(entries)
 }
 
-fn parse_dependency_value(value: &str) -> TomlValue {
+fn parse_dependency_value(value: &str) -> DependencyValue {
     let value = value.trim();
     if value.is_empty() {
-        return TomlValue::String(String::new());
+        return DependencyValue::Bare(String::new());
     }
 
     if (value.starts_with('"') && value.ends_with('"'))
         || (value.starts_with('\'') && value.ends_with('\''))
     {
-        return TomlValue::String(strip_toml_quoted(value));
+        return DependencyValue::String(strip_toml_quoted(value));
     }
 
     if value == "true" {
-        return TomlValue::Boolean(true);
+        return DependencyValue::Bool(true);
     }
     if value == "false" {
-        return TomlValue::Boolean(false);
+        return DependencyValue::Bool(false);
     }
 
     if value.starts_with('[') && value.ends_with(']') {
@@ -341,20 +304,31 @@ fn parse_dependency_value(value: &str) -> TomlValue {
         } else {
             split_toml_level(inner, ',')
                 .into_iter()
-                .map(|item| parse_dependency_value(item.trim()))
+                .filter_map(|item| {
+                    let parsed = parse_dependency_value(item.trim());
+                    parsed.as_str().map(strip_toml_quoted)
+                })
                 .collect()
         };
-        return TomlValue::Array(items);
+        return DependencyValue::StringArray(items);
     }
 
-    if let Ok(value) = value.parse::<i64>() {
-        return TomlValue::Integer(value);
-    }
-    if let Ok(value) = value.parse::<f64>() {
-        return TomlValue::Float(value);
+    if value.starts_with('{') && value.ends_with('}') {
+        let mut entries = Vec::new();
+        for raw_entry in split_toml_level(&value[1..value.len() - 1], ',') {
+            let entry = raw_entry.trim();
+            let Some(eq_pos) = entry.find('=') else {
+                continue;
+            };
+            entries.push((
+                entry[..eq_pos].trim().to_string(),
+                parse_dependency_value(entry[eq_pos + 1..].trim()),
+            ));
+        }
+        return DependencyValue::InlineTable(entries);
     }
 
-    TomlValue::String(value.to_string())
+    DependencyValue::Bare(value.to_string())
 }
 
 fn split_toml_level(value: &str, delimiter: char) -> Vec<String> {
@@ -492,34 +466,14 @@ fn load_workspace_members(workspace_root: &Path) -> HashSet<String> {
         return members;
     };
 
-    let Ok(toml) = edgerun_json::from_toml_str(&content) else {
-        return members;
-    };
+    let projection = parse_cargo_toml_projection(&content);
 
-    let Some(workspace) = toml.get("workspace").and_then(|v| v.as_table()) else {
-        return members;
-    };
-
-    let workspace_members = workspace.iter().find(|(name, _)| name == "members");
-    if let Some((_, v)) = workspace_members {
-        if let Some(crates) = v.as_array() {
-            for item in crates {
-                if let Some(name) = item.as_str() {
-                    let cleaned = strip_toml_quoted(name);
-                    if cleaned.starts_with("crates/") {
-                        members.insert(cleaned.trim_start_matches("crates/").to_string());
-                    }
-                }
-            }
+    for name in projection.workspace_members {
+        if name.starts_with("crates/") {
+            members.insert(name.trim_start_matches("crates/").to_string());
         }
     }
-
-    let workspace_dependencies = workspace.iter().find(|(name, _)| name == "dependencies");
-    if let Some((_, v)) = workspace_dependencies {
-        if let Some(deps) = v.as_table() {
-            members.extend(deps.iter().map(|(name, _)| name.clone()));
-        }
-    }
+    members.extend(projection.workspace_dependencies);
 
     members
 }

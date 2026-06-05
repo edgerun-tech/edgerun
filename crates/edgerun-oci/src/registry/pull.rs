@@ -6,8 +6,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use edgerun_json::ToJson;
-
 use super::client::RegistryClient;
 use super::config::parse_image_config;
 use super::errors::RegistryError;
@@ -187,8 +185,7 @@ where
     progress(PullProgress::WritingProvenance {
         path: provenance_path.clone(),
     });
-    let provenance_json = edgerun_json::to_string_pretty(&provenance.to_json())
-        .map_err(|error| RegistryError::ParseError(error.to_string()))?;
+    let provenance_json = provenance.to_json_string_pretty();
     atomic_write(&provenance_path, provenance_json.as_bytes())?;
 
     Ok(ImagePullReport {

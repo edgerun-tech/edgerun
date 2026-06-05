@@ -1,0 +1,24 @@
+id = "codec-http1-header-block"
+name = "http1-header-block"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300101
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/http1-header-block.wat"
+runner = "standards/runners/http1-header-block-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "limits"]
+outputs = ["status", "records"]
+depends_on = ["codec-http1-scan", "codec-http1-lines", "codec-http1-body"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "http1_validate_header_block",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/http/header.rs",
+  "crates/protocol/edgerun-protocols/src/http/message.rs",
+  "crates/protocol/edgerun-protocols/src/http/http1/connection.rs",
+]

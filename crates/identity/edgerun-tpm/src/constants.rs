@@ -24,6 +24,7 @@ pub const TPM_CC_FLUSH_CONTEXT: u32 = 0x0000_0165;
 pub const TPM_CC_STARTUP: u32 = 0x0000_0144;
 pub const TPM_CC_SHUTDOWN: u32 = 0x0000_0145;
 
+
 // Startup types
 pub const TPM_SU_CLEAR: u16 = 0x0000;
 pub const TPM_SU_STATE: u16 = 0x0001;

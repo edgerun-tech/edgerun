@@ -1,3 +1,5 @@
+#[cfg(any(target_os = "none", target_arch = "wasm32"))]
+use crate::io::{self, Read, Write};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -6,8 +8,6 @@ use alloc::vec::Vec;
 use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 use core::{debug_assert_eq, fmt, write};
-#[cfg(any(target_os = "none", target_arch = "wasm32"))]
-use edgerun_encoding::io::{self, Read, Write};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
 use std::io::{self, Read, Write};
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
@@ -78,14 +78,15 @@ mod sync {
 }
 
 use edgerun_protocols::block::{
-    BLOCK_FRAME_HEADER_LEN, BLOCK_PROTOCOL_VERSION, BlockBackend, BlockDeviceInfo, BlockError,
-    BlockRequest, BlockResponse, RequestId, byte_offset, byte_range, checked_len_bytes,
-    decode_frame_len, decode_request_frame, decode_request_payload, decode_response_frame,
-    decode_response_payload, encode_request_frame, encode_request_payload, encode_response_frame,
-    encode_response_payload, expect_discard_response, expect_flush_response,
-    expect_handshake_response, expect_info_response, expect_pong_response, expect_read_response,
-    expect_write_response, expect_write_zeroes_response, frame_payload, handle_request,
-    total_size_len, validate_device_info, validate_range, validate_transfer,
+    byte_offset, byte_range, checked_len_bytes, decode_frame_len, decode_request_frame,
+    decode_request_payload, decode_response_frame, decode_response_payload, encode_request_frame,
+    encode_request_payload, encode_response_frame, encode_response_payload,
+    expect_discard_response, expect_flush_response, expect_handshake_response,
+    expect_info_response, expect_pong_response, expect_read_response, expect_write_response,
+    expect_write_zeroes_response, frame_payload, handle_request, total_size_len,
+    validate_device_info, validate_range, validate_transfer, BlockBackend, BlockDeviceInfo,
+    BlockError, BlockRequest, BlockResponse, RequestId, BLOCK_FRAME_HEADER_LEN,
+    BLOCK_PROTOCOL_VERSION,
 };
 
 pub struct MemoryBlockBackend {
@@ -493,7 +494,7 @@ fn block_io_error(error: io::Error) -> BlockError {
 mod tests {
     use super::*;
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-    use crate::image::{VirtualDiskFormat, VirtualDiskSpec, create};
+    use crate::image::{create, VirtualDiskFormat, VirtualDiskSpec};
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     use std::env;
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]

@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use edgerun_json::{JsonValue, ToJson};
-
 #[derive(Debug, Clone)]
 pub enum AnalyzerError {
     CrateNotFound(String),
@@ -11,37 +9,52 @@ pub enum AnalyzerError {
     VisibilityViolation(String),
 }
 
-impl ToJson for AnalyzerError {
-    fn to_json(&self) -> JsonValue {
+impl AnalyzerError {
+    pub fn to_json_string(&self) -> String {
         match self {
             AnalyzerError::CrateNotFound(name) => {
-                let mut map = edgerun_json::Map::new();
-                map.insert("CrateNotFound".into(), name.to_json());
-                JsonValue::Object(map)
+                json_object(&[("CrateNotFound", json_string(name))])
             }
-            AnalyzerError::ParseError { file, message } => {
-                let mut map = edgerun_json::Map::new();
-                map.insert("file".into(), file.to_string_lossy().into_owned().to_json());
-                map.insert("message".into(), message.to_json());
-                JsonValue::Object(map)
-            }
-            AnalyzerError::IoError(msg) => {
-                let mut map = edgerun_json::Map::new();
-                map.insert("IoError".into(), msg.to_json());
-                JsonValue::Object(map)
-            }
+            AnalyzerError::ParseError { file, message } => json_object(&[
+                ("file", json_string(&file.to_string_lossy())),
+                ("message", json_string(message)),
+            ]),
+            AnalyzerError::IoError(msg) => json_object(&[("IoError", json_string(msg))]),
             AnalyzerError::NotImplemented(feature) => {
-                let mut map = edgerun_json::Map::new();
-                map.insert("NotImplemented".into(), feature.to_json());
-                JsonValue::Object(map)
+                json_object(&[("NotImplemented", json_string(feature))])
             }
             AnalyzerError::VisibilityViolation(msg) => {
-                let mut map = edgerun_json::Map::new();
-                map.insert("VisibilityViolation".into(), msg.to_json());
-                JsonValue::Object(map)
+                json_object(&[("VisibilityViolation", json_string(msg))])
             }
         }
     }
+}
+
+fn json_object(fields: &[(&str, String)]) -> String {
+    let body = fields
+        .iter()
+        .map(|(key, value)| format!("{}:{}", json_string(key), value))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("{{{body}}}")
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 impl std::fmt::Display for AnalyzerError {

@@ -1,5 +1,5 @@
+use super::buf::{Buf, BufMut};
 use alloc::vec::Vec;
-use edgerun_encoding::buf::{Buf, BufMut};
 
 use super::{parse_error::ParseError, prefix_int, prefix_string};
 
@@ -392,11 +392,11 @@ impl Literal {
 
 #[cfg(test)]
 mod test {
+    use super::buf::Cursor;
     use super::*;
     use alloc::vec;
     use alloc::vec::Vec;
     use core::convert::TryInto;
-    use edgerun_encoding::buf::Cursor;
 
     const TABLE_SIZE: usize = 4096;
 

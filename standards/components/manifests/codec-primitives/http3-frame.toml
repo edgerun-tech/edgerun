@@ -1,0 +1,26 @@
+id = "codec-http3-frame"
+name = "http3-frame"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300012
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/http3-frame.wat"
+runner = "standards/runners/http3-frame-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "bytes"]
+depends_on = ["codec-encoding-core"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "http3_frame_type_classify",
+  "http3_frame_header_decode",
+  "http3_frame_header_encode",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/http/http3/frame.rs",
+  "crates/protocol/edgerun-protocols/src/http/http3/varint.rs",
+]
+

@@ -12,8 +12,8 @@ description = "Transport-independent protocol parsers, encoders, and state machi
 edgerun-crypto = { workspace = true, default-features = false, optional = true }
 edgerun-core = { workspace = true, default-features = false, optional = true }
 edgerun-encoding = { workspace = true, default-features = false, optional = true }
-edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
 edgerun-json = { workspace = true, default-features = false, optional = true }
+edgerun-tpm = { path = "../../identity/edgerun-tpm", default-features = false, features = ["std"], optional = true }
 edgerun-url = { workspace = true, default-features = false, optional = true }
 edgerun-wire = { workspace = true, default-features = false, optional = true }
 
@@ -39,8 +39,8 @@ emrtd = []
 ethernet-ipv4 = ["dep:edgerun-encoding"]
 goodix-fingerprint = ["dep:edgerun-encoding"]
 http = ["dep:edgerun-encoding"]
-http2-server = ["http", "dep:edgerun-hpack"]
-http-compression = ["http", "dep:edgerun-encoding", "edgerun-encoding/compression"]
+http2-server = ["http"]
+http-compression = ["http", "dep:edgerun-encoding"]
 http3 = ["http", "dep:edgerun-encoding"]
 imap = ["dep:edgerun-encoding"]
 keygen = ["sign-p256"]
@@ -49,7 +49,7 @@ matter = ["dep:edgerun-encoding"]
 nbd = ["block", "dep:edgerun-encoding"]
 ndef = ["dep:edgerun-encoding"]
 node-bootstrap = ["keygen", "sign-p256", "verify"]
-oci = ["dep:edgerun-json"]
+oci = []
 oauth = ["dep:edgerun-crypto", "dep:edgerun-encoding", "edgerun-crypto/sha2"]
 quic = ["tls", "tls-ed25519", "tls-rsa", "tls-x25519"]
 seal = ["keygen", "dep:edgerun-crypto", "edgerun-crypto/aead"]
@@ -59,6 +59,7 @@ sign-p256 = ["sign"]
 smtp = ["dep:edgerun-encoding"]
 ssh = ["dep:edgerun-encoding"]
 tls = ["tls-cert", "dep:edgerun-encoding", "edgerun-crypto/aead", "edgerun-crypto/hmac"]
+tls-tpm = ["tls", "dep:edgerun-tpm", "edgerun-tpm/std"]
 tls-cert = ["dep:edgerun-crypto", "edgerun-crypto/p256", "edgerun-crypto/pem", "edgerun-crypto/sha2"]
 tls-ed25519 = ["tls", "edgerun-crypto/ed25519"]
 tls-rsa = ["tls", "edgerun-crypto/rsa"]

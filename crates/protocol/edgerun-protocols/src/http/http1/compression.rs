@@ -13,8 +13,6 @@ use crate::http::HeaderMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-#[cfg(feature = "http-compression")]
-use edgerun_encoding::compression;
 
 /// Supported content encodings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,10 +72,10 @@ pub fn accept_encoding_value() -> &'static str {
 /// Compress response body for a negotiated content encoding.
 #[cfg(feature = "http-compression")]
 pub fn compress_body(body: &[u8], encoding: ContentEncoding) -> Option<Vec<u8>> {
+    let _ = body;
     match encoding {
-        ContentEncoding::Gzip => Some(compress_gzip(body)),
-        ContentEncoding::Deflate => Some(compress_deflate(body)),
         ContentEncoding::Identity | ContentEncoding::Brotli | ContentEncoding::Unknown => None,
+        ContentEncoding::Gzip | ContentEncoding::Deflate => None,
     }
 }
 
@@ -129,53 +127,17 @@ pub fn decompress_body(body: &[u8], headers: &HeaderMap) -> Option<Vec<u8>> {
 
     match encoding {
         #[cfg(feature = "http-compression")]
-        ContentEncoding::Gzip => decompress_gzip(body),
+        ContentEncoding::Gzip => None,
         #[cfg(not(feature = "http-compression"))]
         ContentEncoding::Gzip => None,
         #[cfg(feature = "http-compression")]
-        ContentEncoding::Deflate => decompress_deflate(body),
+        ContentEncoding::Deflate => None,
         #[cfg(not(feature = "http-compression"))]
         ContentEncoding::Deflate => None,
         ContentEncoding::Brotli => None,
         ContentEncoding::Identity => Some(body.to_vec()),
         ContentEncoding::Unknown => Some(body.to_vec()),
     }
-}
-
-// ---------------------------------------------------------------------------
-// gzip compression/decompression (RFC 1952)
-// ---------------------------------------------------------------------------
-
-/// Compress to gzip format
-#[cfg(feature = "http-compression")]
-fn compress_gzip(data: &[u8]) -> Vec<u8> {
-    compression::gzip_compress(data, 6)
-}
-
-/// Decompress gzip data
-#[cfg(feature = "http-compression")]
-fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
-    compression::gzip_decompress(data).ok()
-}
-
-// ---------------------------------------------------------------------------
-// deflate/zlib compression/decompression (RFC 1950)
-// ---------------------------------------------------------------------------
-
-/// Compress to zlib/deflate format
-#[cfg(feature = "http-compression")]
-fn compress_deflate(data: &[u8]) -> Vec<u8> {
-    compression::zlib_compress(data, 6)
-}
-
-/// Decompress zlib/deflate data
-#[cfg(feature = "http-compression")]
-fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
-    if data.len() < 2 {
-        return None;
-    }
-
-    compression::zlib_decompress(data).ok()
 }
 
 // ---------------------------------------------------------------------------

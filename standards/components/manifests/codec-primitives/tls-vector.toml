@@ -1,0 +1,28 @@
+id = "codec-tls-vector"
+name = "tls-vector"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300013
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/tls-vector.wat"
+runner = "standards/runners/tls-vector-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "offsets"]
+outputs = ["status", "records"]
+depends_on = ["codec-tls-frame"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "tls_vector_u8_decode",
+  "tls_vector_u16_decode",
+  "tls_vector_u24_decode",
+  "tls_extension_next",
+  "tls_alpn_next",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/tls/handshake.rs",
+  "crates/protocol/edgerun-protocols/src/tls/tls_alpn.rs",
+]
+

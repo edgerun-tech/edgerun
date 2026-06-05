@@ -2,6 +2,7 @@ pub mod api_analyzer;
 pub mod benchmarks;
 pub mod call_graph;
 pub mod cargo_toml;
+pub mod cargo_toml_projection;
 pub mod crate_model;
 pub mod dependency_analyzer;
 pub mod dependency_footprint;

@@ -21,7 +21,7 @@ use crate::http::http2::frame::{
     DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame,
     SettingsFrame, WindowUpdateFrame, flags,
 };
-use crate::http::http2::hpack::{Decoder, Encoder};
+use crate::http::http2::hpack::HpackContext;
 use crate::http::http2::settings::Settings;
 use crate::http::http2::stream::{StreamManager, StreamState};
 use crate::http::http2::{CONNECTION_PREFACE, ErrorCode, Http2Error, Result};
@@ -435,8 +435,7 @@ enum ConnectionEvent {
 }
 
 struct StreamStateInner {
-    encoder: Encoder<'static>,
-    decoder: Decoder<'static>,
+    hpack: HpackContext,
     flow: FlowControlManager,
     streams: StreamManager,
     client_settings: Settings,
@@ -456,8 +455,7 @@ impl StreamStateInner {
     fn new(client_settings: Settings, remote_settings: Settings) -> Self {
         let max_frame_size = remote_settings.max_frame_size;
         StreamStateInner {
-            encoder: Encoder::new(),
-            decoder: Decoder::new(),
+            hpack: HpackContext::new(),
             flow: FlowControlManager::new(remote_settings.initial_window_size),
             streams: StreamManager::new(remote_settings.initial_window_size),
             client_settings,
@@ -650,8 +648,8 @@ async fn connection_task<S>(
                     let (encoded,) = {
                         let mut s = state.lock().unwrap();
                         let enc = s
-                            .encoder
-                            .encode(headers.iter().map(|(n, v)| (&n[..], &v[..])));
+                            .hpack
+                            .encode_header_block(headers.iter().map(|(n, v)| (&n[..], &v[..])))?;
                         (enc,)
                     };
                     let hdr_frame = HeadersFrame::new(stream_id, encoded, end_stream);
@@ -796,7 +794,7 @@ where
                 {
                     let mut s = state.lock().unwrap();
                     s.max_frame_size = max_frame;
-                    s.decoder.set_max_table_size(header_table_size);
+                    s.hpack.set_max_table_size(header_table_size);
                 }
                 let ack = SettingsFrame::ack();
                 write_frame_async(stream, &ack.to_frame()).await?;
@@ -819,7 +817,7 @@ where
 
             let headers = {
                 let mut s = state.lock().unwrap();
-                s.decoder.decode(&hdr_frame.header_block)?
+                s.hpack.decode_header_block(&hdr_frame.header_block)?
             };
 
             handle_response_headers(state, hdr_frame.stream_id, headers, end_stream).await?;
@@ -841,7 +839,7 @@ where
 
                     let headers = {
                         let mut s = state.lock().unwrap();
-                        s.decoder.decode(&block_clone)?
+                        s.hpack.decode_header_block(&block_clone)?
                     };
 
                     handle_response_headers(state, sid, headers, end_stream).await?;

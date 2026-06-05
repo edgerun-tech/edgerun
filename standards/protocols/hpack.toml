@@ -4,7 +4,13 @@ summary = "Header compression format for HTTP/2."
 layer = "presentation"
 runs_over = ["HTTP/2"]
 depends_on = ["HTTP/2"]
-implementation_crates = ["crates/utility/edgerun-hpack"]
+implementation_crates = [
+  "standards/build/wasm/codec-primitives/http-prefix-int.wat",
+  "standards/build/wasm/codec-primitives/hpack-string.wat",
+  "standards/build/wasm/codec-primitives/hpack-huffman.wat",
+  "standards/build/wasm/codec-primitives/hpack-header-block.wat",
+  "standards/build/wasm/codec-primitives/hpack-table-core.wat",
+]
 profiles = ["encoder", "decoder", "no_std-candidate"]
 standards_bodies = ["IETF"]
 
@@ -34,13 +40,15 @@ role = "base"
 id = "hpack-integer-codec"
 kind = "codec"
 standards = ["RFC7541"]
-implementation = ["crates/utility/edgerun-hpack"]
-status = "unknown"
+implementation = ["standards/build/wasm/codec-primitives/http-prefix-int.wat"]
+status = "wat-owned"
 
 [[behavior]]
 id = "hpack-dynamic-table"
 kind = "state-machine"
 standards = ["RFC7541"]
-implementation = ["crates/utility/edgerun-hpack"]
-status = "unknown"
-
+implementation = [
+  "standards/build/wasm/codec-primitives/hpack-header-block.wat",
+  "standards/build/wasm/codec-primitives/hpack-table-core.wat",
+]
+status = "wat-owned"

@@ -11,6 +11,7 @@ use crate::clap::cli::Action;
 use crate::clap::{Arg, Command};
 use crate::cli::exec::container_namespace_pid;
 use crate::cli::exec::{enter_container_root, join_container_namespaces, open_exec_root};
+use crate::cli::json;
 use crate::cli::process_tree;
 use crate::cli::{invalid_input, parse_cli_args};
 use crate::state::{ContainerState, load_state, save_state, state_root_dir};
@@ -148,19 +149,27 @@ fn print_containers_table(states: &[ContainerState]) {
 }
 
 fn print_containers_json(states: &[ContainerState]) {
-    let entries = states
-        .iter()
-        .map(|state| {
-            edgerun_json::json!({
-                "id": state.id.as_str(),
-                "status": state.status.as_str(),
-                "pid": state.pid.map(edgerun_json::JsonValue::from).unwrap_or(edgerun_json::JsonValue::Null),
-                "bundle": state.bundle.as_str()
-            })
-        })
-        .collect::<Vec<_>>();
-    let output = edgerun_json::JsonValue::Array(entries);
-    println!("{}", edgerun_json::to_string(&output).unwrap_or_default());
+    let mut out = String::new();
+    out.push('[');
+    for (index, state) in states.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let mut first = true;
+        out.push('{');
+        json::push_string_field(&mut out, &mut first, "id", &state.id);
+        json::push_string_field(&mut out, &mut first, "status", &state.status);
+        json::push_field_prefix(&mut out, &mut first, "pid");
+        if let Some(pid) = state.pid {
+            out.push_str(&pid.to_string());
+        } else {
+            out.push_str("null");
+        }
+        json::push_string_field(&mut out, &mut first, "bundle", &state.bundle);
+        out.push('}');
+    }
+    out.push(']');
+    println!("{}", out);
 }
 
 fn print_container_processes(init_pid: u32, root_fd: i32, json: bool) -> io::Result<()> {
@@ -287,17 +296,20 @@ fn print_processes_table(processes: &[ProcEntry]) {
 }
 
 fn print_processes_json(processes: &[ProcEntry]) {
-    let entries = processes
-        .iter()
-        .map(|process| {
-            edgerun_json::json!({
-                "pid": process.pid,
-                "ppid": process.ppid,
-                "state": process.state.as_str(),
-                "command": process.name.as_str()
-            })
-        })
-        .collect::<Vec<_>>();
-    let output = edgerun_json::JsonValue::Array(entries);
-    println!("{}", edgerun_json::to_string(&output).unwrap_or_default());
+    let mut out = String::new();
+    out.push('[');
+    for (index, process) in processes.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let mut first = true;
+        out.push('{');
+        json::push_u64_field(&mut out, &mut first, "pid", u64::from(process.pid));
+        json::push_u64_field(&mut out, &mut first, "ppid", u64::from(process.ppid));
+        json::push_string_field(&mut out, &mut first, "state", &process.state);
+        json::push_string_field(&mut out, &mut first, "command", &process.name);
+        out.push('}');
+    }
+    out.push(']');
+    println!("{}", out);
 }

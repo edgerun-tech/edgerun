@@ -2,11 +2,11 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::buf::Cursor;
 use super::decoder::Decoder;
 use super::encoder::Encoder;
-use super::helpers::{TABLE_SIZE, build_table, build_table_with_size};
-use super::{Decoded, DecoderError, HeaderField, dynamic::DynamicTable};
-use edgerun_encoding::buf::Cursor;
+use super::helpers::{build_table, build_table_with_size, TABLE_SIZE};
+use super::{dynamic::DynamicTable, Decoded, DecoderError, HeaderField};
 
 #[test]
 fn codec_basic_get() {

@@ -3,8 +3,10 @@
 //! Outputs container state JSON to stdout.
 
 use crate::prelude::*;
+use core::fmt::Write as _;
 use std::io;
 
+use crate::cli::json;
 use crate::state::load_state;
 
 pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
@@ -24,28 +26,38 @@ pub fn cmd_state(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
         }
     }
 
-    // Output matching rspecs.State JSON format
-    let pid_val = updated_state.pid.unwrap_or(0);
-    let annotations = edgerun_json::JsonValue::Object(edgerun_json::Map::from(
-        updated_state
-            .annotations
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(key, value)| (key, edgerun_json::JsonValue::String(value)))
-            .collect::<Vec<_>>(),
-    ));
-    let output = edgerun_json::json!({
-        "ociVersion": updated_state.oci_version,
-        "id": updated_state.id,
-        "status": updated_state.status,
-        "pid": pid_val,
-        "bundle": updated_state.bundle,
-        "annotations": annotations,
-    });
-    println!(
-        "{}",
-        edgerun_json::to_string_pretty(&output)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
-    );
+    println!("{}", state_output_json(&updated_state));
     Ok(())
+}
+
+fn state_output_json(state: &crate::state::ContainerState) -> String {
+    let mut out = String::new();
+    out.push_str("{\n  \"ociVersion\": ");
+    json::write_string(&mut out, &state.oci_version);
+    out.push_str(",\n  \"id\": ");
+    json::write_string(&mut out, &state.id);
+    out.push_str(",\n  \"status\": ");
+    json::write_string(&mut out, &state.status);
+    out.push_str(",\n  \"pid\": ");
+    write!(&mut out, "{}", state.pid.unwrap_or(0)).expect("writing to String cannot fail");
+    out.push_str(",\n  \"bundle\": ");
+    json::write_string(&mut out, &state.bundle);
+    out.push_str(",\n  \"annotations\": {");
+    if let Some(annotations) = &state.annotations {
+        for (index, (key, value)) in annotations.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            out.push_str("\n    ");
+            json::write_string(&mut out, key);
+            out.push_str(": ");
+            json::write_string(&mut out, value);
+        }
+        if !annotations.is_empty() {
+            out.push('\n');
+            out.push_str("  ");
+        }
+    }
+    out.push_str("}\n}");
+    out
 }

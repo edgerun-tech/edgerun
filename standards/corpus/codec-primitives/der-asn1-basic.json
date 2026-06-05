@@ -1,0 +1,43 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "der-asn1-basic",
+  "module": "der-asn1-basic.wat",
+  "cases": [
+    {
+      "id": "integer-127",
+      "function": "der_asn1_integer_decode",
+      "input": { "hex": "02017f" },
+      "expect": { "status": 0, "value_len": 1, "negative": false },
+      "notes": "Minimal positive INTEGER."
+    },
+    {
+      "id": "integer-nonminimal-positive",
+      "function": "der_asn1_integer_decode",
+      "input": { "hex": "02020000" },
+      "expect": { "status": 3 },
+      "notes": "Positive INTEGER must use the minimum number of content octets."
+    },
+    {
+      "id": "bit-string-unused-overflow",
+      "function": "der_asn1_bit_string_decode",
+      "input": { "hex": "030108" },
+      "expect": { "status": 3 },
+      "notes": "BIT STRING unused bit count must be 0..=7."
+    },
+    {
+      "id": "null-zero-length",
+      "function": "der_asn1_null_decode",
+      "input": { "hex": "0500" },
+      "expect": { "status": 0 },
+      "notes": "DER NULL has exactly zero value octets."
+    },
+    {
+      "id": "sequence-integer-null",
+      "function": "der_asn1_sequence_next_child",
+      "input": { "hex": "30050201010500" },
+      "expect": { "status": 0, "children": ["INTEGER", "NULL"] },
+      "notes": "SEQUENCE child iterator over two DER children."
+    }
+  ]
+}
+

@@ -1,0 +1,26 @@
+id = "codec-dns-section-walk"
+name = "dns-section-walk"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300034
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/dns-section-walk.wat"
+runner = "standards/runners/dns-section-walk-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "counts", "offsets"]
+outputs = ["status", "records"]
+depends_on = ["codec-dns-message-header", "codec-dns-compressed-name"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "dns_question_next",
+  "dns_rr_next",
+  "dns_section_walk",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/dns/message.rs",
+  "crates/protocol/edgerun-protocols/src/dns/record.rs",
+  "crates/protocol/edgerun-protocols/src/dns/limits.rs",
+]

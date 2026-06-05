@@ -17,6 +17,7 @@
 
 use crate::prelude::*;
 use alloc::collections::BTreeMap;
+use core::fmt::Write as _;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -38,22 +39,50 @@ pub struct ContainerState {
 
 impl ContainerState {
     pub fn to_json(&self) -> String {
-        edgerun_json::to_json_string(self).unwrap_or_default()
+        let mut out = String::new();
+        out.push('{');
+        out.push_str("\"ociVersion\":");
+        write_json_string(&mut out, &self.version);
+        out.push_str(",\"id\":");
+        write_json_string(&mut out, &self.id);
+        out.push_str(",\"status\":");
+        write_json_string(&mut out, &self.status);
+        out.push_str(",\"pid\":");
+        write!(&mut out, "{}", self.pid).expect("writing to String cannot fail");
+        out.push_str(",\"bundle\":");
+        write_json_string(&mut out, &self.bundle);
+        out.push_str(",\"annotations\":{");
+        for (index, (key, value)) in self.annotations.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            write_json_string(&mut out, key);
+            out.push(':');
+            write_json_string(&mut out, value);
+        }
+        out.push_str("}}");
+        out
     }
 }
 
-edgerun_json::impl_json_struct! {
-    ContainerState {
-        required {
-            version: "ociVersion" => String,
-            id: "id" => String,
-            status: "status" => String,
-            pid: "pid" => u32,
-            bundle: "bundle" => String,
-            annotations: "annotations" => BTreeMap<String, String>,
+fn write_json_string(out: &mut String, value: &str) {
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch <= '\u{1f}' => {
+                write!(out, "\\u{:04x}", ch as u32).expect("writing to String cannot fail");
+            }
+            ch => out.push(ch),
         }
-        optional {}
     }
+    out.push('"');
 }
 
 /// Error type for hook execution that tracks which hook failed.

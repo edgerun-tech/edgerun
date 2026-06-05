@@ -3,6 +3,7 @@
 use crate::prelude::*;
 use std::io;
 
+use crate::cli::json;
 use crate::spec::OciSpec;
 use crate::state::{ContainerState, container_state_dir, load_state, save_state};
 
@@ -14,12 +15,7 @@ pub fn cmd_inspect(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     let mut state = load_state(id)?;
     refresh_state(id, &mut state);
     let spec = crate::cli::load_runtime_or_bundle_spec(&state.id, &state.bundle);
-    let output = inspect_json(&state, spec.as_ref());
-    println!(
-        "{}",
-        edgerun_json::to_string_pretty(&output)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
-    );
+    println!("{}", inspect_json(&state, spec.as_ref()));
     Ok(())
 }
 
@@ -32,82 +28,152 @@ fn refresh_state(id: &str, state: &mut ContainerState) {
     }
 }
 
-fn inspect_json(state: &ContainerState, spec: Option<&OciSpec>) -> edgerun_json::JsonValue {
+fn inspect_json(state: &ContainerState, spec: Option<&OciSpec>) -> String {
     let pid = state.pid.unwrap_or(0);
     let state_dir = container_state_dir(&state.id);
     let process = spec.and_then(|spec| spec.process.as_ref());
     let root = spec.and_then(|spec| spec.root.as_ref());
-    let annotations = state
-        .annotations
-        .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(k, v)| (k, edgerun_json::JsonValue::String(v)))
-        .collect::<Vec<_>>();
+    let args = process
+        .and_then(|process| process.args.as_ref())
+        .cloned()
+        .unwrap_or_default();
+    let path = args.first().cloned().unwrap_or_default();
+    let rest_args = args.into_iter().skip(1).collect::<Vec<_>>();
+    let env = process
+        .and_then(|process| process.env.clone())
+        .unwrap_or_default();
+    let binds = bind_summaries(spec);
+    let dns = annotation_list(spec, "run.edgerun.io/dns");
+    let extra_hosts = annotation_list(spec, "run.edgerun.io/add-host");
+    let log_stdout = state_dir.join("stdout.log").to_string_lossy().to_string();
+    let log_stderr = state_dir.join("stderr.log").to_string_lossy().to_string();
 
-    edgerun_json::json!({
-        "Id": state.id.clone(),
-        "State": {
-            "Status": state.status.clone(),
-            "Running": state.status == "running",
-            "Pid": pid,
-        },
-        "Path": process
-            .and_then(|process| process.args.as_ref())
-            .and_then(|args| args.first())
-            .cloned()
+    let mut out = String::new();
+    let mut first = true;
+    out.push('{');
+    json::push_string_field(&mut out, &mut first, "Id", &state.id);
+    json::push_field_prefix(&mut out, &mut first, "State");
+    out.push('{');
+    let mut state_first = true;
+    json::push_string_field(&mut out, &mut state_first, "Status", &state.status);
+    json::push_bool_field(
+        &mut out,
+        &mut state_first,
+        "Running",
+        state.status == "running",
+    );
+    json::push_u64_field(&mut out, &mut state_first, "Pid", u64::from(pid));
+    out.push('}');
+    json::push_string_field(&mut out, &mut first, "Path", &path);
+    json::push_field_prefix(&mut out, &mut first, "Args");
+    json::push_string_array(&mut out, &rest_args);
+    json::push_field_prefix(&mut out, &mut first, "Config");
+    out.push('{');
+    let mut config_first = true;
+    json::push_field_prefix(&mut out, &mut config_first, "Env");
+    json::push_string_array(&mut out, &env);
+    json::push_string_field(
+        &mut out,
+        &mut config_first,
+        "WorkingDir",
+        &process
+            .and_then(|process| process.cwd.clone())
             .unwrap_or_default(),
-        "Args": process
-            .and_then(|process| process.args.as_ref())
-            .map(|args| args.iter().skip(1).cloned().collect::<Vec<_>>())
+    );
+    json::push_bool_field(
+        &mut out,
+        &mut config_first,
+        "Tty",
+        process
+            .and_then(|process| process.terminal)
+            .unwrap_or(false),
+    );
+    json::push_bool_field(
+        &mut out,
+        &mut config_first,
+        "NoNewPrivileges",
+        process
+            .and_then(|process| process.no_new_privileges)
+            .unwrap_or(true),
+    );
+    json::push_string_field(
+        &mut out,
+        &mut config_first,
+        "Hostname",
+        &spec
+            .and_then(|spec| spec.hostname.clone())
             .unwrap_or_default(),
-        "Config": {
-            "Env": process
-                .and_then(|process| process.env.clone())
-                .unwrap_or_default(),
-            "WorkingDir": process
-                .and_then(|process| process.cwd.clone())
-                .unwrap_or_default(),
-            "Tty": process
-                .and_then(|process| process.terminal)
-                .unwrap_or(false),
-            "NoNewPrivileges": process
-                .and_then(|process| process.no_new_privileges)
-                .unwrap_or(true),
-            "Hostname": spec
-                .and_then(|spec| spec.hostname.clone())
-                .unwrap_or_default(),
-            "User": process
-                .and_then(|process| process.user.as_ref())
-                .map(user_string)
-                .unwrap_or_default(),
-        },
-        "HostConfig": {
-            "Privileged": process
-                .and_then(|process| process.no_new_privileges)
-                .map(|no_new| !no_new)
-                .unwrap_or(false),
-            "Binds": bind_summaries(spec),
-            "Dns": annotation_list(spec, "run.edgerun.io/dns"),
-            "ExtraHosts": annotation_list(spec, "run.edgerun.io/add-host"),
-        },
-        "Mounts": mount_json(spec),
-        "GraphDriver": {
-            "Name": "edgerun-rootfs",
-            "Data": {
-                "RootDir": root.map(|root| root.path.clone()).unwrap_or_default(),
-                "ReadonlyRootfs": root.and_then(|root| root.readonly).unwrap_or(false),
+    );
+    json::push_string_field(
+        &mut out,
+        &mut config_first,
+        "User",
+        &process
+            .and_then(|process| process.user.as_ref())
+            .map(user_string)
+            .unwrap_or_default(),
+    );
+    out.push('}');
+    json::push_field_prefix(&mut out, &mut first, "HostConfig");
+    out.push('{');
+    let mut host_first = true;
+    json::push_bool_field(
+        &mut out,
+        &mut host_first,
+        "Privileged",
+        process
+            .and_then(|process| process.no_new_privileges)
+            .map(|no_new| !no_new)
+            .unwrap_or(false),
+    );
+    json::push_field_prefix(&mut out, &mut host_first, "Binds");
+    json::push_string_array(&mut out, &binds);
+    json::push_field_prefix(&mut out, &mut host_first, "Dns");
+    json::push_string_array(&mut out, &dns);
+    json::push_field_prefix(&mut out, &mut host_first, "ExtraHosts");
+    json::push_string_array(&mut out, &extra_hosts);
+    out.push('}');
+    json::push_field_prefix(&mut out, &mut first, "Mounts");
+    write_mounts_json(&mut out, spec);
+    json::push_field_prefix(&mut out, &mut first, "GraphDriver");
+    out.push_str("{\"Name\":\"edgerun-rootfs\",\"Data\":{");
+    let mut graph_first = true;
+    json::push_string_field(
+        &mut out,
+        &mut graph_first,
+        "RootDir",
+        &root.map(|root| root.path.clone()).unwrap_or_default(),
+    );
+    json::push_bool_field(
+        &mut out,
+        &mut graph_first,
+        "ReadonlyRootfs",
+        root.and_then(|root| root.readonly).unwrap_or(false),
+    );
+    out.push_str("}}");
+    json::push_string_field(&mut out, &mut first, "LogPath", &log_stdout);
+    json::push_field_prefix(&mut out, &mut first, "LogPaths");
+    out.push('{');
+    let mut log_first = true;
+    json::push_string_field(&mut out, &mut log_first, "Stdout", &log_stdout);
+    json::push_string_field(&mut out, &mut log_first, "Stderr", &log_stderr);
+    out.push('}');
+    json::push_string_field(&mut out, &mut first, "Bundle", &state.bundle);
+    json::push_string_field(&mut out, &mut first, "OciVersion", &state.oci_version);
+    json::push_field_prefix(&mut out, &mut first, "Annotations");
+    out.push('{');
+    if let Some(annotations) = &state.annotations {
+        for (index, (key, value)) in annotations.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
             }
-        },
-        "LogPath": state_dir.join("stdout.log").to_string_lossy().to_string(),
-        "LogPaths": {
-            "Stdout": state_dir.join("stdout.log").to_string_lossy().to_string(),
-            "Stderr": state_dir.join("stderr.log").to_string_lossy().to_string(),
-        },
-        "Bundle": state.bundle.clone(),
-        "OciVersion": state.oci_version.clone(),
-        "Annotations": edgerun_json::JsonValue::Object(edgerun_json::Map::from(annotations)),
-    })
+            json::write_string(&mut out, key);
+            out.push(':');
+            json::write_string(&mut out, value);
+        }
+    }
+    out.push_str("}}");
+    out
 }
 
 fn user_string(user: &crate::spec::OciUser) -> String {
@@ -159,30 +225,41 @@ fn bind_summaries(spec: Option<&OciSpec>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn mount_json(spec: Option<&OciSpec>) -> Vec<edgerun_json::JsonValue> {
-    spec.and_then(|spec| spec.mounts.as_ref())
-        .map(|mounts| {
-            mounts
-                .iter()
-                .map(|mount| {
-                    let mode = if mount
-                        .options
-                        .as_ref()
-                        .is_some_and(|opts| opts.iter().any(|opt| opt == "ro"))
-                    {
-                        "ro"
-                    } else {
-                        "rw"
-                    };
-                    edgerun_json::json!({
-                        "Type": mount.mount_type.clone().unwrap_or_default(),
-                        "Source": mount.source.clone().unwrap_or_default(),
-                        "Destination": mount.destination.clone(),
-                        "Mode": mode,
-                        "RW": mode == "rw",
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+fn write_mounts_json(out: &mut String, spec: Option<&OciSpec>) {
+    out.push('[');
+    if let Some(mounts) = spec.and_then(|spec| spec.mounts.as_ref()) {
+        for (index, mount) in mounts.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            let mode = if mount
+                .options
+                .as_ref()
+                .is_some_and(|opts| opts.iter().any(|opt| opt == "ro"))
+            {
+                "ro"
+            } else {
+                "rw"
+            };
+            let mut first = true;
+            out.push('{');
+            json::push_string_field(
+                out,
+                &mut first,
+                "Type",
+                &mount.mount_type.clone().unwrap_or_default(),
+            );
+            json::push_string_field(
+                out,
+                &mut first,
+                "Source",
+                &mount.source.clone().unwrap_or_default(),
+            );
+            json::push_string_field(out, &mut first, "Destination", &mount.destination);
+            json::push_string_field(out, &mut first, "Mode", mode);
+            json::push_bool_field(out, &mut first, "RW", mode == "rw");
+            out.push('}');
+        }
+    }
+    out.push(']');
 }

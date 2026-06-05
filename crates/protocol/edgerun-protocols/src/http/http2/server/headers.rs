@@ -7,7 +7,7 @@ use super::response;
 use crate::http::http2::ErrorCode;
 use crate::http::http2::frame::{Frame, HeadersFrame};
 use crate::http::http2::headers::{validate_header_name_case, validate_request_headers};
-use crate::http::http2::hpack::{Decoder, Encoder};
+use crate::http::http2::hpack::HpackContext;
 use crate::http::http2::stream::StreamState;
 
 impl Http2Server {
@@ -16,8 +16,7 @@ impl Http2Server {
     pub fn handle_headers(
         &mut self,
         frame: &Frame,
-        decoder: &mut Decoder,
-        encoder: &mut Encoder,
+        hpack: &mut HpackContext,
         cont: &mut ContinuationState,
     ) -> FrameAction {
         let hf = match HeadersFrame::from_frame(frame) {
@@ -125,7 +124,7 @@ impl Http2Server {
                 );
             }
             // Decode and validate trailer headers
-            let trailers = match decoder.decode(&hf.header_block) {
+            let trailers = match hpack.decode_header_block(&hf.header_block) {
                 Ok(h) => h,
                 Err(_) => {
                     self.goaway_sent = true;
@@ -155,9 +154,9 @@ impl Http2Server {
         }
 
         if hf.end_stream && end_headers {
-            return self.process_complete_headers(&hf.header_block, stream_id, decoder, encoder);
+            return self.process_complete_headers(&hf.header_block, stream_id, hpack);
         } else if end_headers && !hf.end_stream {
-            let headers = match decoder.decode(&hf.header_block) {
+            let headers = match hpack.decode_header_block(&hf.header_block) {
                 Ok(h) => h,
                 Err(_) => {
                     self.goaway_sent = true;
@@ -202,8 +201,7 @@ impl Http2Server {
         &mut self,
         frame: &Frame,
         cont: &mut ContinuationState,
-        decoder: &mut Decoder,
-        encoder: &mut Encoder,
+        hpack: &mut HpackContext,
     ) -> FrameAction {
         if !cont.expecting {
             self.goaway_sent = true;
@@ -241,7 +239,7 @@ impl Http2Server {
                 );
             }
 
-            let headers = match decoder.decode(&cont.header_block_buf) {
+            let headers = match hpack.decode_header_block(&cont.header_block_buf) {
                 Ok(h) => h,
                 Err(_) => {
                     cont.abort();
@@ -263,7 +261,7 @@ impl Http2Server {
                 return response::rst_stream(sid, ec, &mut self.stream_manager);
             }
 
-            let action = response::respond_with_200(sid, encoder);
+            let action = response::respond_with_200(sid, hpack, self.last_processed_stream_id);
             self.half_close_remote(sid);
             cont.finish();
             return action;
@@ -276,10 +274,9 @@ impl Http2Server {
         &mut self,
         header_block: &[u8],
         stream_id: u32,
-        decoder: &mut Decoder,
-        encoder: &mut Encoder,
+        hpack: &mut HpackContext,
     ) -> FrameAction {
-        let headers = match decoder.decode(header_block) {
+        let headers = match hpack.decode_header_block(header_block) {
             Ok(h) => h,
             Err(_) => {
                 self.goaway_sent = true;
@@ -310,7 +307,7 @@ impl Http2Server {
             }
         }
 
-        let action = response::respond_with_200(stream_id, encoder);
+        let action = response::respond_with_200(stream_id, hpack, self.last_processed_stream_id);
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_local();
             self.record_closed_stream(stream_id);

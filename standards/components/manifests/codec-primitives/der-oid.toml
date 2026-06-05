@@ -1,0 +1,30 @@
+id = "codec-der-oid"
+name = "der-oid"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300021
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/der-oid.wat"
+runner = "standards/runners/der-oid-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "bytes"]
+depends_on = ["codec-der-tlv"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "der_oid_root_decode",
+  "der_oid_next_arc",
+  "der_oid_value_validate",
+  "der_oid_root_encode",
+  "der_oid_arc_encode",
+]
+parity_sources = [
+  "crates/utility/edgerun-crypto/src/const_oid/parser.rs",
+  "crates/utility/edgerun-crypto/src/const_oid/encoder.rs",
+  "crates/utility/edgerun-crypto/src/const_oid/arcs.rs",
+  "crates/utility/edgerun-crypto/src/der/asn1/oid.rs",
+]
+

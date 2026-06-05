@@ -12,7 +12,7 @@ use edgerun_node::http_client::{
 };
 
 use super::auth::RegistryAuth;
-use super::config::{parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest};
+use super::config::{parse_image_config, parse_manifest, parse_single_manifest};
 use super::errors::RegistryError;
 use super::image_ref::ImageRef;
 use super::manifest::{ImageManifest, SingleManifest};
@@ -21,18 +21,6 @@ use edgerun_encoding::percent::{
     percent_encode, percent_encode_colon_pair, percent_encode_path_segments,
 };
 use edgerun_protocols::http::parse_bearer_auth;
-
-#[derive(Debug, Clone)]
-struct RegistryTokenResponse {
-    token: Option<String>,
-}
-
-edgerun_json::impl_json_struct! {
-    RegistryTokenResponse {
-        required {}
-        optional { token: ["token", "access_token"] => String }
-    }
-}
 
 /// The main registry client.
 pub struct RegistryClient {
@@ -393,7 +381,7 @@ impl RegistryClient {
             .await
             .map_err(|e| RegistryError::HttpError(e.to_string()))?;
 
-        let value = parse_json_bytes(resp.body()).map_err(|error| {
+        self.token = registry_token_from_response(resp.body()).map_err(|error| {
             RegistryError::ParseError(format!(
                 "token response parse failed: status {}, body {} bytes: {}",
                 resp.status().as_u16(),
@@ -401,10 +389,6 @@ impl RegistryClient {
                 error
             ))
         })?;
-
-        self.token = edgerun_json::from_json_value::<RegistryTokenResponse>(value)
-            .ok()
-            .and_then(|response| response.token);
 
         if self.token.is_some() {
             Ok(())
@@ -638,6 +622,240 @@ impl RegistryClient {
     ) -> Result<(), RegistryError> {
         super::bundle_push::push(self, image, bundle_path).await
     }
+}
+
+fn registry_token_from_response(body: &[u8]) -> Result<Option<String>, String> {
+    let data = core::str::from_utf8(body).map_err(|_| "token response is not UTF-8")?;
+    optional_json_string_field(data, "token").and_then(|token| match token {
+        Some(token) => Ok(Some(token)),
+        None => optional_json_string_field(data, "access_token"),
+    })
+}
+
+fn optional_json_string_field(data: &str, name: &str) -> Result<Option<String>, String> {
+    let Some((start, end)) = field_value_span(data, name)? else {
+        return Ok(None);
+    };
+    let value = data[start..end].trim();
+    if value == "null" {
+        return Ok(None);
+    }
+    let mut index = skip_ws(value.as_bytes(), 0);
+    let string = parse_json_string_at(value, &mut index)
+        .map_err(|error| format!("field `{name}` is not a JSON string: {error}"))?;
+    if skip_ws(value.as_bytes(), index) != value.len() {
+        return Err(format!("field `{name}` has trailing bytes"));
+    }
+    Ok(Some(string))
+}
+
+fn field_value_span(data: &str, name: &str) -> Result<Option<(usize, usize)>, String> {
+    let bytes = data.as_bytes();
+    let mut index = skip_ws(bytes, 0);
+    if bytes.get(index) != Some(&b'{') {
+        return Err("token response root must be a JSON object".into());
+    }
+    index += 1;
+    loop {
+        index = skip_ws(bytes, index);
+        match bytes.get(index) {
+            Some(b'}') => return Ok(None),
+            Some(b'"') => {}
+            _ => return Err("expected token response object key".into()),
+        }
+        let key = parse_json_string_at(data, &mut index)?;
+        index = skip_ws(bytes, index);
+        if bytes.get(index) != Some(&b':') {
+            return Err("expected `:` after token response key".into());
+        }
+        index += 1;
+        index = skip_ws(bytes, index);
+        let value_start = index;
+        skip_json_value(data, &mut index)?;
+        let value_end = index;
+        if key == name {
+            return Ok(Some((value_start, value_end)));
+        }
+        index = skip_ws(bytes, index);
+        match bytes.get(index) {
+            Some(b',') => index += 1,
+            Some(b'}') => return Ok(None),
+            _ => return Err("expected `,` or `}` after token response value".into()),
+        }
+    }
+}
+
+fn parse_json_string_at(data: &str, index: &mut usize) -> Result<String, String> {
+    let bytes = data.as_bytes();
+    if bytes.get(*index) != Some(&b'"') {
+        return Err("expected JSON string".into());
+    }
+    *index += 1;
+    let mut out = String::new();
+    while let Some(byte) = bytes.get(*index).copied() {
+        match byte {
+            b'"' => {
+                *index += 1;
+                return Ok(out);
+            }
+            b'\\' => {
+                *index += 1;
+                let escaped = bytes
+                    .get(*index)
+                    .copied()
+                    .ok_or_else(|| "truncated JSON escape".to_string())?;
+                *index += 1;
+                match escaped {
+                    b'"' => out.push('"'),
+                    b'\\' => out.push('\\'),
+                    b'/' => out.push('/'),
+                    b'b' => out.push('\u{08}'),
+                    b'f' => out.push('\u{0c}'),
+                    b'n' => out.push('\n'),
+                    b'r' => out.push('\r'),
+                    b't' => out.push('\t'),
+                    b'u' => {
+                        let code = parse_hex_u16(bytes, index)?;
+                        let ch = char::from_u32(code as u32)
+                            .ok_or_else(|| "invalid JSON unicode escape".to_string())?;
+                        out.push(ch);
+                    }
+                    _ => return Err("invalid JSON escape".into()),
+                }
+            }
+            0x00..=0x1f => return Err("unescaped control byte in JSON string".into()),
+            _ => {
+                let rest = data
+                    .get(*index..)
+                    .ok_or_else(|| "invalid string boundary".to_string())?;
+                let ch = rest
+                    .chars()
+                    .next()
+                    .ok_or_else(|| "truncated JSON string".to_string())?;
+                out.push(ch);
+                *index += ch.len_utf8();
+            }
+        }
+    }
+    Err("unterminated JSON string".into())
+}
+
+fn parse_hex_u16(bytes: &[u8], index: &mut usize) -> Result<u16, String> {
+    let mut value = 0u16;
+    for _ in 0..4 {
+        let byte = bytes
+            .get(*index)
+            .copied()
+            .ok_or_else(|| "truncated unicode escape".to_string())?;
+        *index += 1;
+        value = (value << 4)
+            | match byte {
+                b'0'..=b'9' => (byte - b'0') as u16,
+                b'a'..=b'f' => (byte - b'a' + 10) as u16,
+                b'A'..=b'F' => (byte - b'A' + 10) as u16,
+                _ => return Err("invalid unicode escape".into()),
+            };
+    }
+    Ok(value)
+}
+
+fn skip_json_value(data: &str, index: &mut usize) -> Result<(), String> {
+    let bytes = data.as_bytes();
+    *index = skip_ws(bytes, *index);
+    match bytes.get(*index).copied() {
+        Some(b'"') => parse_json_string_at(data, index).map(|_| ()),
+        Some(b'{') => skip_json_object(data, index),
+        Some(b'[') => skip_json_array(data, index),
+        Some(b't') if data[*index..].starts_with("true") => {
+            *index += 4;
+            Ok(())
+        }
+        Some(b'f') if data[*index..].starts_with("false") => {
+            *index += 5;
+            Ok(())
+        }
+        Some(b'n') if data[*index..].starts_with("null") => {
+            *index += 4;
+            Ok(())
+        }
+        Some(b'-' | b'0'..=b'9') => {
+            skip_json_number(bytes, index);
+            Ok(())
+        }
+        _ => Err("expected JSON value".into()),
+    }
+}
+
+fn skip_json_object(data: &str, index: &mut usize) -> Result<(), String> {
+    let bytes = data.as_bytes();
+    if bytes.get(*index) != Some(&b'{') {
+        return Err("expected JSON object".into());
+    }
+    *index += 1;
+    loop {
+        *index = skip_ws(bytes, *index);
+        if bytes.get(*index) == Some(&b'}') {
+            *index += 1;
+            return Ok(());
+        }
+        parse_json_string_at(data, index)?;
+        *index = skip_ws(bytes, *index);
+        if bytes.get(*index) != Some(&b':') {
+            return Err("expected `:` after JSON object key".into());
+        }
+        *index += 1;
+        skip_json_value(data, index)?;
+        *index = skip_ws(bytes, *index);
+        match bytes.get(*index) {
+            Some(b',') => *index += 1,
+            Some(b'}') => {
+                *index += 1;
+                return Ok(());
+            }
+            _ => return Err("expected `,` or object close".into()),
+        }
+    }
+}
+
+fn skip_json_array(data: &str, index: &mut usize) -> Result<(), String> {
+    let bytes = data.as_bytes();
+    if bytes.get(*index) != Some(&b'[') {
+        return Err("expected JSON array".into());
+    }
+    *index += 1;
+    loop {
+        *index = skip_ws(bytes, *index);
+        if bytes.get(*index) == Some(&b']') {
+            *index += 1;
+            return Ok(());
+        }
+        skip_json_value(data, index)?;
+        *index = skip_ws(bytes, *index);
+        match bytes.get(*index) {
+            Some(b',') => *index += 1,
+            Some(b']') => {
+                *index += 1;
+                return Ok(());
+            }
+            _ => return Err("expected `,` or array close".into()),
+        }
+    }
+}
+
+fn skip_json_number(bytes: &[u8], index: &mut usize) {
+    while matches!(
+        bytes.get(*index),
+        Some(b'-' | b'+' | b'.' | b'0'..=b'9' | b'e' | b'E')
+    ) {
+        *index += 1;
+    }
+}
+
+fn skip_ws(bytes: &[u8], mut index: usize) -> usize {
+    while matches!(bytes.get(index), Some(b' ' | b'\n' | b'\r' | b'\t')) {
+        index += 1;
+    }
+    index
 }
 
 fn registry_http_client() -> HttpClient {

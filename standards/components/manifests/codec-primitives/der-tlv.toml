@@ -1,0 +1,26 @@
+id = "codec-der-tlv"
+name = "der-tlv"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300005
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/der-tlv.wat"
+runner = "standards/runners/der-tlv-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "der_len_decode",
+  "der_len_encode",
+  "der_tag_decode",
+  "der_header_decode",
+]
+parity_sources = [
+  "crates/utility/edgerun-crypto/src/der",
+]
+

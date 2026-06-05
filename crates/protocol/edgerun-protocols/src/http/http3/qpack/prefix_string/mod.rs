@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use core::convert::TryInto;
 use core::num::TryFromIntError;
 
-use edgerun_encoding::buf::{Buf, BufMut};
+use super::super::buf::{Buf, BufMut};
 
 pub use self::bitwin::BitWindow;
 
@@ -102,8 +102,8 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
+    use super::super::buf::Cursor;
     use super::*;
-    use edgerun_encoding::buf::Cursor;
 
     #[test]
     fn codec_6() {

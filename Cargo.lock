@@ -164,6 +164,7 @@ dependencies = [
 name = "codex-host"
 version = "0.1.1"
 dependencies = [
+ "codex-client",
  "codex-core",
  "edgerun-crypto",
  "edgerun-http",
@@ -757,6 +758,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-hpack",
  "edgerun-json",
+ "edgerun-tpm",
  "edgerun-url",
  "edgerun-wire",
 ]
@@ -927,6 +929,15 @@ dependencies = [
  "edgerun-bytes",
  "edgerun-futures",
  "edgerun-tokio",
+]
+
+[[package]]
+name = "edgerun-tor-bench"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-http-client",
+ "miniz_oxide",
 ]
 
 [[package]]

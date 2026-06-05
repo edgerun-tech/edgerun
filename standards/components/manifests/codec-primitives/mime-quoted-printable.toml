@@ -1,0 +1,26 @@
+id = "codec-mime-quoted-printable"
+name = "mime-quoted-printable"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300050
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/mime-quoted-printable.wat"
+runner = "standards/runners/mime-quoted-printable-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes"]
+outputs = ["status", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "quoted_printable_encode",
+]
+parity_sources = [
+  "crates/utility/edgerun-encoding/src/quoted_printable.rs",
+]
+
+# Strict decode is intentionally future work. The Rust source being retired only
+# exposes encode_quoted_printable, so this primitive preserves the useful covered
+# behavior without inventing a new decoder surface.

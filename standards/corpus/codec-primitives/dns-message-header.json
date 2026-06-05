@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "dns-message-header",
+  "module": "dns-message-header.wat",
+  "cases": [
+    {
+      "id": "valid-query-header",
+      "function": "dns_header_decode",
+      "input": { "hex": "123401000001000000000000" },
+      "expect": { "status": 0, "id": 4660, "flags": 256, "qdcount": 1 },
+      "notes": "Standard query with recursion desired and one question."
+    },
+    {
+      "id": "response-flags",
+      "function": "dns_header_decode",
+      "input": { "hex": "abcd85830001000200030004" },
+      "expect": { "status": 0, "qr": 1, "aa": 1, "rd": 1, "ra": 1, "rcode": 3 },
+      "notes": "Header flag fields are exposed as scalar record values."
+    },
+    {
+      "id": "short-header",
+      "function": "dns_header_decode",
+      "input": { "hex": "1234010000010000000000" },
+      "expect": { "status": 1 },
+      "notes": "DNS message headers require twelve octets."
+    },
+    {
+      "id": "too-many-questions",
+      "function": "dns_header_decode",
+      "input": { "hex": "000100000011000000000000" },
+      "expect": { "status": 3 },
+      "notes": "Question count above the local parser cap is rejected."
+    },
+    {
+      "id": "encode-cap-too-small",
+      "function": "dns_header_encode",
+      "params": { "id": 48879, "flags": 256, "qdcount": 1, "out_cap": 11 },
+      "expect": { "status": 2 },
+      "notes": "Encoding requires twelve output octets."
+    }
+  ]
+}

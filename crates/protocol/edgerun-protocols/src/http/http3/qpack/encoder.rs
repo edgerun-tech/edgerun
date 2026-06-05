@@ -1,9 +1,8 @@
+use super::buf::{Buf, BufMut, Cursor};
 use alloc::vec::Vec;
 use core::cmp;
-use edgerun_encoding::buf::{Buf, BufMut, Cursor};
 
 use super::{
-    HeaderField,
     block::{
         HeaderPrefix, Indexed, IndexedWithPostBase, Literal, LiteralWithNameRef,
         LiteralWithPostBaseNameRef,
@@ -20,6 +19,7 @@ use super::{
         DecoderInstruction, Duplicate, DynamicTableSizeUpdate, HeaderAck, InsertCountIncrement,
         InsertWithNameRef, InsertWithoutNameRef, StreamCancel,
     },
+    HeaderField,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -300,7 +300,7 @@ mod tests {
 
     use super::*;
 
-    use super::super::helpers::{TABLE_SIZE, build_table};
+    use super::super::helpers::{build_table, TABLE_SIZE};
 
     #[allow(clippy::type_complexity)]
     fn check_encode_field(

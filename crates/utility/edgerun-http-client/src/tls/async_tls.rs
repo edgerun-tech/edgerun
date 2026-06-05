@@ -43,7 +43,7 @@ use crate::tls::server::message_builder::{
     compute_server_finished_verify_data,
 };
 use crate::tls::session_cache::SessionCache;
-use edgerun_crypto::CipherSuite;
+use edgerun_crypto::{CipherSuite, sha256};
 use edgerun_encoding::byteorder::{read_u16_be, read_u24_be};
 
 use crate::rt::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, IoError};
@@ -198,6 +198,12 @@ pub struct AsyncTlsStream<S> {
     write_needs_flush: bool,
     /// The ALPN protocol negotiated during the TLS handshake.
     alpn_protocol: Option<Vec<u8>>,
+    /// The DER-encoded peer certificate from the TLS handshake.
+    peer_cert_der: Vec<u8>,
+    /// The exporter master secret (RFC 8446 §7.1), derived after handshake.
+    exporter_master_secret: Vec<u8>,
+    /// The hash algorithm negotiated during handshake.
+    hash: Hasher,
 }
 
 impl<S> AsyncTlsStream<S> {
@@ -225,6 +231,46 @@ impl<S> AsyncTlsStream<S> {
     pub fn alpn_protocol(&self) -> Option<&[u8]> {
         self.alpn_protocol.as_deref()
     }
+
+    /// Returns the DER-encoded peer certificate from the TLS handshake.
+    pub fn peer_cert_der(&self) -> &[u8] {
+        &self.peer_cert_der
+    }
+
+    /// TLS-Exporter per RFC 8446 §7.5.
+    ///
+    /// Derives `key_length` bytes from the exporter master secret using the
+    /// given label and context.
+    pub fn tls_exporter(&self, label: &str, context: &[u8], key_length: usize) -> Vec<u8> {
+        // OpenSSL TLS 1.3 exporter (matches SSL_export_keying_material):
+        //   1. HKDF-Expand-Label(ExporterMasterSecret, label, Hash(""), hash_len)
+        //   2. HKDF-Expand-Label(tmp, "exporter", Hash(context), key_length)
+        let empty_hash = self.hash.hash(&[]);
+        let tmp = self.hash.expand_label(
+            &self.exporter_master_secret,
+            label,
+            &empty_hash,
+            self.hash.len(),
+        );
+        let context_hash = self.hash.hash(context);
+        self.hash.expand_label(&tmp, "exporter", &context_hash, key_length)
+    }
+
+    /// Compute TLSSECRETS (Tor AUTHENTICATE cell, type 3) from the TLS exporter.
+    ///
+    /// TLSSECRETS = SHA256(
+    ///     tls_exporter("EXPORTER FOR TOR TLS 1.3", "", 32) ||
+    ///     "Tor TLS 1.3 TLS Export" ||
+    ///     RAND
+    /// )
+    pub fn tls_tor_tlssecrets(&self, rand: &[u8; 24]) -> [u8; 32] {
+        let exporter_output = self.tls_exporter("EXPORTER FOR TOR TLS 1.3", &[], 32);
+        let mut preimage = Vec::with_capacity(32 + 24 + 24);
+        preimage.extend_from_slice(&exporter_output);
+        preimage.extend_from_slice(b"Tor TLS 1.3 TLS Export");
+        preimage.extend_from_slice(rand);
+        sha256(&preimage)
+    }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
@@ -249,6 +295,67 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             current_unix_secs(),
         )
         .await
+    }
+
+    /// Perform an async TLS 1.3 client handshake with no-hostname verification
+    /// (accepts any server certificate regardless of hostname).
+    pub async fn client_insecure(
+        mut stream: S,
+        alpn_protocols: &[&[u8]],
+        session_cache: Option<&SessionCache>,
+    ) -> Result<Self> {
+        Self::client_insecure_at_unix_secs(
+            stream,
+            alpn_protocols,
+            session_cache,
+            current_unix_secs(),
+        )
+        .await
+    }
+
+    /// Perform an async TLS 1.3 client handshake using caller-provided Unix
+    /// time for certificate validation, without hostname verification.
+    pub async fn client_insecure_at_unix_secs(
+        mut stream: S,
+        alpn_protocols: &[&[u8]],
+        session_cache: Option<&SessionCache>,
+        unix_secs: u64,
+    ) -> Result<Self> {
+        const DUMMY_SERVER_NAME: &str = "insecure";
+        let mut stream = stream;
+        let mut hrr_group = KeyExchangeGroup::X25519;
+        let mut cookie: Vec<u8> = Vec::new();
+        loop {
+            let client_random = generate_random();
+            let key_pair = EcdhKeyPair::generate(if cookie.is_empty() {
+                KeyExchangeGroup::X25519
+            } else {
+                hrr_group
+            })
+            .map_err(TlsError::HandshakeFailure)?;
+
+            match Self::client_inner_with_cookie(
+                stream,
+                DUMMY_SERVER_NAME,
+                alpn_protocols,
+                session_cache,
+                client_random,
+                key_pair,
+                &cookie,
+                unix_secs,
+                true, // skip_hostname_verify
+            )
+            .await
+            {
+                Ok(tls) => return Ok(tls),
+                Err((TlsError::HelloRetryRequest(selected_group, new_cookie), s)) => {
+                    stream = s;
+                    hrr_group = selected_group;
+                    cookie = new_cookie;
+                }
+                Err((e, _s)) => return Err(e),
+            }
+        }
     }
 
     /// Perform an async TLS 1.3 client handshake using caller-provided Unix
@@ -281,6 +388,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 key_pair,
                 &cookie,
                 unix_secs,
+                false, // skip_hostname_verify
             )
             .await
             {
@@ -304,6 +412,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         key_pair: EcdhKeyPair,
         hrr_cookie: &[u8],
         unix_secs: u64,
+        skip_hostname_verify: bool,
     ) -> core::result::Result<Self, (TlsError, S)> {
         let group = match key_pair.group() {
             KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
@@ -449,7 +558,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                 Err(e) => return Err((e.into(), stream)),
             };
 
-        let alpn_protocol = match async_read_encrypted_handshake_messages(
+        let (alpn_protocol, peer_cert_der) = match async_read_encrypted_handshake_messages(
             &mut stream,
             &mut read_cipher,
             &mut ks,
@@ -458,10 +567,11 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             &transcript_hash,
             server_name,
             unix_secs,
+            skip_hostname_verify,
         )
         .await
         {
-            Ok(a) => a,
+            Ok(v) => v,
             Err(e) => return Err((e, stream)),
         };
 
@@ -481,6 +591,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         }
 
         ks.advance_to_master();
+        let exporter_master_secret = ks.exporter_master_secret(&app_transcript_hash);
         let client_app = ks.client_app_traffic_secret(&app_transcript_hash);
         let server_app = ks.server_app_traffic_secret(&app_transcript_hash);
 
@@ -518,6 +629,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             write_plaintext_len: 0,
             write_needs_flush: false,
             alpn_protocol,
+            peer_cert_der,
+            exporter_master_secret,
+            hash,
         })
     }
 
@@ -710,6 +824,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             write_plaintext_len: 0,
             write_needs_flush: false,
             alpn_protocol: None,
+            peer_cert_der: Vec::new(),
+            exporter_master_secret: Vec::new(),
+            hash: Hasher::Sha256,
         })
     }
 
@@ -1301,9 +1418,11 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
     handshake_transcript_hash: &[u8],
     server_name: &str,
     unix_secs: u64,
-) -> Result<Option<Vec<u8>>> {
+    skip_hostname_verify: bool,
+) -> Result<(Option<Vec<u8>>, Vec<u8>)> {
     let mut handshake_buf = Vec::new();
     let mut alpn_protocol = None;
+    let mut peer_cert_der: Vec<u8> = Vec::new();
 
     loop {
         let mut hdr = [0u8; 5];
@@ -1362,7 +1481,10 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                                 if cert_pos + cert_data_len + 2 > cert_list_end {
                                     break;
                                 }
-                                let cert_der = &msg[cert_pos..cert_pos + cert_data_len];
+                                 let cert_der = &msg[cert_pos..cert_pos + cert_data_len];
+                                if peer_cert_der.is_empty() {
+                                    peer_cert_der = cert_der.to_vec();
+                                }
                                 cert_pos += cert_data_len;
                                 let ext_len = read_u16_be(&msg, cert_pos) as usize;
                                 cert_pos += 2 + ext_len;
@@ -1380,7 +1502,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                                     "Server certificate is expired".into(),
                                 ));
                             }
-                            if !leaf.matches_hostname(server_name) {
+                            if !skip_hostname_verify && !leaf.matches_hostname(server_name) {
                                 return Err(TlsError::Certificate(format!(
                                     "Certificate does not match hostname {}",
                                     server_name,
@@ -1421,7 +1543,7 @@ async fn async_read_encrypted_handshake_messages<S: AsyncRead + AsyncWrite + Unp
                         ));
                     }
                     transcript.extend_from_slice(&msg);
-                    return Ok(alpn_protocol);
+                    return Ok((alpn_protocol, peer_cert_der));
                 }
                 _ => {}
             }

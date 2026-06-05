@@ -1,0 +1,56 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "percent-url-form",
+  "module": "percent-url-form.wat",
+  "cases": [
+    {
+      "id": "percent-decode-space-slash",
+      "function": "percent_decode_strict",
+      "input": { "ascii": "hello%20world%2Fok" },
+      "expect": { "status": 0, "bytes_written": 14, "ascii": "hello world/ok" },
+      "notes": "Strict percent decode accepts uppercase hex triples."
+    },
+    {
+      "id": "percent-decode-invalid-triple",
+      "function": "percent_decode_strict",
+      "input": { "ascii": "%GG" },
+      "expect": { "status": 3 },
+      "notes": "Malformed percent triples are rejected instead of passed through."
+    },
+    {
+      "id": "percent-encode-component",
+      "function": "percent_encode_component",
+      "input": { "ascii": "a b/c?d=e&f", "mode": 0 },
+      "expect": { "status": 0, "ascii": "a%20b%2Fc%3Fd%3De%26f" },
+      "notes": "Component mode preserves RFC3986 unreserved bytes only."
+    },
+    {
+      "id": "percent-encode-path",
+      "function": "percent_encode_component",
+      "input": { "ascii": "a b/c?d", "mode": 1 },
+      "expect": { "status": 0, "ascii": "a%20b/c%3Fd" },
+      "notes": "Path mode preserves slash separators."
+    },
+    {
+      "id": "form-pairs",
+      "function": "form_urlencoded_next_pair",
+      "input": { "ascii": "a=1&b=two+words&empty=&keyonly" },
+      "expect": { "status": 0, "pairs": [["a", "1"], ["b", "two+words"], ["empty", ""], ["keyonly", ""]] },
+      "notes": "Scanner returns raw spans; plus-to-space is reserved for the decode helper layer."
+    },
+    {
+      "id": "form-malformed-percent",
+      "function": "form_urlencoded_next_pair",
+      "input": { "ascii": "a=bad%GG" },
+      "expect": { "status": 3 },
+      "notes": "Form pair scanning validates percent triples inside each raw pair."
+    },
+    {
+      "id": "uri-path-query-fragment",
+      "function": "uri_scan_path_query",
+      "input": { "ascii": "/path/to?a=1&b=2#frag" },
+      "expect": { "status": 0, "path": "/path/to", "query": "a=1&b=2", "fragment": "frag" },
+      "notes": "Scanner-level request-target split without authority or URI object construction."
+    }
+  ]
+}

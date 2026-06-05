@@ -2,7 +2,7 @@ extern crate alloc;
 
 use alloc::format;
 
-use super::{HeaderField, dynamic::DynamicTable};
+use super::{dynamic::DynamicTable, HeaderField};
 
 pub const TABLE_SIZE: usize = 4096;
 

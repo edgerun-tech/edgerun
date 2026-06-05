@@ -46,48 +46,363 @@ pub struct CredentialMeta {
 
 impl CredentialMeta {
     pub fn to_json(&self) -> String {
-        let mut obj = edgerun_json::Map::new();
-        let mut attrs = edgerun_json::Map::new();
-        for (k, v) in &self.attributes {
-            attrs.insert(k.clone(), edgerun_json::JsonValue::String(v.clone()));
+        let mut out = Vec::new();
+        out.extend_from_slice(br#"{"label":"#);
+        push_json_string(&mut out, &self.label);
+        out.extend_from_slice(br#","attributes":{"#);
+        for (index, (key, value)) in self.attributes.iter().enumerate() {
+            if index > 0 {
+                out.push(b',');
+            }
+            push_json_key(&mut out, key);
+            push_json_string(&mut out, value);
         }
-        obj.insert(
-            "label".into(),
-            edgerun_json::JsonValue::String(self.label.clone()),
-        );
-        obj.insert("attributes".into(), edgerun_json::JsonValue::Object(attrs));
-        obj.insert(
-            "created_us".into(),
-            edgerun_json::JsonValue::from(self.created_us),
-        );
-        edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default()
+        out.extend_from_slice(br#"},"created_us":"#);
+        push_u64(&mut out, self.created_us);
+        out.push(b'}');
+        String::from_utf8(out).unwrap_or_default()
     }
 
     pub fn from_json(s: &str) -> Option<Self> {
-        let tape = edgerun_json::parse_json_tape(s).ok()?;
-        let root = tape.root(s)?;
-        let label = root
-            .get("label")
-            .and_then(|value| value.as_str())
-            .unwrap_or("")
-            .to_string();
-        let created_us = root
-            .get("created_us")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(0);
-        let mut attributes = HashMap::new();
-        if let Some(attrs) = root.get_object_fields("attributes") {
-            for (k, val) in attrs {
-                if let Some(vs) = val.as_str() {
-                    attributes.insert(k.to_string(), vs.to_string());
+        parse_credential_meta_json(s)
+    }
+}
+
+fn push_item_key_json(out: &mut Vec<u8>, label: &str, attrs: &[(String, String)]) {
+    out.extend_from_slice(br#"{"l":"#);
+    push_json_string(out, label);
+    out.extend_from_slice(br#","a":["#);
+    for (index, (key, value)) in attrs.iter().enumerate() {
+        if index > 0 {
+            out.push(b',');
+        }
+        out.extend_from_slice(br#"{"k":"#);
+        push_json_string(out, key);
+        out.extend_from_slice(br#","v":"#);
+        push_json_string(out, value);
+        out.push(b'}');
+    }
+    out.extend_from_slice(b"]}");
+}
+
+fn push_json_key(out: &mut Vec<u8>, value: &str) {
+    push_json_string(out, value);
+    out.push(b':');
+}
+
+fn push_json_string(out: &mut Vec<u8>, value: &str) {
+    out.push(b'"');
+    for byte in value.bytes() {
+        match byte {
+            b'"' => out.extend_from_slice(br#"\""#),
+            b'\\' => out.extend_from_slice(br"\\"),
+            0x08 => out.extend_from_slice(br"\b"),
+            0x0c => out.extend_from_slice(br"\f"),
+            b'\n' => out.extend_from_slice(br"\n"),
+            b'\r' => out.extend_from_slice(br"\r"),
+            b'\t' => out.extend_from_slice(br"\t"),
+            0x00..=0x1f => {
+                out.extend_from_slice(br"\u00");
+                out.push(hex_digit((byte >> 4) & 0x0f));
+                out.push(hex_digit(byte & 0x0f));
+            }
+            _ => out.push(byte),
+        }
+    }
+    out.push(b'"');
+}
+
+fn push_u64(out: &mut Vec<u8>, mut value: u64) {
+    let mut digits = [0u8; 20];
+    let mut len = 0usize;
+    loop {
+        digits[len] = b'0' + (value % 10) as u8;
+        len += 1;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    for digit in digits[..len].iter().rev() {
+        out.push(*digit);
+    }
+}
+
+fn hex_digit(value: u8) -> u8 {
+    match value {
+        0..=9 => b'0' + value,
+        10..=15 => b'a' + (value - 10),
+        _ => b'0',
+    }
+}
+
+fn parse_credential_meta_json(input: &str) -> Option<CredentialMeta> {
+    let mut cursor = JsonCursor::new(input);
+    let mut label = None;
+    let mut attributes = None;
+    let mut created_us = None;
+
+    cursor.object_fields(|cursor, key| {
+        match key.as_str() {
+            "label" if label.is_none() => {
+                label = cursor.string_value();
+                if label.is_none() {
+                    cursor.skip_value()?;
                 }
             }
+            "attributes" if attributes.is_none() => {
+                attributes = cursor.string_object();
+                if attributes.is_none() {
+                    cursor.skip_value()?;
+                }
+            }
+            "created_us" if created_us.is_none() => {
+                created_us = cursor.u64_value();
+                if created_us.is_none() {
+                    cursor.skip_value()?;
+                }
+            }
+            _ => cursor.skip_value()?,
         }
-        Some(Self {
-            label,
-            attributes,
-            created_us,
+        Some(())
+    })?;
+    cursor.finish()?;
+
+    Some(CredentialMeta {
+        label: label.unwrap_or_default(),
+        attributes: attributes.unwrap_or_default(),
+        created_us: created_us.unwrap_or(0),
+    })
+}
+
+struct JsonCursor<'a> {
+    bytes: &'a [u8],
+    index: usize,
+}
+
+impl<'a> JsonCursor<'a> {
+    fn new(input: &'a str) -> Self {
+        Self {
+            bytes: input.as_bytes(),
+            index: 0,
+        }
+    }
+
+    fn finish(&mut self) -> Option<()> {
+        self.skip_ws();
+        (self.index == self.bytes.len()).then_some(())
+    }
+
+    fn object_fields(
+        &mut self,
+        mut field: impl FnMut(&mut Self, String) -> Option<()>,
+    ) -> Option<()> {
+        self.skip_ws();
+        self.take(b'{')?;
+        self.skip_ws();
+        if self.take(b'}').is_some() {
+            return Some(());
+        }
+        loop {
+            let key = self.string_value()?;
+            self.skip_ws();
+            self.take(b':')?;
+            field(self, key)?;
+            self.skip_ws();
+            if self.take(b'}').is_some() {
+                return Some(());
+            }
+            self.take(b',')?;
+            self.skip_ws();
+        }
+    }
+
+    fn string_object(&mut self) -> Option<HashMap<String, String>> {
+        let mut fields = HashMap::new();
+        self.object_fields(|cursor, key| {
+            if let Some(value) = cursor.string_value() {
+                fields.insert(key, value);
+            } else {
+                cursor.skip_value()?;
+            }
+            Some(())
+        })?;
+        Some(fields)
+    }
+
+    fn string_value(&mut self) -> Option<String> {
+        self.skip_ws();
+        self.take(b'"')?;
+        let mut out = String::new();
+        let mut plain_start = self.index;
+        while self.index < self.bytes.len() {
+            let byte = self.bytes[self.index];
+            match byte {
+                b'"' => {
+                    out.push_str(core::str::from_utf8(&self.bytes[plain_start..self.index]).ok()?);
+                    self.index += 1;
+                    return Some(out);
+                }
+                b'\\' => {
+                    out.push_str(core::str::from_utf8(&self.bytes[plain_start..self.index]).ok()?);
+                    self.index += 1;
+                    out.push(self.escape_char()?);
+                    plain_start = self.index;
+                }
+                0x00..=0x1f => return None,
+                _ => self.index += 1,
+            }
+        }
+        None
+    }
+
+    fn escape_char(&mut self) -> Option<char> {
+        let byte = *self.bytes.get(self.index)?;
+        self.index += 1;
+        match byte {
+            b'"' => Some('"'),
+            b'\\' => Some('\\'),
+            b'/' => Some('/'),
+            b'b' => Some('\u{08}'),
+            b'f' => Some('\u{0c}'),
+            b'n' => Some('\n'),
+            b'r' => Some('\r'),
+            b't' => Some('\t'),
+            b'u' => self.unicode_escape(),
+            _ => None,
+        }
+    }
+
+    fn unicode_escape(&mut self) -> Option<char> {
+        let code = self.take_hex4()?;
+        if (0xd800..=0xdbff).contains(&code) {
+            self.take_raw(b'\\')?;
+            self.take_raw(b'u')?;
+            let low = self.take_hex4()?;
+            if !(0xdc00..=0xdfff).contains(&low) {
+                return None;
+            }
+            let high_ten = u32::from(code - 0xd800);
+            let low_ten = u32::from(low - 0xdc00);
+            return char::from_u32(0x10000 + ((high_ten << 10) | low_ten));
+        }
+        if (0xdc00..=0xdfff).contains(&code) {
+            return None;
+        }
+        char::from_u32(u32::from(code))
+    }
+
+    fn take_hex4(&mut self) -> Option<u16> {
+        let mut value = 0u16;
+        for _ in 0..4 {
+            let byte = *self.bytes.get(self.index)?;
+            self.index += 1;
+            value = (value << 4) | u16::from(hex_value(byte)?);
+        }
+        Some(value)
+    }
+
+    fn u64_value(&mut self) -> Option<u64> {
+        self.skip_ws();
+        let mut value = 0u64;
+        let mut saw_digit = false;
+        while let Some(byte @ b'0'..=b'9') = self.bytes.get(self.index).copied() {
+            saw_digit = true;
+            value = value.checked_mul(10)?.checked_add(u64::from(byte - b'0'))?;
+            self.index += 1;
+        }
+        saw_digit.then_some(value)
+    }
+
+    fn skip_value(&mut self) -> Option<()> {
+        self.skip_ws();
+        match self.bytes.get(self.index).copied()? {
+            b'"' => self.string_value().map(drop),
+            b'{' => self.skip_object(),
+            b'[' => self.skip_array(),
+            b'-' | b'0'..=b'9' => self.skip_number(),
+            b't' => self.take_literal(b"true"),
+            b'f' => self.take_literal(b"false"),
+            b'n' => self.take_literal(b"null"),
+            _ => None,
+        }
+    }
+
+    fn skip_object(&mut self) -> Option<()> {
+        self.object_fields(|cursor, _key| cursor.skip_value())
+    }
+
+    fn skip_array(&mut self) -> Option<()> {
+        self.take(b'[')?;
+        self.skip_ws();
+        if self.take(b']').is_some() {
+            return Some(());
+        }
+        loop {
+            self.skip_value()?;
+            self.skip_ws();
+            if self.take(b']').is_some() {
+                return Some(());
+            }
+            self.take(b',')?;
+        }
+    }
+
+    fn skip_number(&mut self) -> Option<()> {
+        let start = self.index;
+        if self.take(b'-').is_some() {}
+        self.take_digits();
+        if self.take(b'.').is_some() {
+            self.take_digits();
+        }
+        if self.take(b'e').is_some() || self.take(b'E').is_some() {
+            let _ = self.take(b'+').or_else(|| self.take(b'-'));
+            self.take_digits();
+        }
+        (self.index > start).then_some(())
+    }
+
+    fn take_digits(&mut self) {
+        while matches!(self.bytes.get(self.index), Some(b'0'..=b'9')) {
+            self.index += 1;
+        }
+    }
+
+    fn take_literal(&mut self, literal: &[u8]) -> Option<()> {
+        self.bytes
+            .get(self.index..self.index + literal.len())
+            .filter(|value| *value == literal)?;
+        self.index += literal.len();
+        Some(())
+    }
+
+    fn take(&mut self, byte: u8) -> Option<()> {
+        self.skip_ws();
+        self.take_raw(byte)
+    }
+
+    fn take_raw(&mut self, byte: u8) -> Option<()> {
+        (*self.bytes.get(self.index)? == byte).then(|| {
+            self.index += 1;
         })
+    }
+
+    fn skip_ws(&mut self) {
+        while matches!(
+            self.bytes.get(self.index),
+            Some(b' ' | b'\n' | b'\r' | b'\t')
+        ) {
+            self.index += 1;
+        }
+    }
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -201,23 +516,10 @@ impl Backend {
 
     /// Compute a stable item key from label + attributes (SHA-256 based).
     pub fn item_key(label: &str, attrs: &[(String, String)]) -> String {
-        let mut obj = edgerun_json::Map::new();
-        obj.insert(
-            "l".into(),
-            edgerun_json::JsonValue::String(label.to_string()),
-        );
-        let mut arr = Vec::new();
-        for (k, v) in attrs {
-            let mut pair = edgerun_json::Map::new();
-            pair.insert("k".into(), edgerun_json::JsonValue::String(k.clone()));
-            pair.insert("v".into(), edgerun_json::JsonValue::String(v.clone()));
-            arr.push(edgerun_json::JsonValue::Object(pair));
-        }
-        obj.insert("a".into(), edgerun_json::JsonValue::Array(arr));
-        let json =
-            edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default();
+        let mut json = Vec::new();
+        push_item_key_json(&mut json, label, attrs);
         edgerun_protocols::core_protocol::util::bytes_to_hex(
-            &edgerun_protocols::core_protocol::crypto::sha256(json.as_bytes()),
+            &edgerun_protocols::core_protocol::crypto::sha256(&json),
         )
     }
 
@@ -575,16 +877,18 @@ mod tests {
     fn meta_roundtrip() {
         let mut attrs = HashMap::new();
         attrs.insert("xdg:schema".into(), "org.gnome.keyring.Note".into());
+        attrs.insert("quote".into(), "line\n\"two\"".into());
         let meta = CredentialMeta {
-            label: "My Note".into(),
+            label: "My Note Ω".into(),
             attributes: attrs,
             created_us: 12345,
         };
         let json = meta.to_json();
         let back = CredentialMeta::from_json(&json).unwrap();
-        assert_eq!(back.label, "My Note");
+        assert_eq!(back.label, "My Note Ω");
         assert_eq!(back.created_us, 12345);
         assert_eq!(back.attributes["xdg:schema"], "org.gnome.keyring.Note");
+        assert_eq!(back.attributes["quote"], "line\n\"two\"");
     }
 
     #[test]
@@ -1008,22 +1312,20 @@ mod tests {
     fn backend_get_nonexistent_collection() {
         let root = tmp_root();
         let be = Backend::new_noop(root).unwrap();
-        assert!(
-            be.get("/org/freedesktop/secrets/collections/nonexistent", "any")
-                .unwrap()
-                .is_none()
-        );
+        assert!(be
+            .get("/org/freedesktop/secrets/collections/nonexistent", "any")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn backend_list_nonexistent_collection() {
         let root = tmp_root();
         let be = Backend::new_noop(root).unwrap();
-        assert!(
-            be.list("/org/freedesktop/secrets/collections/nonexistent")
-                .unwrap()
-                .is_empty()
-        );
+        assert!(be
+            .list("/org/freedesktop/secrets/collections/nonexistent")
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -1059,6 +1361,8 @@ mod tests {
         let meta = CredentialMeta::from_json(r#"{"label": "Test"}"#).unwrap();
         assert_eq!(meta.label, "Test");
         assert_eq!(meta.created_us, 0);
+        let meta = CredentialMeta::from_json(r#"{"attributes": false}"#).unwrap();
+        assert!(meta.attributes.is_empty());
         assert!(CredentialMeta::from_json("not json").is_none());
         assert!(CredentialMeta::from_json("").is_none());
     }

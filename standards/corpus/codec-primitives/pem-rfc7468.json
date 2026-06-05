@@ -1,0 +1,42 @@
+{
+  "schema": "edgerun.codec-primitives.corpus.v1",
+  "family": "pem-rfc7468",
+  "module": "pem-rfc7468.wat",
+  "cases": [
+    {
+      "id": "certificate-boundaries",
+      "function": "pem_find_boundaries",
+      "input": { "ascii": "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----\n" },
+      "expect": { "status": 0, "label": "CERTIFICATE", "base64_ascii": "AA==" },
+      "notes": "Finds matching BEGIN/END labels and body span."
+    },
+    {
+      "id": "mismatched-boundaries",
+      "function": "pem_find_boundaries",
+      "input": { "ascii": "-----BEGIN CERTIFICATE-----\nAA==\n-----END PRIVATE KEY-----\n" },
+      "expect": { "status": 3 },
+      "notes": "BEGIN and END labels must match."
+    },
+    {
+      "id": "label-lowercase-rejected",
+      "function": "pem_validate_label",
+      "input": { "ascii": "certificate" },
+      "expect": { "status": 3 },
+      "notes": "Strict RFC7468-style label validation uses uppercase words."
+    },
+    {
+      "id": "compact-base64-skip-whitespace",
+      "function": "pem_compact_base64",
+      "input": { "ascii": "QU JD\nRA==" },
+      "expect": { "status": 0, "ascii": "QUJDRA==" },
+      "notes": "Whitespace is removed before base64 decoding."
+    },
+    {
+      "id": "header-line-rejected",
+      "function": "pem_compact_base64",
+      "input": { "ascii": "Proc-Type: 4,ENCRYPTED\nAA==" },
+      "expect": { "status": 3 },
+      "notes": "Legacy PEM headers are not accepted by this primitive."
+    }
+  ]
+}

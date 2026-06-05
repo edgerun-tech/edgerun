@@ -54,7 +54,7 @@ impl Hasher {
     }
 
     /// HKDF-Expand(prk, info, length) using the hkdf crate directly.
-    fn expand(&self, prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
+    pub fn expand(&self, prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
         let mut okm = vec![0u8; length];
         match self {
             Hasher::Sha256 => okm = edgerun_crypto::hkdf_sha256(None, prk, info, length),
@@ -152,6 +152,18 @@ impl Tls13KeySchedule {
             transcript_hash,
             self.hash.len(),
         )
+    }
+
+    /// Derive exporter master secret (RFC 8446 §7.1)
+    ///
+    /// Must be called after `advance_to_master()`. Uses the transcript hash
+    /// up to server Finished (not including client Finished).
+    ///
+    /// Note: uses `expand_label` directly (not `derive_secret`) because
+    /// callers already pass the transcript hash (not the raw messages).
+    pub fn exporter_master_secret(&self, transcript_hash: &[u8]) -> Vec<u8> {
+        self.hash
+            .expand_label(&self.secret, "exp master", transcript_hash, self.hash.len())
     }
 
     /// Derive resumption master secret
@@ -349,8 +361,39 @@ pub fn quic_hp_key(secret: &[u8], cipher_key_len: usize, hash: &Hasher) -> Vec<u
     hash.quic_expand_label(secret, "hp", &[], cipher_key_len)
 }
 
-// HMAC helpers re-exported from edgerun-crypto (single source of truth)
-pub use edgerun_crypto::{hmac_sha256, hmac_sha384};
+// HMAC helpers — routed through TPM 2.0 hardware when tls-tpm is enabled
+#[cfg(not(feature = "tls-tpm"))]
+pub use edgerun_crypto::hmac_sha256;
+
+/// TPM-backed HMAC-SHA256 for TLS 1.3 key derivation.
+///
+/// SHA256 is delegated to the TPM via TPM2_HASH. The HMAC XOR/padding is
+/// done in software. The TPM device is cached so it is opened once and reused.
+#[cfg(feature = "tls-tpm")]
+pub fn hmac_sha256(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {
+    use core::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    static TPM_INIT: AtomicBool = AtomicBool::new(false);
+    static TPM_DEVICE: Mutex<Option<edgerun_tpm::TpmDevice<edgerun_tpm::LinuxTpmDevice>>> =
+        Mutex::new(None);
+
+    if !TPM_INIT.load(Ordering::Acquire) {
+        let mut guard = TPM_DEVICE.lock().unwrap();
+        if guard.is_none() {
+            let transport = edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0");
+            *guard = Some(edgerun_tpm::TpmDevice::new(transport));
+        }
+        TPM_INIT.store(true, Ordering::Release);
+    }
+
+    let mut guard = TPM_DEVICE.lock().unwrap();
+    let tpm = guard.as_mut().expect("TPM device not available");
+    tpm.hmac_sha256(key, data).expect("TPM HMAC-SHA256 failed")
+}
+
+// HMAC-SHA384 is always software (TPM2_HMAC with SHA384 not needed for TLS 1.3)
+pub use edgerun_crypto::hmac_sha384;
 
 #[cfg(test)]
 mod tests {

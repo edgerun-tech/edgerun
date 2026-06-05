@@ -9,15 +9,21 @@ use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use codex_client::Request;
+use codex_client::HttpTransport;
+use codex_client::ReqwestTransport;
 use codex_core::Provider;
 use codex_core::api::AuthProvider;
 use codex_core::api::RetryConfig;
 use codex_core::protocol::models::ContentItem;
 use codex_core::protocol::models::ResponseItem;
+use edgerun_json::parse_json;
+use edgerun_json::json;
 use edgerun_crypto::Ed25519SigningKey;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
+use edgerun_http::Method;
 use edgerun_json::Value;
 use edgerun_work::*;
 
@@ -32,6 +38,7 @@ const CONTACT_CARD_DOMAIN: &[u8] = b"edgerun:v1:work:chat-contact-card";
 const DEFAULT_LISTEN: &str = "127.0.0.1:8787";
 const DEFAULT_MODEL: &str = "local";
 const DEFAULT_BASE_URL: &str = "http://127.0.0.1:5000/v1";
+const DEFAULT_CHAT_API: ApiMode = ApiMode::Responses;
 
 #[derive(Debug)]
 struct HostAuth {
@@ -68,6 +75,193 @@ struct Config {
     executor_seed: [u8; 32],
     print_contact: bool,
     mock_response: Option<String>,
+    api_mode: ApiMode,
+}
+
+#[derive(Debug)]
+enum HostModelClient {
+    Responses(codex_core::ModelClient),
+    ChatCompletions(ChatCompletionClient),
+}
+
+#[derive(Debug)]
+struct ChatCompletionClient {
+    model: String,
+    base_url: String,
+    api_key: Option<String>,
+    transport: ReqwestTransport,
+}
+
+impl HostModelClient {
+    fn connect(config: &Config) -> Result<Self, Box<dyn Error>> {
+        match config.api_mode {
+            ApiMode::Responses => {
+                let auth =
+                    auth_provider(config).map_err(|error| format!("chat model auth setup failed: {error}"))?;
+                Ok(Self::Responses(codex_core::ModelClient::new_native(
+                    config.model.clone(),
+                    provider(config),
+                    auth,
+                )))
+            }
+            ApiMode::ChatCompletions => Ok(Self::ChatCompletions(ChatCompletionClient::new(
+                config.base_url.clone(),
+                config.model.clone(),
+                config.api_key.clone(),
+            ))),
+        }
+    }
+
+    fn api_mode(&self) -> ApiMode {
+        match self {
+            Self::Responses(_) => ApiMode::Responses,
+            Self::ChatCompletions(_) => ApiMode::ChatCompletions,
+        }
+    }
+}
+
+impl pipeline::PipelineModelClient for HostModelClient {
+    fn collect_turn_text(
+        &self,
+        runtime: &edgerun_tokio::runtime::Runtime,
+        request: codex_core::TurnRequest,
+    ) -> Result<codex_core::TurnOutput, pipeline::BoxError> {
+        match self {
+            Self::Responses(client) => client.collect_turn_text(runtime, request),
+            Self::ChatCompletions(client) => client.collect_turn_text(runtime, request),
+        }
+    }
+}
+
+impl ChatCompletionClient {
+    fn new(base_url: String, model: String, api_key: Option<String>) -> Self {
+        Self {
+            model,
+            base_url,
+            api_key,
+            transport: ReqwestTransport::new_default(),
+        }
+    }
+
+    fn collect_turn_text(
+        &self,
+        runtime: &edgerun_tokio::runtime::Runtime,
+        request: codex_core::TurnRequest,
+    ) -> Result<codex_core::TurnOutput, pipeline::BoxError> {
+        let endpoint = self.chat_completion_endpoint();
+        let messages = chat_completion_messages(&request);
+        let request_json = json!({
+            "model": self.model.as_str(),
+            "messages": messages,
+            "stream": false,
+        });
+
+        let mut req = Request::new(Method::POST, endpoint).with_json(&request_json);
+        if let Some(token) = self.api_key.as_ref() {
+            req.headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {token}")).map_err(|error| {
+                    format!("failed to set authorization header: {error}")
+                })?,
+            );
+        }
+
+        let response = runtime
+            .block_on(self.transport.execute(req))
+            .map_err(|error| error.to_string())?;
+
+        let payload = parse_json(std::str::from_utf8(&response.body).map_err(|error| {
+            format!("chat completion response decode failed: {error}")
+        })?)
+        .map_err(|error| format!("chat completion response parse failed: {error}"))?;
+        let content = payload
+            .get("choices")
+            .and_then(Value::as_array)
+            .and_then(|choices| choices.first())
+            .and_then(|item| item.get("message"))
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .ok_or_else(|| {
+                "chat completion response missing choices[0].message.content".to_string()
+            })?;
+
+        Ok(codex_core::TurnOutput {
+            response_id: None,
+            output_text: content,
+            reasoning_summary_text: String::new(),
+            reasoning_content_text: String::new(),
+            output_items: Vec::new(),
+            token_usage: None,
+            end_turn: Some(true),
+            server_model: Some(self.model.clone()),
+            server_reasoning_included: false,
+        })
+    }
+
+    fn chat_completion_endpoint(&self) -> String {
+        let mut base = self.base_url.trim_end_matches('/').to_string();
+        if base.is_empty() {
+            base.push_str("http://127.0.0.1:5001");
+        }
+        format!("{base}/chat/completions")
+    }
+}
+
+fn chat_completion_messages(request: &codex_core::TurnRequest) -> Vec<Value> {
+    request
+        .prompt
+        .input
+        .iter()
+        .filter_map(|item| {
+            let ResponseItem::Message { role, content, .. } = item else {
+                return None;
+            };
+            let text = content
+                .iter()
+                .filter_map(|part| match part {
+                    ContentItem::InputText { text } | ContentItem::OutputText { text } => Some(text),
+                    _ => None,
+                })
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string();
+            if text.is_empty() {
+                return None;
+            }
+            Some(json!({
+                "role": role.as_str(),
+                "content": text,
+            }))
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ApiMode {
+    Responses,
+    ChatCompletions,
+}
+
+impl ApiMode {
+    fn parse(value: &str) -> Option<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "responses" | "responses-api" | "responses_api" => Some(Self::Responses),
+            "chat" | "chat-completions" | "chat_completions" => Some(Self::ChatCompletions),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Responses => "responses",
+            Self::ChatCompletions => "chat-completions",
+        }
+    }
 }
 
 struct UiStreamSink {
@@ -196,13 +390,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let runtime = edgerun_tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let client = match config.mock_response {
+    let model_client = match config.mock_response {
         Some(_) => None,
-        None => Some(codex_core::ModelClient::new_native(
-            config.model.clone(),
-            provider(&config),
-            auth_provider(&config)?,
-        )),
+        None => Some(HostModelClient::connect(&config)?),
     };
     let mut ui_sink = UiStreamSink::open(config.ui_stream_stdout, config.ui_stream_path.as_ref())?;
     ui_sink.status("codex-host starting")?;
@@ -213,6 +403,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("codex-host listening on ws://{}", hub.listen_addr());
     eprintln!("codex model {}", config.model);
     eprintln!("codex model base_url {}", config.base_url);
+    eprintln!("codex model api_mode {}", config.api_mode.as_str());
     eprintln!(
         "repo workspace {} files {} bytes root {}",
         repo_workspace.file_count(),
@@ -240,7 +431,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             if envelope.to == agent.node_id {
                 if let Err(error) = handle_chat_envelope(
                     &runtime,
-                    client.as_ref(),
+                    model_client.as_ref(),
+                    config.api_mode,
                     config.mock_response.as_deref(),
                     &hub,
                     &agent_key,
@@ -296,7 +488,8 @@ fn commit_pending_repo_changes(
 #[allow(clippy::too_many_arguments)]
 fn handle_chat_envelope(
     runtime: &edgerun_tokio::runtime::Runtime,
-    client: Option<&codex_core::ModelClient>,
+    client: Option<&HostModelClient>,
+    api_mode: ApiMode,
     mock_response: Option<&str>,
     hub: &WebSocketWorkHub,
     agent_key: &Ed25519SigningKey,
@@ -363,6 +556,11 @@ fn handle_chat_envelope(
         pipeline::run_mock_pipeline(&text, ui_sink)?
     } else {
         let client = client.ok_or("codex model client unavailable")?;
+        if let ApiMode::ChatCompletions = api_mode {
+            ui_sink.tool_call("api", "using chat/completions compatibility mode")?;
+        } else {
+            ui_sink.tool_call("api", "using responses compatibility mode")?;
+        }
         pipeline::run_pipeline(
             runtime,
             client,
@@ -626,6 +824,7 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
         executor_seed: seed_from_env("CODEX_HOST_EXECUTOR_SEED_HEX", 202)?,
         print_contact: false,
         mock_response: std::env::var("CODEX_HOST_MOCK_RESPONSE").ok(),
+        api_mode: parse_api_mode(std::env::var("CODEX_HOST_API_MODE").ok().as_deref())?,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -634,6 +833,10 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
             "--model" => config.model = args.next().ok_or("--model requires a model")?,
             "--base-url" => config.base_url = args.next().ok_or("--base-url requires a URL")?,
             "--api-key" => config.api_key = Some(args.next().ok_or("--api-key requires a value")?),
+            "--api-mode" => {
+                let value = args.next().ok_or("--api-mode requires a value")?;
+                config.api_mode = parse_api_mode(Some(&value))?;
+            }
             "--repo-root" => config.repo_root = PathBuf::from(args.next().ok_or("--repo-root requires a path")?),
             "--ui-stream-stdout" => config.ui_stream_stdout = true,
             "--ui-stream-path" => {
@@ -663,12 +866,13 @@ fn parse_config() -> Result<Config, Box<dyn Error>> {
 
 fn print_help() {
     println!(
-        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--repo-root PATH] [--ui-stream-stdout|--ui-stream-path PATH] [--print-contact] [--mock-response TEXT]"
+        "Usage: codex-host [--listen ADDR] [--model MODEL] [--base-url URL] [--api-key KEY] [--api-mode responses|chat-completions] [--repo-root PATH] [--ui-stream-stdout|--ui-stream-path PATH] [--print-contact] [--mock-response TEXT]"
     );
     println!(
-        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_REPO_ROOT CODEX_HOST_UI_STREAM_STDOUT CODEX_HOST_UI_STREAM_PATH CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
+        "Env: CODEX_HOST_LISTEN CODEX_HOST_MODEL CODEX_HOST_BASE_URL CODEX_HOST_API_KEY CODEX_HOST_API_MODE CODEX_HOST_REPO_ROOT CODEX_HOST_UI_STREAM_STDOUT CODEX_HOST_UI_STREAM_PATH CODEX_HOST_AGENT_SEED_HEX CODEX_HOST_EXECUTOR_SEED_HEX CODEX_HOST_MOCK_RESPONSE"
     );
     println!("Default base URL: {DEFAULT_BASE_URL}");
+    println!("Default API mode: {}", DEFAULT_CHAT_API.as_str());
     println!("Repository files are indexed into an in-memory workspace from --repo-root/current directory. Native mode should prefer --ui-stream-stdout and read raw ui_stream MessageType.patch bytes from the child stdout pipe; logs are written to stderr.");
 }
 
@@ -724,4 +928,16 @@ fn now_unix_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn parse_api_mode(value: Option<&str>) -> Result<ApiMode, Box<dyn Error>> {
+    match value {
+        Some(value) => ApiMode::parse(value).ok_or_else(|| {
+            format!(
+                "invalid CODEX_HOST_API_MODE / --api-mode value: {value} (expected responses|chat|chat-completions|chat_completions)"
+            )
+            .into()
+        }),
+        None => Ok(DEFAULT_CHAT_API),
+    }
 }

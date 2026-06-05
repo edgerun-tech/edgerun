@@ -99,5 +99,8 @@ pub fn save_report(
     std::fs::write(crate_dir.join("report.html"), html)
         .map_err(|e| crate::codealyzer::errors::AnalyzerError::IoError(e.to_string()))?;
 
+    std::fs::write(crate_dir.join("report.json"), report.to_json_string())
+        .map_err(|e| crate::codealyzer::errors::AnalyzerError::IoError(e.to_string()))?;
+
     Ok(())
 }

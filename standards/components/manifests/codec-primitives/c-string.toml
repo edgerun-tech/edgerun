@@ -1,0 +1,23 @@
+id = "codec-c-string"
+name = "c-string"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300049
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/c-string.wat"
+runner = "standards/runners/c-string-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes"]
+outputs = ["status", "packed_i64", "records"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "c_string_scan",
+  "c_multi_string_next",
+]
+parity_sources = [
+  "crates/utility/edgerun-encoding/src/cstring.rs",
+]

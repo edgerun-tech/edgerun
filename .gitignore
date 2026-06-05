@@ -17,6 +17,10 @@ env/
 build/
 !vendor/cargo/**/build/
 !vendor/cargo/**/build/**
+!standards/build/
+!standards/build/wasm/
+!standards/build/wasm/codec-primitives/
+!standards/build/wasm/codec-primitives/**
 dist/
 target/
 target*/

@@ -6,9 +6,10 @@ use crate::tar_layer::TarLayerApplyError;
 pub use edgerun_protocols::oci::layer::{OciLayerCompression, layer_compression};
 
 #[cfg(feature = "gzip")]
-pub fn decompress_gzip_layer(data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {
-    edgerun_encoding::compression::gzip_decompress(data)
-        .map_err(|error| TarLayerApplyError::Decompress(format!("{error:?}")))
+pub fn decompress_gzip_layer(_data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {
+    Err(TarLayerApplyError::Decompress(
+        "gzip WAT adapter is not wired".into(),
+    ))
 }
 
 #[cfg(not(feature = "gzip"))]

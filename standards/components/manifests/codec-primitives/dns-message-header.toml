@@ -1,0 +1,25 @@
+id = "codec-dns-message-header"
+name = "dns-message-header"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300026
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/dns-message-header.wat"
+runner = "standards/runners/dns-message-header-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "packed_i64"]
+depends_on = ["codec-encoding-core"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "dns_header_flags_classify",
+  "dns_header_decode",
+  "dns_header_encode",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/dns/message.rs",
+  "crates/protocol/edgerun-protocols/src/dns/limits.rs",
+]

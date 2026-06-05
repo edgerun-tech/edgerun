@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::codealyzer::crate_model::{ApiItem, ApiItemKind, FunctionalityCoverage, TestInfo};
-use edgerun_json::Value;
 
 pub fn collect_test_info(crate_dir: &Path, public_api: &[ApiItem]) -> TestInfo {
     let mut info = TestInfo {
@@ -123,16 +122,113 @@ fn line_contains_warning(line: &str) -> bool {
     if normalized.contains(": warning:") {
         return true;
     }
-    if let Ok(value) = edgerun_json::parse_json(normalized) {
-        if value.get("reason").and_then(Value::as_str) == Some("compiler-message") {
-            return value
-                .get("message")
-                .and_then(|message| message.get("level"))
-                .and_then(Value::as_str)
-                == Some("warning");
+
+    if fixed_json_string_field(normalized, "reason").as_deref() == Some("compiler-message") {
+        if let Some(message) = fixed_json_object_field(normalized, "message") {
+            return fixed_json_string_field(message, "level").as_deref() == Some("warning");
         }
     }
     false
+}
+
+fn fixed_json_string_field(input: &str, key: &str) -> Option<String> {
+    let value = fixed_json_field_value(input, key)?;
+    parse_json_string(value.trim_start()).map(|(value, _)| value)
+}
+
+fn fixed_json_object_field<'a>(input: &'a str, key: &str) -> Option<&'a str> {
+    let value = fixed_json_field_value(input, key)?.trim_start();
+    if !value.starts_with('{') {
+        return None;
+    }
+    let end = matching_json_end(value, '{', '}')?;
+    Some(&value[..end])
+}
+
+fn fixed_json_field_value<'a>(input: &'a str, key: &str) -> Option<&'a str> {
+    let mut rest = input;
+    while let Some(pos) = rest.find('"') {
+        rest = &rest[pos..];
+        let (found, used) = parse_json_string(rest)?;
+        rest = &rest[used..];
+        let after_key = rest.trim_start();
+        if !after_key.starts_with(':') {
+            continue;
+        }
+        let value = after_key[1..].trim_start();
+        if found == key {
+            return Some(value);
+        }
+        rest = value;
+    }
+    None
+}
+
+fn parse_json_string(input: &str) -> Option<(String, usize)> {
+    let bytes = input.as_bytes();
+    if bytes.first().copied() != Some(b'"') {
+        return None;
+    }
+    let mut out = String::new();
+    let mut i = 1usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => return Some((out, i + 1)),
+            b'\\' => {
+                i += 1;
+                let escaped = *bytes.get(i)?;
+                match escaped {
+                    b'"' => out.push('"'),
+                    b'\\' => out.push('\\'),
+                    b'/' => out.push('/'),
+                    b'b' => out.push('\u{0008}'),
+                    b'f' => out.push('\u{000c}'),
+                    b'n' => out.push('\n'),
+                    b'r' => out.push('\r'),
+                    b't' => out.push('\t'),
+                    b'u' => {
+                        let hex = input.get(i + 1..i + 5)?;
+                        let scalar = u16::from_str_radix(hex, 16).ok()?;
+                        out.push(char::from_u32(scalar as u32)?);
+                        i += 4;
+                    }
+                    _ => return None,
+                }
+            }
+            byte => out.push(byte as char),
+        }
+        i += 1;
+    }
+    None
+}
+
+fn matching_json_end(input: &str, open: char, close: char) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (idx, ch) in input.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if ch == '"' {
+            in_string = true;
+        } else if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth = depth.checked_sub(1)?;
+            if depth == 0 {
+                return Some(idx + ch.len_utf8());
+            }
+        }
+    }
+    None
 }
 
 fn estimate_functionality_coverage(

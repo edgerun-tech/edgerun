@@ -60,6 +60,56 @@ impl<T: TpmTransport> TpmDevice<T> {
         parse_hash_response(&response)
     }
 
+    /// Compute HMAC-SHA256 using the TPM hardware hash engine.
+    ///
+    /// SHA256 is delegated to the TPM via TPM2_HASH. The HMAC XOR/padding is
+    /// done in software, so the HMAC key remains in the caller's address space.
+    /// This guarantees the hash primitive comes from the TPM's verified
+    /// hardware implementation while avoiding the need for TPM2_LoadExternal
+    /// (which this TPM does not support for HMAC keys).
+    pub fn hmac_sha256(&mut self, key: &[u8], data: &[u8]) -> Result<Vec<u8>, TpmError> {
+        // HMAC = SHA256((key XOR opad) || SHA256((key XOR ipad) || data))
+
+        let mut key_block = [0u8; 64];
+        if key.len() > 64 {
+            let hashed = self.hash(&TpmHashParams {
+                data: key.to_vec(),
+                hash_algorithm: TpmNameAlgorithm::Sha256,
+                hierarchy: TPM_RH_NULL,
+            })?;
+            key_block[..32].copy_from_slice(&hashed.digest);
+        } else {
+            key_block[..key.len()].copy_from_slice(key);
+        }
+
+        let mut ipad = [0x36u8; 64];
+        let mut opad = [0x5cu8; 64];
+        for i in 0..64 {
+            ipad[i] ^= key_block[i];
+            opad[i] ^= key_block[i];
+        }
+
+        let mut inner_input = alloc::vec![0u8; 64 + data.len()];
+        inner_input[..64].copy_from_slice(&ipad);
+        inner_input[64..].copy_from_slice(data);
+        let inner_hash = self.hash(&TpmHashParams {
+            data: inner_input,
+            hash_algorithm: TpmNameAlgorithm::Sha256,
+            hierarchy: TPM_RH_NULL,
+        })?;
+
+        let mut outer_input = alloc::vec![0u8; 64 + 32];
+        outer_input[..64].copy_from_slice(&opad);
+        outer_input[64..].copy_from_slice(&inner_hash.digest);
+        let outer_hash = self.hash(&TpmHashParams {
+            data: outer_input,
+            hash_algorithm: TpmNameAlgorithm::Sha256,
+            hierarchy: TPM_RH_NULL,
+        })?;
+
+        Ok(outer_hash.digest)
+    }
+
     /// Read random bytes from the TPM RNG.
     pub fn get_random(&mut self, bytes_requested: u16) -> Result<Vec<u8>, TpmError> {
         let response = self.transmit_command(&build_get_random_command(bytes_requested))?;

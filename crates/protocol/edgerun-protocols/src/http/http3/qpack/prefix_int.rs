@@ -1,4 +1,4 @@
-use edgerun_encoding::buf::{Buf, BufMut};
+use super::buf::{Buf, BufMut};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
@@ -83,7 +83,7 @@ mod test {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use edgerun_encoding::buf::Cursor;
+    use super::buf::Cursor;
 
     use super::Error;
 

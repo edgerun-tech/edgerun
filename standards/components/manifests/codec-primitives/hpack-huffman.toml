@@ -1,0 +1,24 @@
+id = "codec-hpack-huffman"
+name = "hpack-huffman"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300018
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/hpack-huffman.wat"
+runner = "standards/runners/hpack-huffman-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes"]
+outputs = ["status", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "hpack_huffman_decode",
+  "hpack_huffman_validate",
+]
+parity_sources = [
+  "crates/utility/edgerun-hpack/src/huffman.rs",
+  "crates/protocol/edgerun-protocols/src/http/http3/qpack/prefix_string/decode.rs",
+]

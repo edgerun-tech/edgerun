@@ -1,0 +1,24 @@
+id = "codec-deflate-stored"
+name = "deflate-stored"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300066
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/deflate-stored.wat"
+runner = "standards/runners/deflate-stored-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "scalars"]
+outputs = ["status", "records", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "deflate_stored_scan",
+  "deflate_stored_encode",
+]
+parity_sources = [
+  "crates/utility/edgerun-encoding/src/compression.rs",
+  "crates/utility/edgerun-miniz-oxide",
+]

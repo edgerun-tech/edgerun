@@ -1,0 +1,28 @@
+id = "codec-http1-lines"
+name = "http1-lines"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300008
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/http1-lines.wat"
+runner = "standards/runners/http1-lines-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "offsets"]
+outputs = ["status", "records"]
+depends_on = ["codec-http1-scan"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "http_parse_request_line",
+  "http_parse_status_line",
+  "http_next_header",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/http/message.rs",
+  "crates/protocol/edgerun-protocols/src/http/method.rs",
+  "crates/protocol/edgerun-protocols/src/http/status.rs",
+  "crates/protocol/edgerun-protocols/src/http/header.rs",
+]
+

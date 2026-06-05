@@ -1,0 +1,24 @@
+id = "codec-dkim-body"
+name = "dkim-body"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300047
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/dkim-body.wat"
+runner = "standards/runners/dkim-body-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "output_buffer"]
+outputs = ["status", "packed_i64", "bytes"]
+depends_on = []
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "dkim_body_simple",
+  "dkim_body_relaxed",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/email_auth/dkim.rs",
+  "crates/protocol/edgerun-protocols/src/email_auth/sign.rs",
+]

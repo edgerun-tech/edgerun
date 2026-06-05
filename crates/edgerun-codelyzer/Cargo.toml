@@ -44,6 +44,6 @@ wire-rkyv = ["dep:rkyv"]
 
 [dependencies]
 edgerun-json = { workspace = true, features = ["toml"] }
-edgerun-encoding = { workspace = true, features = ["compression"] }
+edgerun-encoding = { workspace = true }
 edgerun-vfs = { workspace = true, optional = true }
 rkyv = { workspace = true, features = ["std", "bytecheck"], optional = true }

@@ -10,8 +10,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
-use edgerun_encoding::io;
 
+use super::io;
 use super::types::Mailbox;
 
 // ===========================================================================

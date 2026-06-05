@@ -1,0 +1,28 @@
+id = "codec-tls-clienthello"
+name = "tls-clienthello"
+kind = "codec-primitive"
+version = "0.1.0"
+standard_id = 300023
+abi_version = 2
+wat = "standards/build/wasm/codec-primitives/tls-clienthello.wat"
+runner = "standards/runners/tls-clienthello-smoke.js"
+entrypoint = "proto_abi_version"
+deterministic = true
+inputs = ["bytes", "offsets"]
+outputs = ["status", "records"]
+depends_on = ["codec-tls-frame", "codec-tls-vector", "codec-tls-name"]
+exports = [
+  "memory",
+  "proto_abi_version",
+  "proto_standard_id",
+  "tls_clienthello_scan",
+  "tls_clienthello_find_extension",
+  "tls_clienthello_sni_host",
+  "tls_clienthello_alpn_next",
+]
+parity_sources = [
+  "crates/protocol/edgerun-protocols/src/tls/server/client_hello.rs",
+  "crates/protocol/edgerun-protocols/src/tls/handshake.rs",
+  "crates/protocol/edgerun-protocols/src/tls/tls_alpn.rs",
+]
+

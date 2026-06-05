@@ -1,9 +1,8 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use edgerun_encoding::io;
-
 use super::dsn::{DsnNotify, DsnRet};
+use super::io;
 
 /// Parsed SMTP command from a client.
 #[derive(Debug, Clone)]

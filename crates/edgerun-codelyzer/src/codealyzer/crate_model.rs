@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use edgerun_json::{JsonValue, ToJson};
-
 #[derive(Debug, Clone)]
 pub struct CrateIdentity {
     pub name: String,
@@ -21,41 +19,6 @@ pub struct CrateIdentity {
     pub hidden_files_count: usize,
     pub commit_hash: Option<String>,
 }
-
-impl ToJson for CrateIdentity {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("name".into(), self.name.to_json());
-        map.insert("version".into(), self.version.to_json());
-        map.insert(
-            "path".into(),
-            self.path.to_string_lossy().into_owned().to_json(),
-        );
-        map.insert("description".into(), self.description.to_json());
-        map.insert("license".into(), self.license.to_json());
-        map.insert("edition".into(), self.edition.to_json());
-        map.insert("rust_version".into(), self.rust_version.to_json());
-        map.insert("features".into(), self.features.to_json());
-        map.insert("lib_target".into(), self.lib_target.to_json());
-        map.insert("bin_targets".into(), self.bin_targets.to_json());
-        map.insert("test_targets".into(), self.test_targets.to_json());
-        map.insert("bench_targets".into(), self.bench_targets.to_json());
-        map.insert("crate_type".into(), self.crate_type.to_json());
-        let visible_files: Vec<String> = self
-            .visible_files
-            .iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect();
-        map.insert("visible_files".into(), visible_files.to_json());
-        map.insert(
-            "hidden_files_count".into(),
-            self.hidden_files_count.to_json(),
-        );
-        map.insert("commit_hash".into(), self.commit_hash.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum CrateType {
     Unknown,
@@ -74,13 +37,6 @@ impl CrateType {
         }
     }
 }
-
-impl ToJson for CrateType {
-    fn to_json(&self) -> JsonValue {
-        self.as_str().to_json()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Dependency {
     pub name: String,
@@ -95,25 +51,6 @@ pub struct Dependency {
     pub source_ref: Option<String>,
     pub weight: usize,
 }
-
-impl ToJson for Dependency {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("name".into(), self.name.to_json());
-        map.insert("version_req".into(), self.version_req.to_json());
-        map.insert("kind".into(), self.kind.to_json());
-        map.insert("optional".into(), self.optional.to_json());
-        map.insert("features".into(), self.features.to_json());
-        map.insert("reason".into(), self.reason.to_json());
-        map.insert("is_workspace".into(), self.is_workspace.to_json());
-        map.insert("is_visible".into(), self.is_visible.to_json());
-        map.insert("source".into(), self.source.to_json());
-        map.insert("source_ref".into(), self.source_ref.to_json());
-        map.insert("weight".into(), self.weight.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DependencySource {
     Workspace,
@@ -134,13 +71,6 @@ impl DependencySource {
         }
     }
 }
-
-impl ToJson for DependencySource {
-    fn to_json(&self) -> JsonValue {
-        self.as_str().to_json()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ApiItem {
     pub name: String,
@@ -151,24 +81,6 @@ pub struct ApiItem {
     pub feature_gate: Option<String>,
     pub visibility: Visibility,
 }
-
-impl ToJson for ApiItem {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("name".into(), self.name.to_json());
-        map.insert("kind".into(), self.kind.to_json());
-        map.insert(
-            "file".into(),
-            self.file.to_string_lossy().into_owned().to_json(),
-        );
-        map.insert("line".into(), self.line.to_json());
-        map.insert("docs".into(), self.docs.to_json());
-        map.insert("feature_gate".into(), self.feature_gate.to_json());
-        map.insert("visibility".into(), self.visibility.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum ApiItemKind {
     Module,
@@ -178,39 +90,12 @@ pub enum ApiItemKind {
     Function,
     Impl,
 }
-
-impl ToJson for ApiItemKind {
-    fn to_json(&self) -> JsonValue {
-        let s = match self {
-            ApiItemKind::Module => "Module",
-            ApiItemKind::Struct => "Struct",
-            ApiItemKind::Enum => "Enum",
-            ApiItemKind::Trait => "Trait",
-            ApiItemKind::Function => "Function",
-            ApiItemKind::Impl => "Impl",
-        };
-        JsonValue::String(s.into())
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum Visibility {
     Public,
     Private,
     Crate,
 }
-
-impl ToJson for Visibility {
-    fn to_json(&self) -> JsonValue {
-        let s = match self {
-            Visibility::Public => "Public",
-            Visibility::Private => "Private",
-            Visibility::Crate => "Crate",
-        };
-        JsonValue::String(s.into())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct CallGraphEdge {
     pub caller: String,
@@ -220,23 +105,6 @@ pub struct CallGraphEdge {
     pub confidence: Confidence,
     pub runtime_count: u64,
 }
-
-impl ToJson for CallGraphEdge {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("caller".into(), self.caller.to_json());
-        map.insert("callee".into(), self.callee.to_json());
-        map.insert(
-            "file".into(),
-            self.file.to_string_lossy().into_owned().to_json(),
-        );
-        map.insert("line".into(), self.line.to_json());
-        map.insert("confidence".into(), self.confidence.to_json());
-        map.insert("runtime_count".into(), self.runtime_count.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct SecurityFinding {
     pub id: String,
@@ -249,27 +117,6 @@ pub struct SecurityFinding {
     pub confidence: Confidence,
     pub recommendation: String,
 }
-
-impl ToJson for SecurityFinding {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("id".into(), self.id.to_json());
-        map.insert("severity".into(), self.severity.to_json());
-        map.insert("title".into(), self.title.to_json());
-        let file = self
-            .file
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned());
-        map.insert("file".into(), file.to_json());
-        map.insert("line".into(), self.line.to_json());
-        map.insert("code_excerpt".into(), self.code_excerpt.to_json());
-        map.insert("explanation".into(), self.explanation.to_json());
-        map.insert("confidence".into(), self.confidence.to_json());
-        map.insert("recommendation".into(), self.recommendation.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct TestInfo {
     pub total: usize,
@@ -286,30 +133,6 @@ pub struct TestInfo {
     pub compile_warnings: usize,
     pub functionality_coverage: FunctionalityCoverage,
 }
-
-impl ToJson for TestInfo {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("total".into(), self.total.to_json());
-        map.insert("unit_tests".into(), self.unit_tests.to_json());
-        map.insert("integration_tests".into(), self.integration_tests.to_json());
-        map.insert("doc_tests".into(), self.doc_tests.to_json());
-        map.insert("ignored".into(), self.ignored.to_json());
-        map.insert("passing".into(), self.passing.to_json());
-        map.insert("failing".into(), self.failing.to_json());
-        map.insert("last_run_status".into(), self.last_run_status.to_json());
-        map.insert("last_run_commit".into(), self.last_run_commit.to_json());
-        map.insert("compile_status".into(), self.compile_status.to_json());
-        map.insert("compile_exit_code".into(), self.compile_exit_code.to_json());
-        map.insert("compile_warnings".into(), self.compile_warnings.to_json());
-        map.insert(
-            "functionality_coverage".into(),
-            self.functionality_coverage.to_json(),
-        );
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct FunctionalityCoverage {
     pub public_items: usize,
@@ -340,17 +163,6 @@ impl FunctionalityCoverage {
         }
     }
 }
-
-impl ToJson for FunctionalityCoverage {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("public_items".into(), self.public_items.to_json());
-        map.insert("covered_items".into(), self.covered_items.to_json());
-        map.insert("coverage_percent".into(), self.coverage_percent.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum Severity {
     Low,
@@ -358,54 +170,18 @@ pub enum Severity {
     High,
     Info,
 }
-
-impl ToJson for Severity {
-    fn to_json(&self) -> JsonValue {
-        let value = match self {
-            Severity::Low => "Low",
-            Severity::Medium => "Medium",
-            Severity::High => "High",
-            Severity::Info => "Info",
-        };
-        JsonValue::String(value.into())
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum DependencyKind {
     Normal,
     Dev,
     Build,
 }
-
-impl ToJson for DependencyKind {
-    fn to_json(&self) -> JsonValue {
-        match self {
-            DependencyKind::Normal => JsonValue::String("Normal".into()),
-            DependencyKind::Dev => JsonValue::String("Dev".into()),
-            DependencyKind::Build => JsonValue::String("Build".into()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum Confidence {
     Exact,
     Likely,
     Ambiguous,
 }
-
-impl ToJson for Confidence {
-    fn to_json(&self) -> JsonValue {
-        let s = match self {
-            Confidence::Exact => "Exact",
-            Confidence::Likely => "Likely",
-            Confidence::Ambiguous => "Ambiguous",
-        };
-        JsonValue::String(s.into())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct FootprintInfo {
     pub binary_size: Option<usize>,
@@ -418,23 +194,6 @@ pub struct FootprintInfo {
     pub target_triple: Option<String>,
     pub measured: bool,
 }
-
-impl ToJson for FootprintInfo {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("binary_size".into(), self.binary_size.to_json());
-        map.insert("stripped_size".into(), self.stripped_size.to_json());
-        map.insert("compressed_size".into(), self.compressed_size.to_json());
-        map.insert("idle_rss".into(), self.idle_rss.to_json());
-        map.insert("peak_rss".into(), self.peak_rss.to_json());
-        map.insert("threads".into(), self.threads.to_json());
-        map.insert("open_fds".into(), self.open_fds.to_json());
-        map.insert("target_triple".into(), self.target_triple.to_json());
-        map.insert("measured".into(), self.measured.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct BenchmarkArtifact {
     pub name: String,
@@ -442,21 +201,6 @@ pub struct BenchmarkArtifact {
     pub scenario: Option<String>,
     pub commit: Option<String>,
 }
-
-impl ToJson for BenchmarkArtifact {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("name".into(), self.name.to_json());
-        map.insert(
-            "path".into(),
-            self.path.to_string_lossy().into_owned().to_json(),
-        );
-        map.insert("scenario".into(), self.scenario.to_json());
-        map.insert("commit".into(), self.commit.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct StandardCoverage {
     pub standard: String,
@@ -466,20 +210,6 @@ pub struct StandardCoverage {
     pub confidence: Confidence,
     pub notes: Option<String>,
 }
-
-impl ToJson for StandardCoverage {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("standard".into(), self.standard.to_json());
-        map.insert("status".into(), self.status.to_json());
-        map.insert("code_refs".into(), self.code_refs.to_json());
-        map.insert("tests".into(), self.tests.to_json());
-        map.insert("confidence".into(), self.confidence.to_json());
-        map.insert("notes".into(), self.notes.to_json());
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct VisibilityReport {
     pub visible_count: usize,
@@ -488,22 +218,6 @@ pub struct VisibilityReport {
     pub blocked_refs: Vec<String>,
     pub suspicious_visible: Vec<String>,
 }
-
-impl ToJson for VisibilityReport {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("visible_count".into(), self.visible_count.to_json());
-        map.insert("hidden_count".into(), self.hidden_count.to_json());
-        map.insert("public_surface".into(), self.public_surface.to_json());
-        map.insert("blocked_refs".into(), self.blocked_refs.to_json());
-        map.insert(
-            "suspicious_visible".into(),
-            self.suspicious_visible.to_json(),
-        );
-        JsonValue::Object(map)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct CrateReport {
     pub identity: CrateIdentity,
@@ -521,25 +235,380 @@ pub struct CrateReport {
     pub parser_confidence: String,
 }
 
-impl ToJson for CrateReport {
-    fn to_json(&self) -> JsonValue {
-        let mut map = edgerun_json::Map::new();
-        map.insert("identity".into(), self.identity.to_json());
-        map.insert("dependencies".into(), self.dependencies.to_json());
-        map.insert("public_api".into(), self.public_api.to_json());
-        map.insert("call_graph".into(), self.call_graph.to_json());
-        map.insert(
-            "runtime_call_observations".into(),
-            self.runtime_call_observations.to_json(),
-        );
-        map.insert("security_findings".into(), self.security_findings.to_json());
-        map.insert("test_info".into(), self.test_info.to_json());
-        map.insert("footprint".into(), self.footprint.to_json());
-        map.insert("benchmarks".into(), self.benchmarks.to_json());
-        map.insert("standards".into(), self.standards.to_json());
-        map.insert("visibility".into(), self.visibility.to_json());
-        map.insert("generated_at".into(), self.generated_at.to_json());
-        map.insert("parser_confidence".into(), self.parser_confidence.to_json());
-        JsonValue::Object(map)
+impl CrateReport {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("identity", &self.identity.to_json_string()),
+            json_field(
+                "dependencies",
+                &json_array(&self.dependencies, Dependency::to_json_string),
+            ),
+            json_field(
+                "public_api",
+                &json_array(&self.public_api, ApiItem::to_json_string),
+            ),
+            json_field(
+                "call_graph",
+                &json_array(&self.call_graph, CallGraphEdge::to_json_string),
+            ),
+            json_field(
+                "runtime_call_observations",
+                &self.runtime_call_observations.to_string(),
+            ),
+            json_field(
+                "security_findings",
+                &json_array(&self.security_findings, SecurityFinding::to_json_string),
+            ),
+            json_field("test_info", &self.test_info.to_json_string()),
+            json_field("footprint", &self.footprint.to_json_string()),
+            json_field(
+                "benchmarks",
+                &json_array(&self.benchmarks, BenchmarkArtifact::to_json_string),
+            ),
+            json_field(
+                "standards",
+                &json_array(&self.standards, StandardCoverage::to_json_string),
+            ),
+            json_field("visibility", &self.visibility.to_json_string()),
+            json_field("generated_at", &json_string(&self.generated_at)),
+            json_field("parser_confidence", &json_string(&self.parser_confidence)),
+        ])
     }
+}
+
+impl CrateIdentity {
+    pub fn to_json_string(&self) -> String {
+        let visible_files = self
+            .visible_files
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        json_object(&[
+            json_field("name", &json_string(&self.name)),
+            json_field("version", &json_string(&self.version)),
+            json_field("path", &json_string(&self.path.to_string_lossy())),
+            json_field(
+                "description",
+                &json_option_string(self.description.as_deref()),
+            ),
+            json_field("license", &json_option_string(self.license.as_deref())),
+            json_field("edition", &json_string(&self.edition)),
+            json_field(
+                "rust_version",
+                &json_option_string(self.rust_version.as_deref()),
+            ),
+            json_field("features", &json_string_array(&self.features)),
+            json_field("lib_target", &json_bool(self.lib_target)),
+            json_field("bin_targets", &json_string_array(&self.bin_targets)),
+            json_field("test_targets", &json_string_array(&self.test_targets)),
+            json_field("bench_targets", &json_string_array(&self.bench_targets)),
+            json_field("crate_type", &json_string(self.crate_type.as_str())),
+            json_field("visible_files", &json_string_array(&visible_files)),
+            json_field("hidden_files_count", &self.hidden_files_count.to_string()),
+            json_field(
+                "commit_hash",
+                &json_option_string(self.commit_hash.as_deref()),
+            ),
+        ])
+    }
+}
+
+impl Dependency {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("name", &json_string(&self.name)),
+            json_field(
+                "version_req",
+                &json_option_string(self.version_req.as_deref()),
+            ),
+            json_field("kind", &json_string(self.kind.as_str())),
+            json_field("optional", &json_bool(self.optional)),
+            json_field("features", &json_string_array(&self.features)),
+            json_field("reason", &json_option_string(self.reason.as_deref())),
+            json_field("is_workspace", &json_bool(self.is_workspace)),
+            json_field("is_visible", &json_bool(self.is_visible)),
+            json_field("source", &json_string(self.source.as_str())),
+            json_field(
+                "source_ref",
+                &json_option_string(self.source_ref.as_deref()),
+            ),
+            json_field("weight", &self.weight.to_string()),
+        ])
+    }
+}
+
+impl ApiItem {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("name", &json_string(&self.name)),
+            json_field("kind", &json_string(self.kind.as_str())),
+            json_field("file", &json_string(&self.file.to_string_lossy())),
+            json_field("line", &self.line.to_string()),
+            json_field("docs", &json_bool(self.docs)),
+            json_field(
+                "feature_gate",
+                &json_option_string(self.feature_gate.as_deref()),
+            ),
+            json_field("visibility", &json_string(self.visibility.as_str())),
+        ])
+    }
+}
+
+impl CallGraphEdge {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("caller", &json_string(&self.caller)),
+            json_field("callee", &json_string(&self.callee)),
+            json_field("file", &json_string(&self.file.to_string_lossy())),
+            json_field("line", &self.line.to_string()),
+            json_field("confidence", &json_string(self.confidence.as_str())),
+            json_field("runtime_count", &self.runtime_count.to_string()),
+        ])
+    }
+}
+
+impl SecurityFinding {
+    pub fn to_json_string(&self) -> String {
+        let file = self.file.as_ref().map(|path| path.to_string_lossy());
+        json_object(&[
+            json_field("id", &json_string(&self.id)),
+            json_field("severity", &json_string(self.severity.as_str())),
+            json_field("title", &json_string(&self.title)),
+            json_field("file", &json_option_cow(file.as_ref())),
+            json_field("line", &json_option_usize(self.line)),
+            json_field(
+                "code_excerpt",
+                &json_option_string(self.code_excerpt.as_deref()),
+            ),
+            json_field("explanation", &json_string(&self.explanation)),
+            json_field("confidence", &json_string(self.confidence.as_str())),
+            json_field("recommendation", &json_string(&self.recommendation)),
+        ])
+    }
+}
+
+impl TestInfo {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("total", &self.total.to_string()),
+            json_field("unit_tests", &self.unit_tests.to_string()),
+            json_field("integration_tests", &self.integration_tests.to_string()),
+            json_field("doc_tests", &self.doc_tests.to_string()),
+            json_field("ignored", &self.ignored.to_string()),
+            json_field("passing", &json_option_usize(self.passing)),
+            json_field("failing", &json_option_usize(self.failing)),
+            json_field(
+                "last_run_status",
+                &json_option_string(self.last_run_status.as_deref()),
+            ),
+            json_field(
+                "last_run_commit",
+                &json_option_string(self.last_run_commit.as_deref()),
+            ),
+            json_field(
+                "compile_status",
+                &json_option_string(self.compile_status.as_deref()),
+            ),
+            json_field(
+                "compile_exit_code",
+                &json_option_i32(self.compile_exit_code),
+            ),
+            json_field("compile_warnings", &self.compile_warnings.to_string()),
+            json_field(
+                "functionality_coverage",
+                &self.functionality_coverage.to_json_string(),
+            ),
+        ])
+    }
+}
+
+impl FunctionalityCoverage {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("public_items", &self.public_items.to_string()),
+            json_field("covered_items", &self.covered_items.to_string()),
+            json_field("coverage_percent", &self.coverage_percent.to_string()),
+        ])
+    }
+}
+
+impl FootprintInfo {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("binary_size", &json_option_usize(self.binary_size)),
+            json_field("stripped_size", &json_option_usize(self.stripped_size)),
+            json_field("compressed_size", &json_option_usize(self.compressed_size)),
+            json_field("idle_rss", &json_option_usize(self.idle_rss)),
+            json_field("peak_rss", &json_option_usize(self.peak_rss)),
+            json_field("threads", &json_option_usize(self.threads)),
+            json_field("open_fds", &json_option_usize(self.open_fds)),
+            json_field(
+                "target_triple",
+                &json_option_string(self.target_triple.as_deref()),
+            ),
+            json_field("measured", &json_bool(self.measured)),
+        ])
+    }
+}
+
+impl BenchmarkArtifact {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("name", &json_string(&self.name)),
+            json_field("path", &json_string(&self.path.to_string_lossy())),
+            json_field("scenario", &json_option_string(self.scenario.as_deref())),
+            json_field("commit", &json_option_string(self.commit.as_deref())),
+        ])
+    }
+}
+
+impl StandardCoverage {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("standard", &json_string(&self.standard)),
+            json_field("status", &json_string(&self.status)),
+            json_field("code_refs", &json_string_array(&self.code_refs)),
+            json_field("tests", &json_string_array(&self.tests)),
+            json_field("confidence", &json_string(self.confidence.as_str())),
+            json_field("notes", &json_option_string(self.notes.as_deref())),
+        ])
+    }
+}
+
+impl VisibilityReport {
+    pub fn to_json_string(&self) -> String {
+        json_object(&[
+            json_field("visible_count", &self.visible_count.to_string()),
+            json_field("hidden_count", &self.hidden_count.to_string()),
+            json_field("public_surface", &json_string(&self.public_surface)),
+            json_field("blocked_refs", &json_string_array(&self.blocked_refs)),
+            json_field(
+                "suspicious_visible",
+                &json_string_array(&self.suspicious_visible),
+            ),
+        ])
+    }
+}
+
+impl ApiItemKind {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ApiItemKind::Module => "Module",
+            ApiItemKind::Struct => "Struct",
+            ApiItemKind::Enum => "Enum",
+            ApiItemKind::Trait => "Trait",
+            ApiItemKind::Function => "Function",
+            ApiItemKind::Impl => "Impl",
+        }
+    }
+}
+
+impl Visibility {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Visibility::Public => "Public",
+            Visibility::Private => "Private",
+            Visibility::Crate => "Crate",
+        }
+    }
+}
+
+impl Severity {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Severity::Low => "Low",
+            Severity::Medium => "Medium",
+            Severity::High => "High",
+            Severity::Info => "Info",
+        }
+    }
+}
+
+impl DependencyKind {
+    fn as_str(&self) -> &'static str {
+        match self {
+            DependencyKind::Normal => "Normal",
+            DependencyKind::Dev => "Dev",
+            DependencyKind::Build => "Build",
+        }
+    }
+}
+
+impl Confidence {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Confidence::Exact => "Exact",
+            Confidence::Likely => "Likely",
+            Confidence::Ambiguous => "Ambiguous",
+        }
+    }
+}
+
+fn json_object(fields: &[String]) -> String {
+    format!("{{{}}}", fields.join(","))
+}
+
+fn json_field(name: &str, encoded: &str) -> String {
+    format!("{}:{}", json_string(name), encoded)
+}
+
+fn json_array<T>(items: &[T], emit: fn(&T) -> String) -> String {
+    let values = items.iter().map(emit).collect::<Vec<_>>();
+    format!("[{}]", values.join(","))
+}
+
+fn json_string_array(items: &[String]) -> String {
+    let values = items
+        .iter()
+        .map(|item| json_string(item))
+        .collect::<Vec<_>>();
+    format!("[{}]", values.join(","))
+}
+
+fn json_option_string(value: Option<&str>) -> String {
+    value.map(json_string).unwrap_or_else(|| "null".to_string())
+}
+
+fn json_option_cow(value: Option<&std::borrow::Cow<'_, str>>) -> String {
+    value
+        .map(|value| json_string(value.as_ref()))
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_option_usize(value: Option<usize>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_option_i32(value: Option<i32>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_bool(value: bool) -> String {
+    if value {
+        "true".to_string()
+    } else {
+        "false".to_string()
+    }
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push_str(&format!("\\u{:04x}", ch as u32)),
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
