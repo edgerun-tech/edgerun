@@ -89,6 +89,37 @@ function writeAscii(memory, value, ptr = 2048) {
   assert.equal(code("codex_method_family_code", "thread/realtime/start"), 1);
   assert.equal(code("codex_method_family_code", "mcpServer/tool/call"), 0);
   assert.equal(code("codex_method_family_code", "app/list"), 5);
+  assert.equal(code("codex_realtime_outbound_code", "input_audio_buffer.append"), 1);
+  assert.equal(code("codex_realtime_outbound_code", "conversation.handoff.append"), 2);
+  assert.equal(code("codex_realtime_outbound_code", "response.create"), 3);
+  assert.equal(code("codex_realtime_outbound_code", "session.update"), 4);
+  assert.equal(code("codex_realtime_outbound_code", "conversation.item.create"), 5);
+  assert.equal(code("codex_realtime_session_type_code", "quicksilver"), 1);
+  assert.equal(code("codex_realtime_session_type_code", "realtime"), 2);
+  assert.equal(code("codex_realtime_session_type_code", "transcription"), 3);
+  assert.equal(e.codex_realtime_audio_sample_rate(), 24000);
+  assert.equal(e.codex_realtime_command_queue_cap(), 32);
+  assert.equal(e.codex_realtime_vad_silence_ms(), 500);
+  assert.equal(e.codex_sse_event_channel_cap(), 1600);
+  assert.equal(code("codex_sse_event_kind_code", "response.output_item.done"), 1);
+  assert.equal(code("codex_sse_event_kind_code", "response.output_text.delta"), 2);
+  assert.equal(code("codex_sse_event_kind_code", "response.custom_tool_call_input.delta"), 3);
+  assert.equal(code("codex_sse_event_kind_code", "response.reasoning_summary_text.delta"), 4);
+  assert.equal(code("codex_sse_event_kind_code", "response.reasoning_text.delta"), 5);
+  assert.equal(code("codex_sse_event_kind_code", "response.completed"), 9);
+  assert.equal(code("codex_sse_event_kind_code", "response.reasoning_summary_part.added"), 11);
+  assert.equal(e.codex_sse_event_class(1), 1);
+  assert.equal(e.codex_sse_event_class(3), 2);
+  assert.equal(e.codex_sse_event_class(4), 3);
+  assert.equal(e.codex_sse_event_class(9), 4);
+  assert.equal(e.codex_sse_event_class(7), 5);
+  assert.equal(code("codex_api_error_code_class", "context_length_exceeded"), 1);
+  assert.equal(code("codex_api_error_code_class", "insufficient_quota"), 2);
+  assert.equal(code("codex_api_error_code_class", "usage_not_included"), 3);
+  assert.equal(code("codex_api_error_code_class", "invalid_prompt"), 4);
+  assert.equal(code("codex_api_error_code_class", "cyber_policy"), 5);
+  assert.equal(code("codex_api_error_code_class", "slow_down"), 6);
+  assert.equal(code("codex_api_error_code_class", "rate_limit_exceeded"), 7);
 
   console.log(
     JSON.stringify({
