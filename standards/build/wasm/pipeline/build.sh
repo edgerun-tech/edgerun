@@ -28,6 +28,7 @@ EOF
 # 6. pipeline-core — pipeline_run + dispatch table
 # 7. encoding-text — hex/base64 pipeline stages
 # 8. socket-core — transport stage
+# 8a. session-core — session scheduler (depends on pipeline_run)
 # 9. mux-core — mux/demux stages
 # 10. ws-frame — WebSocket frame parsing
 # 11. ws-stage — WebSocket pipeline stages
@@ -57,6 +58,8 @@ echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/encoding/encoding-text.wat"
 echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/net/socket-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/net/session-core.wat"
 echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/io/mux-core.wat"
 echo "" >> "$OUT"

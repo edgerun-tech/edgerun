@@ -100,7 +100,8 @@
     (i32.load offset=16 (local.get $desc)))
 
   ;; pipeline_run(desc, input_pipe, output_pipe, scratch, scap) → OK | MORE | error
-  (func (export "pipeline_run")
+  ;; Fuses consecutive batch stages (state_ptr==0) by reusing a single intermediate pipe.
+  (func $pipeline_run (export "pipeline_run")
     (param $desc i32) (param $input i32) (param $output i32)
     (param $scratch i32) (param $scap i32) (result i32)
     (local $count i32) (local $pcap i32)
@@ -109,6 +110,7 @@
     (local $stages i32) (local $slot i32)
     (local $cfg i32) (local $clen i32) (local $state i32)
     (local $snapshot i32) (local $last_i i32)
+    (local $reusable i32) (local $in_batch i32)
 
     (local.set $count (i32.load offset=12 (local.get $desc)))
     (local.set $last_i (i32.sub (local.get $count) (i32.const 1)))
@@ -135,13 +137,26 @@
         (if (local.get $state)
           (then (i32.store (local.get $state) (i32.load offset=16 (local.get $desc)))))
 
-        ;; Last stage → output pipe, others → intermediate pipe
+        ;; Determine output pipe.
+        ;; Optimisation: consecutive batch stages reuse a single intermediate pipe.
         (if (i32.eq (local.get $i) (local.get $last_i))
-          (then (local.set $out (local.get $output)))
+          (then
+            (local.set $out (local.get $output))
+            (local.set $in_batch (i32.const 0)))
           (else
-            (local.set $out (call $pipe_create (local.get $pcap)))
-            (if (i32.eq (local.get $out) (i32.const -1))
-              (then (local.set $result (i32.const -1)) (br $done)))))
+            (if (i32.and (local.get $in_batch) (i32.eqz (local.get $state)))
+              (then
+                ;; Consecutive batch stage: reuse the same pipe as prev and out.
+                ;; The stage reads from prev (draining it, auto-reset) then writes to out.
+                (local.set $out (local.get $prev)))
+              (else
+                (local.set $out (call $pipe_create (local.get $pcap)))
+                (if (i32.eq (local.get $out) (i32.const -1))
+                  (then (local.set $result (i32.const -1)) (br $done)))
+                (if (i32.eqz (local.get $state))
+                  (then
+                    (local.set $reusable (local.get $out))
+                    (local.set $in_batch (i32.const 1))))))))
 
         ;; Call stage via dispatch table
         (local.set $result
@@ -159,9 +174,13 @@
         ;; Stage completed — reset result to OK for pipeline return value
         (local.set $result (global.get $STATUS_OK))
 
-        ;; Close previous intermediate pipe (i>0 means it was an intermediate, never the user's input)
-        (if (local.get $i)
+        ;; Close previous intermediate if it was a distinct pipe (not fused/reused)
+        (if (i32.and (local.get $i) (i32.ne (local.get $prev) (local.get $out)))
           (then (call $pipe_close (local.get $prev))))
+
+        ;; End batch run if current stage has state (streaming)
+        (if (local.get $state)
+          (then (local.set $in_batch (i32.const 0))))
 
         (local.set $prev (local.get $out))
         (local.set $slot (i32.add (local.get $slot) (global.get $PS_SIZE)))

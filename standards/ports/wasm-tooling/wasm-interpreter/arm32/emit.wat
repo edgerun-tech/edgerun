@@ -839,7 +839,7 @@
 
     (call $emit_bl_rel (i32.add (global.get $TEXT_VA) (global.get $ELF_CODE_OFF)))
 
-    (call $emit_instr_movi (i32.const 7) (i32.const 1))  ;; MOV R7, #1 (SYS_exit)
+    (call $emit_instr_movi (i32.const 7) (global.get $LINUX_SYS_ARM32_EXIT))  ;; MOV R7, #1 (SYS_exit)
     (call $emit_instr (i32.const 0xEF000000))            ;; SVC #0
   )
 

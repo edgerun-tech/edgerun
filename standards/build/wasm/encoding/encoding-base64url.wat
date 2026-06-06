@@ -290,12 +290,9 @@
     end
 
     ;; result = status=0, written=o
-    i64.const 0
+    i32.const 0
     local.get $o
-    i64.extend_i32_u
-    i64.const 32
-    i64.shl
-    i64.or)
+    call $pack)
 
   ;; base64url_decode(src_ptr, src_len, dst_ptr, dcap) -> status:i32, written:i32 packed as i64
   ;; Decodes base64url (no padding). Rejects invalid chars.
@@ -445,12 +442,9 @@
     end
     end
 
-    i64.const 0
+    i32.const 0
     local.get $o
-    i64.extend_i32_u
-    i64.const 32
-    i64.shl
-    i64.or)
+    call $pack)
 
   (func $m86b64url_value (param $c i32) (result i32)
     local.get $c

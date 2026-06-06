@@ -1620,7 +1620,7 @@
     (call $emit_bl_rel (i32.add (global.get $TEXT_VA) (global.get $ELF_CODE_OFF)))
 
     ;; MOV X8, #93 (SYS_exit); SVC #0
-    (call $emit_instr_movz_64 (i32.const 8) (i32.const 0) (i32.const 93))
+    (call $emit_instr_movz_64 (i32.const 8) (i32.const 0) (global.get $LINUX_SYS_AARCH64_EXIT))
     (call $emit_instr (i32.const 0xD4000001))  ;; SVC #0
   )
 

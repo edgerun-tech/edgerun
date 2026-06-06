@@ -19,6 +19,7 @@
   (import "edgerun-core" "SZ_TYPE" (global $SZ_TYPE i32))
   (import "edgerun-core" "SZ_CODE" (global $SZ_CODE i32))
   (import "edgerun-core" "SZ_FUNC" (global $SZ_FUNC i32))
+  (import "edgerun-core" "LINUX_SYS_ARM32_EXIT" (global $LINUX_SYS_ARM32_EXIT i32))
 
   ;; JIT code cache: 1MB starting at 0x100000
   (global $JIT_CACHE      i32 (i32.const 0x100000))
@@ -960,7 +961,7 @@
 
     (call $emit_bl_rel (i32.add (global.get $TEXT_VA) (global.get $ELF_CODE_OFF)))
 
-    (call $emit_instr_movi (i32.const 7) (i32.const 1))  ;; MOV R7, #1 (SYS_exit)
+    (call $emit_instr_movi (i32.const 7) (global.get $LINUX_SYS_ARM32_EXIT))  ;; MOV R7, #1 (SYS_exit)
     (call $emit_instr (i32.const 0xEF000000))            ;; SVC #0
   )
 
