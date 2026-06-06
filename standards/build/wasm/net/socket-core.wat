@@ -1,5 +1,6 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "STATUS_MORE" (global $MORE i32))
   (import "pipe-core" "pipe_alloc" (func $pipe_alloc (param i32) (result i32)))
   (import "pipe-core" "pipe_create" (func $pipe_create (param i32) (result i32)))
   (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
@@ -452,27 +453,49 @@
   ;; ── Pipeline stage: transport ──
   ;; Reads from input pipe, sends via socket, reads response, writes to output pipe.
   ;; Config: pointer to a 4-byte i32 socket handle.
-  ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap) → bytes_written | error
+  ;; State: 4-byte i32 phase flag (0=idle, 1=awaiting recv)
+  ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) → OK | MORE | error
   (func (export "process_transport")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
-    (local $sock i32) (local $n i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $sock i32) (local $n i32) (local $phase i32) (local $sent i32)
     (if (i32.lt_u (local.get $clen) (i32.const 4))
       (then (return (i32.const -1))))
     (local.set $sock (i32.load (local.get $cfg)))
+    (local.set $phase (i32.load (local.get $state)))
+
+    ;; Phase 1 (awaiting response): try recv again
+    (if (i32.eq (local.get $phase) (i32.const 1))
+      (then
+        (local.set $n (call $pipe_read (i32.load offset=4 (local.get $sock)) (local.get $scratch) (local.get $scap)))
+        (if (i32.gt_s (local.get $n) (i32.const 0))
+          (then
+            (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
+            (i32.store (local.get $state) (i32.const 0))
+            (return (local.get $n))))
+        (return (global.get $MORE))))
+
+    ;; Phase 0 (idle): try send + recv
     ;; Read data to send from input pipe
     (local.set $n (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
-    (if (i32.lt_s (local.get $n) (i32.const 0))
-      (then (return (local.get $n))))
     (if (i32.gt_s (local.get $n) (i32.const 0))
       (then
         (drop (call $pipe_write (i32.load offset=0 (local.get $sock)) (local.get $scratch) (local.get $n)))))
+    (local.set $sent (local.get $n))
+
     ;; Read response from socket recv pipe
     (local.set $n (call $pipe_read (i32.load offset=4 (local.get $sock)) (local.get $scratch) (local.get $scap)))
-    (if (i32.lt_s (local.get $n) (i32.const 0))
-      (then (return (local.get $n))))
-    (if (i32.eqz (local.get $n)) (then (return (i32.const 0))))
-    ;; Write response to output pipe
-    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
+    (if (i32.gt_s (local.get $n) (i32.const 0))
+      (then
+        (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
+        (return (local.get $n))))
+    (if (i32.eqz (local.get $n))
+      (then
+        ;; No response yet — if we sent something, mark awaiting and return MORE
+        (if (i32.gt_s (local.get $sent) (i32.const 0))
+          (then
+            (i32.store (local.get $state) (i32.const 1))
+            (return (global.get $MORE))))
+        (return (i32.const 0))))
     local.get $n)
 )

@@ -158,6 +158,7 @@
   (global $STATUS_OVERFLOW     (export "STATUS_OVERFLOW")     i32 (i32.const 4))
   (global $STATUS_TRUNCATED    (export "STATUS_TRUNCATED")    i32 (i32.const 5))
   (global $STATUS_TOO_LONG     (export "STATUS_TOO_LONG")     i32 (i32.const 6))
+  (global $STATUS_MORE         (export "STATUS_MORE")         i32 (i32.const 7))
 
   ;; ── Bounds check ──
   ;; Returns 1 if offset + need <= len, 0 otherwise.

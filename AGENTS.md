@@ -60,6 +60,56 @@ wat2wasm interpreter.wat -o interpreter.wasm 2>/dev/null; true
   `base.wat` + `emit.wat` + `templates/all.wat` + `templates/simd-${ARCH}.wat` + `dispatch.wat`
 - x86-64 compiler is monolithic (`compiler-x86_64.wat`)
 
+### build/wasm/ — Pipeline Infrastructure
+
+Composable WAT modules for in-memory data processing — no host I/O, all data
+flows through shared linear memory pipes. 24 tests passing across 2 test files.
+
+**Module DAG** (indentation = import dependency):
+```
+edgerun-core        — shared memory, status codes, LUTs, pack()
+  ├─ pipe-core      — byte pipes + bump allocator (0x40000–0x80000)
+  │  ├─ frame-core  — framed I/O (8-byte header [stream_id][payload_len])
+  │  ├─ pipeline-core — 64-slot dispatch table + pipeline_run
+  │  ├─ encoding-core — binary I/O, varint, crc32/adler32
+  │  ├─ socket-core   — send/recv pipe abstraction
+  │  └─ hash/crypto-sha1 — SHA-1 (workspace at 65536)
+  ├─ encoding-text   — hex/base64 encode/decode + process_* stages
+  ├─ mux-core        — static/dynamic mux + demux + process_* stages
+  ├─ stage-registry  — wires modules into dispatch table (10 of 64 slots)
+  ├─ deflate-inflate — imports crc32/adler32 from encoding-core
+  └─ ws-accept       — imports sha1 from crypto-sha1
+```
+
+**Stage dispatch** (pipeline-core call_indirect, indices 0–9):
+| idx | Name             | Module         |
+|-----|------------------|----------------|
+| 0   | passthrough      | pipeline-core  |
+| 1   | hex_encode       | encoding-text  |
+| 2   | hex_decode       | encoding-text  |
+| 3   | b64_encode       | encoding-text  |
+| 4   | b64_decode       | encoding-text  |
+| 5   | transport        | socket-core    |
+| 6   | mux_static       | mux-core       |
+| 7   | demux_static     | mux-core       |
+| 8   | mux_dynamic      | mux-core       |
+| 9   | demux_dynamic    | mux-core       |
+
+**Frame format**: `[stream_id:u32_le][payload_len:u32_le][payload]` — 8-byte
+header, no varint. `frame_read` stores payload metadata at scratch[0..4].
+
+**Mux strategies**:
+- Static: fixed array of stream pipes, round-robin drain. Config = `[count][pipe_0]...`
+- Dynamic: linked list of stream nodes, O(1) add/remove, O(n) iteration
+
+**Demux strategies**:
+- Static: direct array indexing by stream_id. Config = `[count][pipe_0]...`
+- Dynamic: hash table with linear probing (identity hash `stream_id & mask`)
+
+**Shared HDR scratch at 0x3FFF0**: safe since stages run sequentially.
+**Pipe bump heap at 0x40000–0x80000**: pipes are one-shot transfer buffers,
+auto-reset on full drain.
+
 ## Engineering Rules
 
 - Always read existing code before writing.

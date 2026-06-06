@@ -4022,20 +4022,591 @@
     (call $emit_v128_push)
   )
 
-  ;; ── v128.bitselect (0xFD, 0x19) ───────────────────────────────────
-  ;; (v128 mask, v128 if_true, v128 if_false)
-  ;; Result = (mask AND if_true) OR (NOT(mask) AND if_false)
-  ;; Using SSE: we pop mask → xmm0, if_true → xmm1, if_false → xmm2
-  ;; But we only have xmm0, xmm1. Need to handle carefully.
-  ;; Approach: use stack to hold one value.
-  ;; pop mask → xmm0, pop if_true → xmm1, pop if_false → xmm0
-  ;; Then: pand xmm0, xmm1 (mask & if_true) → temp1
-  ;;   pandn xmm1, [original if_false] (BUT xmm1 is now modified...)
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; Extract lane (v128 → scalar) — SSE4.1
+  ;; ═════════════════════════════════════════════════════════════════════
+
+  ;; i8x16.extract_lane_s (0x2E): pop v128, sign-extract byte lane, push i32
+  ;; PEXTRB eax, xmm0, imm8 + MOVSX eax, al
+  (func $template_simd_i8x16_extract_lane_s (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x14))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xBE))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_push_rax)
+  )
+
+  ;; i8x16.extract_lane_u (0x2F): PEXTRB (zero-extends implicitly)
+  (func $template_simd_i8x16_extract_lane_u (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x14))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_push_rax)
+  )
+
+  ;; i16x8.extract_lane_s (0x32): PEXTRW + MOVSX
+  (func $template_simd_i16x8_extract_lane_s (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xC5))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xBF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_push_rax)
+  )
+
+  ;; i16x8.extract_lane_u (0x33): PEXTRW (zero-extends)
+  (func $template_simd_i16x8_extract_lane_u (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xC5))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_push_rax)
+  )
+
+  ;; i32x4.extract_lane (0x36): PEXTRD
+  (func $template_simd_i32x4_extract_lane (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x16))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_push_rax)
+  )
+
+  ;; i64x2.extract_lane (0x38): PEXTRQ (REX.W)
+  (func $template_simd_i64x2_extract_lane (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_rex_w)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x16))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_push_rax)
+  )
+
+  ;; f32x4.extract_lane (0x3B): PEXTRD (treat f32 bits as i32)
+  (func $template_simd_f32x4_extract_lane (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x16))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_push_rax)
+  )
+
+  ;; f64x2.extract_lane (0x3E): PEXTRQ (treat f64 bits as i64)
+  (func $template_simd_f64x2_extract_lane (param $dec_ptr i32)
+    (call $emit_v128_pop)
+    (call $emit_rex_w)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x16))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_push_rax)
+  )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; Replace lane (v128 = v128 insert scalar) — SSE4.1
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; Stack: pop scalar, pop v128 → insert → push v128
+
+  ;; i8x16.replace_lane (0x30): PINSRB
+  (func $template_simd_i8x16_replace_lane (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_v128_pop_xmm1)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x20))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_v128_push)
+  )
+
+  ;; i16x8.replace_lane (0x34): PINSRW
+  (func $template_simd_i16x8_replace_lane (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_v128_pop_xmm1)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xC4))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_v128_push)
+  )
+
+  ;; i32x4.replace_lane (0x37): PINSRD
+  (func $template_simd_i32x4_replace_lane (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_v128_pop_xmm1)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x22))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_v128_push)
+  )
+
+  ;; i64x2.replace_lane (0xAB): PINSRQ (REX.W)
+  (func $template_simd_i64x2_replace_lane (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_v128_pop_xmm1)
+    (call $emit_rex_w)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x22))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_v128_push)
+  )
+
+  ;; f32x4.replace_lane (0x3C): PINSRD
+  (func $template_simd_f32x4_replace_lane (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_v128_pop_xmm1)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x22))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_v128_push)
+  )
+
+  ;; f64x2.replace_lane (0x3F): PINSRQ (REX.W)
+  (func $template_simd_f64x2_replace_lane (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_v128_pop_xmm1)
+    (call $emit_rex_w)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x3A))
+    (call $emit_byte (i32.const 0x22))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.load8_u (i32.add (local.get $dec_ptr) (i32.const 8))))
+    (call $emit_v128_push)
+  )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; Load-splat (memory → broadcast) — SSE2/SSSE3
+  ;; ═════════════════════════════════════════════════════════════════════
+
+  ;; v128.load8_splat (0xA6): load byte from [addr], broadcast to 16
+  ;; MOVD xmm0, [rax]; PXOR xmm1,xmm1; PSHUFB xmm0,xmm1
+  (func $template_simd_v128_load8_splat (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6E))
+    (call $emit_modrm (i32.const 0) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 1))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x38))
+    (call $emit_byte (i32.const 0x00))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; v128.load16_splat (0xA7): load word from [rax], broadcast to 8 words
+  ;; MOVD xmm0, [rax]; PUNPCKLWD xmm0,xmm0; PSHUFD xmm0,xmm0,0
+  (func $template_simd_v128_load16_splat (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6E))
+    (call $emit_modrm (i32.const 0) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x61))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x70))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.const 0))
+    (call $emit_v128_push)
+  )
+
+  ;; v128.load32_splat (0xA8): load dword from [rax], broadcast to 4
+  ;; MOVD xmm0, [rax]; PSHUFD xmm0,xmm0,0
+  (func $template_simd_v128_load32_splat (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6E))
+    (call $emit_modrm (i32.const 0) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x70))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.const 0))
+    (call $emit_v128_push)
+  )
+
+  ;; v128.load64_splat (0xA9): load qword from [rax], broadcast to 2
+  ;; MOVQ xmm0, [rax]; PUNPCKLQDQ xmm0,xmm0
+  (func $template_simd_v128_load64_splat (param $dec_ptr i32)
+    (call $emit_pop_reg (i32.const 0))
+    (call $emit_rex_w)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6E))
+    (call $emit_modrm (i32.const 0) (i32.const 0) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6C))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
+    (call $emit_v128_push)
+  )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; Swizzle — SSSE3
+  ;; ═════════════════════════════════════════════════════════════════════
+
+  ;; i8x16.swizzle (0xAA): PSHUFB xmm0, xmm1
+  (func $template_simd_i8x16_swizzle (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x38))
+    (call $emit_byte (i32.const 0x00))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; f32x4/f64x2 min/max
+  ;; ═════════════════════════════════════════════════════════════════════
+
+  ;; f32x4.min (0xE1): MINPS xmm0, xmm1: 00 0F 5D /r
+  (func $template_simd_f32x4_min (param $dec_ptr i32)
+    (call $emit_sse128_binop (i32.const 0x00) (i32.const 0x5D))
+  )
+
+  ;; f32x4.max (0xE2): MAXPS xmm0, xmm1: 00 0F 5F /r
+  (func $template_simd_f32x4_max (param $dec_ptr i32)
+    (call $emit_sse128_binop (i32.const 0x00) (i32.const 0x5F))
+  )
+
+  ;; f64x2.min (0xE3): MINPD xmm0, xmm1: 66 0F 5D /r
+  (func $template_simd_f64x2_min (param $dec_ptr i32)
+    (call $emit_sse128_binop (i32.const 0x66) (i32.const 0x5D))
+  )
+
+  ;; f64x2.max (0xE4): MAXPD xmm0, xmm1: 66 0F 5F /r
+  (func $template_simd_f64x2_max (param $dec_ptr i32)
+    (call $emit_sse128_binop (i32.const 0x66) (i32.const 0x5F))
+  )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; avgr_u (average unsigned) — SSE2
+  ;; ═════════════════════════════════════════════════════════════════════
+
+  ;; i8x16.avgr_u (0xBB): PAVGB: 66 0F E0 /r
+  (func $template_simd_i8x16_avgr_u (param $dec_ptr i32)
+    (call $emit_sse128_int_binop (i32.const 0xE0))
+  )
+
+  ;; i16x8.avgr_u (0xBF): PAVGW: 66 0F E3 /r
+  (func $template_simd_i16x8_avgr_u (param $dec_ptr i32)
+    (call $emit_sse128_int_binop (i32.const 0xE3))
+  )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; Unsigned comparisons (bias-XOR technique)
+  ;; lt_u = PCMPGT(b^bias, a^bias), gt_u = PCMPGT(a^bias, b^bias)
+  ;; le_u = NOT(gt_u), ge_u = NOT(lt_u)
+  ;; ═════════════════════════════════════════════════════════════════════
   ;;
-  ;; Better: pop mask → xmm0, pop if_true → xmm1, push xmm1, pop if_false → xmm2
-  ;; But we don't have xmm2 helpers. Let me stub for now.
+  ;; Bias generation in xmm2:
+  ;;   PXOR xmm2,xmm2; PCMPEQ xmm2,xmm2 (all 1s)
+  ;;   PSLLW/D/Q then PACK for byte bias
+
+  ;; i8x16.lt_u (0x4A): PCMPGTB(b^0x80, a^0x80)
+  (func $template_simd_i8x16_lt_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 7))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x38))
+    (call $emit_byte (i32.const 0x1C))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x64))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; i8x16.gt_u (0x4C): PCMPGTB(a^0x80, b^0x80)
+  (func $template_simd_i8x16_gt_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 7))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x38))
+    (call $emit_byte (i32.const 0x1C))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x64))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; i8x16.le_u (0x4E): NOT(gt_u)
+  (func $template_simd_i8x16_le_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 7))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x38))
+    (call $emit_byte (i32.const 0x1C))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x64))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_not)
+    (call $emit_v128_push)
+  )
+
+  ;; i8x16.ge_u (0xAE): NOT(lt_u)
+  (func $template_simd_i8x16_ge_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 7))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x38))
+    (call $emit_byte (i32.const 0x1C))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x64))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_not)
+    (call $emit_v128_push)
+  )
+
+  ;; i16x8.lt_u (0x5B): PCMPGTW(b^0x8000, a^0x8000)
+  (func $template_simd_i16x8_lt_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 15))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x65))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; i16x8.gt_u (0x5D): PCMPGTW(a^0x8000, b^0x8000)
+  (func $template_simd_i16x8_gt_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 15))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x65))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; i16x8.le_u (0x5F): NOT(gt_u)
+  (func $template_simd_i16x8_le_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 15))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x65))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_not)
+    (call $emit_v128_push)
+  )
+
+  ;; i16x8.ge_u (0xAF): NOT(lt_u)
+  (func $template_simd_i16x8_ge_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF1))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 15))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x65))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_not)
+    (call $emit_v128_push)
+  )
+
+  ;; i32x4.lt_u (0x6C): PCMPGTD(b^0x80000000, a^0x80000000)
+  (func $template_simd_i32x4_lt_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF2))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 31))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x66))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; i32x4.gt_u (0x6E): PCMPGTD(a^0x80000000, b^0x80000000)
+  (func $template_simd_i32x4_gt_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF2))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 31))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x66))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_push)
+  )
+
+  ;; i32x4.le_u (0x70): NOT(gt_u)
+  (func $template_simd_i32x4_le_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF2))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 31))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x66))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_not)
+    (call $emit_v128_push)
+  )
+
+  ;; i32x4.ge_u (0xB0): NOT(lt_u)
+  (func $template_simd_i32x4_ge_u (param $dec_ptr i32)
+    (call $emit_v128_pop_xmm1)
+    (call $emit_v128_pop)
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x76))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xF2))
+    (call $emit_modrm (i32.const 3) (i32.const 2) (i32.const 2))
+    (call $emit_byte (i32.const 31))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xEF))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x66))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 0))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 1))
+    (call $emit_v128_not)
+    (call $emit_v128_push)
+  )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; v128.bitselect — SSE4.1 PBLENDVB
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; PBLENDVB: 66 0F 38 10 /r — selects from xmm1 based on sign bits of
+  ;; negation mask in xmm0 (implicit): if xmm0[i] bit 7 set, select from
+  ;; xmm2, else from xmm1.
+  ;; Stack: pop if_false, pop if_true, pop mask
+  ;; PBLENDVB: mask in xmm0 (implicit), if_false in xmm1, if_true in xmm2
   (func $template_simd_v128_bitselect (param $dec_ptr i32)
-    (call $template_unsupported)
+    ;; Pop if_false → xmm0
+    (call $emit_v128_pop)
+    ;; Pop if_true → xmm1
+    (call $emit_v128_pop_xmm1)
+    ;; Pop mask → xmm0 (overwrites if_false, but we have it in xmm1)
+    (call $emit_v128_pop)
+    ;; Now: mask=xmm0, if_true=xmm1, if_false=on stack
+    ;; Pop if_false → xmm2 (but no helper, inline: movdqu xmm2, [rsp]; add rsp,16)
+    (call $emit_byte (i32.const 0xF3))
+    (call $emit_byte (i32.const 0x0F))
+    (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 0) (i32.const 2) (i32.const 4))
+    (call $emit_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_rex_w)
+    (call $emit_byte (i32.const 0x83))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 4))
+    (call $emit_byte (i32.const 16))
+    ;; PBLENDVB xmm2, xmm1 (mask in xmm0 implicit): 66 0F 38 10 /r
+    ;; ModRM: reg = xmm1 (if_true), rm = xmm2 (if_false)
+    ;; Actually PBLENDVB: xmm2 = (mask[i] & 0x80) ? xmm1[i] : xmm2[i]
+    ;; So bits from if_true selected where mask sign bit set
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x38))
+    (call $emit_byte (i32.const 0x10))
+    (call $emit_modrm (i32.const 3) (i32.const 1) (i32.const 2))
+    (call $emit_byte (i32.const 0x66)) (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0x6F))
+    (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 2))
+    (call $emit_v128_push)
   )
 
   ;; ── SIMD unsupported stub ─────────────────────────────────────────
@@ -4333,165 +4904,145 @@
         )
 
         ;; ── 0xFD prefixed ops (WASM SIMD) ──
-        ;; Sub-opcode encoding matches modern wabt/wat2wasm (not old pre-standard, not final spec)
+        ;; Sub-opcode encoding uses canonical IDs (AArch64 old encoding).
+        ;; The decoder in interpreter.wat translates modern wabt → canonical.
         (if (i32.eq (local.get $op) (i32.const 0xFD))
           (then
             (local.set $imm0 (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
             (block $fd_done
-              ;; 0x00-0x0B: memory ops
+              ;; ── Memory ops ──
               (if (i32.eq (local.get $imm0) (i32.const 0x00)) (then (call $template_simd_v128_load (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x07)) (then (call $template_simd_v128_load8_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x08)) (then (call $template_simd_v128_load16_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x09)) (then (call $template_simd_v128_load32_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x0A)) (then (call $template_simd_v128_load64_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x0B)) (then (call $template_simd_v128_store (local.get $dec_ptr)) (br $fd_done)))
               (if (i32.eq (local.get $imm0) (i32.const 0x0C)) (then (call $template_simd_v128_const (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x0E: swizzle
-              (if (i32.eq (local.get $imm0) (i32.const 0x0E)) (then (call $template_simd_i8x16_swizzle (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x0F-0x14: splat
-              (if (i32.eq (local.get $imm0) (i32.const 0x0F)) (then (call $template_simd_i8x16_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x10)) (then (call $template_simd_i16x8_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x11)) (then (call $template_simd_i32x4_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x12)) (then (call $template_simd_i64x2_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x13)) (then (call $template_simd_f32x4_splat (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x14)) (then (call $template_simd_f64x2_splat (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x15-0x22: extract_lane / replace_lane
-              (if (i32.eq (local.get $imm0) (i32.const 0x15)) (then (call $template_simd_i8x16_extract_lane_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x16)) (then (call $template_simd_i8x16_extract_lane_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x17)) (then (call $template_simd_i8x16_replace_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x18)) (then (call $template_simd_i16x8_extract_lane_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x19)) (then (call $template_simd_i16x8_extract_lane_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x1A)) (then (call $template_simd_i16x8_replace_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x1B)) (then (call $template_simd_i32x4_extract_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x1C)) (then (call $template_simd_i32x4_replace_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x1D)) (then (call $template_simd_i64x2_extract_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x1E)) (then (call $template_simd_i64x2_replace_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x1F)) (then (call $template_simd_f32x4_extract_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x20)) (then (call $template_simd_f32x4_replace_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x21)) (then (call $template_simd_f64x2_extract_lane (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x22)) (then (call $template_simd_f64x2_replace_lane (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x23-0x40: integer comparison
-              (if (i32.eq (local.get $imm0) (i32.const 0x23)) (then (call $template_simd_i8x16_eq (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x24)) (then (call $template_simd_i8x16_ne (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x25)) (then (call $template_simd_i8x16_lt_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x26)) (then (call $template_simd_i8x16_lt_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x27)) (then (call $template_simd_i8x16_gt_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x28)) (then (call $template_simd_i8x16_gt_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x29)) (then (call $template_simd_i8x16_le_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x2A)) (then (call $template_simd_i8x16_le_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x2B)) (then (call $template_simd_i8x16_ge_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x2C)) (then (call $template_simd_i8x16_ge_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x2D)) (then (call $template_simd_i16x8_eq (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x2E)) (then (call $template_simd_i16x8_ne (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x2F)) (then (call $template_simd_i16x8_lt_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x30)) (then (call $template_simd_i16x8_lt_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x31)) (then (call $template_simd_i16x8_gt_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x32)) (then (call $template_simd_i16x8_gt_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x33)) (then (call $template_simd_i16x8_le_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x34)) (then (call $template_simd_i16x8_le_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x35)) (then (call $template_simd_i16x8_ge_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x36)) (then (call $template_simd_i16x8_ge_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x37)) (then (call $template_simd_i32x4_eq (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x38)) (then (call $template_simd_i32x4_ne (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x39)) (then (call $template_simd_i32x4_lt_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x3A)) (then (call $template_simd_i32x4_lt_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x3B)) (then (call $template_simd_i32x4_gt_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x3C)) (then (call $template_simd_i32x4_gt_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x3D)) (then (call $template_simd_i32x4_le_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x3E)) (then (call $template_simd_i32x4_le_u (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x3F)) (then (call $template_simd_i32x4_ge_s (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x40)) (then (call $template_simd_i32x4_ge_u (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x41-0x4C: float comparison
-              (if (i32.eq (local.get $imm0) (i32.const 0x41)) (then (call $template_simd_f32x4_eq (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x42)) (then (call $template_simd_f32x4_ne (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x43)) (then (call $template_simd_f32x4_lt (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x44)) (then (call $template_simd_f32x4_gt (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x45)) (then (call $template_simd_f32x4_le (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x46)) (then (call $template_simd_f32x4_ge (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x47)) (then (call $template_simd_f64x2_eq (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x48)) (then (call $template_simd_f64x2_ne (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x49)) (then (call $template_simd_f64x2_lt (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x4A)) (then (call $template_simd_f64x2_gt (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x4B)) (then (call $template_simd_f64x2_le (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x4C)) (then (call $template_simd_f64x2_ge (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x4D-0x52: v128 bitwise
-              (if (i32.eq (local.get $imm0) (i32.const 0x4D)) (then (call $template_simd_v128_not (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x4E)) (then (call $template_simd_v128_and (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x50)) (then (call $template_simd_v128_or (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x51)) (then (call $template_simd_v128_xor (local.get $dec_ptr)) (br $fd_done)))
-              (if (i32.eq (local.get $imm0) (i32.const 0x52)) (then (call $template_simd_v128_bitselect (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x61: i8x16.neg
-              (if (i32.eq (local.get $imm0) (i32.const 0x61)) (then (call $template_simd_i8x16_neg (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x6E: i8x16.add
-              (if (i32.eq (local.get $imm0) (i32.const 0x6E)) (then (call $template_simd_i8x16_add (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x71: i8x16.sub
-              (if (i32.eq (local.get $imm0) (i32.const 0x71)) (then (call $template_simd_i8x16_sub (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x77: i8x16.min_u
-              (if (i32.eq (local.get $imm0) (i32.const 0x77)) (then (call $template_simd_i8x16_min_u (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x79: i8x16.max_u
-              (if (i32.eq (local.get $imm0) (i32.const 0x79)) (then (call $template_simd_i8x16_max_u (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x7B: i8x16.avgr_u
-              (if (i32.eq (local.get $imm0) (i32.const 0x7B)) (then (call $template_simd_i8x16_avgr_u (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x81 (LEB128): i16x8.neg
-              (if (i32.eq (local.get $imm0) (i32.const 0x81)) (then (call $template_simd_i16x8_neg (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x8E (LEB128): i16x8.add
-              (if (i32.eq (local.get $imm0) (i32.const 0x8E)) (then (call $template_simd_i16x8_add (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x91 (LEB128): i16x8.sub
-              (if (i32.eq (local.get $imm0) (i32.const 0x91)) (then (call $template_simd_i16x8_sub (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x95 (LEB128): i16x8.mul
-              (if (i32.eq (local.get $imm0) (i32.const 0x95)) (then (call $template_simd_i16x8_mul (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x97 (LEB128): i16x8.min_u
-              (if (i32.eq (local.get $imm0) (i32.const 0x97)) (then (call $template_simd_i16x8_min_u (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x99 (LEB128): i16x8.max_u
-              (if (i32.eq (local.get $imm0) (i32.const 0x99)) (then (call $template_simd_i16x8_max_u (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0x9B (LEB128): i16x8.avgr_u
-              (if (i32.eq (local.get $imm0) (i32.const 0x9B)) (then (call $template_simd_i16x8_avgr_u (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xA1 (LEB128): i32x4.neg
-              (if (i32.eq (local.get $imm0) (i32.const 0xA1)) (then (call $template_simd_i32x4_neg (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xAE (LEB128): i32x4.add
-              (if (i32.eq (local.get $imm0) (i32.const 0xAE)) (then (call $template_simd_i32x4_add (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xB1 (LEB128): i32x4.sub
-              (if (i32.eq (local.get $imm0) (i32.const 0xB1)) (then (call $template_simd_i32x4_sub (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xB5 (LEB128): i32x4.mul
-              (if (i32.eq (local.get $imm0) (i32.const 0xB5)) (then (call $template_simd_i32x4_mul (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xC1 (LEB128): i64x2.neg
-              (if (i32.eq (local.get $imm0) (i32.const 0xC1)) (then (call $template_simd_i64x2_neg (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xCE (LEB128): i64x2.add
-              (if (i32.eq (local.get $imm0) (i32.const 0xCE)) (then (call $template_simd_i64x2_add (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xD1 (LEB128): i64x2.sub
-              (if (i32.eq (local.get $imm0) (i32.const 0xD1)) (then (call $template_simd_i64x2_sub (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE0 (LEB128): f32x4.abs
-              (if (i32.eq (local.get $imm0) (i32.const 0xE0)) (then (call $template_simd_f32x4_abs (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE1 (LEB128): f32x4.neg
-              (if (i32.eq (local.get $imm0) (i32.const 0xE1)) (then (call $template_simd_f32x4_neg (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE4 (LEB128): f32x4.add
-              (if (i32.eq (local.get $imm0) (i32.const 0xE4)) (then (call $template_simd_f32x4_add (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE5 (LEB128): f32x4.sub
-              (if (i32.eq (local.get $imm0) (i32.const 0xE5)) (then (call $template_simd_f32x4_sub (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE6 (LEB128): f32x4.mul
-              (if (i32.eq (local.get $imm0) (i32.const 0xE6)) (then (call $template_simd_f32x4_mul (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE7 (LEB128): f32x4.div
-              (if (i32.eq (local.get $imm0) (i32.const 0xE7)) (then (call $template_simd_f32x4_div (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE8 (LEB128): f32x4.min
-              (if (i32.eq (local.get $imm0) (i32.const 0xE8)) (then (call $template_simd_f32x4_min (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xE9 (LEB128): f32x4.max
-              (if (i32.eq (local.get $imm0) (i32.const 0xE9)) (then (call $template_simd_f32x4_max (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xEC (LEB128): f64x2.abs
-              (if (i32.eq (local.get $imm0) (i32.const 0xEC)) (then (call $template_simd_f64x2_abs (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xED (LEB128): f64x2.neg
-              (if (i32.eq (local.get $imm0) (i32.const 0xED)) (then (call $template_simd_f64x2_neg (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xF0 (LEB128): f64x2.add
-              (if (i32.eq (local.get $imm0) (i32.const 0xF0)) (then (call $template_simd_f64x2_add (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xF1 (LEB128): f64x2.sub
-              (if (i32.eq (local.get $imm0) (i32.const 0xF1)) (then (call $template_simd_f64x2_sub (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xF2 (LEB128): f64x2.mul
-              (if (i32.eq (local.get $imm0) (i32.const 0xF2)) (then (call $template_simd_f64x2_mul (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xF3 (LEB128): f64x2.div
-              (if (i32.eq (local.get $imm0) (i32.const 0xF3)) (then (call $template_simd_f64x2_div (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xF4 (LEB128): f64x2.min
-              (if (i32.eq (local.get $imm0) (i32.const 0xF4)) (then (call $template_simd_f64x2_min (local.get $dec_ptr)) (br $fd_done)))
-              ;; 0xF5 (LEB128): f64x2.max
-              (if (i32.eq (local.get $imm0) (i32.const 0xF5)) (then (call $template_simd_f64x2_max (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x1B)) (then (call $template_simd_v128_store (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xA6)) (then (call $template_simd_v128_load8_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xA7)) (then (call $template_simd_v128_load16_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xA8)) (then (call $template_simd_v128_load32_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xA9)) (then (call $template_simd_v128_load64_splat (local.get $dec_ptr)) (br $fd_done)))
+              ;; Swizzle
+              (if (i32.eq (local.get $imm0) (i32.const 0xAA)) (then (call $template_simd_i8x16_swizzle (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── Splats (0x2D, 0x31, 0x35, 0x39, 0x3A, 0x3D) ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x2D)) (then (call $template_simd_i8x16_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x31)) (then (call $template_simd_i16x8_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x35)) (then (call $template_simd_i32x4_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x39)) (then (call $template_simd_i64x2_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x3A)) (then (call $template_simd_f32x4_splat (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x3D)) (then (call $template_simd_f64x2_splat (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── Extract/replace lanes (0x2E-0x30, 0x32-0x34, 0x36-0x38, 0xAB, 0x3B-0x3C, 0x3E-0x3F) ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x2E)) (then (call $template_simd_i8x16_extract_lane_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x2F)) (then (call $template_simd_i8x16_extract_lane_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x30)) (then (call $template_simd_i8x16_replace_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x32)) (then (call $template_simd_i16x8_extract_lane_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x33)) (then (call $template_simd_i16x8_extract_lane_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x34)) (then (call $template_simd_i16x8_replace_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x36)) (then (call $template_simd_i32x4_extract_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x37)) (then (call $template_simd_i32x4_replace_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x38)) (then (call $template_simd_i64x2_extract_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xAB)) (then (call $template_simd_i64x2_replace_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x3B)) (then (call $template_simd_f32x4_extract_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x3C)) (then (call $template_simd_f32x4_replace_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x3E)) (then (call $template_simd_f64x2_extract_lane (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x3F)) (then (call $template_simd_f64x2_replace_lane (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i8x16 arithmetic ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x40)) (then (call $template_simd_i8x16_add (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x41)) (then (call $template_simd_i8x16_sub (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x46)) (then (call $template_simd_i8x16_neg (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i8x16 comparisons ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x47)) (then (call $template_simd_i8x16_eq (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x48)) (then (call $template_simd_i8x16_ne (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x49)) (then (call $template_simd_i8x16_ge_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x4B)) (then (call $template_simd_i8x16_lt_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x4D)) (then (call $template_simd_i8x16_gt_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x4F)) (then (call $template_simd_i8x16_le_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x4A)) (then (call $template_simd_i8x16_lt_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x4C)) (then (call $template_simd_i8x16_gt_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x4E)) (then (call $template_simd_i8x16_le_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xAE)) (then (call $template_simd_i8x16_ge_u (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i8x16 min/max/avgr ──
+              (if (i32.eq (local.get $imm0) (i32.const 0xB8)) (then (call $template_simd_i8x16_min_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xBA)) (then (call $template_simd_i8x16_max_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xBB)) (then (call $template_simd_i8x16_avgr_u (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i16x8 arithmetic ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x51)) (then (call $template_simd_i16x8_add (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x52)) (then (call $template_simd_i16x8_sub (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x57)) (then (call $template_simd_i16x8_neg (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x61)) (then (call $template_simd_i16x8_mul (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i16x8 comparisons ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x58)) (then (call $template_simd_i16x8_eq (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x59)) (then (call $template_simd_i16x8_ne (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x5A)) (then (call $template_simd_i16x8_ge_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x5C)) (then (call $template_simd_i16x8_lt_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x5E)) (then (call $template_simd_i16x8_gt_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x60)) (then (call $template_simd_i16x8_le_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x5B)) (then (call $template_simd_i16x8_lt_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x5D)) (then (call $template_simd_i16x8_gt_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x5F)) (then (call $template_simd_i16x8_le_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xAF)) (then (call $template_simd_i16x8_ge_u (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i16x8 min/max/avgr ──
+              (if (i32.eq (local.get $imm0) (i32.const 0xBC)) (then (call $template_simd_i16x8_min_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xBE)) (then (call $template_simd_i16x8_max_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xBF)) (then (call $template_simd_i16x8_avgr_u (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i32x4 arithmetic ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x62)) (then (call $template_simd_i32x4_add (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x63)) (then (call $template_simd_i32x4_sub (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x68)) (then (call $template_simd_i32x4_neg (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x72)) (then (call $template_simd_i32x4_mul (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i32x4 comparisons ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x69)) (then (call $template_simd_i32x4_eq (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x6A)) (then (call $template_simd_i32x4_ne (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x6B)) (then (call $template_simd_i32x4_ge_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x6D)) (then (call $template_simd_i32x4_lt_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x6F)) (then (call $template_simd_i32x4_gt_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x71)) (then (call $template_simd_i32x4_le_s (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x6C)) (then (call $template_simd_i32x4_lt_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x6E)) (then (call $template_simd_i32x4_gt_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x70)) (then (call $template_simd_i32x4_le_u (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xB0)) (then (call $template_simd_i32x4_ge_u (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── i64x2 arithmetic ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x73)) (then (call $template_simd_i64x2_add (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x74)) (then (call $template_simd_i64x2_sub (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x79)) (then (call $template_simd_i64x2_neg (local.get $dec_ptr)) (br $fd_done)))
+              ;; i64x2.mul (not in old encoding) — template not yet added
+              ;; ── f32x4 unary ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x88)) (then (call $template_simd_f32x4_abs (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x8A)) (then (call $template_simd_f32x4_neg (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── f32x4 binary ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x84)) (then (call $template_simd_f32x4_add (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x85)) (then (call $template_simd_f32x4_sub (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x87)) (then (call $template_simd_f32x4_mul (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x89)) (then (call $template_simd_f32x4_div (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xE1)) (then (call $template_simd_f32x4_min (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xE2)) (then (call $template_simd_f32x4_max (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── f32x4 comparisons ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x8C)) (then (call $template_simd_f32x4_eq (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x8B)) (then (call $template_simd_f32x4_ne (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x8E)) (then (call $template_simd_f32x4_lt (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x90)) (then (call $template_simd_f32x4_gt (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x92)) (then (call $template_simd_f32x4_le (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x94)) (then (call $template_simd_f32x4_ge (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── f64x2 unary ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x9A)) (then (call $template_simd_f64x2_abs (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x9B)) (then (call $template_simd_f64x2_neg (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── f64x2 binary ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x95)) (then (call $template_simd_f64x2_add (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x96)) (then (call $template_simd_f64x2_sub (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x98)) (then (call $template_simd_f64x2_mul (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x99)) (then (call $template_simd_f64x2_div (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xE3)) (then (call $template_simd_f64x2_min (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xE4)) (then (call $template_simd_f64x2_max (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── f64x2 comparisons ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x9D)) (then (call $template_simd_f64x2_eq (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x9C)) (then (call $template_simd_f64x2_ne (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x9F)) (then (call $template_simd_f64x2_lt (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xA1)) (then (call $template_simd_f64x2_gt (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xA3)) (then (call $template_simd_f64x2_le (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xA5)) (then (call $template_simd_f64x2_ge (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── v128 bitwise ──
+              (if (i32.eq (local.get $imm0) (i32.const 0x43)) (then (call $template_simd_v128_and (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x44)) (then (call $template_simd_v128_or (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0x45)) (then (call $template_simd_v128_xor (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xAC)) (then (call $template_simd_v128_not (local.get $dec_ptr)) (br $fd_done)))
+              (if (i32.eq (local.get $imm0) (i32.const 0xAD)) (then (call $template_simd_v128_bitselect (local.get $dec_ptr)) (br $fd_done)))
+              ;; ── Fall through: unsupported SIMD opcode ──
               (call $template_simd_unsupported (local.get $dec_ptr))
             )
             (local.set $dec_start (i32.add (local.get $dec_start) (i32.const 1)))

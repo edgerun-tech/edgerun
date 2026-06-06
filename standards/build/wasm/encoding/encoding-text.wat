@@ -892,7 +892,7 @@
   ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
   (func (export "process_hex_encode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
     (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
     (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
@@ -912,7 +912,7 @@
   ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
   (func (export "process_b64_encode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
     (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
     (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
@@ -932,7 +932,7 @@
   ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
   (func (export "process_b64_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
     (local.set $max_in (i32.div_u (local.get $scap) (i32.const 2)))
     (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
@@ -952,7 +952,7 @@
   ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
   (func (export "process_hex_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
     (local.set $max_in (i32.div_u (i32.mul (local.get $scap) (i32.const 2)) (i32.const 3)))
     (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
