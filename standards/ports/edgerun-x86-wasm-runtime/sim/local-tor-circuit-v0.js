@@ -11,6 +11,7 @@ const { runTrustedWatExportMemory } = require("./local-memory-sim.js");
 const port = path.resolve(__dirname, "..");
 const root = path.resolve(port, "../../..");
 const torCellCodecWat = path.join(root, "standards/build/wasm/app-primitives/tor-cell-codec/tor-cell-codec.wat");
+const localTorCellRecordWat = path.join(port, "tests/local-tor-cell-record-v0.wat");
 const localTorDeliveryProofWat = path.join(port, "tests/local-tor-delivery-proof-v0.wat");
 
 const defaultCircuitIdentities = {
@@ -67,6 +68,11 @@ function sha256Buffers(parts) {
 function hexBytes(value, label) {
   assert.match(value, /^[0-9a-f]{64}$/i, `${label} must be a 32-byte hex value`);
   return Buffer.from(value, "hex");
+}
+
+function optionalHexBytes(value, label) {
+  if (value === undefined || value === null || value === "") return Buffer.alloc(32, 0);
+  return hexBytes(value, label);
 }
 
 function asciiIdentityBytes(value, label) {
@@ -257,36 +263,56 @@ function payloadHash({ appId, sourceEventHash, targetIdentity, serviceIdentity, 
   ]);
 }
 
-function cellHash(cell) {
-  return sha256([
-    "edgerun.tor-cell.v0",
-    cell.appId,
-    cell.sourceEventHash,
-    ":",
-    cell.circuitId,
-    ":",
-    cell.command,
-    ":",
-    cell.streamId,
-    ":",
-    cell.relayCommand,
-    ":",
-    cell.length,
-    ":",
-    cell.payloadHash,
-    ":",
-    cell.sequence,
-    ":",
-    cell.handshakeType ?? 0,
-    ":",
-    cell.onionKeyIdentity ?? "",
-    ":",
-    cell.clientEphemeralHash ?? "",
-    ":",
-    cell.serverEphemeralHash ?? "",
-    ":",
-    cell.handshakeTranscriptHash ?? "",
+function torCellRecordHashBytes(cell) {
+  return Buffer.concat([
+    hexBytes(cell.appId, "cell app id"),
+    hexBytes(cell.sourceEventHash, "cell source event hash"),
+    hexBytes(cell.payloadHash, "cell payload hash"),
+    optionalHexBytes(cell.onionKeyIdentity, "cell onion key identity"),
+    optionalHexBytes(cell.clientEphemeralHash, "cell client ephemeral hash"),
+    optionalHexBytes(cell.serverEphemeralHash, "cell server ephemeral hash"),
+    optionalHexBytes(cell.handshakeTranscriptHash, "cell handshake transcript hash"),
   ]);
+}
+
+function buildTorCellRecord(cell) {
+  const outPtr = 4096;
+  const hashesPtr = 8192;
+  const recordLen = 272;
+  const memory = runTrustedWatExportMemory({
+    watPath: localTorCellRecordWat,
+    exportName: "er_local_tor_cell_record_write",
+    args: [
+      outPtr,
+      hashesPtr,
+      cell.circuitId,
+      cell.sequence,
+      cell.command,
+      cell.relayCommand,
+      cell.streamId,
+      cell.length,
+      cell.handshakeType ?? 0,
+    ],
+    expected: recordLen,
+    memoryWrites: [{ offset: hashesPtr, bytes: [...torCellRecordHashBytes(cell)] }],
+  });
+  const record = memory.subarray(outPtr, outPtr + recordLen);
+  assert.strictEqual(record.readUInt32LE(0), 0x45524352, "local Tor cell record magic mismatch");
+  assert.strictEqual(record.readUInt32LE(4), 0, "local Tor cell record version mismatch");
+  assert.strictEqual(record.readUInt32LE(8), cell.circuitId, "local Tor cell record circuit id mismatch");
+  assert.strictEqual(record.readUInt32LE(12), cell.sequence, "local Tor cell record sequence mismatch");
+  assert.strictEqual(record.readUInt32LE(16), cell.command, "local Tor cell record command mismatch");
+  assert.strictEqual(record.readUInt32LE(20), cell.relayCommand, "local Tor cell record relay command mismatch");
+  assert.strictEqual(record.readUInt32LE(24), cell.streamId, "local Tor cell record stream id mismatch");
+  assert.strictEqual(record.readUInt32LE(28), cell.length, "local Tor cell record relay length mismatch");
+  assert.strictEqual(record.readUInt32LE(32), cell.handshakeType ?? 0, "local Tor cell record handshake type mismatch");
+  assert.strictEqual(record.readUInt32LE(36), 0, "local Tor cell record plaintext private byte count mismatch");
+  assert.strictEqual(record.readUInt32LE(40), 0, "local Tor cell record private key export count mismatch");
+  return record;
+}
+
+function cellHash(cell) {
+  return sha256Buffer(buildTorCellRecord(cell));
 }
 
 function ntorPublicMetadata({ appId, sourceEventHash, guardIdentity }) {
@@ -336,9 +362,11 @@ function makeCell({
     plaintextPrivateBytes: 0,
     ...(handshake || {}),
   };
+  const canonicalRecord = buildTorCellRecord(cell);
   return {
     ...cell,
-    cellHash: cellHash(cell),
+    canonicalRecordBytes: canonicalRecord.length,
+    cellHash: sha256Buffer(canonicalRecord),
   };
 }
 
@@ -550,6 +578,7 @@ function assertTorCells({ app, commit, route, cells }) {
     assert.strictEqual(cell.command, expected[index][0], "Tor cell command sequence mismatch");
     assert.strictEqual(cell.relayCommand, expected[index][1], "Tor cell relay command sequence mismatch");
     assert.strictEqual(cell.plaintextPrivateBytes, 0, "Tor cell must not expose plaintext private bytes");
+    assert.strictEqual(cell.canonicalRecordBytes, 272, "Tor cell must carry WAT-canonical record length");
     assert.strictEqual(cell.cellHash, cellHash(cell), "Tor cell hash mismatch");
     assert(!Object.hasOwn(cell, "plaintextPayload"), "Tor cell must not carry plaintext payload");
     assertNoPrivateHandshakeMaterial(cell);
@@ -650,6 +679,7 @@ module.exports = {
   assertTorDeliveryProof,
   buildTorDeliveryProof,
   buildTorDeliveryProofRecord,
+  buildTorCellRecord,
   buildLocalTorCircuit,
   buildTorCells,
   handshakeTypes,

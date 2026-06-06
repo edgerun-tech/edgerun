@@ -50,9 +50,10 @@ receipts exist, and the hidden service is registered, then runs the compiled
 stages minimal CREATE2/CREATED2 and relay bodies, calls `tor_cell_build_fixed`,
 decodes the serialized cells for `CREATE2`, `CREATED2`, `RELAY_EXTEND2`,
 `RELAY_EXTENDED2`, `RELAY_BEGIN`, `RELAY_DATA`, and `RELAY_END`, and binds
-circuit receipts to the decoded cell hashes, app id, and source event hash
-without opening raw sockets, performing DNS lookup, exposing a listen port, or
-carrying plaintext payload bytes.
+circuit receipts to decoded cell hashes from 272-byte canonical records emitted
+by `tests/local-tor-cell-record-v0.wat`, app id, and source event hash without
+opening raw sockets, performing DNS lookup, exposing a listen port, or carrying
+plaintext payload bytes.
 
 The circuit simulator also emits one canonical local delivery proof,
 `edgerun.local-tor-delivery.v0`. That proof binds the app id, committed event
