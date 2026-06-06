@@ -3,9 +3,9 @@
 
   ;; Canonical local Tor cell receipt record writer.
   ;;
-  ;; Input at hashes_ptr is 7 contiguous 32-byte fields:
+  ;; Input at hashes_ptr is 8 contiguous 32-byte fields:
   ;; app_id, source_event, payload_hash, onion_key_identity,
-  ;; client_ephemeral, server_ephemeral, handshake_transcript.
+  ;; client_ephemeral, server_ephemeral, handshake_transcript, relay_body.
   ;;
   ;; Output layout:
   ;; u32 magic 'ERCR'
@@ -20,7 +20,7 @@
   ;; u32 plaintext_private_bytes
   ;; u32 private_key_export_count
   ;; u32 reserved
-  ;; bytes hashes[7][32]
+  ;; bytes hashes[8][32]
   (func (export "er_local_tor_cell_record_write")
     (param $out_ptr i32)
     (param $hashes_ptr i32)
@@ -109,7 +109,7 @@
     block $done_hashes
       loop $copy_hashes
         local.get $i
-        i32.const 224
+        i32.const 256
         i32.eq
         br_if $done_hashes
         local.get $out_ptr
@@ -130,5 +130,5 @@
       end
     end
 
-    i32.const 272)
+    i32.const 304)
 )

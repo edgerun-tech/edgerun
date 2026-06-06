@@ -3391,11 +3391,13 @@ try {
 	      ],
 	      `${test.name} Tor cell command sequence mismatch`,
 	    );
+	    assert.strictEqual(result.tor.cells[2].length, 119, `${test.name} RELAY_EXTEND2 payload length mismatch`);
 	    assert.strictEqual(result.tor.cells[5].length, 24, `${test.name} RELAY_DATA payload length mismatch`);
 	    assert(result.tor.cells.every((cell) => cell.appId === result.app.appId), `${test.name} Tor cells must bind app id`);
 	    assert(result.tor.cells.every((cell) => cell.sourceEventHash === result.relay.accepted[0].sourceEventHash), `${test.name} Tor cells must bind source event`);
 	    assert(result.tor.cells.every((cell) => cell.plaintextPrivateBytes === 0), `${test.name} Tor cells must not expose plaintext private bytes`);
-	    assert(result.tor.cells.every((cell) => cell.canonicalRecordBytes === 272), `${test.name} Tor cells must carry WAT-canonical record lengths`);
+	    assert(result.tor.cells.every((cell) => cell.canonicalRecordBytes === 304), `${test.name} Tor cells must carry WAT-canonical record lengths`);
+	    assert(result.tor.cells.every((cell) => /^[0-9a-f]{64}$/.test(cell.relayBodyHash)), `${test.name} Tor cells must bind relay body hashes`);
 	    assert(result.tor.cells.every((cell) => !Object.hasOwn(cell, "plaintextPayload")), `${test.name} Tor cells must not carry plaintext payload`);
 	    assert(result.tor.receipts.every((receipt) => result.tor.cells.some((cell) => cell.cellHash === receipt.cellHash)), `${test.name} Tor receipts must bind cell hashes`);
 	    assert.match(result.tor.deliveryProof.proofHash, /^[0-9a-f]{64}$/, `${test.name} Tor delivery proof hash missing`);

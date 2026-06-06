@@ -11,6 +11,7 @@ const { runTrustedWatExportMemory } = require("./local-memory-sim.js");
 const port = path.resolve(__dirname, "..");
 const root = path.resolve(port, "../../..");
 const torCellCodecWat = path.join(root, "standards/build/wasm/app-primitives/tor-cell-codec/tor-cell-codec.wat");
+const torLibraryWat = path.join(root, "standards/build/wasm/app-primitives/tor-wat/tor-library.wat");
 const localTorCellRecordWat = path.join(port, "tests/local-tor-cell-record-v0.wat");
 const localTorDeliveryProofWat = path.join(port, "tests/local-tor-delivery-proof-v0.wat");
 
@@ -272,13 +273,14 @@ function torCellRecordHashBytes(cell) {
     optionalHexBytes(cell.clientEphemeralHash, "cell client ephemeral hash"),
     optionalHexBytes(cell.serverEphemeralHash, "cell server ephemeral hash"),
     optionalHexBytes(cell.handshakeTranscriptHash, "cell handshake transcript hash"),
+    hexBytes(cell.relayBodyHash, "cell relay body hash"),
   ]);
 }
 
 function buildTorCellRecord(cell) {
   const outPtr = 4096;
   const hashesPtr = 8192;
-  const recordLen = 272;
+  const recordLen = 304;
   const memory = runTrustedWatExportMemory({
     watPath: localTorCellRecordWat,
     exportName: "er_local_tor_cell_record_write",
@@ -346,6 +348,7 @@ function makeCell({
   streamId = 0,
   length = 0,
   payloadHash: cellPayloadHash,
+  relayBodyHash,
   handshake = null,
 }) {
   const cell = {
@@ -359,6 +362,7 @@ function makeCell({
     digest: "0".repeat(40),
     length,
     payloadHash: cellPayloadHash,
+    relayBodyHash,
     plaintextPrivateBytes: 0,
     ...(handshake || {}),
   };
@@ -378,11 +382,12 @@ function readUInt16BE(buffer, offset) {
   return buffer.readUInt16BE(offset);
 }
 
-function relayBody({ relayCommand, streamId = 0, length = 0 }) {
-  const body = Buffer.alloc(11 + length, 0);
+function relayBody({ relayCommand, streamId = 0, data = Buffer.alloc(0) }) {
+  const body = Buffer.alloc(11 + data.length, 0);
   body.writeUInt8(relayCommand, 0);
   body.writeUInt16BE(streamId, torCellCodec.relayStreamIdOffset);
-  body.writeUInt16BE(length, torCellCodec.relayLengthOffset);
+  body.writeUInt16BE(data.length, torCellCodec.relayLengthOffset);
+  data.copy(body, 11);
   return body;
 }
 
@@ -399,15 +404,51 @@ function created2Body() {
   return body;
 }
 
-function fixedCellBody({ command, relayCommand, streamId, length }) {
+function buildExtend2Body({ appId, sourceEventHash, guardIdentity }) {
+  const outPtr = 50176;
+  const nodeIdPtr = 4096;
+  const handshakePtr = 8192;
+  const nodeId = crypto.createHash("sha256").update(`edgerun.local-extend2.node-id.v0:${guardIdentity}`).digest().subarray(0, 20);
+  const handshakeSeed = crypto
+    .createHash("sha256")
+    .update(`edgerun.local-extend2.ntor-client-handshake.v0:${appId}:${sourceEventHash}:${guardIdentity}`)
+    .digest();
+  const handshake = Buffer.alloc(84);
+  for (let offset = 0; offset < handshake.length; offset += handshakeSeed.length) {
+    handshakeSeed.copy(handshake, offset, 0, Math.min(handshakeSeed.length, handshake.length - offset));
+  }
+  const memory = runTrustedWatExportMemory({
+    watPath: torLibraryWat,
+    exportName: "er_tor_build_extend2_body",
+    args: [outPtr, 0x01020304, 9001, nodeIdPtr, handshakePtr],
+    expected: 119,
+    memoryWrites: [
+      { offset: nodeIdPtr, bytes: [...nodeId] },
+      { offset: handshakePtr, bytes: [...handshake] },
+    ],
+  });
+  const body = Buffer.from(memory.subarray(outPtr, outPtr + 119));
+  assert.strictEqual(body[0], 2, "EXTEND2 body must declare two link specifiers");
+  assert.strictEqual(body[1], 0, "EXTEND2 first link specifier must be IPv4");
+  assert.strictEqual(body[2], 6, "EXTEND2 IPv4 link specifier length mismatch");
+  assert.strictEqual(body.readUInt16BE(7), 9001, "EXTEND2 OR port mismatch");
+  assert.strictEqual(body[9], 2, "EXTEND2 second link specifier must be legacy identity");
+  assert.strictEqual(body[10], 20, "EXTEND2 legacy identity length mismatch");
+  assert.strictEqual(body.readUInt16BE(31), handshakeTypes.ntor, "EXTEND2 handshake type must be ntor");
+  assert.strictEqual(body.readUInt16BE(33), 84, "EXTEND2 ntor handshake length mismatch");
+  return body;
+}
+
+function fixedCellBody({ command, relayCommand, streamId, length, relayData }) {
   if (command === torCommands.CREATE2) return create2Body();
   if (command === torCommands.CREATED2) return created2Body();
-  if (command === torCommands.RELAY) return relayBody({ relayCommand, streamId, length });
+  if (command === torCommands.RELAY) return relayBody({ relayCommand, streamId, data: relayData || Buffer.alloc(length) });
   return Buffer.alloc(0);
 }
 
-function buildCodecCellRecord({ sequence, circuitId, command, relayCommand = 0, streamId = 0, length = 0 }) {
-  const body = fixedCellBody({ command, relayCommand, streamId, length });
+function buildCodecCellRecord({ sequence, circuitId, command, relayCommand = 0, streamId = 0, length = 0, relayData }) {
+  const body = fixedCellBody({ command, relayCommand, streamId, length, relayData });
+  const relayDataLength = command === torCommands.RELAY ? body.length - 11 : body.length;
   const memory = runTrustedWatExportMemory({
     watPath: torCellCodecWat,
     exportName: "tor_cell_build_fixed",
@@ -426,6 +467,7 @@ function buildCodecCellRecord({ sequence, circuitId, command, relayCommand = 0, 
     streamId: 0,
     length: 0,
     handshakeType: 0,
+    relayBodyHash: sha256Buffer(body),
     plaintextPrivateBytes: 0,
     privateKeyExportCount: 0,
   };
@@ -435,7 +477,7 @@ function buildCodecCellRecord({ sequence, circuitId, command, relayCommand = 0, 
     record.length = readUInt16BE(memory, payload + torCellCodec.relayLengthOffset);
     assert.strictEqual(record.relayCommand, relayCommand, "real Tor codec relay command mismatch");
     assert.strictEqual(record.streamId, streamId, "real Tor codec stream id mismatch");
-    assert.strictEqual(record.length, length, "real Tor codec relay length mismatch");
+    assert.strictEqual(record.length, relayDataLength, "real Tor codec relay length mismatch");
   }
   if (decodedCommand === torCommands.CREATE2) {
     record.handshakeType = readUInt16BE(memory, payload);
@@ -447,11 +489,16 @@ function buildCodecCellRecord({ sequence, circuitId, command, relayCommand = 0, 
   return record;
 }
 
-function readTorCellCodecRecords({ circuitId, payloadBytes }) {
+function readTorCellCodecRecords({ appId, sourceEventHash, circuitId, payloadBytes }) {
+  const extend2Body = buildExtend2Body({
+    appId,
+    sourceEventHash,
+    guardIdentity: defaultCircuitIdentities.guard,
+  });
   return [
     buildCodecCellRecord({ sequence: 0, circuitId, command: torCommands.CREATE2 }),
     buildCodecCellRecord({ sequence: 1, circuitId, command: torCommands.CREATED2 }),
-    buildCodecCellRecord({ sequence: 2, circuitId, command: torCommands.RELAY, relayCommand: relayCommands.EXTEND2 }),
+    buildCodecCellRecord({ sequence: 2, circuitId, command: torCommands.RELAY, relayCommand: relayCommands.EXTEND2, relayData: extend2Body }),
     buildCodecCellRecord({ sequence: 3, circuitId, command: torCommands.RELAY, relayCommand: relayCommands.EXTENDED2 }),
     buildCodecCellRecord({ sequence: 4, circuitId, command: torCommands.RELAY, relayCommand: relayCommands.BEGIN, streamId: 1 }),
     buildCodecCellRecord({
@@ -481,7 +528,12 @@ function buildTorCells({ app, commit, route, service }) {
     circuitId,
     payloadHash: sealedPayloadHash,
   };
-  const records = readTorCellCodecRecords({ circuitId, payloadBytes: route.payloadBytes });
+  const records = readTorCellCodecRecords({
+    appId: app.appId,
+    sourceEventHash: route.sourceEventHash,
+    circuitId,
+    payloadBytes: route.payloadBytes,
+  });
   const ntor = ntorPublicMetadata({
     appId: app.appId,
     sourceEventHash: route.sourceEventHash,
@@ -525,6 +577,7 @@ function buildTorCells({ app, commit, route, service }) {
       relayCommand: record.relayCommand,
       streamId: record.streamId,
       length: record.length,
+      relayBodyHash: record.relayBodyHash,
       handshake,
     });
   });
@@ -578,12 +631,13 @@ function assertTorCells({ app, commit, route, cells }) {
     assert.strictEqual(cell.command, expected[index][0], "Tor cell command sequence mismatch");
     assert.strictEqual(cell.relayCommand, expected[index][1], "Tor cell relay command sequence mismatch");
     assert.strictEqual(cell.plaintextPrivateBytes, 0, "Tor cell must not expose plaintext private bytes");
-    assert.strictEqual(cell.canonicalRecordBytes, 272, "Tor cell must carry WAT-canonical record length");
+    assert.strictEqual(cell.canonicalRecordBytes, 304, "Tor cell must carry WAT-canonical record length");
     assert.strictEqual(cell.cellHash, cellHash(cell), "Tor cell hash mismatch");
     assert(!Object.hasOwn(cell, "plaintextPayload"), "Tor cell must not carry plaintext payload");
     assertNoPrivateHandshakeMaterial(cell);
   }
   assertNtorHandshake({ app, route, cells });
+  assert.strictEqual(cells[2].length, 119, "Tor RELAY_EXTEND2 length must match WAT-built EXTEND2 body");
   assert.strictEqual(cells[5].length, route.payloadBytes, "Tor RELAY_DATA length must match route payload bytes");
   assert.strictEqual(cells[0].circuitId, Number.parseInt(commit.eventHash.slice(0, 8), 16) || 1, "Tor circuit id must bind to commit hash");
 }
