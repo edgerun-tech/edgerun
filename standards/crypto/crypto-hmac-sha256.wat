@@ -281,7 +281,7 @@
     end)
 
   ;; ── hmac_sha256(key, klen, msg, mlen, out, ocap) -> i32 ──
-  (func (export "hmac_sha256")
+  (func $hmac_sha256 (export "hmac_sha256")
     (param $key i32) (param $klen i32)
     (param $msg i32) (param $mlen i32)
     (param $out i32) (param $ocap i32)
@@ -347,7 +347,8 @@
 
     ;; Save inner hash from H to blk (big-endian, 32 bytes)
     ;; NOTE: must not overwrite buf[0..63] — key material needed for restore/opad
-    local.get $blk local.get $H call $hash_to_buf
+    ;; blk is at fixed address 16672 (defined in sha256_process)
+    i32.const 16672 local.get $H call $hash_to_buf
 
     ;; ── 3. Restore key in buf (undo ipad) ──
     i32.const 0 local.set $i
@@ -376,8 +377,8 @@
     end
     end
 
-    ;; Copy inner hash from blk to buf+64
-    local.get $buf i32.const 64 i32.add local.get $blk i32.const 32 call $m59memcpy
+    ;; Copy inner hash from blk (16672) to buf+64
+    local.get $buf i32.const 64 i32.add i32.const 16672 i32.const 32 call $m59memcpy
     ;; SHA256 of (buf, 64+32 = 96)
     local.get $buf i32.const 96 call $sha256_process
 

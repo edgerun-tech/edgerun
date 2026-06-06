@@ -2,10 +2,7 @@
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 32-byte SHA-256 hash via output pipe
-  ;; Imports sha256 from crypto/crypto-sha256.wat
-
-  (import "crypto" "sha256" (func $sha256 (param i32 i32 i32) (result i64)))
-  (import "runtime" "pack" (func $pack (param i32 i32) (result i64)))
+  ;; Calls $sha256 from crypto/crypto-sha256.wat (merged in module scope)
 
   ;; Pipeline stage: SHA-256 hash (batch, copy input to safe buffer)
   ;; SHA-256 code requires input + output buffers below 65536.

@@ -299,7 +299,7 @@
   ;;   +0: tick          i32 (RO, written by pipeline_run)
   ;;   +4: epoch_len     i32 (0 = no batching, drain every call)
   ;;   +8: last_flush_tick i32 (last tick when drain occurred)
-  (func (export "process_mux_static")
+  (func $process_mux_static (export "process_mux_static")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $count i32) (local $i i32) (local $pipe i32)
@@ -353,7 +353,7 @@
   ;; process_demux_static — reads framed from input, routes to stream pipes in config
   ;; Config: [count][pipe_0][pipe_1]...
   ;; Drains all available frames in one call
-  (func (export "process_demux_static")
+  (func $process_demux_static (export "process_demux_static")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $count i32) (local $avail i32) (local $result i64)
@@ -385,7 +385,7 @@
 
   ;; process_mux_dynamic — calls mux_dynamic_run on pre-created mux handle
   ;; Config: [mux_handle:i32]
-  (func (export "process_mux_dynamic")
+  (func $process_mux_dynamic (export "process_mux_dynamic")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $mux i32)
@@ -394,7 +394,7 @@
 
   ;; process_demux_dynamic — calls demux_dynamic_run on pre-created demux handle
   ;; Config: [demux_handle:i32]
-  (func (export "process_demux_dynamic")
+  (func $process_demux_dynamic (export "process_demux_dynamic")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $demux i32)

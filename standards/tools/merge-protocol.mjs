@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Protocol Family Merger v5 — handles all edge cases
+ * Fragment Family Merger v6 — merge multi-file WAT fragments into single modules
  *
  * Usage:
  *   node tools/merge-protocol.mjs [--dry-run]
@@ -12,129 +12,6 @@ import { resolve } from 'path';
 const ROOT = resolve(import.meta.dirname, '..');
 
 const FAMILIES = [
-  {
-    name: 'http', outfile: 'protocol/http.wat', internal: ['http'],
-    files: [
-      'protocol/http-core.wat', 'protocol/http1-body.wat',
-      'protocol/http1-chunk-stream.wat', 'protocol/http1-header-block.wat',
-      'protocol/http1-lines.wat', 'protocol/http1-scan.wat',
-      'protocol/http2-frame.wat', 'protocol/http3-frame.wat',
-      'protocol/http-client-core.wat', 'protocol/http-date.wat',
-      'protocol/http-node-state.wat', 'protocol/http-prefix-int.wat',
-    ],
-    missingImports: [],
-    sourceFixes: [],
-  },
-  {
-    name: 'dns', outfile: 'protocol/dns.wat', internal: ['dns'],
-    files: [
-      'protocol/dns-core.wat', 'protocol/dns-compressed-name.wat',
-      'protocol/dns-core-records.wat', 'protocol/dns-message-header.wat',
-      'protocol/dns-name.wat', 'protocol/dns-rdata-core.wat',
-      'protocol/dns-resolve.wat', 'protocol/dns-section-walk.wat',
-    ],
-    missingImports: [
-      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
-      '(import "host" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))',
-      '(import "host" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))',
-      '(import "host" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))',
-      '(import "host" "sock_close" (func $sock_close (param i32) (result i32)))',
-    ],
-    sourceFixes: [],
-  },
-  {
-    name: 'tls', outfile: 'protocol/tls.wat', internal: [],
-    files: [
-      'protocol/tls-certificate-list.wat', 'protocol/tls-clienthello.wat',
-      'protocol/tls-core-state.wat', 'protocol/tls-extension-walk.wat',
-      'protocol/tls-frame.wat', 'protocol/tls-name.wat',
-      'protocol/tls-vector.wat',
-    ],
-    missingImports: [
-      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
-      '(import "edgerun" "is_alnum" (func $is_alnum (param i32) (result i32)))',
-      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
-    ],
-    sourceFixes: [],
-  },
-  {
-    name: 'hpack', outfile: 'protocol/hpack.wat', internal: ['hpack-qpack'],
-    files: [
-      'protocol/hpack-qpack-core.wat', 'protocol/hpack-header-block.wat',
-      'protocol/hpack-huffman.wat', 'protocol/hpack-string.wat',
-      'protocol/hpack-table-core.wat', 'protocol/qpack-decoder-stream.wat',
-      'protocol/qpack-encoder-stream.wat', 'protocol/qpack-string.wat',
-      'protocol/qpack-table-core.wat',
-    ],
-    missingImports: [
-      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
-    ],
-    sourceFixes: [
-      // Fix missing $ prefix on function calls (all files in family)
-      { file: '*', find: '(call huffman_decode_internal', replace: '(call $huffman_decode_internal' },
-      { file: '*', find: '(call qpack_prefix_decode', replace: '(call $qpack_prefix_decode' },
-      { file: '*', find: '(call prefix_encode', replace: '(call $prefix_encode' },
-    ],
-  },
-  {
-    name: 'ws', outfile: 'protocol/ws.wat', internal: [],
-    files: [
-      'protocol/ws-accept.wat', 'protocol/ws-client.wat',
-      'protocol/ws-frame.wat', 'protocol/ws-stage.wat',
-    ],
-    missingImports: [
-      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
-      '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
-      '(import "crypto" "sha1" (func $sha1 (param i32 i32 i32) (result i64)))',
-      '(import "codec" "base64_encode" (func $base64_encode (param i32 i32 i32 i32) (result i64)))',
-      '(import "host" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))',
-      '(import "host" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))',
-      '(import "host" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))',
-      '(import "host" "sock_close" (func $sock_close (param i32) (result i32)))',
-      '(import "pipeline" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))',
-      '(import "pipeline" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))',
-      '(import "edgerun" "STATUS_MORE" (global $STATUS_MORE i32))',
-      '(import "edgerun" "STATUS_TIMEOUT" (global $STATUS_TIMEOUT i32))',
-    ],
-  },
-  {
-    name: 'quic', outfile: 'protocol/quic.wat', internal: ['quic'],
-    files: [
-      'protocol/quic-core.wat', 'protocol/quic-core-state.wat',
-    ],
-    missingImports: [],
-    sourceFixes: [],
-    stripExports: ['quic_varint_decode_at'],
-  },
-  {
-    name: 'dhcp', outfile: 'protocol/dhcp.wat', internal: [],
-    files: [
-      'protocol/dhcp-message-core.wat', 'protocol/dhcpv6-core.wat',
-    ],
-    missingImports: [
-      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
-    ],
-    sourceFixes: [],
-  },
-  {
-    name: 'der', outfile: 'protocol/der.wat', internal: [],
-    files: [
-      'protocol/der-asn1-basic.wat', 'protocol/der-integer.wat',
-      'protocol/der-oid.wat', 'protocol/der-time.wat',
-      'protocol/der-tlv.wat',
-    ],
-    missingImports: [],
-    sourceFixes: [],
-  },
-  {
-    name: 'cache', outfile: 'protocol/cache.wat', internal: [],
-    files: [
-      'protocol/cache-index.wat', 'protocol/js5-cache.wat',
-    ],
-    missingImports: [],
-    sourceFixes: [],
-    dedupGlobals: ['$ERR_BOUNDS'],
-  },
   // ════════════════════════════════════════════════════════════════
   // CODEC families (38 files → 9 files)
   // ════════════════════════════════════════════════════════════════
@@ -151,11 +28,11 @@ const FAMILIES = [
       '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
       '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
       '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
+      '(import "pipeline" "pipe_read_ptr" (func $pipe_read_ptr (param i32 i32) (result i32)))',
+      '(import "pipeline" "pipe_advance" (func $pipe_advance (param i32 i32) (result i32)))',
+      '(import "pipeline" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))',
     ],
-    sourceFixes: [
-      // Standardize local names for load8_u
-      { file: '*', find: '(import "edgerun" "load8_u"', replace: ';; stripped (load8_u not needed)' },
-    ],
+    sourceFixes: [],
     // encoding-text.wat references $b64_encode/$b64_decode from encoding-base64url — internal to family
   },
   {
@@ -166,8 +43,6 @@ const FAMILIES = [
     ],
     missingImports: [
       '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
-      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
-      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
       '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
       '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
       '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
@@ -177,6 +52,7 @@ const FAMILIES = [
   {
     name: 'codec-compress', outfile: 'codec/compress.wat', internal: [],
     files: [
+      'codec/encoding-core.wat',
       'codec/deflate-inflate.wat', 'codec/deflate-stored.wat',
       'codec/gzip-member.wat', 'codec/zlib-wrapper.wat',
     ],
@@ -215,6 +91,8 @@ const FAMILIES = [
       '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
       '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
       '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
     ],
     sourceFixes: [],
   },
@@ -264,6 +142,7 @@ const FAMILIES = [
       '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
       '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
       '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
     ],
     sourceFixes: [],
   },
@@ -279,7 +158,10 @@ const FAMILIES = [
       '(import "math" "min" (func $min (param i32 i32) (result i32)))',
       '(import "math" "max" (func $max (param i32 i32) (result i32)))',
     ],
-    sourceFixes: [],
+    sourceFixes: [
+      // model-decode.wat defines $read_u16be with different signature than definition-decode's
+      { file: 'codec/model-decode.wat', find: '(func $read_u16be', replace: '(func $read_u16be_m' },
+    ],
   },
   // ════════════════════════════════════════════════════════════════
   // APP families (44 files → 11 files)
@@ -297,12 +179,17 @@ const FAMILIES = [
       '(import "edgerun" "strlen" (func $strlen (param i32) (result i32)))',
       '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
       '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "host" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))',
+      '(import "host" "sock_close" (func $sock_close (param i32) (result i32)))',
+      '(import "host" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))',
+      '(import "host" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))',
     ],
     sourceFixes: [],
   },
   {
     name: 'app-oci', outfile: 'app/oci.wat', internal: [],
     files: [
+      'app/oci-lx64-defs.wat',
       'app/oci-config-core.wat', 'app/oci-elf64.wat',
       'app/oci-reference.wat', 'app/oci-runtime-state.wat',
       'app/oci-tar-header.wat',
@@ -317,6 +204,7 @@ const FAMILIES = [
       '(import "edgerun" "fnv1a_lower" (func $fnv1a_lower (param i32 i32) (result i32)))',
       '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
       '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "is_alnum" (func $is_alnum (param i32) (result i32)))',
     ],
     sourceFixes: [],
   },
@@ -337,15 +225,29 @@ const FAMILIES = [
   {
     name: 'app-wallet', outfile: 'app/wallet.wat', internal: [],
     files: [
-      'app/wallet-decimal.wat', 'app/wallet-exec-core.wat',
-      'app/wallet-order-status.wat',
+      'app/wallet-order-status.wat', 'app/wallet-decimal.wat',
+      'app/wallet-exec-core.wat',
     ],
     missingImports: [
       '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
       '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
       '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32) (result i32)))',
+      '(import "edgerun" "memset" (func $memset (param i32 i32 i32) (result i32)))',
+      '(import "edgerun" "load8_u" (func $load8_u (param i32) (result i32)))',
+      '(import "math" "min" (func $min (param i32 i32) (result i32)))',
+      '(import "math" "max" (func $max (param i32 i32) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "string_eq" (func $string_eq (param i32 i32 i32 i32) (result i32)))',
+      '(import "edgerun" "strlen" (func $strlen (param i32 i32) (result i32)))',
     ],
-    sourceFixes: [],
+    sourceFixes: [
+      // wallet-decimal type names collide with wallet-order-status: $t0→$t10, $t1→$t11, ...
+      { file: 'app/wallet-decimal.wat', find: /\$t(\d+)(?!\d)/g, replace: '$$t1$1' },
+      // wallet-decimal $f4 collides with wallet-order-status $f4
+      { file: 'app/wallet-decimal.wat', find: '$f4', replace: '$df4' },
+    ],
   },
   {
     name: 'app-security', outfile: 'app/security.wat', internal: [],
@@ -500,6 +402,26 @@ function stripStrayPreamble(content) {
   return content.replace(/^(?!\s*\(|\s*;;)[^\n]*\n?/, '');
 }
 
+/** Count excess closing parens at end of fragment (for parent-module close) */
+function stripTrailingClosers(content) {
+  let open = 0, close = 0;
+  for (const ch of content) {
+    if (ch === '(') open++;
+    if (ch === ')') close++;
+  }
+  if (open >= close) return content;
+  // Excess closing parens — remove from end
+  const excess = close - open;
+  let removed = 0;
+  let i = content.length - 1;
+  while (removed < excess && i >= 0) {
+    if (content[i] === ')') { removed++; i--; }
+    else if (/\s/.test(content[i])) { i--; }
+    else break;
+  }
+  return content.slice(0, i + 1);
+}
+
 /** Extract renames needed when internal imports use different local names */
 function extractRenames(content, internalNames) {
   const renames = {};
@@ -519,6 +441,20 @@ function applyRenames(content, renames) {
     content = content.replace(new RegExp(oldN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), newN);
   }
   return content;
+}
+
+/** Extract a balanced S-expression starting at pos, return {sexpr, end} */
+function extractSexpr(content, start) {
+  if (content[start] !== '(') return null;
+  let depth = 0;
+  for (let i = start; i < content.length; i++) {
+    if (content[i] === '(') depth++;
+    if (content[i] === ')') {
+      depth--;
+      if (depth === 0) return { sexpr: content.slice(start, i + 1), end: i + 1 };
+    }
+  }
+  return null;
 }
 
 /** Check if a line is an import */
@@ -617,6 +553,8 @@ function merge() {
         } else {
           console.log(`  • ${filePath}: ${lines} lines (fragment)`);
         }
+        // Strip trailing closers meant for parent module
+        content = stripTrailingClosers(content);
       }
 
       // Extract rename rules for internal imports
@@ -643,16 +581,33 @@ function merge() {
       }
 
       // Split into imports, data, and body
+      let inDataDepth = 0;
       for (const line of cleanedLines) {
         const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith(';')) {
+        if (inDataDepth > 0) {
+          dataParts.push(line);
+          for (const ch of trimmed) {
+            if (ch === '(') inDataDepth++;
+            if (ch === ')') inDataDepth--;
+          }
+        } else if (!trimmed || trimmed.startsWith(';')) {
           bodyParts.push(line);
         } else if (isImportLine(trimmed)) {
           const info = parseImport(trimmed);
-          if (info) allImportLines.push({ ...info, raw: trimmed });
+          if (info) {
+            allImportLines.push({ ...info, raw: trimmed });
+          } else {
+            console.warn(`    ⚠  import line matched isImportLine but parseImport failed: ${trimmed.substring(0,80)}`);
+          }
         } else if (isMemoryLine(trimmed)) {
           // Stripped
         } else if (isDataLine(trimmed)) {
+          let parenNet = 0;
+          for (const ch of trimmed) {
+            if (ch === '(') parenNet++;
+            if (ch === ')') parenNet--;
+          }
+          inDataDepth += parenNet;
           dataParts.push(line);
         } else if (isGlobalDefLine(trimmed)) {
           const name = parseGlobalName(trimmed);
@@ -709,7 +664,10 @@ function merge() {
     // Apply import renames to body + data
     let bodyContent = bodyParts.join('\n');
     for (const [oldL, newL] of Object.entries(importRenames)) {
-      bodyContent = bodyContent.replace(new RegExp(oldL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), newL);
+      bodyContent = bodyContent.replace(
+        new RegExp(oldL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+        newL.replace(/\$/g, '$$$$')
+      );
     }
 
     const dedupCount = allImportLines.length - dedupedImports.length;

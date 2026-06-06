@@ -84,6 +84,10 @@ const MANIFEST = [
   {file: 'crypto/crypto-x25519-scalar.wat', rename_map: {'$m64memcpy': '$memcpy'}},
   // crypto-aes-block.wat deferred (data at 0x2000 conflicts with lower_case LUT)
 
+  // ── Layer 7a: Pipeline crypto stages ──
+  'pipeline/sha256-stage.wat',
+  'pipeline/hmac-sha256-stage.wat',
+
   // ── Layer 8: Protocol parsers ──
   // (TODO: convert protocol/*.wat to fragments)
 

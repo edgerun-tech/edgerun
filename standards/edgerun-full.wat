@@ -1450,6 +1450,14 @@
 
   (elem (i32.const 0) $stage_passthrough)
 
+  ;; ── Pipeline stage registration (stage_table) ──
+  (elem (i32.const 6) $process_mux_static)
+  (elem (i32.const 7) $process_demux_static)
+  (elem (i32.const 8) $process_mux_dynamic)
+  (elem (i32.const 9) $process_demux_dynamic)
+  (elem (i32.const 13) $process_exec)
+  (elem (i32.const 15) $process_frame_pacer)
+
 ;; ── pipeline/frame-core.wat ──
 ;; Frame Core — framed I/O (8-byte header)
 
@@ -2049,7 +2057,7 @@
   ;;   +4: arg_count i32  (number of i32 arguments)
   ;;   +8: args[]    i32  (inline argument values)
 
-  (func (export "process_exec")
+  (func $process_exec (export "process_exec")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $len i32) (local $err i32) (local $func_idx i32)

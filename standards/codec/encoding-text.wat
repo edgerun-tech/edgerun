@@ -415,7 +415,7 @@
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
     (call $pipe_advance (local.get $input) (local.get $read))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
-    local.get $out_len)
+    (return (local.get $out_len)))
 
   ;; ── Pipeline stage: base64url nopad encode (zero-copy input) ──
   (func (export "process_b64_encode")
@@ -435,7 +435,7 @@
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
     (call $pipe_advance (local.get $input) (local.get $read))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
-    local.get $out_len)
+    (return (local.get $out_len)))
 
   ;; ── Pipeline stage: base64url nopad decode (zero-copy input) ──
   (func (export "process_b64_decode")
@@ -455,7 +455,7 @@
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
     (call $pipe_advance (local.get $input) (local.get $read))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
-    local.get $out_len)
+    (return (local.get $out_len)))
 
   ;; ── Pipeline stage: hex decode (zero-copy input, SIMD accelerated) ──
   (func (export "process_hex_decode")
@@ -475,4 +475,4 @@
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
     (call $pipe_advance (local.get $input) (local.get $read))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
-    local.get $out_len)
+    (return (local.get $out_len)))

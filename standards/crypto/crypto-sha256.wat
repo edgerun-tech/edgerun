@@ -498,7 +498,7 @@
     local.get $word
     i32.store8)
 
-  (func (export "sha256") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i64)
+  (func $sha256 (export "sha256") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i64)
     (local $blocks i32)
     (local $total i32)
     (local $block i32)

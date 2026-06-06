@@ -3,10 +3,7 @@
   ;; Input:  message bytes via input pipe
   ;; Output: 32-byte HMAC-SHA256 tag via output pipe
   ;; Config: [key_len: i32][key_bytes: key_len]
-  ;; Imports hmac_sha256 from crypto/crypto-hmac-sha256.wat
-
-  (import "crypto" "hmac_sha256" (func $hmac_sha256
-    (param i32) (param i32) (param i32) (param i32) (param i32) (param i32) (result i32)))
+  ;; Calls $hmac_sha256 from crypto/crypto-hmac-sha256.wat (merged in module scope)
 
   ;; Pipeline stage: HMAC-SHA256 (batch, zero-copy input)
   ;; Config layout: [klen: i32][key: klen]
