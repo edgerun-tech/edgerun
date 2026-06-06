@@ -1,0 +1,60 @@
+(module
+  (memory (export "memory") 1)
+
+  (global $bt_spp_host_abi i32 (i32.const 1))
+
+  (func (export "bt_spp_host_abi_version") (result i32)
+    global.get $bt_spp_host_abi
+  )
+
+  ;; Validate SPP server configuration parameters
+  (func (export "bt_spp_validate_config")
+    (param $channel i32)
+    (param $mtu i32)
+    (param $buffer_size i32)
+    (result i32)
+    ;; RFCOMM channel must be 1-30 (non-DLCI reserved)
+    (if (i32.lt_u (local.get $channel) (i32.const 1))
+      (then (return (i32.const 1)))
+    )
+    (if (i32.gt_u (local.get $channel) (i32.const 30))
+      (then (return (i32.const 2)))
+    )
+    ;; MTU must be at least 48 (per SPP spec)
+    (if (i32.lt_u (local.get $mtu) (i32.const 48))
+      (then (return (i32.const 3)))
+    )
+    ;; Buffer must hold at least 2 MTUs
+    (if (i32.lt_u (local.get $buffer_size) (i32.mul (local.get $mtu) (i32.const 2)))
+      (then (return (i32.const 4)))
+    )
+    (i32.const 0)
+  )
+
+  ;; Map SPP error code to human-readable status
+  (func (export "bt_spp_error_string")
+    (param $error i32)
+    (result i32)
+    (local $ptr i32)
+    (i32.store offset=0 (i32.const 0) (local.get $error))
+    (local.set $ptr
+      (block $exit (result i32)
+        (if (i32.eqz (local.get $error))
+          (then (br $exit (i32.const 0)))
+        )
+        (if (i32.eq (local.get $error) (i32.const 1))
+          (then (br $exit (i32.const 1)))
+        )
+        (br $exit (i32.const 2))
+      )
+    )
+    (local.get $ptr)
+  )
+
+  ;; Check whether pairing is required for a given security level
+  (func (export "bt_spp_security_requires_pairing")
+    (param $security_level i32)
+    (result i32)
+    (i32.gt_u (local.get $security_level) (i32.const 0))
+  )
+)

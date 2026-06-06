@@ -115,7 +115,8 @@ def build(kind):
     {'' if kind == 'sha384' else '(call $write64be (i32.const 4160) (local.get $h7))'}
     (call $packed_result (i32.const 4096) (i32.const {8 + digest_len})))
 
-  (func (export "proto_abi_version") (result i32) (i32.const 1))
+  (func (export "proto_abi_version") (result i32) (i32.const 2))
+  (func (export "simd_capabilities") (result i32) (i32.const 1))
   (func (export "proto_standard_id") (result i32) (i32.const {standard_id}))
   (func (export "proto_open") (param $config_ptr i32) (param $config_len i32) (result i32) (i32.const 1))
   (func (export "proto_close") (param $handle i32))

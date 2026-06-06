@@ -324,4 +324,1210 @@
         end
         br $scan))
     i32.const -1)
+
+  (func (export "simd_capabilities") (result i32)
+    i32.const 1)
+
+  (func (export "memchr_simd")
+    (param $ptr i32) (param $len i32) (param $needle i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $eq v128)
+    (local $splat_val v128)
+    local.get $needle
+    i8x16.splat
+    local.set $splat_val
+    i32.const 0
+    local.set $i
+    (block $done_simd
+      (loop $scan_simd
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        br_if $done_simd
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.set $v
+        local.get $v
+        local.get $splat_val
+        i8x16.eq
+        local.set $eq
+        local.get $eq
+        v128.any_true
+        if
+          local.get $eq
+          i8x16.extract_lane_s 0
+          if
+            local.get $i
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 1
+          if
+            local.get $i
+            i32.const 1
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 2
+          if
+            local.get $i
+            i32.const 2
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 3
+          if
+            local.get $i
+            i32.const 3
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 4
+          if
+            local.get $i
+            i32.const 4
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 5
+          if
+            local.get $i
+            i32.const 5
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 6
+          if
+            local.get $i
+            i32.const 6
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 7
+          if
+            local.get $i
+            i32.const 7
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 8
+          if
+            local.get $i
+            i32.const 8
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 9
+          if
+            local.get $i
+            i32.const 9
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 10
+          if
+            local.get $i
+            i32.const 10
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 11
+          if
+            local.get $i
+            i32.const 11
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 12
+          if
+            local.get $i
+            i32.const 12
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 13
+          if
+            local.get $i
+            i32.const 13
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 14
+          if
+            local.get $i
+            i32.const 14
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 15
+          if
+            local.get $i
+            i32.const 15
+            i32.add
+            return
+          end
+        end
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $scan_simd))
+    (block $done_tail
+      (loop $scan_tail
+        local.get $i
+        local.get $len
+        i32.ge_u
+        br_if $done_tail
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.get $needle
+        i32.eq
+        if
+          local.get $i
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $scan_tail))
+    i32.const -1)
+
+  (func (export "memrchr_simd")
+    (param $ptr i32) (param $len i32) (param $needle i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $eq v128)
+    (local $splat_val v128)
+    local.get $needle
+    i8x16.splat
+    local.set $splat_val
+    local.get $len
+    local.set $i
+    (block $done_simd
+      (loop $scan_simd
+        local.get $i
+        i32.const 16
+        i32.lt_u
+        br_if $done_simd
+        local.get $i
+        i32.const 16
+        i32.sub
+        local.set $i
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.set $v
+        local.get $v
+        local.get $splat_val
+        i8x16.eq
+        local.set $eq
+        local.get $eq
+        v128.any_true
+        if
+          local.get $eq
+          i8x16.extract_lane_s 15
+          if
+            local.get $i
+            i32.const 15
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 14
+          if
+            local.get $i
+            i32.const 14
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 13
+          if
+            local.get $i
+            i32.const 13
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 12
+          if
+            local.get $i
+            i32.const 12
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 11
+          if
+            local.get $i
+            i32.const 11
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 10
+          if
+            local.get $i
+            i32.const 10
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 9
+          if
+            local.get $i
+            i32.const 9
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 8
+          if
+            local.get $i
+            i32.const 8
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 7
+          if
+            local.get $i
+            i32.const 7
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 6
+          if
+            local.get $i
+            i32.const 6
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 5
+          if
+            local.get $i
+            i32.const 5
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 4
+          if
+            local.get $i
+            i32.const 4
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 3
+          if
+            local.get $i
+            i32.const 3
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 2
+          if
+            local.get $i
+            i32.const 2
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 1
+          if
+            local.get $i
+            i32.const 1
+            i32.add
+            return
+          end
+          local.get $eq
+          i8x16.extract_lane_s 0
+          if
+            local.get $i
+            return
+          end
+        end
+        br $scan_simd))
+    (block $done_tail
+      (loop $scan_tail
+        local.get $i
+        i32.eqz
+        br_if $done_tail
+        local.get $i
+        i32.const 1
+        i32.sub
+        local.set $i
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.get $needle
+        i32.eq
+        if
+          local.get $i
+          return
+        end
+        br $scan_tail))
+    i32.const -1)
+
+  (func (export "memchr2_simd")
+    (param $ptr i32) (param $len i32) (param $n1 i32) (param $n2 i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $eq1 v128)
+    (local $eq2 v128)
+    (local $combined v128)
+    (local $splat1 v128)
+    (local $splat2 v128)
+    (local $b i32)
+    local.get $n1
+    i8x16.splat
+    local.set $splat1
+    local.get $n2
+    i8x16.splat
+    local.set $splat2
+    i32.const 0
+    local.set $i
+    (block $done_simd
+      (loop $scan_simd
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        br_if $done_simd
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.set $v
+        local.get $v
+        local.get $splat1
+        i8x16.eq
+        local.set $eq1
+        local.get $v
+        local.get $splat2
+        i8x16.eq
+        local.set $eq2
+        local.get $eq1
+        local.get $eq2
+        v128.or
+        local.set $combined
+        local.get $combined
+        v128.any_true
+        if
+          local.get $combined
+          i8x16.extract_lane_s 0
+          if
+            local.get $i
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 1
+          if
+            local.get $i
+            i32.const 1
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 2
+          if
+            local.get $i
+            i32.const 2
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 3
+          if
+            local.get $i
+            i32.const 3
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 4
+          if
+            local.get $i
+            i32.const 4
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 5
+          if
+            local.get $i
+            i32.const 5
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 6
+          if
+            local.get $i
+            i32.const 6
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 7
+          if
+            local.get $i
+            i32.const 7
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 8
+          if
+            local.get $i
+            i32.const 8
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 9
+          if
+            local.get $i
+            i32.const 9
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 10
+          if
+            local.get $i
+            i32.const 10
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 11
+          if
+            local.get $i
+            i32.const 11
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 12
+          if
+            local.get $i
+            i32.const 12
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 13
+          if
+            local.get $i
+            i32.const 13
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 14
+          if
+            local.get $i
+            i32.const 14
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 15
+          if
+            local.get $i
+            i32.const 15
+            i32.add
+            return
+          end
+        end
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $scan_simd))
+    (block $done_tail
+      (loop $scan_tail
+        local.get $i
+        local.get $len
+        i32.ge_u
+        br_if $done_tail
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.set $b
+        local.get $b
+        local.get $n1
+        i32.eq
+        local.get $b
+        local.get $n2
+        i32.eq
+        i32.or
+        if
+          local.get $i
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $scan_tail))
+    i32.const -1)
+
+  (func (export "memrchr2_simd")
+    (param $ptr i32) (param $len i32) (param $n1 i32) (param $n2 i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $eq1 v128)
+    (local $eq2 v128)
+    (local $combined v128)
+    (local $splat1 v128)
+    (local $splat2 v128)
+    (local $b i32)
+    local.get $n1
+    i8x16.splat
+    local.set $splat1
+    local.get $n2
+    i8x16.splat
+    local.set $splat2
+    local.get $len
+    local.set $i
+    (block $done_simd
+      (loop $scan_simd
+        local.get $i
+        i32.const 16
+        i32.lt_u
+        br_if $done_simd
+        local.get $i
+        i32.const 16
+        i32.sub
+        local.set $i
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.set $v
+        local.get $v
+        local.get $splat1
+        i8x16.eq
+        local.set $eq1
+        local.get $v
+        local.get $splat2
+        i8x16.eq
+        local.set $eq2
+        local.get $eq1
+        local.get $eq2
+        v128.or
+        local.set $combined
+        local.get $combined
+        v128.any_true
+        if
+          local.get $combined
+          i8x16.extract_lane_s 15
+          if
+            local.get $i
+            i32.const 15
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 14
+          if
+            local.get $i
+            i32.const 14
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 13
+          if
+            local.get $i
+            i32.const 13
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 12
+          if
+            local.get $i
+            i32.const 12
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 11
+          if
+            local.get $i
+            i32.const 11
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 10
+          if
+            local.get $i
+            i32.const 10
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 9
+          if
+            local.get $i
+            i32.const 9
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 8
+          if
+            local.get $i
+            i32.const 8
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 7
+          if
+            local.get $i
+            i32.const 7
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 6
+          if
+            local.get $i
+            i32.const 6
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 5
+          if
+            local.get $i
+            i32.const 5
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 4
+          if
+            local.get $i
+            i32.const 4
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 3
+          if
+            local.get $i
+            i32.const 3
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 2
+          if
+            local.get $i
+            i32.const 2
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 1
+          if
+            local.get $i
+            i32.const 1
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 0
+          if
+            local.get $i
+            return
+          end
+        end
+        br $scan_simd))
+    (block $done_tail
+      (loop $scan_tail
+        local.get $i
+        i32.eqz
+        br_if $done_tail
+        local.get $i
+        i32.const 1
+        i32.sub
+        local.set $i
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.set $b
+        local.get $b
+        local.get $n1
+        i32.eq
+        local.get $b
+        local.get $n2
+        i32.eq
+        i32.or
+        if
+          local.get $i
+          return
+        end
+        br $scan_tail))
+    i32.const -1)
+
+  (func (export "memchr3_simd")
+    (param $ptr i32) (param $len i32) (param $n1 i32) (param $n2 i32) (param $n3 i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $eq1 v128)
+    (local $eq2 v128)
+    (local $eq3 v128)
+    (local $combined v128)
+    (local $splat1 v128)
+    (local $splat2 v128)
+    (local $splat3 v128)
+    local.get $n1
+    i8x16.splat
+    local.set $splat1
+    local.get $n2
+    i8x16.splat
+    local.set $splat2
+    local.get $n3
+    i8x16.splat
+    local.set $splat3
+    i32.const 0
+    local.set $i
+    (block $done_simd
+      (loop $scan_simd
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        br_if $done_simd
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.set $v
+        local.get $v
+        local.get $splat1
+        i8x16.eq
+        local.set $eq1
+        local.get $v
+        local.get $splat2
+        i8x16.eq
+        local.set $eq2
+        local.get $v
+        local.get $splat3
+        i8x16.eq
+        local.set $eq3
+        local.get $eq1
+        local.get $eq2
+        v128.or
+        local.get $eq3
+        v128.or
+        local.set $combined
+        local.get $combined
+        v128.any_true
+        if
+          local.get $combined
+          i8x16.extract_lane_s 0
+          if
+            local.get $i
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 1
+          if
+            local.get $i
+            i32.const 1
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 2
+          if
+            local.get $i
+            i32.const 2
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 3
+          if
+            local.get $i
+            i32.const 3
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 4
+          if
+            local.get $i
+            i32.const 4
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 5
+          if
+            local.get $i
+            i32.const 5
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 6
+          if
+            local.get $i
+            i32.const 6
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 7
+          if
+            local.get $i
+            i32.const 7
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 8
+          if
+            local.get $i
+            i32.const 8
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 9
+          if
+            local.get $i
+            i32.const 9
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 10
+          if
+            local.get $i
+            i32.const 10
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 11
+          if
+            local.get $i
+            i32.const 11
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 12
+          if
+            local.get $i
+            i32.const 12
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 13
+          if
+            local.get $i
+            i32.const 13
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 14
+          if
+            local.get $i
+            i32.const 14
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 15
+          if
+            local.get $i
+            i32.const 15
+            i32.add
+            return
+          end
+        end
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $scan_simd))
+    (block $done_tail
+      (loop $scan_tail
+        local.get $i
+        local.get $len
+        i32.ge_u
+        br_if $done_tail
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.get $n1
+        local.get $n2
+        local.get $n3
+        call $matches3
+        if
+          local.get $i
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $scan_tail))
+    i32.const -1)
+
+  (func (export "memrchr3_simd")
+    (param $ptr i32) (param $len i32) (param $n1 i32) (param $n2 i32) (param $n3 i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $eq1 v128)
+    (local $eq2 v128)
+    (local $eq3 v128)
+    (local $combined v128)
+    (local $splat1 v128)
+    (local $splat2 v128)
+    (local $splat3 v128)
+    local.get $n1
+    i8x16.splat
+    local.set $splat1
+    local.get $n2
+    i8x16.splat
+    local.set $splat2
+    local.get $n3
+    i8x16.splat
+    local.set $splat3
+    local.get $len
+    local.set $i
+    (block $done_simd
+      (loop $scan_simd
+        local.get $i
+        i32.const 16
+        i32.lt_u
+        br_if $done_simd
+        local.get $i
+        i32.const 16
+        i32.sub
+        local.set $i
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.set $v
+        local.get $v
+        local.get $splat1
+        i8x16.eq
+        local.set $eq1
+        local.get $v
+        local.get $splat2
+        i8x16.eq
+        local.set $eq2
+        local.get $v
+        local.get $splat3
+        i8x16.eq
+        local.set $eq3
+        local.get $eq1
+        local.get $eq2
+        v128.or
+        local.get $eq3
+        v128.or
+        local.set $combined
+        local.get $combined
+        v128.any_true
+        if
+          local.get $combined
+          i8x16.extract_lane_s 15
+          if
+            local.get $i
+            i32.const 15
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 14
+          if
+            local.get $i
+            i32.const 14
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 13
+          if
+            local.get $i
+            i32.const 13
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 12
+          if
+            local.get $i
+            i32.const 12
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 11
+          if
+            local.get $i
+            i32.const 11
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 10
+          if
+            local.get $i
+            i32.const 10
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 9
+          if
+            local.get $i
+            i32.const 9
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 8
+          if
+            local.get $i
+            i32.const 8
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 7
+          if
+            local.get $i
+            i32.const 7
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 6
+          if
+            local.get $i
+            i32.const 6
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 5
+          if
+            local.get $i
+            i32.const 5
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 4
+          if
+            local.get $i
+            i32.const 4
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 3
+          if
+            local.get $i
+            i32.const 3
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 2
+          if
+            local.get $i
+            i32.const 2
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 1
+          if
+            local.get $i
+            i32.const 1
+            i32.add
+            return
+          end
+          local.get $combined
+          i8x16.extract_lane_s 0
+          if
+            local.get $i
+            return
+          end
+        end
+        br $scan_simd))
+    (block $done_tail
+      (loop $scan_tail
+        local.get $i
+        i32.eqz
+        br_if $done_tail
+        local.get $i
+        i32.const 1
+        i32.sub
+        local.set $i
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        local.get $n1
+        local.get $n2
+        local.get $n3
+        call $matches3
+        if
+          local.get $i
+          return
+        end
+        br $scan_tail))
+    i32.const -1)
 )

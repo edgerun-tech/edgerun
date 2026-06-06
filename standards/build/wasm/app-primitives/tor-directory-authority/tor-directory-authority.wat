@@ -6,7 +6,7 @@
   (memory (export "memory") 4)
 
   (global $STANDARD_ID i32 (i32.const 300218))
-  (global $ABI_VERSION i32 (i32.const 1))
+  (global $ABI_VERSION i32 (i32.const 2))
   (global $OK i32 (i32.const 0))
   (global $NOT_FOUND i32 (i32.const 1))
   (global $ERR_INVALID i32 (i32.const -1))
@@ -160,6 +160,7 @@
 
   (func (export "proto_standard_id") (result i32) (global.get $STANDARD_ID))
   (func (export "proto_abi_version") (result i32) (global.get $ABI_VERSION))
+  (func (export "simd_capabilities") (result i32) (i32.const 1))
   (func (export "tor_da_max_descriptors") (result i32) (global.get $MAX_DESC))
   (func (export "tor_da_descriptor_size") (result i32) (global.get $DESC_SIZE))
   (func (export "tor_da_consensus_entry_size") (result i32) (global.get $CONS_SIZE))

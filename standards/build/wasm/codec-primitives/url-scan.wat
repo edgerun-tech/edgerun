@@ -651,4 +651,737 @@
     local.get $has_port
     call $write_record
     i32.const 0)
+
+  ;; ============================================================
+  ;; 256-byte lookup table at offset 0x2000 (8192)
+  ;; bit 0: scheme byte (+ - . 0-9 A-Z a-z)
+  ;; bit 1: digit (0-9)
+  ;; bit 2: whitespace (HT LF CR SP)
+  ;; ============================================================
+  (data (i32.const 8192)
+    "\00\00\00\00\00\00\00\00\00\04\04\00\00\04\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\04\00\00\00\00\00\00\00\00\00\00\01\00\01\01\00"
+    "\03\03\03\03\03\03\03\03\03\03\00\00\00\00\00\00"
+    "\00\01\01\01\01\01\01\01\01\01\01\01\01\01\01\01"
+    "\01\01\01\01\01\01\01\01\01\01\01\00\00\00\00\00"
+    "\00\01\01\01\01\01\01\01\01\01\01\01\01\01\01\01"
+    "\01\01\01\01\01\01\01\01\01\01\01\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+    "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
+  )
+
+  ;; -----------------------------------------------------------
+  ;; LUT-based scheme byte check (reads bit 0 of LUT)
+  ;; -----------------------------------------------------------
+  (func $is_scheme_byte_lut (param $b i32) (result i32)
+    i32.const 8192
+    local.get $b
+    i32.add
+    i32.load8_u
+    i32.const 1
+    i32.and)
+
+  ;; -----------------------------------------------------------
+  ;; simd_capabilities: returns bitmask of SIMD features
+  ;; bit 0 = v128 available
+  ;; -----------------------------------------------------------
+  (func (export "simd_capabilities") (result i32)
+    i32.const 1)
+
+  ;; -----------------------------------------------------------
+  ;; url_scheme_validate_simd: LUT + SIMD batch pre-check
+  ;; Uses v128 to verify all bytes in [0x2B, 0x7A] before
+  ;; falling back to per-byte LUT lookups.
+  ;; -----------------------------------------------------------
+  (func $url_scheme_validate_simd (export "url_scheme_validate_simd")
+    (param $ptr i32) (param $len i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $ge v128)
+    (local $le v128)
+    (local $in_range v128)
+
+    local.get $len
+    i32.eqz
+    if
+      i32.const 3
+      return
+    end
+
+    i32.const 0
+    local.set $i
+
+    ;; SIMD batch pre-check: verify all bytes in [0x2B, 0x7A]
+    (block $simd_done
+      (loop $simd_loop
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        br_if $simd_done
+
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load align=1
+        local.set $v
+
+        local.get $v
+        i32.const 0x2B
+        i8x16.splat
+        i8x16.ge_u
+        local.set $ge
+
+        local.get $v
+        i32.const 0x7A
+        i8x16.splat
+        i8x16.le_u
+        local.set $le
+
+        local.get $ge
+        local.get $le
+        v128.and
+        local.set $in_range
+
+        local.get $in_range
+        v128.not
+        v128.any_true
+        if
+          i32.const 3
+          return
+        end
+
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $simd_loop
+      )
+    )
+
+    ;; Per-byte LUT check for remaining bytes
+    (block $done
+      (loop $loop
+        local.get $i
+        local.get $len
+        i32.ge_u
+        br_if $done
+
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        call $is_scheme_byte_lut
+        i32.eqz
+        if
+          i32.const 3
+          return
+        end
+
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $loop
+      )
+    )
+
+    i32.const 0
+  )
+
+  ;; -----------------------------------------------------------
+  ;; $simd_find: find first occurrence of any of up to 3 bytes
+  ;; using v128 pre-scan. byte2=0 or byte3=0 means "skip".
+  ;; Returns position or -1 if not found.
+  ;; -----------------------------------------------------------
+  (func $simd_find
+    (param $ptr i32)
+    (param $start i32)
+    (param $end i32)
+    (param $byte1 i32)
+    (param $byte2 i32)
+    (param $byte3 i32)
+    (result i32)
+    (local $i i32)
+    (local $b i32)
+    (local $v v128)
+    (local $combined v128)
+
+    local.get $start
+    local.set $i
+
+    (block $found_simd
+      (loop $simd_loop
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $end
+        i32.gt_u
+        br_if $found_simd
+
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load align=1
+        local.set $v
+
+        ;; compare against byte1 (always checked)
+        local.get $v
+        local.get $byte1
+        i8x16.splat
+        i8x16.eq
+        local.set $combined
+
+        ;; compare against byte2 if non-zero
+        local.get $byte2
+        i32.eqz
+        if
+        else
+          local.get $combined
+          local.get $v
+          local.get $byte2
+          i8x16.splat
+          i8x16.eq
+          v128.or
+          local.set $combined
+        end
+
+        ;; compare against byte3 if non-zero
+        local.get $byte3
+        i32.eqz
+        if
+        else
+          local.get $combined
+          local.get $v
+          local.get $byte3
+          i8x16.splat
+          i8x16.eq
+          v128.or
+          local.set $combined
+        end
+
+        local.get $combined
+        v128.any_true
+        if
+          br $found_simd
+        end
+
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $simd_loop
+      )
+    )
+
+    ;; scalar fallback from position i
+    (loop $scalar_loop
+      local.get $i
+      local.get $end
+      i32.ge_u
+      if
+        i32.const -1
+        return
+      end
+
+      local.get $ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      local.set $b
+
+      local.get $b
+      local.get $byte1
+      i32.eq
+      if
+        local.get $i
+        return
+      end
+
+      local.get $byte2
+      i32.eqz
+      if
+      else
+        local.get $b
+        local.get $byte2
+        i32.eq
+        if
+          local.get $i
+          return
+        end
+      end
+
+      local.get $byte3
+      i32.eqz
+      if
+      else
+        local.get $b
+        local.get $byte3
+        i32.eq
+        if
+          local.get $i
+          return
+        end
+      end
+
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i
+      br $scalar_loop
+    )
+
+    unreachable
+  )
+
+  ;; -----------------------------------------------------------
+  ;; url_scan_simd: SIMD-accelerated URL scanner
+  ;;
+  ;; Same as url_scan but uses $simd_find for delimiter scans
+  ;; and $url_scheme_validate_simd for scheme validation.
+  ;; Auth/port/detailed validation uses original byte-by-byte.
+  ;; -----------------------------------------------------------
+  (func (export "url_scan_simd")
+    (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    (local $start i32)
+    (local $end i32)
+    (local $i i32)
+    (local $b i32)
+    (local $colon i32)
+    (local $auth_start i32)
+    (local $auth_end i32)
+    (local $last_colon i32)
+    (local $host_len i32)
+    (local $port i32)
+    (local $digit i32)
+    (local $has_port i32)
+    (local $path_off i32)
+    (local $path_len i32)
+    (local $query_off i32)
+    (local $query_len i32)
+    (local $fragment_off i32)
+    (local $fragment_len i32)
+
+    i32.const 0
+    local.set $start
+    local.get $len
+    local.set $end
+
+    (block $trim_start_done
+      (loop $trim_start
+        local.get $start
+        local.get $end
+        i32.ge_u
+        br_if $trim_start_done
+        local.get $ptr
+        local.get $start
+        i32.add
+        i32.load8_u
+        call $is_ascii_ws
+        i32.eqz
+        br_if $trim_start_done
+        local.get $start
+        i32.const 1
+        i32.add
+        local.set $start
+        br $trim_start))
+
+    (block $trim_end_done
+      (loop $trim_end
+        local.get $end
+        local.get $start
+        i32.le_u
+        br_if $trim_end_done
+        local.get $ptr
+        local.get $end
+        i32.const 1
+        i32.sub
+        i32.add
+        i32.load8_u
+        call $is_ascii_ws
+        i32.eqz
+        br_if $trim_end_done
+        local.get $end
+        i32.const 1
+        i32.sub
+        local.set $end
+        br $trim_end))
+
+    local.get $start
+    local.get $end
+    i32.ge_u
+    if
+      i32.const 3
+      return
+    end
+
+    ;; --- Scheme colon scan using $simd_find ---
+    local.get $ptr
+    local.get $start
+    local.get $end
+    i32.const 58
+    i32.const 0
+    i32.const 0
+    call $simd_find
+    local.set $colon
+
+    local.get $colon
+    i32.const -1
+    i32.eq
+    if
+      i32.const 3
+      return
+    end
+
+    local.get $ptr
+    local.get $start
+    i32.add
+    local.get $colon
+    local.get $start
+    i32.sub
+    call $url_scheme_validate_simd
+    if
+      i32.const 3
+      return
+    end
+
+    local.get $colon
+    i32.const 3
+    i32.add
+    local.get $end
+    i32.gt_u
+    if
+      i32.const 3
+      return
+    end
+    local.get $ptr
+    local.get $colon
+    i32.const 1
+    i32.add
+    i32.add
+    i32.load8_u
+    i32.const 47
+    i32.ne
+    if
+      i32.const 3
+      return
+    end
+    local.get $ptr
+    local.get $colon
+    i32.const 2
+    i32.add
+    i32.add
+    i32.load8_u
+    i32.const 47
+    i32.ne
+    if
+      i32.const 3
+      return
+    end
+
+    local.get $colon
+    i32.const 3
+    i32.add
+    local.set $auth_start
+    local.get $auth_start
+    local.set $auth_end
+    i32.const -1
+    local.set $last_colon
+
+    ;; --- Auth scan (byte-by-byte, stateful) ---
+    (block $auth_done
+      (loop $auth_scan
+        local.get $auth_end
+        local.get $end
+        i32.ge_u
+        br_if $auth_done
+        local.get $ptr
+        local.get $auth_end
+        i32.add
+        i32.load8_u
+        local.tee $b
+        i32.const 47
+        i32.eq
+        local.get $b
+        i32.const 63
+        i32.eq
+        i32.or
+        local.get $b
+        i32.const 35
+        i32.eq
+        i32.or
+        br_if $auth_done
+        local.get $b
+        i32.const 64
+        i32.eq
+        local.get $b
+        i32.const 91
+        i32.eq
+        i32.or
+        local.get $b
+        i32.const 93
+        i32.eq
+        i32.or
+        if
+          i32.const 3
+          return
+        end
+        local.get $b
+        i32.const 58
+        i32.eq
+        if
+          local.get $auth_end
+          local.set $last_colon
+        end
+        local.get $auth_end
+        i32.const 1
+        i32.add
+        local.set $auth_end
+        br $auth_scan))
+
+    local.get $auth_start
+    local.get $auth_end
+    i32.ge_u
+    if
+      i32.const 3
+      return
+    end
+
+    local.get $auth_end
+    local.get $auth_start
+    i32.sub
+    local.set $host_len
+    i32.const 0
+    local.set $port
+    i32.const 0
+    local.set $has_port
+
+    local.get $last_colon
+    i32.const -1
+    i32.ne
+    if
+      local.get $last_colon
+      local.get $auth_start
+      i32.eq
+      if
+        i32.const 3
+        return
+      end
+      local.get $last_colon
+      i32.const 1
+      i32.add
+      local.get $auth_end
+      i32.ge_u
+      if
+        i32.const 3
+        return
+      end
+      local.get $last_colon
+      local.get $auth_start
+      i32.sub
+      local.set $host_len
+      i32.const 1
+      local.set $has_port
+      i32.const 0
+      local.set $port
+      local.get $last_colon
+      i32.const 1
+      i32.add
+      local.set $i
+      (block $port_done
+        (loop $port_loop
+          local.get $i
+          local.get $auth_end
+          i32.ge_u
+          br_if $port_done
+          local.get $ptr
+          local.get $i
+          i32.add
+          i32.load8_u
+          local.tee $b
+          call $is_digit
+          i32.eqz
+          if
+            i32.const 3
+            return
+          end
+          local.get $b
+          i32.const 48
+          i32.sub
+          local.set $digit
+          local.get $port
+          i32.const 6553
+          i32.gt_u
+          if
+            i32.const 3
+            return
+          end
+          local.get $port
+          i32.const 6553
+          i32.eq
+          local.get $digit
+          i32.const 5
+          i32.gt_u
+          i32.and
+          if
+            i32.const 3
+            return
+          end
+          local.get $port
+          i32.const 10
+          i32.mul
+          local.get $digit
+          i32.add
+          local.set $port
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br $port_loop))
+    end
+
+    local.get $auth_end
+    local.set $i
+    local.get $i
+    local.set $path_off
+    i32.const 0
+    local.set $path_len
+    local.get $i
+    local.set $query_off
+    i32.const 0
+    local.set $query_len
+    local.get $i
+    local.set $fragment_off
+    i32.const 0
+    local.set $fragment_len
+
+    local.get $i
+    local.get $end
+    i32.lt_u
+    if
+      local.get $ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      i32.const 47
+      i32.eq
+      if
+        local.get $i
+        local.set $path_off
+        ;; --- Path scan using $simd_find for '?' or '#' ---
+        local.get $ptr
+        local.get $i
+        local.get $end
+        i32.const 63
+        i32.const 35
+        i32.const 0
+        call $simd_find
+        local.tee $i
+        i32.const -1
+        i32.eq
+        if
+          local.get $end
+          local.set $i
+        end
+        local.get $i
+        local.get $path_off
+        i32.sub
+        local.set $path_len
+      end
+    end
+
+    local.get $i
+    local.get $end
+    i32.lt_u
+    if
+      local.get $ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      i32.const 63
+      i32.eq
+      if
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $query_off
+        local.get $query_off
+        local.set $i
+        ;; --- Query scan using $simd_find for '#' ---
+        local.get $ptr
+        local.get $i
+        local.get $end
+        i32.const 35
+        i32.const 0
+        i32.const 0
+        call $simd_find
+        local.tee $i
+        i32.const -1
+        i32.eq
+        if
+          local.get $end
+          local.set $i
+        end
+        local.get $i
+        local.get $query_off
+        i32.sub
+        local.set $query_len
+      end
+    end
+
+    local.get $i
+    local.get $end
+    i32.lt_u
+    if
+      local.get $ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      i32.const 35
+      i32.eq
+      if
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $fragment_off
+        local.get $end
+        local.get $fragment_off
+        i32.sub
+        local.set $fragment_len
+      else
+        i32.const 3
+        return
+      end
+    end
+
+    local.get $out
+    local.get $start
+    local.get $colon
+    local.get $start
+    i32.sub
+    local.get $auth_start
+    local.get $auth_end
+    local.get $auth_start
+    i32.sub
+    local.get $auth_start
+    local.get $host_len
+    local.get $path_off
+    local.get $path_len
+    local.get $query_off
+    local.get $query_len
+    local.get $fragment_off
+    local.get $fragment_len
+    local.get $port
+    local.get $has_port
+    call $write_record
+    i32.const 0)
+
 )

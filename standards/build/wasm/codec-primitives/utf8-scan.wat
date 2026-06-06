@@ -539,4 +539,125 @@
     i32.const 0
     local.get $written
     call $pack)
+
+  (func (export "simd_capabilities") (result i32)
+    i32.const 1)
+
+  (func (export "utf8_scan_simd") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    (local $i i32)
+    (local $j i32)
+    (local $v v128)
+    (local $status i32)
+    (local $byte i32)
+    (block $tail
+      (loop $skip
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        if
+          br $tail
+        end
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.set $v
+        local.get $v
+        i32.const 128
+        i8x16.splat
+        i8x16.lt_u
+        i8x16.all_true
+        if
+          local.get $i
+          i32.const 16
+          i32.add
+          local.set $i
+          br $skip
+        end
+        i32.const 0
+        local.set $j
+        (block $found
+          (loop $find
+            local.get $j
+            i32.const 16
+            i32.ge_u
+            if
+              br $found
+            end
+            local.get $ptr
+            local.get $i
+            i32.add
+            local.get $j
+            i32.add
+            i32.load8_u
+            local.set $byte
+            local.get $byte
+            i32.const 128
+            i32.ge_u
+            if
+              br $found
+            end
+            local.get $j
+            i32.const 1
+            i32.add
+            local.set $j
+            br $find
+          )
+        )
+        local.get $ptr
+        local.get $i
+        i32.add
+        local.get $j
+        i32.add
+        local.get $len
+        local.get $i
+        i32.sub
+        local.get $j
+        i32.sub
+        local.get $out
+        call $utf8_scan
+        local.set $status
+        local.get $out
+        local.get $out
+        i32.load
+        local.get $i
+        i32.add
+        local.get $j
+        i32.add
+        i32.store
+        local.get $status
+        return
+      )
+    )
+    local.get $i
+    local.get $len
+    i32.lt_u
+    if
+      local.get $ptr
+      local.get $i
+      i32.add
+      local.get $len
+      local.get $i
+      i32.sub
+      local.get $out
+      call $utf8_scan
+      local.set $status
+      local.get $out
+      local.get $out
+      i32.load
+      local.get $i
+      i32.add
+      i32.store
+      local.get $status
+      return
+    end
+    local.get $out
+    local.get $len
+    i32.const 0
+    i32.const 0
+    i32.const 0
+    call $write_scan
+    i32.const 0)
 )

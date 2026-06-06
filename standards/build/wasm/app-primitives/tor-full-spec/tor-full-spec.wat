@@ -2,7 +2,7 @@
   ;; Local Tor specification coverage index for the WAT port.
   (memory (export "memory") 1)
   (global $STANDARD_ID i32 (i32.const 300208))
-  (global $ABI_VERSION i32 (i32.const 1))
+  (global $ABI_VERSION i32 (i32.const 2))
   (data (i32.const 1024) "00-os-mapping.md\00")
   (data (i32.const 1056) "02-tor-protocol.md\00")
   (data (i32.const 1088) "03-directory-protocol.md\00")
@@ -30,6 +30,7 @@
 
   (func (export "proto_standard_id") (result i32) (global.get $STANDARD_ID))
   (func (export "proto_abi_version") (result i32) (global.get $ABI_VERSION))
+  (func (export "simd_capabilities") (result i32) (i32.const 1))
   (func (export "tor_spec_document_count") (result i32) (i32.const 24))
   (func (export "tor_spec_document_name_ptr") (param $index i32) (result i32)
     (if (i32.ge_u (local.get $index) (i32.const 24)) (then (return (i32.const 0))))

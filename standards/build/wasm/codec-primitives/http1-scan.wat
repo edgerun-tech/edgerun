@@ -1233,4 +1233,218 @@
     i32.const 0
     i32.store
     i32.const 0)
+
+  (data (i32.const 8192) "\00\00\00\00\00\00\00\00\00\02\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\02\21\20\21\21\21\21\21\20\20\21\21\20\21\21\20\35\35\35\35\35\35\35\35\35\35\20\20\20\20\20\20\20\39\39\39\39\39\39\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\20\20\20\21\21\21\39\39\39\39\39\39\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\29\20\21\20\21\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+
+  (func (export "simd_capabilities") (result i32)
+    i32.const 1)
+
+  (func (export "http_find_crlf_simd") (param $ptr i32) (param $len i32) (param $start i32) (result i64)
+    (local $i i32)
+    (local $v v128)
+    local.get $start
+    local.get $len
+    i32.gt_u
+    if
+      i32.const 3
+      local.get $len
+      call $pack
+      return
+    end
+    local.get $start
+    local.set $i
+    block $scalar
+      loop $simd
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        br_if $scalar
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.tee $v
+        i32.const 0x0D
+        i8x16.splat
+        i8x16.eq
+        local.get $v
+        i32.const 0x0A
+        i8x16.splat
+        i8x16.eq
+        v128.or
+        v128.any_true
+        br_if $scalar
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $simd
+      end
+    end
+    block $not_found
+      loop $scan
+        local.get $i
+        local.get $len
+        i32.ge_u
+        br_if $not_found
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        i32.const 13
+        i32.eq
+        if
+          local.get $i
+          i32.const 1
+          i32.add
+          local.get $len
+          i32.lt_u
+          if
+            local.get $ptr
+            local.get $i
+            i32.add
+            i32.const 1
+            i32.add
+            i32.load8_u
+            i32.const 10
+            i32.eq
+            if
+              i32.const 0
+              local.get $i
+              call $pack
+              return
+            end
+          end
+        end
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        i32.const 10
+        i32.eq
+        if
+          i32.const 0
+          local.get $i
+          call $pack
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $scan
+      end
+    end
+    i32.const 1
+    local.get $len
+    call $pack)
+
+  (func (export "http_find_double_crlf_simd") (param $ptr i32) (param $len i32) (param $start i32) (result i64)
+    (local $i i32)
+    (local $v v128)
+    local.get $start
+    local.get $len
+    i32.gt_u
+    if
+      i32.const 3
+      local.get $len
+      call $pack
+      return
+    end
+    local.get $start
+    local.set $i
+    block $scalar
+      loop $simd
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        br_if $scalar
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.tee $v
+        i32.const 0x0D
+        i8x16.splat
+        i8x16.eq
+        local.get $v
+        i32.const 0x0A
+        i8x16.splat
+        i8x16.eq
+        v128.or
+        v128.any_true
+        br_if $scalar
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $simd
+      end
+    end
+    block $not_found
+      loop $scan
+        local.get $i
+        i32.const 3
+        i32.add
+        local.get $len
+        i32.ge_u
+        br_if $not_found
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.load8_u
+        i32.const 13
+        i32.eq
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.const 1
+        i32.add
+        i32.load8_u
+        i32.const 10
+        i32.eq
+        i32.and
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.const 2
+        i32.add
+        i32.load8_u
+        i32.const 13
+        i32.eq
+        i32.and
+        local.get $ptr
+        local.get $i
+        i32.add
+        i32.const 3
+        i32.add
+        i32.load8_u
+        i32.const 10
+        i32.eq
+        i32.and
+        if
+          i32.const 0
+          local.get $i
+          call $pack
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $scan
+      end
+    end
+    i32.const 1
+    local.get $len
+    call $pack)
+
+  (func (export "http_method_classify_simd") (param $ptr i32) (param $len i32) (result i32)
+    local.get $ptr
+    local.get $len
+    call 18)
 )

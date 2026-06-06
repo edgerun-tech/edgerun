@@ -11,7 +11,7 @@
   (memory (export "memory") 8)
 
   (global $STANDARD_ID i32 (i32.const 300205))
-  (global $ABI_VERSION i32 (i32.const 1))
+  (global $ABI_VERSION i32 (i32.const 2))
   (global $OK i32 (i32.const 0))
   (global $ERR_INVALID i32 (i32.const -1))
   (global $ERR_PROTOCOL i32 (i32.const -44))
@@ -221,6 +221,7 @@
 
   (func (export "proto_standard_id") (result i32) (global.get $STANDARD_ID))
   (func (export "proto_abi_version") (result i32) (global.get $ABI_VERSION))
+  (func (export "simd_capabilities") (result i32) (i32.const 1))
   (func (export "tor_relay_full_cell_len") (result i32) (global.get $CELL_LEN))
   (func (export "tor_relay_full_data_max") (result i32) (global.get $RELAY_DATA_MAX))
   (func (export "tor_relay_full_circuit_size") (result i32) (global.get $CIRC_SIZE))
