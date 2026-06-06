@@ -6,20 +6,12 @@
   ;; - net kind: unknown=0 ethernet=1 loopback=2 wireless=3 bridge=4 vlan=5 tunnel=6 virtual=7
   ;; - input kind: other=0 touch=1 pen=2 pointer=3 gamepad=4 switch=5 keyboard=6
 
+  (import "math" "min" (func $m208min (param i32 i32) (result i32)))
+
   (func $m208bool (param $x i32) (result i32)
     local.get $x
     i32.const 0
     i32.ne)
-
-  (func $m208min (param $a i32) (param $b i32) (result i32)
-    local.get $a
-    local.get $b
-    i32.lt_s
-    if (result i32)
-      local.get $a
-    else
-      local.get $b
-    end)
 
   (export "sysfs_hex_prefix_len" (func $sysfs_hex_prefix_len))
   (func $sysfs_hex_prefix_len

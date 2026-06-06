@@ -30,23 +30,8 @@
     i32.eqz
     i32.and)
 
-  (func $m169is_upper (param $b i32) (result i32)
-    local.get $b
-    i32.const 65
-    i32.ge_u
-    local.get $b
-    i32.const 90
-    i32.le_u
-    i32.and)
-
-  (func $m169is_lower (param $b i32) (result i32)
-    local.get $b
-    i32.const 97
-    i32.ge_u
-    local.get $b
-    i32.const 122
-    i32.le_u
-    i32.and)
+  (import "edgerun" "is_upper" (func $m169is_upper (param i32) (result i32)))
+  (import "edgerun" "is_lower" (func $m169is_lower (param i32) (result i32)))
 
 
   (func $is_b64_data (param $b i32) (result i32)

@@ -1,4 +1,5 @@
   ;; Pipe Core — byte pipes + bump allocators
+  (import "math" "min_u" (func $min_u (param i32 i32) (result i32)))
 
     ;; Standard ID removed — merged into single module
 
@@ -212,11 +213,6 @@
           (then
             (i32.store offset=0 (local.get $p) (i32.const 0))
             (i32.store offset=4 (local.get $p) (i32.const 0)))))))
-
-  (func $min_u (param $a i32) (param $b i32) (result i32)
-    (if (result i32) (i32.lt_u (local.get $a) (local.get $b))
-      (then (local.get $a))
-      (else (local.get $b))))
 
   ;; ── Query ──
 

@@ -1,3 +1,4 @@
+  (import "edgerun" "load8_u" (func $m126byte_at (param i32 i32) (result i32)))
 
   (data (i32.const 60000) "9223372036854775807")
   (data (i32.const 60032) "18446744073709551615")
@@ -36,12 +37,6 @@
     i32.add
     i32.load)
 
-
-  (func $m126byte_at (param $ptr i32) (param $off i32) (result i32)
-    local.get $ptr
-    local.get $off
-    i32.add
-    i32.load8_u)
 
   (func $limit_digit (param $limit i32) (param $idx i32) (result i32)
     local.get $limit

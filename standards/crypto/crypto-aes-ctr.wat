@@ -1,5 +1,6 @@
   ;; AES-128-CTR mode — self-contained AES-128 key expansion + block encrypt + CTR XOR.
   ;; Exports: aes128_ctr_xor(out, in, len, key[16], counter[16]) -> 0
+  (import "edgerun" "memcpy" (func $m54memcpy (param i32 i32 i32)))
   (data (i32.const 0) "\63\7c\77\7b\f2\6b\6f\c5\30\01\67\2b\fe\d7\ab\76")  ;; S-box 0-15
   (data (i32.const 16) "\ca\82\c9\7d\fa\59\47\f0\ad\d4\a2\af\9c\a4\72\c0")  ;; 16-31
   (data (i32.const 32) "\b7\fd\93\26\36\3f\f7\cc\34\a5\e5\f1\71\d8\31\15")  ;; 32-47
@@ -299,17 +300,3 @@
 
     i32.const 0)
 
-  ;; ── memcpy ──
-  (func $m54memcpy (param $dst i32) (param $src i32) (param $len i32)
-    (local $i i32)
-    i32.const 0 local.set $i
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add
-      local.get $src local.get $i i32.add i32.load8_u
-      i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end)

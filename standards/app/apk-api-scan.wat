@@ -73,27 +73,8 @@
   ;; Flags: bit0 matched inside a quoted string, bit1 Android/platform API,
   ;;   bit2 network/URI, bit3 sensitive capability, bit4 manifest-ish.
 
-  (func $m31ch (param $ptr i32) (param $pos i32) (result i32)
-    local.get $ptr
-    local.get $pos
-    i32.add
-    i32.load8_u)
-
-  (func $m31lower (param $c i32) (result i32)
-    local.get $c
-    i32.const 65
-    i32.ge_u
-    local.get $c
-    i32.const 90
-    i32.le_u
-    i32.and
-    if (result i32)
-      local.get $c
-      i32.const 32
-      i32.add
-    else
-      local.get $c
-    end)
+  (import "edgerun" "load8_u" (func $m31ch (param i32 i32) (result i32)))
+  (import "edgerun" "to_lower" (func $m31lower (param i32) (result i32)))
 
   (func $packed_kind (param $v i64) (result i32)
     local.get $v

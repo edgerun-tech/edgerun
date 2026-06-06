@@ -6,11 +6,7 @@
   ;; First function out record, 24 bytes:
   ;;   u32 name_start, u32 name_len, u32 start_byte, u32 end_byte, u32 is_static, u32 lang.
 
-  (func $m44ch (param $ptr i32) (param $pos i32) (result i32)
-    local.get $ptr
-    local.get $pos
-    i32.add
-    i32.load8_u)
+  (import "edgerun" "load8_u" (func $m44ch (param i32 i32) (result i32)))
 
   (func $m44is_ws (param $c i32) (result i32)
     local.get $c

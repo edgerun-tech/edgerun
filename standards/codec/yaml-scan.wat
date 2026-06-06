@@ -1,3 +1,4 @@
+  (import "edgerun" "load8_u" (func $m202byte (param i32 i32) (result i32)))
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
   ;; Line kinds: 0 blank, 1 comment, 2 mapping, 3 sequence, 4 scalar, 5 doc_start, 6 doc_end.
@@ -6,9 +7,6 @@
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300042)
-
-  (func $m202byte (param $ptr i32) (param $off i32) (result i32)
-    (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
 
   (func $m202is_ws (param $c i32) (result i32)
     (i32.or (i32.eq (local.get $c) (i32.const 32)) (i32.eq (local.get $c) (i32.const 9))))

@@ -1,3 +1,5 @@
+  (import "edgerun" "load8_u" (func $m41byte (param i32 i32) (result i32)))
+  (import "edgerun" "is_cont" (func $m41is_cont (param i32) (result i32)))
 
   ;; Status values: 0 ok, 2 output_short, 3 invalid, 5 incomplete.
   ;; Packed result: low 32 bits status, high 32 bits output byte count.
@@ -5,21 +7,6 @@
   (func (export "proto_standard_id") (result i32)
     i32.const 300069)
 
-
-  (func $m41byte (param $ptr i32) (param $off i32) (result i32)
-    local.get $ptr
-    local.get $off
-    i32.add
-    i32.load8_u)
-
-  (func $m41is_cont (param $c i32) (result i32)
-    local.get $c
-    i32.const 128
-    i32.ge_u
-    local.get $c
-    i32.const 191
-    i32.le_u
-    i32.and)
 
   (func $put1 (param $out i32) (param $cap i32) (param $j i32) (param $b0 i32) (result i32)
     local.get $j

@@ -5,20 +5,12 @@
   ;; Queue constants: split queue size=16, net header=12, net buffer=2048,
   ;; sector size=512, console/rng chunk=256.
 
+  (import "math" "min" (func $m214min (param i32 i32) (result i32)))
+
   (func $m214bool (param $x i32) (result i32)
     local.get $x
     i32.const 0
     i32.ne)
-
-  (func $m214min (param $a i32) (param $b i32) (result i32)
-    local.get $a
-    local.get $b
-    i32.lt_s
-    if (result i32)
-      local.get $a
-    else
-      local.get $b
-    end)
 
   (export "virtio_modern_device_type" (func $virtio_modern_device_type))
   (func $virtio_modern_device_type (param $device_id i32) (result i32)

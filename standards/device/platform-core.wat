@@ -1,9 +1,12 @@
 ;; Bare-metal platform semantics plundered from edgerun-platform.
 
+  (import "math" "align_up" (func $align_up_internal (param i32 i32) (result i32)))
+
   (func (export "platform_core_abi_version") (result i32) i32.const 1)
   (func (export "platform_max_cpus") (result i32) i32.const 64)
   (func (export "platform_timer_freq") (result i64) i64.const 1000000)
   (func (export "platform_irq_timer") (result i32) i32.const 0)
+
   (func (export "platform_irq_reschedule") (result i32) i32.const 65248)
 
   (func (export "cpu_id_index") (param $id i32) (result i32)
@@ -45,9 +48,6 @@
     (local.set $aligned (call $align_up_internal (local.get $current) (local.get $align)))
     (if (i32.gt_u (i32.add (local.get $aligned) (local.get $size)) (local.get $heap_end)) (then (return (i32.const 2))))
     i32.const 0)
-
-  (func $align_up_internal (param $value i32) (param $align i32) (result i32)
-    (i32.and (i32.add (local.get $value) (i32.sub (local.get $align) (i32.const 1))) (i32.xor (i32.sub (local.get $align) (i32.const 1)) (i32.const -1))))
 
   (func (export "tls_area_size") (result i32) i32.const 128)
   (func (export "tls_per_cpu_roundtrip") (param $ptr i32) (result i32)

@@ -1,3 +1,4 @@
+  (import "edgerun" "load8_u" (func $m185byte (param i32 i32) (result i32)))
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
   ;; Scalar kinds: 1 quoted string, 2 literal string, 3 bool, 4 int, 5 float, 6 array, 7 bare string.
@@ -5,9 +6,6 @@
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300017)
-
-  (func $m185byte (param $ptr i32) (param $off i32) (result i32)
-    (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
 
   (func $m185is_ws (param $c i32) (result i32)
     (i32.or (i32.eq (local.get $c) (i32.const 32)) (i32.eq (local.get $c) (i32.const 9))))

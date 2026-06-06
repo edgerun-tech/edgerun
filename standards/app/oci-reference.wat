@@ -6,8 +6,7 @@
   ;; registry_start,registry_len,repo_start,repo_len,tag_start,tag_len,digest_start,digest_len,kind.
   ;; kind: 1 tag, 2 digest, 3 both. Missing spans are written as zero length.
 
-  (func $m142b (param $ptr i32) (param $off i32) (result i32)
-    (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
+  (import "edgerun" "load8_u" (func $m142b (param i32 i32) (result i32)))
 
   (func $is_lower_hex (param $c i32) (result i32)
     (i32.or
@@ -49,19 +48,7 @@
               (i32.eq (local.get $c) (i32.const 58))
               (i32.or (i32.eq (local.get $c) (i32.const 91)) (i32.eq (local.get $c) (i32.const 93)))))))))
 
-  (func $m142eq_lit (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
-    (local $i i32)
-    (if (i32.ne (local.get $len) (local.get $lit_len)) (then (return (i32.const 0))))
-    (block $done
-      (loop $scan
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (if (i32.ne
-              (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
-              (i32.load8_u (i32.add (local.get $lit) (local.get $i))))
-          (then (return (i32.const 0))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $scan)))
-    i32.const 1)
+  (import "edgerun" "string_eq" (func $m142eq_lit (param i32 i32 i32 i32) (result i32)))
 
   (func $validate_tag (param $ptr i32) (param $start i32) (param $len i32) (result i32)
     (local $i i32)

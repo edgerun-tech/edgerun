@@ -1,3 +1,5 @@
+  (import "edgerun" "load8_u" (func $m190byte (param i32 i32) (result i32)))
+  (import "edgerun" "is_cont" (func $m190is_cont (param i32) (result i32)))
 
   ;; Status values: 0 ok, 2 output_short, 3 invalid, 5 incomplete.
   ;; utf8_scan out record: valid_up_to, error_len, suffix_len, expected_len.
@@ -6,21 +8,6 @@
   (func (export "proto_standard_id") (result i32)
     i32.const 300068)
 
-
-  (func $m190byte (param $ptr i32) (param $off i32) (result i32)
-    local.get $ptr
-    local.get $off
-    i32.add
-    i32.load8_u)
-
-  (func $m190is_cont (param $c i32) (result i32)
-    local.get $c
-    i32.const 128
-    i32.ge_u
-    local.get $c
-    i32.const 191
-    i32.le_u
-    i32.and)
 
   (func $write_scan (param $out i32) (param $valid i32) (param $err_len i32) (param $suffix i32) (param $expected i32)
     local.get $out

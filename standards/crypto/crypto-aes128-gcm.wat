@@ -3,6 +3,8 @@
   ;; Exports:
   ;;   aes128_gcm_encrypt(out, in, len, aad, aad_len, key, iv12, tag16) -> i32 (0=ok, -1=error)
   ;;   aes128_gcm_decrypt(out, in, len, aad, aad_len, key, iv12, tag16) -> i32 (0=ok, -1=error);; ── S-box (0-255) ──
+  (import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))
+  (import "edgerun" "memset" (func $memset (param i32 i32 i32)))
   (data (i32.const 0) "\63\7c\77\7b\f2\6b\6f\c5\30\01\67\2b\fe\d7\ab\76")
   (data (i32.const 16) "\ca\82\c9\7d\fa\59\47\f0\ad\d4\a2\af\9c\a4\72\c0")
   (data (i32.const 32) "\b7\fd\93\26\36\3f\f7\cc\34\a5\e5\f1\71\d8\31\15")
@@ -208,32 +210,6 @@
       if local.get $b call $mix_columns end
       local.get $b local.get $rk local.get $round i32.const 4 i32.shl i32.add call $add_round_key
       local.get $round i32.const 1 i32.add local.set $round
-      br $loop
-    end
-    end)
-
-  ;; ── memcpy ──
-  (func $memcpy (param $dst i32) (param $src i32) (param $len i32)
-    (local $i i32)
-    i32.const 0 local.set $i
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add local.get $src local.get $i i32.add i32.load8_u i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end)
-
-  ;; ── memset(dst, val, len) — set each byte to val ──
-  (func $memset (param $dst i32) (param $val i32) (param $len i32)
-    (local $i i32)
-    i32.const 0 local.set $i
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add local.get $val i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
       br $loop
     end
     end)

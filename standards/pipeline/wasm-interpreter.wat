@@ -1,4 +1,5 @@
   ;; ── Memory offsets ──────────────────────────────────────────────────
+  (import "edgerun" "STATUS_OK" (global $OK i32))
   (global $OFF_ERR         i32 (i32.const 0))
   (global $OFF_SCRATCH0    i32 (i32.const 8))
   (global $OFF_SCRATCH1    i32 (i32.const 16))
@@ -135,7 +136,6 @@
   (global $EXT_GLOBAL i32 (i32.const 3))
 
   ;; ── Error codes ─────────────────────────────────────────────────────
-  (global $OK           i32 (i32.const 0))
   (global $ERR_UNSUP    i32 (i32.const 1))
   (global $ERR_CORRUPT  i32 (i32.const 2))
   (global $ERR_STK_UND  i32 (i32.const 3))

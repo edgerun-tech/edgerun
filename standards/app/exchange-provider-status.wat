@@ -2,31 +2,8 @@
   (func (export "proto_standard_id") (result i32)
     i32.const 300095)
 
-  (func $m93ascii_lower (param $c i32) (result i32)
-    (if
-      (i32.and
-        (i32.ge_u (local.get $c) (i32.const 65))
-        (i32.le_u (local.get $c) (i32.const 90)))
-      (then (return (i32.add (local.get $c) (i32.const 32)))))
-    local.get $c)
-
-  (func $m93fnv_lower (param $ptr i32) (param $len i32) (result i32)
-    (local $i i32)
-    (local $h i32)
-    (local.set $h (i32.const 0x811c9dc5))
-    (block $done
-      (loop $scan
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (local.set $h
-          (i32.mul
-            (i32.xor
-              (local.get $h)
-              (call $m93ascii_lower
-                (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
-            (i32.const 0x01000193)))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $scan)))
-    local.get $h)
+  (import "edgerun" "to_lower" (func $m93ascii_lower (param i32) (result i32)))
+  (import "edgerun" "fnv1a_lower" (func $m93fnv_lower (param i32 i32) (result i32)))
 
   (func $provider_id_from_hash (param $h i32) (result i32)
     (if (i32.eq (local.get $h) (i32.const 1676413470)) (then (return (i32.const 1))))

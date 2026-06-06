@@ -1,3 +1,6 @@
+  (import "math" "min" (func $min2 (param i32 i32) (result i32)))
+  (import "math" "max" (func $max2 (param i32 i32) (result i32)))
+
   (memory (export "memory") 72)
 
   ;; ── BSS memory layout ──
@@ -1155,9 +1158,4 @@
   (func $max3 (param $a i32) (param $b i32) (param $c i32) (result i32)
     local.get $a local.get $b local.get $c call $max2 call $max2
   )
-  (func $min2 (param $a i32) (param $b i32) (result i32)
-    local.get $a local.get $b i32.lt_s if local.get $a return end local.get $b
-  )
-  (func $max2 (param $a i32) (param $b i32) (result i32)
-    local.get $a local.get $b i32.gt_s if local.get $a return end local.get $b
-  )
+

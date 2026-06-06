@@ -6,8 +6,7 @@
     i32.const 300047)
 
 
-  (func $m76byte (param $ptr i32) (param $off i32) (result i32)
-    (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
+  (import "edgerun" "load8_u" (func $m76byte (param i32 i32) (result i32)))
 
   (func $m76put (param $out_ptr i32) (param $out_cap i32) (param $written i32) (param $c i32) (result i64)
     (if (i32.ge_u (local.get $written) (local.get $out_cap))

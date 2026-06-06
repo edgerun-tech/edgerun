@@ -1,4 +1,5 @@
   ;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
+  (import "edgerun" "memcpy" (func $m59memcpy (param i32 i32 i32)))
   (func (export "proto_standard_id") (result i32) i32.const 300085)
 
   ;; Memory layout:
@@ -409,21 +410,6 @@
     local.get $buf i32.const 20 i32.add local.get $H i32.load offset=20 call $m59store_be32
     local.get $buf i32.const 24 i32.add local.get $H i32.load offset=24 call $m59store_be32
     local.get $buf i32.const 28 i32.add local.get $H i32.load offset=28 call $m59store_be32)
-
-  ;; ── memcpy ──
-  (func $m59memcpy (param $dst i32) (param $src i32) (param $len i32)
-    (local $i i32)
-    i32.const 0 local.set $i
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add
-      local.get $src local.get $i i32.add i32.load8_u
-      i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end)
 
   ;; ── memset ──
   (func $m59memset (param $dst i32) (param $len i32) (param $val i32)

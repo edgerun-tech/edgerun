@@ -179,10 +179,7 @@
       (call $suffix5 (i32.add (local.get $ptr) (i32.const 1)) (i32.sub (local.get $len) (i32.const 1)) (local.get $b) (local.get $c) (local.get $d) (local.get $e) (local.get $f))
       (i32.eq (call $m28lower (i32.load8_u (i32.add (local.get $ptr) (i32.sub (local.get $len) (i32.const 6))))) (local.get $a))))
 
-  (func $m28lower (param $c i32) (result i32)
-    (if (result i32) (i32.and (i32.ge_u (local.get $c) (i32.const 65)) (i32.le_u (local.get $c) (i32.const 90)))
-      (then (i32.add (local.get $c) (i32.const 32)))
-      (else local.get $c)))
+  (import "edgerun" "to_lower" (func $m28lower (param i32) (result i32)))
 
   (func $authority_disk_format_requires_qemu (export "authority_disk_format_requires_qemu") (param $format i32) (result i32)
     (i32.or (i32.eq (local.get $format) (i32.const 2)) (i32.or (i32.eq (local.get $format) (i32.const 3)) (i32.eq (local.get $format) (i32.const 4)))))

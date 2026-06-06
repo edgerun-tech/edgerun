@@ -714,6 +714,75 @@
         (br $loop)))
     (call $pack (i32.const 5) (i32.const 0)))
 
+  ;; ── Additional shared utilities ──
+
+  (func $load8_u (export "load8_u") (param $ptr i32) (param $offset i32) (result i32)
+    (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))))
+
+  (func $store8 (export "store8") (param $ptr i32) (param $offset i32) (param $val i32)
+    (i32.store8 (i32.add (local.get $ptr) (local.get $offset)) (local.get $val)))
+
+  (func $memset (export "memset") (param $ptr i32) (param $val i32) (param $len i32)
+    (local $i i32)
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+        (i32.store8 (i32.add (local.get $ptr) (local.get $i)) (local.get $val))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop))))
+
+  (func $string_eq (export "string_eq") (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
+    (if (result i32) (i32.ne (local.get $len) (local.get $lit_len))
+      (then (i32.const 0))
+      (else
+        (local $i i32)
+        (block $done
+          (loop $loop
+            (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+            (if (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+                        (i32.load8_u (i32.add (local.get $lit) (local.get $i))))
+              (then (return (i32.const 0))))
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br $loop))
+          (i32.const 1)))))
+
+  (func $starts_with (export "starts_with") (param $ptr i32) (param $len i32) (param $prefix i32) (param $prefix_len i32) (result i32)
+    (if (result i32) (i32.lt_u (local.get $len) (local.get $prefix_len))
+      (then (i32.const 0))
+      (else
+        (local $i i32)
+        (block $done
+          (loop $loop
+            (br_if $done (i32.ge_u (local.get $i) (local.get $prefix_len)))
+            (if (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+                        (i32.load8_u (i32.add (local.get $prefix) (local.get $i))))
+              (then (return (i32.const 0))))
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br $loop))
+          (i32.const 1)))))
+
+  (func $strlen (export "strlen") (param $ptr i32) (result i32)
+    (local $i i32)
+    (block $done
+      (loop $loop
+        (if (i32.eqz (i32.load8_u (i32.add (local.get $ptr) (local.get $i))))
+          (then (return (local.get $i))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop)))
+    (i32.const -1))
+
+  (func $fnv1a_lower (export "fnv1a_lower") (param $ptr i32) (param $len i32) (result i32)
+    (local $h i32) (local $i i32)
+    (local.set $h (i32.const 2166136261))
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+        (local.set $h (i32.xor (local.get $h) (call $to_lower (i32.load8_u (i32.add (local.get $ptr) (local.get $i))))))
+        (local.set $h (i32.mul (local.get $h) (i32.const 16777619)))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop)))
+    (local.get $h))
+
   ;; ── Protocol exports ──
 
   (func $proto_abi_version (export "proto_abi_version") (result i32)

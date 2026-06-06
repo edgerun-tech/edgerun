@@ -37,23 +37,7 @@
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
 
-  (func $eq_mem
-    (param $ptr i32) (param $len i32) (param $const_ptr i32) (param $const_len i32)
-    (result i32)
-    (local $i i32)
-    (if (i32.ne (local.get $len) (local.get $const_len))
-      (then (return (i32.const 0))))
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (if
-          (i32.ne
-            (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
-            (i32.load8_u (i32.add (local.get $const_ptr) (local.get $i))))
-          (then (return (i32.const 0))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))
-    i32.const 1)
+  (import "edgerun" "string_eq" (func $eq_mem (param i32 i32 i32 i32) (result i32)))
 
   (func $unit_index (param $ptr i32) (param $len i32) (result i32)
     (if (call $eq_mem (local.get $ptr) (local.get $len) (i32.const 32800) (i32.const 23))

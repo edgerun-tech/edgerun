@@ -14,22 +14,8 @@
   (func (export "proto_standard_id") (result i32)
     i32.const 300093)
 
-  (func $m143b (param $ptr i32) (param $off i32) (result i32)
-    (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
-
-  (func $m143eq_lit (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
-    (local $i i32)
-    (if (i32.ne (local.get $len) (local.get $lit_len)) (then (return (i32.const 0))))
-    (block $done
-      (loop $scan
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (if (i32.ne
-              (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
-              (i32.load8_u (i32.add (local.get $lit) (local.get $i))))
-          (then (return (i32.const 0))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $scan)))
-    i32.const 1)
+  (import "edgerun" "load8_u" (func $m143b (param i32 i32) (result i32)))
+  (import "edgerun" "string_eq" (func $m143eq_lit (param i32 i32 i32 i32) (result i32)))
 
   (func (export "oci_status_valid") (param $status i32) (result i32)
     (i32.le_u (local.get $status) (i32.const 4)))

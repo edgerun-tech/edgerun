@@ -314,24 +314,7 @@
   ;; --- helpers ---
 
   ;; strlen_at(addr) -> length (finds null terminator)
-  (func $strlen_at (param $addr i32) (result i32)
-    (local $i i32)
-    block $done
-    loop $loop
-      local.get $addr
-      local.get $i
-      i32.add
-      i32.load8_u
-      i32.eqz
-      br_if $done
-      local.get $i
-      i32.const 1
-      i32.add
-      local.set $i
-      br $loop
-    end
-    end
-    local.get $i)
+  (import "edgerun" "strlen" (func $strlen_at (param i32) (result i32)))
 
   ;; memcpy(src, dst, len)
   (func $m137memcpy (param $src i32) (param $dst i32) (param $len i32)
