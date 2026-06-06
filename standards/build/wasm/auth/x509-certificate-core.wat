@@ -1,5 +1,5 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300028)
@@ -306,3 +306,5 @@
         (local.set $offset (i32.load (i32.add (local.get $out) (i32.const 172))))
         (br $loop)))
     i32.const 0)
+
+)

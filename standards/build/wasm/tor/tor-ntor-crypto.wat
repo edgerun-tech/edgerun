@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 (type $t_20_0 (func (param i32 i32 i32 i32 i32 i32) (result i32)))
   (type $t_20_1 (func (param i32 i32 i32) (result i32)))
   (type $t_20_2 (func (param i32 i32 i32 i32 i32)))
@@ -8377,9 +8379,7 @@
     i64.and
     i64.or
     i64.store)
-  (table  1 1 funcref)
-  (memory  17)
-  (global $g_20_0 (mut i32) (i32.const 1048576))
+  (table  1 1 funcref)(global $g_20_0 (mut i32) (i32.const 1048576))
   (export "tor_ntor_client_process" (func 0))
   (export "tor_x25519_shared" (func 1))
   (export "tor_ntor_client_handshake_seeded" (func 20))
@@ -8387,6 +8387,6 @@
   (export "tor_ntor_server_handshake_seeded" (func 22))
   (export "tor_hmac_sha256" (func 23))
   (export "tor_sha256" (func 24))
-  (export "proto_abi_version" (func 25))
   (export "proto_standard_id" (func 26))
   (data  (i32.const 1048576) "ntor-curve25519-sha256-1:verify\00ntor-curve25519-sha256-1:key_extract\00Server\00ntor-curve25519-sha256-1:key_expand\00ntor-curve25519-sha256-1:mac\00ntor-curve25519-sha256-1\00\00\00\00\00\00\00\00\00\00\00g\e6\09j\85\aeg\bbr\f3n<:\f5O\a5\7fR\0eQ\8ch\05\9b\ab\d9\83\1f\19\cd\e0[\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\01\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\09\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+)

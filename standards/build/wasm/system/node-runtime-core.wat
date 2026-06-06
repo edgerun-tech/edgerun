@@ -1,5 +1,6 @@
-  (func (export "proto_abi_version") (result i32) i32.const 2)
-  (func (export "proto_standard_id") (result i32) i32.const 300115)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32) i32.const 300115)
 
   (func $m135eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
     (local $i i32)
@@ -371,3 +372,4 @@
   (data (i32.const 2120) "acceptrejectdeferduplicatecommittedrejected")
   (data (i32.const 2400) "duplicate_commandrejecteddeferredPLAINTEXT_PAYLOAD_REJECTEDmissing_controller_identitycontroller_not_foundcannot_remove_last_controlleruse_produce_snapshot_requestuse_fetch_object_requestexecute_workload_not_supportedterminate_workload_not_supportedunsupported_command_typeunknown_command_type")
   (data (i32.const 2800) "softwaretpmyubikeyencryptedprovisioned")
+)

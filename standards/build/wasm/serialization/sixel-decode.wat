@@ -1,10 +1,10 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300071)
-
-
 
   (func $is_sixel (param $c i32) (result i32)
     local.get $c
@@ -889,3 +889,4 @@
     i32.const 0
     local.get $written
     call $pack)
+)

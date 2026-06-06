@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   (global $BISTDIO_ABI i32 (i32.const 1))
 
   ;; Frame types
@@ -117,3 +119,4 @@
   (func (export "bt_stdio_max_payload") (result i32)
     (i32.const 4096)
   )
+)

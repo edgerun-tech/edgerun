@@ -1,10 +1,11 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; UUID parse and format.
   ;; Format: 8-4-4-4-12 hex digits (36 characters).
   ;;
   ;; Exports:
   ;;   uuid_parse(in_ptr, out_ptr) -> i32  (16 bytes, 0 on success, -1 on error)
   ;;   uuid_format(in_ptr, out_ptr) -> i32  (36 chars written, -1 on error)
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300532)
 
   (func $m192hex_digit (param $c i32) (result i32)
@@ -106,3 +107,5 @@
     end
     local.get $o
   )
+
+)

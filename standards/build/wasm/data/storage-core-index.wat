@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   ;; Status values: 0 ok, 1 input_short, 3 invalid.
   ;; Derived DB: magic ERDB0001, format 2, schema 1, flags 0.
   ;; FileIndex strings are u64-len-prefixed UTF-8 fields in the Rust storage.
@@ -7,8 +9,6 @@
   (data (i32.const 60000)
     "events.bin\00stream_heads.bin\00replay_cache.bin\00peers.bin\00snapshots.bin\00delegations.bin\00revocations.bin\00credentials.bin\00object_presence.bin\00controller_changes.bin\00fetch_queue.bin\00pending\00done\00failed\00discovered\00status_changed\00unreachable\00")
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300106)
@@ -313,3 +313,5 @@
   ;; Literal copies for Rust storage headers.
   (data (i32.const 60243) "ERDB0001")
   (data (i32.const 60251) "ERLG")
+
+)

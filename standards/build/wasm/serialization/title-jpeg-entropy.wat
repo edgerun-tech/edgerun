@@ -1,5 +1,6 @@
 (module
-  ;; Baseline JPEG entropy decoder for the retained title.jpg metadata.
+  (import "edgerun-core" "memory" (memory 1))
+;; Baseline JPEG entropy decoder for the retained title.jpg metadata.
   ;;
   ;; Decodes the first MCU block from a JPEG entropy-coded scan using the
   ;; caller-populated Huffman and quantization tables.
@@ -32,11 +33,7 @@
   ;; Exports:
   ;;   jpeg_decode_scan_start(state_ptr) → 0 ok, -1 fail
   ;;   jpeg_decode_first_mcu_block(state_ptr, output_64coeffs) → 0 ok, -1 fail
-  ;;   jpeg_decode_next_mcu_dequantized(state_ptr, dst_y, dst_cb, dst_cr) → 0 ok, -1 fail
-
-  (memory (export "memory") 1)
-
-  (data (i32.const 0) "\00\01\08\10\09\02\03\0a")
+  ;;   jpeg_decode_next_mcu_dequantized(state_ptr, dst_y, dst_cb, dst_cr) → 0 ok, -1 fail(data (i32.const 0) "\00\01\08\10\09\02\03\0a")
   (data (i32.const 8) "\11\18\20\19\12\0b\04\05")
   (data (i32.const 16) "\0c\13\1a\21\28\30\29\22")
   (data (i32.const 24) "\1b\14\0d\06\07\0e\15\1c")
@@ -45,7 +42,6 @@
   (data (i32.const 48) "\3a\3b\34\2d\26\1f\27\2e")
   (data (i32.const 56) "\35\3c\3d\36\2f\37\3e\3f")
 
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300536)
 
   ;; Read byte from entropy stream, handling 0xFF-stuffing.

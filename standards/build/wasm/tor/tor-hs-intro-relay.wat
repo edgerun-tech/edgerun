@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Hidden-service introduction-point relay surface.
   ;; Registers ESTABLISH_INTRO auth keys and forwards exact INTRODUCE1 bodies as
   ;; INTRODUCE2 payloads when the key matches an active introduction circuit.
@@ -116,7 +118,6 @@
     (i32.const 0))
 
   (func (export "proto_standard_id") (result i32) (global.get $m16STANDARD_ID))
-  (func (export "proto_abi_version") (result i32) (global.get $m16ABI_VERSION))
   (func (export "simd_capabilities") (result i32) (i32.const 1))
   (func (export "tor_hs_intro_relay_max_body_len") (result i32) (global.get $INTRODUCE1_MAX))
   (func (export "tor_hs_intro_relay_record_size") (result i32) (global.get $REC_SIZE))
@@ -216,3 +217,4 @@
 
   (func (export "tor_hs_intro_relay_record_ptr") (param $intro_circ_id i32) (result i32)
     (call $find_by_intro_circ (local.get $intro_circ_id)))
+)

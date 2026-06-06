@@ -1,3 +1,8 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
   ;; Status: 0 pass/found/ok, 1 not found, 2 output short or reject,
   ;; 3 invalid input. Packed i64: low u32 status, high u32 bytes_written.
 
@@ -9,8 +14,6 @@
   (data (i32.const 32932) "tftp-rfc1350-ack-length-0001")
   (data (i32.const 32968) "tftp-rfc1350-data-length-0001")
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300092)
@@ -338,3 +341,5 @@
       (local.get $written)
       (local.get $out_ptr)
       (local.get $out_cap)))
+
+)

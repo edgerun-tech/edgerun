@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; EdgeRun mesh semantics plundered from edgerun-mesh.
   ;; Shared result codes: 0 ok/false, 1 true or primary failure.
 
@@ -288,3 +290,4 @@
     (i32.or
       (i32.or (local.get $is_local) (local.get $is_broadcast))
       (local.get $has_route)))
+)

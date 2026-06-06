@@ -1,9 +1,9 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300004)
-
 
   (func (export "ws_decode_prefix") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $b0 i32)
@@ -1284,3 +1284,4 @@
     i32.const 0
     local.get $written
     call $pack)
+)

@@ -1,14 +1,14 @@
-  (global $last_carry (mut i32) (i32.const 0))
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(global $last_carry (mut i32) (i32.const 0))
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300078)
 
   (func (export "carry") (result i32)
     global.get $last_carry)
-
 
   (func $byte_len (param $limbs i32) (result i32)
     local.get $limbs
@@ -441,3 +441,4 @@
     i32.const 0
     local.get $limbs
     call $pack)
+)

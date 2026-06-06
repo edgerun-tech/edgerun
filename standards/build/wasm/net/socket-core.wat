@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Abstract socket layer — transport-agnostic byte stream I/O.
   ;;
   ;; Socket types define the transport. Config structs are fixed-size
@@ -18,7 +20,6 @@
   ;;              target_host_ptr[4] target_host_len[4]
   ;;              target_port[2] pad[2]                    (24 bytes)
   ;; UDP=5        host_ptr[4] host_len[4] port[2] pad[2]   (12 bytes)
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300505)
 
   ;; ── Socket type constants ──
@@ -363,3 +364,4 @@
     end
     end
     local.get $off local.get $digits i32.add)
+)

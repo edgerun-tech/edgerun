@@ -1,5 +1,5 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300074)
@@ -1527,3 +1527,5 @@
         end
         br $scan_tail))
     i32.const -1)
+
+)

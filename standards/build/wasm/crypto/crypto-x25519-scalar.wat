@@ -1,6 +1,7 @@
-;; X25519 scalar multiplication (radix-2^25.5, 10 limbs).
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  ;; X25519 scalar multiplication (radix-2^25.5, 10 limbs).
   ;; Ported from edgerun_crypto_curve25519.inc — self-contained.
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300080)
 
   ;; Scratch: 8192 = product (19×i64), 8448+ = temp fe (80 bytes each)
@@ -650,4 +651,4 @@
       local.get $i i32.const 1 i32.add local.tee $i br_if $loop
     end
     end)
-  
+  )

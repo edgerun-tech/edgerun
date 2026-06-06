@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   ;; Memory layout for module-owned Tor state.
   (global $TOR_STATE i32 (i32.const 0))
   (global $TOR_GUARD_FINGERPRINT i32 (i32.const 64))
@@ -515,3 +517,4 @@
   (data (i32.const 20128) "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
   (data (i32.const 20192) "-----BEGIN MESSAGE-----\0a")
   (data (i32.const 20216) "-----END MESSAGE-----")
+)

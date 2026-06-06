@@ -1,7 +1,8 @@
-;; DJB2 hash — Dan Bernstein's djb2 string hash, modified with initial hash = 0.
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  ;; DJB2 hash — Dan Bernstein's djb2 string hash, modified with initial hash = 0.
   ;; This is the variant used by OSRS cache lookups.
   ;; Exports: djb2_hash(input_ptr, input_len) -> i32 hash
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300521)
 
   (func (export "djb2_hash") (param $ptr i32) (param $len i32) (result i32)
@@ -19,3 +20,4 @@
     end
     local.get $hash
   )
+)

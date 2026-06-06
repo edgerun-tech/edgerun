@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300022)
 
   (func $m68is_supported_tag (param $tag i32) (result i32)
@@ -206,3 +205,4 @@
     (i32.store (i32.add (local.get $out) (i32.const 16)) (i32.add (local.get $hdr) (local.get $vlen)))
     (i32.store (i32.add (local.get $out) (i32.const 20)) (i32.add (local.get $offset) (i32.add (local.get $hdr) (local.get $vlen))))
     i32.const 0)
+)

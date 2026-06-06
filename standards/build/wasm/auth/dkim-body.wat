@@ -1,7 +1,9 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
   ;; Status values: 0 ok, 2 output_short.
   ;; Packed return: low u32 status, high u32 bytes written.
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300047)
@@ -259,3 +261,5 @@
       (br $again))
 
     (call $pack (i32.const 0) (local.get $written)))
+
+)

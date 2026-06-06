@@ -1,6 +1,7 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; WebSocket client — HTTP Upgrade handshake + masked frame send/recv.
   ;; Uses abstract socket for transport.
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300507)
 
   ;; Memory layout:
@@ -680,4 +681,4 @@
     local.get $fd i32.const 8 i32.const 0 i32.const 0 call $ws_send
     drop
     local.get $fd call $sock_close)
-  
+)

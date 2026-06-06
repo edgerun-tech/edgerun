@@ -1,5 +1,6 @@
-  (func (export "proto_abi_version") (result i32) i32.const 2)
-  (func (export "proto_standard_id") (result i32) i32.const 300134)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32) i32.const 300134)
 
   ;; Poll code: 0 pending, 1 ready value/ok/some, 2 ready none/end, 3 ready err.
   ;; Return code: 0 pending, 1 left/value ready, 2 right ready, 3 end, 4 left err, 5 right err.
@@ -124,3 +125,4 @@
 
   (func (export "futures_sink_fanout_ready") (param $left_ready i32) (param $right_ready i32) (result i32)
     (i32.and (local.get $left_ready) (local.get $right_ready)))
+)

@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Compile-time derive/macro semantics captured from local quote,
   ;; synstructure, thiserror, rkyv-derive, bytecheck-derive, and error-derive.
   ;;
@@ -394,3 +396,4 @@
       i32.mul
       i32.or
     end)
+)

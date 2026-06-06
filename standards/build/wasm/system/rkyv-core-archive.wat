@@ -1,5 +1,6 @@
-  (func (export "proto_abi_version") (result i32) i32.const 2)
-  (func (export "proto_standard_id") (result i32) i32.const 300134)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32) i32.const 300134)
 
   (func $is_power_of_two (param $value i64) (result i32)
     (i32.and
@@ -118,3 +119,4 @@
     (if (i32.eq (local.get $phase) (i32.const 2)) (then (return (i32.const 2))))
     (if (i32.eq (local.get $phase) (i32.const 3)) (then (return (i32.const 3))))
     i32.const 0)
+)

@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   (global $ble_uart_abi i32 (i32.const 1))
 
   ;; Nordic UART Service UUIDs

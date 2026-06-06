@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300802)
 
   ;; Status: 0 ok, 1 unsupported kind, 2 short, 3 invalid checksum/path/octal, 4 zero block.
@@ -268,3 +267,4 @@
         (local.get $ptr)
         (local.get $name_len)))
     i32.const 0)
+)

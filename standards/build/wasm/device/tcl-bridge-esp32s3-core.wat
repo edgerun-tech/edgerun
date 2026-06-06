@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; ESP32-S3 TCL AP/display bridge semantics plundered from devices/edgerun-tcl-bridge-esp32s3.
 
   (func (export "tcl_bridge_abi_version") (result i32) i32.const 1)
@@ -124,3 +126,4 @@
     (if (i32.ne (local.get $kind_code) (i32.const 1)) (then (return (i32.const 2))))
     (if (i32.and (i32.ge_u (local.get $symbol_code) (i32.const 1)) (i32.le_u (local.get $symbol_code) (i32.const 5))) (then (return (i32.const 1))))
     i32.const 0)
+)

@@ -1,7 +1,8 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300101)
 
   (data (i32.const 65380) "18446744073709551615")
@@ -34,7 +35,6 @@
     i32.const 9
     i32.eq
     i32.or)
-
 
   (func $m113is_tchar (param $b i32) (result i32)
     local.get $b
@@ -874,3 +874,4 @@
       br $headers
     end
     i32.const 0)
+)

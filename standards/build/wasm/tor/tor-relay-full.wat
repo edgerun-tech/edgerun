@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Full Tor relay state machine and cell-routing surface in WAT.
   ;; Crypto and network I/O stay explicit module imports so this relay can be
   ;; linked to the WAT crypto primitives without relying on app-local TLS/ports.
@@ -211,7 +213,6 @@
     (global.get $m23OK))
 
   (func (export "proto_standard_id") (result i32) (global.get $m23STANDARD_ID))
-  (func (export "proto_abi_version") (result i32) (global.get $m23ABI_VERSION))
   (func (export "simd_capabilities") (result i32) (i32.const 1))
   (func (export "tor_relay_full_cell_len") (result i32) (global.get $CELL_LEN))
   (func (export "tor_relay_full_data_max") (result i32) (global.get $RELAY_DATA_MAX))
@@ -476,3 +477,4 @@
         (call $m23build_fixed_cell (local.get $out_destroy_cell) (local.get $circ_id) (global.get $CELL_DESTROY))
         (i32.store8 (i32.add (local.get $out_destroy_cell) (global.get $CELL_PAYLOAD)) (local.get $reason))))
     (call $record_action (local.get $cp) (global.get $ACTION_DESTROY) (global.get $CELL_DESTROY) (i32.const 0) (local.get $reason)))
+)

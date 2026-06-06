@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300107)
 
   (func $m109lower (param $b i32) (result i32)
@@ -353,3 +352,4 @@
     (if (i32.lt_u (local.get $code) (i32.const 100)) (then (return (i32.const 0))))
     (if (i32.ge_u (local.get $code) (i32.const 600)) (then (return (i32.const 0))))
     (i32.div_u (local.get $code) (i32.const 100)))
+)

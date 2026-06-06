@@ -1,4 +1,6 @@
-;; Convex hull — Jarvis march (gift wrapping) algorithm.
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  ;; Convex hull — Jarvis march (gift wrapping) algorithm.
   ;; Points are (x, y) pairs stored as consecutive i32 values.
   ;; Writes hull point indices to output buffer.
   ;;
@@ -6,7 +8,6 @@
   ;;   convex_hull(points_ptr, num_points, out_indices_ptr) -> i32
   ;;     Returns number of hull points (indices written to out).
   ;;     Returns 0 if < 3 points, -1 on error.
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300534)
 
   (func $x (param $base i32) (param $idx i32) (result i32)
@@ -144,3 +145,4 @@
 
     local.get $count
   )
+)

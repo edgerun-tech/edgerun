@@ -1,4 +1,6 @@
-  ;; ABI status codes: 0 ok/valid, 1 invalid.
+(module
+  (import "edgerun-core" "memory" (memory 1))
+;; ABI status codes: 0 ok/valid, 1 invalid.
   ;; OCI lifecycle status ids:
   ;;   0 creating, 1 created, 2 running, 3 stopped, 4 deleted.
   ;; Synthetic current-state id 255 means no persisted runtime state yet.
@@ -8,9 +10,6 @@
   ;;   0 unknown, 1 namespace, 2 mount, 3 security, 4 resource, 5 process, 6 ebpf.
   ;; Architecture ids for syscall-number classification:
   ;;   1 linux x86_64, 2 linux aarch64.
-
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300093)
@@ -185,3 +184,4 @@
   (data (i32.const 1040) "running")
   (data (i32.const 1048) "stopped")
   (data (i32.const 1056) "deleted")
+)

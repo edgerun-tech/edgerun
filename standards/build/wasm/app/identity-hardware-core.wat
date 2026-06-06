@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Identity hardware semantics plundered from edgerun-hardware-signing,
   ;; edgerun-tpm, and edgerun-yubikey.
 
@@ -296,4 +298,5 @@
             (if (result i32) (i32.eq (local.get $id) (i32.const 0x14))
               (then i32.const 4)
               (else i32.const 0))))))
+)
 )

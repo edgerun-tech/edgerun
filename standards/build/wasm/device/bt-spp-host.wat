@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   (global $bt_spp_host_abi i32 (i32.const 1))
 
   (func (export "bt_spp_host_abi_version") (result i32)

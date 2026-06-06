@@ -1,5 +1,6 @@
-  (func (export "proto_abi_version") (result i32) i32.const 2)
-  (func (export "proto_standard_id") (result i32) i32.const 300133)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32) i32.const 300133)
 
   (func $m160eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
     (local $i i32)
@@ -126,3 +127,4 @@
 
   (data (i32.const 16) "pubfnstructenumtraitimpltypeusemodconststaticletmatchifelseasyncawaitunsafeexterncrateSelfselfsuperwhereforwhileloopreturnbreakcontinuemutrefdyn")
   (data (i32.const 176) "&&||==!=<=>=<>|^&<<>>+-*/%=truefalse")
+)

@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Agent/client/tool semantics plundered from crates/edgerun-codex.
   (func (export "codex_schema_type_code") (param $ptr i32) (param $len i32) (result i32)
     ;; string=1 number=2 boolean=3 integer=4 object=5 array=6 null=7 unknown=0.
@@ -255,3 +257,4 @@
     (i32.and (i32.eq (local.get $len) (i32.const 7))
       (i32.and (call $eq6 (local.get $ptr) (i32.const 6) (local.get $a) (local.get $b) (local.get $c) (local.get $d) (local.get $e) (local.get $f))
                (i32.eq (i32.load8_u (i32.add (local.get $ptr) (i32.const 6))) (local.get $g)))))
+)

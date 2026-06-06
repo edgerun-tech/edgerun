@@ -1,4 +1,6 @@
-  ;; Status values: 0 ok, 1 unsupported, 2 short, 3 invalid.
+(module
+  (import "edgerun-core" "memory" (memory 1))
+;; Status values: 0 ok, 1 unsupported, 2 short, 3 invalid.
   ;; Domains: 1 WiFi, 2 BLE.
   ;; Region kinds:
   ;;   1 blob absolute BSS, 2 GPIO, 3 IO_MUX, 4 RTC control, 5 PBUS/tx power,
@@ -8,9 +10,6 @@
   ;;   1 WiFi absolute BSS, 2 WiFi AP config, 3 WiFi init config,
   ;;   4 WiFi OS adapter, 5 BLE version, 6 BLE controller config,
   ;;   7 BLE OS adapter, 8 BLE advertising payload.
-
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300094)
@@ -205,3 +204,4 @@
     (if (call $esp32s3_wifi_raw_80211_len_valid (local.get $len))
       (then (return (local.get $len))))
     i32.const -1)
+)

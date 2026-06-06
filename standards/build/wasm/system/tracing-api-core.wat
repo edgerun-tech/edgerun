@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Captures remaining tracing/tracing-core/tracing-log/tracing-attributes semantics.
   ;; Level codes: off=0, error=1, warn=2, info=3, debug=4, trace=5.
   ;; Interest codes: never=0, sometimes=1, always=2.
@@ -23,7 +25,6 @@
         (br $loop)))
     (local.get $h))
 
-  (func (export "proto_abi_version") (result i32) (i32.const 2))
   (func (export "proto_standard_id") (result i32) (i32.const 300136))
 
   (func (export "tracing_level_code") (param $ptr i32) (param $len i32) (result i32)
@@ -146,5 +147,4 @@
       (i32.or (i32.const 1) (i32.const 4))
       (i32.or (select (i32.const 2) (i32.const 0) (local.get $records_args))
               (select (i32.const 8) (i32.const 0) (local.get $is_async)))))
-
-  (memory (export "memory") 1)
+)

@@ -1,5 +1,8 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+
+  (func $pack (param $a i32) (param $b i32) (param $c i32) (param $d i32) (result i32)
+    local.get $a)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300099)
@@ -216,7 +219,6 @@
       (local.set $i (i32.add (local.get $i) (i32.const 1)))
       (br $loop))
     i32.const 1)
-
 
   ;; IMAP states: 0 not-authenticated, 1 authenticated, 2 selected, 3 logout.
   ;; IMAP statuses: 0 OK, 1 NO, 2 BAD. Actions: 0 continue, 1 logout.
@@ -447,3 +449,4 @@
         (return (call $pack (i32.const 354) (i32.const 4) (i32.const 0) (i32.const 0)))))
     (if (i32.eq (local.get $cmd) (i32.const 9)) (then (return (call $pack (i32.const 221) (i32.const 5) (i32.const 0) (i32.const 1)))))
     (call $pack (i32.const 554) (local.get $state) (i32.const 0) (i32.const 0)))
+)

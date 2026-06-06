@@ -1,7 +1,10 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_alnum" (func $is_alnum (param i32) (result i32)))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300014)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
@@ -12,9 +15,6 @@
       (i32.and
         (i32.ge_u (local.get $b) (i32.const 9))
         (i32.le_u (local.get $b) (i32.const 13)))))
-
-
-
 
   (func $m183lower_ascii (param $b i32) (result i32)
     (if (result i32)
@@ -308,3 +308,4 @@
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $prefix_scan))))
     (call $validate_label (i32.const 4096) (local.get $prefix_len)))
+)

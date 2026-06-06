@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   ;; Portable scalar model extracted from crates/apps/edgerun-secret-service/src.
   ;; Codes:
   ;; interface: 1 Service, 2 Collection, 3 Item, 4 Session, 5 Introspectable, 6 Properties.
@@ -12,8 +14,6 @@
   (data (i32.const 4128) "/org/freedesktop/secrets/collections/")
   (data (i32.const 4176) "/org/freedesktop/secrets/session/")
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300109)
@@ -279,3 +279,5 @@
     (if (i32.eq (local.get $h) (i32.const 6262436)) (then (return (i32.const 5))))
     (if (i32.eq (local.get $h) (i32.const 3542615378)) (then (return (i32.const 6))))
     i32.const 0)
+
+)

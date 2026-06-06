@@ -1,7 +1,8 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300060)
 
   (func $m101write_record
@@ -28,7 +29,6 @@
     i32.add
     local.get $has_explicit_port
     i32.store)
-
 
   ;; Scan host[:port] using the last colon as the separator, matching the Rust
   ;; parse_host_port_with_default helper. Output offsets are relative to ptr.
@@ -182,3 +182,4 @@
     i32.const 1
     call $m101write_record
     i32.const 0)
+)

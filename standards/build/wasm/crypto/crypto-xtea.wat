@@ -1,4 +1,6 @@
-;; XTEA block cipher — 64-bit block, 128-bit key, 32 Feistel rounds.
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  ;; XTEA block cipher — 64-bit block, 128-bit key, 32 Feistel rounds.
   ;; Big-endian I/O, operates in-place on buffer.
   ;; Remaining bytes (< 8) at end are copied through unchanged.
   ;;
@@ -7,7 +9,6 @@
   ;;   xtea_decrypt(data_ptr, data_len, key_ptr) -> 0
   ;;
   ;; key_ptr points to 16 bytes of key material (4 × 32-bit big-endian words).
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300520)
 
   (func $m65load_be32 (param $p i32) (result i32)
@@ -121,3 +122,4 @@
     end
     i32.const 0
   )
+)

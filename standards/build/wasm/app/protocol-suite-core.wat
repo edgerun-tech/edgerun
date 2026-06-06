@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Residual protocol-suite semantics plundered from edgerun-protocols.
 
   (func (export "protocol_suite_abi_version") (result i32) i32.const 1)
@@ -171,3 +173,4 @@
 
   (func (export "wifi_next_seq") (param $seq i32) (result i32)
     (i32.and (i32.add (local.get $seq) (i32.const 1)) (i32.const 4095)))
+)

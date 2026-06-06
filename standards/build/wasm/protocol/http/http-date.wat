@@ -1,7 +1,8 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300103)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
@@ -9,7 +10,6 @@
   ;; 0 unix_secs_lo, 4 unix_secs_hi, 8 year, 12 month, 16 day, 20 hour,
   ;; 24 minute, 28 second, 32 weekday (Mon=1..Sun=7), 36 format_kind
   ;; format_kind: 1 IMF-fixdate, 2 RFC850 obsolete date, 3 asctime obsolete date.
-
 
   (func $m108b (param $p i32) (result i32)
     (i32.load8_u (local.get $p)))
@@ -117,13 +117,13 @@
 
   (func $wday_long (param $p i32) (param $len i32) (result i64)
     ;; packed as low32=wday, high32=prefix length.
-    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1200) (i32.const 8)) (then (return (i64.const 34359738369)))) ;; Monday, 
-    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1208) (i32.const 9)) (then (return (i64.const 38654705666)))) ;; Tuesday, 
-    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1217) (i32.const 11)) (then (return (i64.const 47244640259)))) ;; Wednesday, 
-    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1228) (i32.const 10)) (then (return (i64.const 42949672964)))) ;; Thursday, 
-    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1238) (i32.const 8)) (then (return (i64.const 34359738373)))) ;; Friday, 
-    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1246) (i32.const 10)) (then (return (i64.const 42949672966)))) ;; Saturday, 
-    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1256) (i32.const 8)) (then (return (i64.const 34359738375)))) ;; Sunday, 
+    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1200) (i32.const 8)) (then (return (i64.const 34359738369)))) ;; Monday,
+    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1208) (i32.const 9)) (then (return (i64.const 38654705666)))) ;; Tuesday,
+    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1217) (i32.const 11)) (then (return (i64.const 47244640259)))) ;; Wednesday,
+    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1228) (i32.const 10)) (then (return (i64.const 42949672964)))) ;; Thursday,
+    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1238) (i32.const 8)) (then (return (i64.const 34359738373)))) ;; Friday,
+    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1246) (i32.const 10)) (then (return (i64.const 42949672966)))) ;; Saturday,
+    (if (call $match (local.get $p) (local.get $len) (i32.const 0) (i32.const 1256) (i32.const 8)) (then (return (i64.const 34359738375)))) ;; Sunday,
     i64.const 0)
 
   (func $m108days_before_year (param $year i32) (result i32)
@@ -389,3 +389,4 @@
   (data (i32.const 1200) "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday,  GMT")
   (data (i32.const 1280) "MonTueWedThuFriSatSun")
   (data (i32.const 1304) "JanFebMarAprMayJunJulAugSepOctNovDec")
+)

@@ -1,7 +1,8 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_alnum" (func $is_alnum (param i32) (result i32)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300100)
 
   (func $m140ascii_lower (param $c i32) (result i32)
@@ -145,7 +146,6 @@
         (br $scan)))
     i32.const 1)
 
-
   (func (export "oci_hostname_valid") (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $c i32)
@@ -189,3 +189,4 @@
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $scan)))
     i32.const 1)
+)

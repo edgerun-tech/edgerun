@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Async/runtime utility semantics captured from local futures-channel,
   ;; futures-core/task, futures-executor/task, tokio-shaped macros, once-cell,
   ;; parking, thread_local, and pin-project-lite compatibility crates.
@@ -553,4 +555,4 @@
           i32.const 2
         end
       end
-    end)
+    end))

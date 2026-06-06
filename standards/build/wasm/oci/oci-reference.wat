@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300090)
 
   ;; Status values: 0 ok, 1 invalid, 2 too large.
@@ -272,3 +271,4 @@
   (data (i32.const 4416) "application/vnd.docker.image.rootfs.diff.tar.gzip")
   (data (i32.const 4480) "application/vnd.oci.image.layer.v1.tar+zstd")
   (data (i32.const 4544) "application/vnd.oci.image.layer.nondistributable.v1.tar+zstd")
+)

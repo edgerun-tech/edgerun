@@ -1,7 +1,7 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; OAuth 2.0 authorization code flow + PKCE — URL building and token body.
   ;; Uses memory for output buffers — caller reads from linear memory.
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300502)
@@ -366,3 +366,4 @@
     local.get $dst
     local.get $len
     call $m137memcpy)
+)

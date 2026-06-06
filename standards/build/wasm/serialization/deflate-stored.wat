@@ -1,7 +1,8 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300066)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid_data,
@@ -177,3 +178,4 @@
         (br $blocks)))
 
     (call $pack (i32.const 0) (local.get $written)))
+)

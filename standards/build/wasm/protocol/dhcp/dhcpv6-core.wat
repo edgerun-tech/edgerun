@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300111)
 
   (func (export "dhcpv6_message_type") (param $id i32) (result i32)
@@ -75,3 +74,4 @@
     (if (i32.eq (local.get $kind) (i32.const 4)) (then (return (i32.const 1800))))
     (if (i32.eq (local.get $kind) (i32.const 5)) (then (return (i32.const 2700))))
     i32.const 0)
+)

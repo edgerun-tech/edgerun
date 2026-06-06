@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300006)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
@@ -115,3 +114,4 @@
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 2)) (i32.shr_u (local.get $body_len) (i32.const 8)))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 3)) (local.get $body_len))
     (i64.const 17179869184))
+)

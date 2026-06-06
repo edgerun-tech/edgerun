@@ -1,11 +1,11 @@
-  (global $parsed_kind (mut i32) (i32.const 0))
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(global $parsed_kind (mut i32) (i32.const 0))
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300073)
-
 
   (func $write_summary
     (param $rec i32) (param $kind i32) (param $arg_count i32)
@@ -548,3 +548,4 @@
     local.get $status
     local.get $next
     call $pack)
+)

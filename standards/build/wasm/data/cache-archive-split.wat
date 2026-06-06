@@ -1,4 +1,5 @@
 (module
+  (import "edgerun-core" "memory" (memory 1))
   ;; JS5 multi-file archive splitter.
   ;;
   ;; Parses a decompressed JS5 archive payload with its entry table (last byte =
@@ -25,9 +26,6 @@
   ;;     arena_len           ;; arena length in bytes
   ;;   ) → status (0=OK, <0=error)
 
-  (memory (export "memory") 1)
-
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300537)
 
   (func $read_be32 (param $p i32) (result i32)
@@ -257,4 +255,5 @@
     local.get $entries local.get $len i32.store offset=4
     i32.const 0
   )
+
 )

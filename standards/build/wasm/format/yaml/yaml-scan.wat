@@ -1,9 +1,11 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
   ;; Line kinds: 0 blank, 1 comment, 2 mapping, 3 sequence, 4 scalar, 5 doc_start, 6 doc_end.
   ;; Scalar kinds: 0 empty, 1 null, 2 bool, 3 int, 4 float, 5 quoted, 6 inline_sequence,
   ;; 7 inline_mapping, 8 bare_string.
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300042)
@@ -420,3 +422,5 @@
       (local.get $comment_count)
       (local.get $p))
     (i32.const 0))
+
+)

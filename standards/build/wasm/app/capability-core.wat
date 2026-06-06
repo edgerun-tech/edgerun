@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; EdgeRun capability policy and remote capability semantics plundered from
   ;; edgerun-capabilities and edgerun-remote-capability.
 
@@ -315,3 +317,4 @@
     (if (result i32) (i32.le_u (local.get $modality) (i32.const 5))
       (then local.get $modality)
       (else i32.const 0)))
+)

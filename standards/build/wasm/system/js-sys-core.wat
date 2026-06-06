@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Captures the useful portable semantics from edgerun-js-sys:
   ;; ECMAScript global families, Temporal option/unit spellings, and futures glue state.
   (func $m122lower (param $c i32) (result i32)
@@ -24,7 +26,6 @@
   (func $m122is (param $h i32) (param $want i32) (result i32)
     (i32.eq (local.get $h) (local.get $want)))
 
-  (func (export "proto_abi_version") (result i32) (i32.const 2))
   (func (export "proto_standard_id") (result i32) (i32.const 300134))
 
   ;; Global kind codes:
@@ -170,5 +171,4 @@
   (func (export "js_sys_wait_async_strategy") (param $has_native_wait_async i32) (result i32)
     (if (local.get $has_native_wait_async) (then (return (i32.const 1))))
     (i32.const 2))
-
-  (memory (export "memory") 1)
+)

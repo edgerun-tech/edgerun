@@ -1,7 +1,8 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300135)
 
   (func $is_upper_ascii (param $b i32) (result i32)
@@ -12,7 +13,6 @@
     i32.const 90
     i32.le_u
     i32.and)
-
 
   (func $is_ascii_alnum (param $b i32) (result i32)
     local.get $b
@@ -665,3 +665,4 @@
     local.get $ver
     i32.const 255
     i32.and)
+)

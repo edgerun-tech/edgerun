@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Wallet settlement and exec-runner semantics plundered from edgerun-wallet and edgerun-exec-runner.
 
   (func (export "wallet_exec_abi_version") (result i32) i32.const 1)
@@ -164,3 +166,4 @@
     (if (i32.ne (local.get $len) (i32.const 64)) (then (return (i32.const 1))))
     (if (i32.eqz (local.get $all_hex)) (then (return (i32.const 2))))
     i32.const 0)
+)

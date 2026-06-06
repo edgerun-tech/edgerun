@@ -1,8 +1,9 @@
-  (global $last_r_len (mut i32) (i32.const 0))
-  (global $last_s_len (mut i32) (i32.const 0))
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(global $last_r_len (mut i32) (i32.const 0))
+  (global $last_s_len (mut i32) (i32.const 0))
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300082)
@@ -12,7 +13,6 @@
 
   (func (export "ecdsa_der_last_s_len") (result i32)
     global.get $last_s_len)
-
 
   (func $m56copy (param $src i32) (param $dst i32) (param $len i32)
     (local $i i32)
@@ -274,3 +274,4 @@
         (local.set $p (i32.add (local.get $p) (i32.const 1)))))
     (call $m56copy (local.get $s) (local.get $p) (local.get $s_len))
     (call $pack (i32.const 0) (local.get $written)))
+)

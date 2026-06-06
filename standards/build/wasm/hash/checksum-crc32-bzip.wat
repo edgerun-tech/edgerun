@@ -1,9 +1,10 @@
-;; BZip2 CRC-32 — non-reflected CRC-32 with polynomial 0x04c11db7.
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  ;; BZip2 CRC-32 — non-reflected CRC-32 with polynomial 0x04c11db7.
   ;; This is the CRC used by bzip2 block checksums, distinct from the
   ;; reflected IEEE/GZip CRC-32 (polynomial 0xedb88320).
   ;; Exports: bzip_crc32(data_ptr, data_len) -> i32
   ;;          bzip_crc32_update(crc, byte) -> i32  (one-byte update)
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300525)
 
   (func $bzip_crc32_byte (param $crc i32) (param $byte i32) (result i32)
@@ -44,3 +45,4 @@
     end
     local.get $crc
   )
+)

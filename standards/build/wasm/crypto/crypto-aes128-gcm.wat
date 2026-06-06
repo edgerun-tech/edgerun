@@ -1,13 +1,10 @@
 (module
-  ;; AES-128-GCM AEAD — self-contained AES-128 key expansion + block encrypt +
+  (import "edgerun-core" "memory" (memory 1))
+;; AES-128-GCM AEAD — self-contained AES-128 key expansion + block encrypt +
   ;; GHASH (GF(2^128) software multiplication) + GCM encrypt/decrypt.
   ;; Exports:
   ;;   aes128_gcm_encrypt(out, in, len, aad, aad_len, key, iv12, tag16) -> i32 (0=ok, -1=error)
-  ;;   aes128_gcm_decrypt(out, in, len, aad, aad_len, key, iv12, tag16) -> i32 (0=ok, -1=error)
-
-  (memory (export "memory") 2)
-
-  ;; ── S-box (0-255) ──
+  ;;   aes128_gcm_decrypt(out, in, len, aad, aad_len, key, iv12, tag16) -> i32 (0=ok, -1=error);; ── S-box (0-255) ──
   (data (i32.const 0) "\63\7c\77\7b\f2\6b\6f\c5\30\01\67\2b\fe\d7\ab\76")
   (data (i32.const 16) "\ca\82\c9\7d\fa\59\47\f0\ad\d4\a2\af\9c\a4\72\c0")
   (data (i32.const 32) "\b7\fd\93\26\36\3f\f7\cc\34\a5\e5\f1\71\d8\31\15")
@@ -29,7 +26,6 @@
   (data (i32.const 256) "\01\02\04\08\10\20\40\80\1b\36")
 
   ;; ── Exports ──
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300087)
 
   ;; ── Memory layout ──

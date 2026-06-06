@@ -1,6 +1,7 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Captures edgerun-runtime core state machines: executor queue, timers,
   ;; channels, semaphore, select, cancellation, ring buffer, and host net poll gates.
-  (func (export "proto_abi_version") (result i32) (i32.const 2))
   (func (export "proto_standard_id") (result i32) (i32.const 300137))
 
   ;; spawn enqueues one task and increments pending.
@@ -139,5 +140,4 @@
   ;; Socket binding authority stays behind node-core/capability gates.
   (func (export "rt_socket_bind_allowed") (param $node_core_feature i32) (param $capability_granted i32) (result i32)
     (i32.and (local.get $node_core_feature) (local.get $capability_granted)))
-
-  (memory (export "memory") 1)
+)

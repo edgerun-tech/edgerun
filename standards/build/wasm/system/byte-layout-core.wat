@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Byte validation, endian layout, pointer metadata, fallible error strategy,
   ;; and destructuring semantics captured from local bytecheck/rancor/rend/
   ;; ptr-meta/munge compatibility crates.
@@ -434,3 +436,4 @@
     else
       i32.const 1
     end)
+)

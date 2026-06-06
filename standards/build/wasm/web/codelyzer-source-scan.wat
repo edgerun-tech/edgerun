@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300089)
 
   ;; Status: 0 ok, 2 no function, 3 unsupported/invalid.
@@ -561,3 +560,4 @@
     i64.extend_i32_u
     i64.const 32
     i64.shl)
+)

@@ -1,11 +1,7 @@
 (module
-  (import "crypto" "xtea_encrypt" (func $xtea_encrypt (param i32 i32 i32) (result i32)))
-  (import "crypto" "xtea_decrypt" (func $xtea_decrypt (param i32 i32 i32) (result i32)))
-
-  (memory (export "memory") 1)
-
-  (func (export "proto_abi_version") (result i32) i32.const 2)
-  (func (export "proto_standard_id") (result i32) i32.const 710001)
+  (import "edgerun-core" "memory" (memory 1))
+(import "crypto" "xtea_encrypt" (func $xtea_encrypt (param i32 i32 i32) (result i32)))
+  (import "crypto" "xtea_decrypt" (func $xtea_decrypt (param i32 i32 i32) (result i32)))(func (export "proto_standard_id") (result i32) i32.const 710001)
 
   (global $OK                     i32 (i32.const 0))
   (global $ERR_BOUNDS             i32 (i32.const -1))

@@ -1,7 +1,7 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; OAuth PKCE (RFC 7636) utility functions.
   ;; Pure computation — caller provides randomness, WAT transforms.
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300501)
@@ -307,3 +307,4 @@
         end
       end
     end)
+)

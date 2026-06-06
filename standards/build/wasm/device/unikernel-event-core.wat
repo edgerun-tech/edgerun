@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 (func (export "unikernel_abi_version") (result i32)
     i32.const 1)
 
@@ -179,3 +181,4 @@
         (local.set $count (i32.add (local.get $count) (call $xtensa_wifi_blob_link_items (local.get $wifi_blob))))
         (local.set $count (i32.add (local.get $count) (call $xtensa_ble_blob_link_items (local.get $ble_blob))))))
     local.get $count)
+)

@@ -1,8 +1,6 @@
-
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300010)
 
   ;; Known HTTP/2 frame types return their type byte. Unknown extension frames
@@ -108,3 +106,4 @@
     (i64.or
       (i64.extend_i32_u (i32.const 0))
       (i64.shl (i64.extend_i32_u (i32.const 9)) (i64.const 32))))
+)

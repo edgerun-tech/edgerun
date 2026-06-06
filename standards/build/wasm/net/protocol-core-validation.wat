@@ -1,5 +1,6 @@
-  (func (export "proto_abi_version") (result i32) i32.const 2)
-  (func (export "proto_standard_id") (result i32) i32.const 300116)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32) i32.const 300116)
 
   (func $m150eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
     (local $i i32)
@@ -120,3 +121,4 @@
   (data (i32.const 48) "ACCEPTREJECTDEFERDUPLICATE")
   (data (i32.const 96) "STRUCTURAL_INVALIDCRYPTO_INVALIDVERSION_UNSUPPORTEDTARGET_MISMATCHREPLAY_DETECTEDAUTHORITY_DENIEDPOLICY_DENIEDMISSING_DEPENDENCYFORK_CONFLICTCANONICALIZATION_FAILEDOBJECT_ID_MISMATCHSNAPSHOT_BASE_CONFLICTTIME_INVALIDREVOCATION_ACTIVEASSURANCE_INSUFFICIENTCONTROL_INVARIANT_FAILEDREPRESENTATION_INVALID")
   (data (i32.const 416) "edgerun:v0:sig:event-envelopeedgerun:v0:sig:command-envelopeedgerun:v0:sig:delegation-recordedgerun:v0:sig:revocation-recordedgerun:v0:sig:snapshot-descriptoredgerun:v0:sig:query-result-fragmentedgerun:v0:sig:route-advertisementedgerun:v0:sig:session-helloedgerun:v0:sig:session-acceptedgerun:v0:sig:relay-envelopeedgerun:v0:sig:identity-recordedgerun:v0:sig:assurance-claimedgerun:v0:sig:query-request")
+)

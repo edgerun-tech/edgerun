@@ -1,5 +1,6 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Captures tinyvec/smallvec/slab/sharded-slab collection state semantics.
-  (func (export "proto_abi_version") (result i32) (i32.const 2))
   (func (export "proto_standard_id") (result i32) (i32.const 300139))
 
   ;; Vec kind: 1 inline, 2 heap/spilled.
@@ -114,5 +115,4 @@
   (func (export "coll_pool_clear_len") (param $len i32) (result i32)
     (drop (local.get $len))
     (i32.const 0))
-
-  (memory (export "memory") 1)
+)

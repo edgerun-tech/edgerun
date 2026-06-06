@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   (global $spp_abi_version i32 (i32.const 1))
   (global $spp_mtu_min i32 (i32.const 48))
   (global $spp_mtu_default i32 (i32.const 128))
@@ -49,3 +51,4 @@
   (func (export "spp_max_payload") (param $mtu i32) (result i32)
     (i32.sub (local.get $mtu) (i32.const 3))
   )
+)

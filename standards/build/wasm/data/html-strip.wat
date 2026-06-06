@@ -1,10 +1,11 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; HTML/XML tag stripping — removes <...> tags from text.
   ;;
   ;; Exports:
   ;;   strip_tags(in_ptr, in_len, out_ptr) -> out_len
   ;;   strip_formatting_tags(in_ptr, in_len, out_ptr) -> out_len
   ;;     (preserves <lt>, <gt>, <br>)
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300529)
 
   (func (export "strip_tags") (param $in i32) (param $len i32) (param $out i32) (result i32)
@@ -127,3 +128,5 @@
     end
     local.get $o
   )
+
+)

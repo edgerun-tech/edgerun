@@ -1,5 +1,6 @@
-;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
-  (func (export "proto_abi_version") (result i32) i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  ;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
   (func (export "proto_standard_id") (result i32) i32.const 300085)
 
   ;; Memory layout:
@@ -436,4 +437,4 @@
       br $loop
     end
     end)
-  
+  )

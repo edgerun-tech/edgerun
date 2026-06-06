@@ -1,15 +1,15 @@
-  (global $m197h0 (mut i32) (i32.const 0))
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
+(global $m197h0 (mut i32) (i32.const 0))
   (global $m197h1 (mut i32) (i32.const 0))
   (global $m197h2 (mut i32) (i32.const 0))
   (global $m197h3 (mut i32) (i32.const 0))
   (global $m197h4 (mut i32) (i32.const 0))
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
   (func (export "proto_standard_id") (result i32)
     i32.const 300048)
-
 
   (func $rotl (param $value i32) (param $bits i32) (result i32)
     local.get $value
@@ -735,3 +735,4 @@
     (call $pack
       (i32.const 0)
       (i32.const 28)))
+)

@@ -1,7 +1,10 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_alpha" (func $is_alpha (param i32) (result i32)))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300101)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
@@ -21,8 +24,6 @@
       (i32.or
         (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 2))) (i32.const 8))
         (i32.load8_u (i32.add (local.get $ptr) (i32.const 3))))))
-
-
 
   (func $m78is_label_byte (param $b i32) (result i32)
     (i32.or
@@ -305,3 +306,4 @@
         (i32.ne (call $dns_class_status (local.get $rclass) (local.get $rtype)) (i32.const 0)))
       (then (i32.const 3))
       (else (i32.const 0))))
+)

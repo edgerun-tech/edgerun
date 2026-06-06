@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Color utilities — hex/ARGB color parsing, formatting, lerp, alpha compositing.
   ;;
   ;; Exports:
@@ -8,7 +10,6 @@
   ;;   constrain_byte(val) -> i32
   ;;   rgb_to_hex(r, g, b, out_ptr) -> out_ptr + 7 ("#RRGGBB\0")
   ;;   argb_to_hex(a, r, g, b, out_ptr) -> out_ptr + 9 ("#AARRGGBB\0")
-  (func (export "proto_abi_version") (result i32) i32.const 2)
   (func (export "proto_standard_id") (result i32) i32.const 300526)
 
   (func $m49hex_digit (param $c i32) (result i32)
@@ -151,3 +152,5 @@
     local.get $b i32.const 0xf i32.and local.get $out i32.const 8 i32.add i32.store8
     local.get $out i32.const 9 i32.add
   )
+
+)

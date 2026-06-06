@@ -1,5 +1,6 @@
-  (func (export "proto_abi_version") (result i32) i32.const 2)
-  (func (export "proto_standard_id") (result i32) i32.const 300504)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32) i32.const 300504)
 
   (data (i32.const 256) "0123456789ABCDEF")
 
@@ -873,3 +874,4 @@
     i32.add)
 
   ;; end helpers
+)

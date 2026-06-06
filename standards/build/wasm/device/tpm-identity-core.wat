@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
   (global $TPM_ID_ABI i32 (i32.const 1))
 
   ;; TPM identity key types
@@ -82,3 +84,4 @@
     (result i32)
     (i32.ge_u (local.get $level) (local.get $minimum))
   )
+)

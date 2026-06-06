@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; EdgeRun/Tor directory-authority core.
   ;; This module models the local DA from tor-spec/00-os-mapping.md while
   ;; retaining Tor directory semantics: descriptor acceptance, flags, consensus
@@ -156,7 +158,6 @@
     (local.get $flags))
 
   (func (export "proto_standard_id") (result i32) (global.get $m7STANDARD_ID))
-  (func (export "proto_abi_version") (result i32) (global.get $m7ABI_VERSION))
   (func (export "simd_capabilities") (result i32) (i32.const 1))
   (func (export "tor_da_max_descriptors") (result i32) (global.get $MAX_DESC))
   (func (export "tor_da_descriptor_size") (result i32) (global.get $DESC_SIZE))
@@ -275,3 +276,4 @@
     (if (i32.eqz (i32.and (i32.load offset=4 (local.get $p)) (global.get $FLAG_VALID))) (then (return (global.get $ERR_REJECT))))
     (i32.store (local.get $out_next_hop) (i32.load offset=32 (local.get $p)))
     (global.get $m7OK))
+)

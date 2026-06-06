@@ -1,8 +1,11 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
   (data (i32.const 60000) "9223372036854775807")
   (data (i32.const 60032) "18446744073709551615")
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300041)
@@ -888,3 +891,5 @@
     i32.const 1
     i32.const 0
     call $pack)
+
+)

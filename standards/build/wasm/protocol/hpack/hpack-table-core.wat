@@ -1,9 +1,9 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
-  (func (export "proto_standard_id") (result i32)
+(func (export "proto_standard_id") (result i32)
     i32.const 300044)
-
 
   ;; HPACK dynamic table entry size is name_len + value_len + 32.
   ;; Returns packed low32=status, high32=size.
@@ -114,3 +114,4 @@
     (i32.store (local.get $out_ptr) (local.get $retained_size))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 4)) (local.get $evict_count))
     (i32.const 0))
+)

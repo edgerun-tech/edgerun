@@ -1,4 +1,8 @@
-  (data (i32.const 32768) "android.permission.")
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
+(data (i32.const 32768) "android.permission.")
   (data (i32.const 32832) "uses-permission")
   (data (i32.const 32896) "package=")
   (data (i32.const 32960) "import android.")
@@ -59,9 +63,6 @@
   (data (i32.const 36480) "auth")
   (data (i32.const 36544) "login")
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
   (func (export "proto_standard_id") (result i32)
     i32.const 300091)
 
@@ -96,7 +97,6 @@
     else
       local.get $c
     end)
-
 
   (func $packed_kind (param $v i64) (result i32)
     local.get $v
@@ -576,3 +576,4 @@
     i64.extend_i32_u
     i64.const 32
     i64.shl)
+)

@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 (func (export "efi_bt_rtl_vendor_id") (result i32) i32.const 3034)
   (func (export "efi_bt_rtl8922_product_id") (result i32) i32.const 35106)
   (func (export "efi_bt_usb_class_wireless") (result i32) i32.const 224)

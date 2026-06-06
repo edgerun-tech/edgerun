@@ -1,6 +1,9 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300016)
@@ -101,7 +104,7 @@
               (else
                 (if (i32.eqz (call $valid_escape (local.get $c)))
                   (then (return (call $pack (i32.const 3) (local.get $esc)))))
-                (local.set $p (i32.add (local.get $p) (i32.const 1)))))) 
+                (local.set $p (i32.add (local.get $p) (i32.const 1))))))
           (else
             (local.set $p (i32.add (local.get $p) (i32.const 1)))))
         (br $again)))
@@ -317,3 +320,5 @@
       (local.set $i (i32.add (local.get $i) (i32.const 1)))
       (br $again))
     (i32.const 5))
+
+)

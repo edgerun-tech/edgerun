@@ -1,7 +1,6 @@
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
-  (func (export "proto_standard_id") (result i32)
+(module
+  (import "edgerun-core" "memory" (memory 1))
+(func (export "proto_standard_id") (result i32)
     i32.const 300102)
 
   (func $m112hex_value (param $b i32) (result i32)
@@ -556,3 +555,4 @@
       br $chunks
     end
     i32.const 1)
+)

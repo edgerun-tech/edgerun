@@ -1,11 +1,14 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
   (global $in_ptr (mut i32) (i32.const 0))
   (global $in_len (mut i32) (i32.const 0))
   (global $tok_ptr (mut i32) (i32.const 0))
   (global $tok_cap (mut i32) (i32.const 0))
   (global $tok_len (mut i32) (i32.const 0))
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300007)
@@ -1284,3 +1287,5 @@
     i32.const 0
     global.get $tok_len
     call $pack)
+
+)

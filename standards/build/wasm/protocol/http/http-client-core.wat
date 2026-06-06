@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; EdgeRun HTTP client portable semantics.
   ;; Codes:
   ;; version: 1=h1 2=h2 3=h3 4=best 5=h2_or_h1
@@ -5,7 +7,6 @@
   ;; pool action: 1=reuse 2=drop 3=create 4=evict_oldest
   ;; result: 0=pending 1=ok 2=err 3=retry 4=redirect 5=close
 
-  (func (export "proto_abi_version") (result i32) (i32.const 2))
   (func (export "proto_standard_id") (result i32) (i32.const 300135))
 
   (func (export "http_client_default_connect_timeout_secs") (result i32) (i32.const 10))
@@ -180,3 +181,4 @@
   (func (export "tls_obfuscated_ticket_age")
     (param $elapsed_ms i32) (param $age_add i32) (result i32)
     (i32.add (local.get $elapsed_ms) (local.get $age_add)))
+)

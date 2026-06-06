@@ -1,4 +1,8 @@
-  (global $m63h0 (mut i64) (i64.const 0))
+(module
+  (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+
+(global $m63h0 (mut i64) (i64.const 0))
   (global $m63h1 (mut i64) (i64.const 0))
   (global $m63h2 (mut i64) (i64.const 0))
   (global $m63h3 (mut i64) (i64.const 0))
@@ -7,12 +11,8 @@
   (global $h6 (mut i64) (i64.const 0))
   (global $h7 (mut i64) (i64.const 0))
 
-  (func (export "proto_abi_version") (result i32)
-    i32.const 2)
-
   (func (export "proto_standard_id") (result i32)
     i32.const 300074)
-
 
   (func $sigma0 (param $x i64) (result i64)
     local.get $x
@@ -997,3 +997,4 @@
     local.get $out_ptr
     i32.const 48
     call $m63hash)
+)

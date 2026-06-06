@@ -1,3 +1,5 @@
+(module
+  (import "edgerun-core" "memory" (memory 1))
 ;; Authority storage semantics plundered from edgerun-vfs and edgerun-virtual-disk.
   (func (export "authority_vfs_wire_abi_version") (result i32)
     i32.const 1)
@@ -267,3 +269,4 @@
     (if (i32.eq (local.get $which) (i32.const 6)) (then (return (i32.const 16))))
     (if (i32.eq (local.get $which) (i32.const 7)) (then (return (i32.const 20))))
     i32.const 0)
+)
