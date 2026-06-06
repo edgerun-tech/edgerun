@@ -100,6 +100,30 @@
   (func $has (export "has") (param $v i32) (param $mask i32) (result i32)
     (i32.ne (i32.and (local.get $v) (local.get $mask)) (i32.const 0)))
 
+  ;; ── Shared memcpy ──
+  (func $memcpy (export "memcpy") (param $dst i32) (param $src i32) (param $len i32)
+    (local $i i32)
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+        (i32.store8
+          (i32.add (local.get $dst) (local.get $i))
+          (i32.load8_u (i32.add (local.get $src) (local.get $i))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop))))
+
+  (func $memcpy_off (export "memcpy_off") (param $dst i32) (param $doff i32) (param $src i32) (param $soff i32) (param $len i32)
+    (local $i i32)
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+        (i32.store8
+          (i32.add (i32.add (local.get $dst) (local.get $doff)) (local.get $i))
+          (i32.load8_u
+            (i32.add (i32.add (local.get $src) (local.get $soff)) (local.get $i))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop))))
+
   ;; ── SIMD stubs ──
 
   (func $simd_memchr (export "simd_memchr") (param $ptr i32) (param $len i32) (param $byte i32) (result i32)

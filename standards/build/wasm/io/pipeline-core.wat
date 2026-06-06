@@ -6,6 +6,8 @@
   (import "pipe-core" "pipe_create" (func $pipe_create (param i32) (result i32)))
   (import "pipe-core" "pipe_drain" (func $pipe_drain (param i32 i32 i32 i32) (result i32)))
   (import "pipe-core" "pipe_close" (func $pipe_close (param i32)))
+  (import "pipe-core" "pipe_snapshot" (func $pipe_snapshot (result i32)))
+  (import "pipe-core" "pipe_restore" (func $pipe_restore (param i32)))
 
   (func (export "proto_standard_id") (result i32) i32.const 300102)
 
@@ -23,7 +25,11 @@
   (func (export "STAGE_DEMUX_STATIC") (result i32) i32.const 7)
   (func (export "STAGE_MUX_DYNAMIC") (result i32) i32.const 8)
   (func (export "STAGE_DEMUX_DYNAMIC") (result i32) i32.const 9)
-  (func (export "STAGE_WASM_EXEC")     (result i32) i32.const 11)
+  (func (export "STAGE_WS_FRAME")     (result i32) i32.const 10)
+  (func (export "STAGE_WS_ENCODE")    (result i32) i32.const 11)
+  (func (export "STAGE_WS_DECODE")    (result i32) i32.const 12)
+  (func (export "STAGE_WASM_EXEC")    (result i32) i32.const 13)
+  (func (export "STAGE_WAT_PARSE")    (result i32) i32.const 14)
 
   ;; ── Stage function type ──
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) -> result
@@ -111,6 +117,7 @@
     (local $out i32) (local $prev i32) (local $result i32)
     (local $stages i32) (local $slot i32)
     (local $cfg i32) (local $clen i32) (local $state i32)
+    (local $snapshot i32)
 
     (local.set $count (i32.load offset=12 (local.get $desc)))
     (local.set $pcap (i32.load offset=8 (local.get $desc)))
@@ -120,6 +127,9 @@
     ;; Increment tick for this run
     (i32.store offset=16 (local.get $desc)
       (i32.add (i32.load offset=16 (local.get $desc)) (i32.const 1)))
+
+    ;; Save heap snapshot before allocating intermediate pipes
+    (local.set $snapshot (call $pipe_snapshot))
 
     (block $done
       (loop $loop
@@ -166,6 +176,10 @@
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop)))
 
+    ;; On full success, restore heap to free intermediate pipes.
+    ;; On MORE (yield), intermediate pipes must persist for next call.
+    (if (i32.eq (local.get $result) (global.get $OK))
+      (then (call $pipe_restore (local.get $snapshot))))
     local.get $result)
 
   ;; ── Built-in passthrough stage (table index 0) ──

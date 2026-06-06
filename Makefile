@@ -82,3 +82,32 @@ install-ert:
 # Build container image from Rust source
 docker-build:
 	docker build -t edgerun-reference-core:local .
+
+.PHONY: build-wat
+W2W := wasm-tools parse
+WAT_DIR := standards/build/wasm
+RUNTIME_DIR := standards/system/runtime
+build-wat:
+	@echo "=== Building WAT modules ==="
+	$(W2W) $(RUNTIME_DIR)/edgerun-core.wat -o $(RUNTIME_DIR)/edgerun-core.wasm
+	$(W2W) $(WAT_DIR)/io/pipe-core.wat -o $(WAT_DIR)/io/pipe-core.wasm
+	$(W2W) $(WAT_DIR)/io/frame-core.wat -o $(WAT_DIR)/io/frame-core.wasm
+	$(W2W) $(WAT_DIR)/io/mux-core.wat -o $(WAT_DIR)/io/mux-core.wasm
+	$(W2W) $(WAT_DIR)/io/pipeline-core.wat -o $(WAT_DIR)/io/pipeline-core.wasm
+	$(W2W) $(WAT_DIR)/net/socket-core.wat -o $(WAT_DIR)/net/socket-core.wasm
+	$(W2W) $(WAT_DIR)/encoding/encoding-core.wat -o $(WAT_DIR)/encoding/encoding-core.wasm
+	$(W2W) $(WAT_DIR)/encoding/encoding-base64.wat -o $(WAT_DIR)/encoding/encoding-base64.wasm
+	$(W2W) $(WAT_DIR)/encoding/encoding-base64url.wat -o $(WAT_DIR)/encoding/encoding-base64url.wasm
+	$(W2W) $(WAT_DIR)/encoding/encoding-text.wat -o $(WAT_DIR)/encoding/encoding-text.wasm
+	$(W2W) $(WAT_DIR)/crypto/crypto-sha1.wat -o $(WAT_DIR)/crypto/crypto-sha1.wasm
+	$(W2W) $(WAT_DIR)/protocol/ws/ws-frame.wat -o $(WAT_DIR)/protocol/ws/ws-frame.wasm
+	$(W2W) $(WAT_DIR)/protocol/ws/ws-stage.wat -o $(WAT_DIR)/protocol/ws/ws-stage.wasm
+	$(W2W) $(WAT_DIR)/protocol/ws/ws-accept.wat -o $(WAT_DIR)/protocol/ws/ws-accept.wasm
+	$(W2W) $(WAT_DIR)/protocol/ws/ws-client.wat -o $(WAT_DIR)/protocol/ws/ws-client.wasm
+	$(W2W) $(WAT_DIR)/serialization/deflate-inflate.wat -o $(WAT_DIR)/serialization/deflate-inflate.wasm
+	$(W2W) $(WAT_DIR)/pipeline/stage-registry.wat -o $(WAT_DIR)/pipeline/stage-registry.wasm
+	$(W2W) $(WAT_DIR)/pipeline/wasm-interpreter.wat -o $(WAT_DIR)/pipeline/wasm-interpreter.wasm
+	$(W2W) $(WAT_DIR)/pipeline/wasm-exec-stage.wat -o $(WAT_DIR)/pipeline/wasm-exec-stage.wasm
+	$(W2W) $(WAT_DIR)/pipeline/process-wat-parse.wat -o $(WAT_DIR)/pipeline/process-wat-parse.wasm
+	$(W2W) $(WAT_DIR)/text/wat-parse-core.wat -o $(WAT_DIR)/text/wat-parse-core.wasm
+	@echo "=== All WAT modules built successfully ==="

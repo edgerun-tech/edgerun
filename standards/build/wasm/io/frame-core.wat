@@ -33,6 +33,7 @@
   (func (export "frame_read")
     (param $pipe i32) (param $scratch i32) (param $scap i32) (result i64)
     (local $r i32) (local $avail i32) (local $stream_id i32) (local $payload_len i32)
+    (local $remaining i32) (local $chunk i32)
     ;; Read 8-byte header
     (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (i32.const 8)))
     (if (i32.lt_s (local.get $r) (i32.const 8))
@@ -42,8 +43,17 @@
     ;; Check space
     (if (i32.gt_u (i32.add (local.get $payload_len) (i32.const 4)) (local.get $scap))
       (then
-        ;; Not enough space: skip the frame payload
-        (drop (call $pipe_read (local.get $pipe) (global.get $HDR) (local.get $payload_len)))
+        ;; Skip payload in chunks using scratch as temp buffer (avoids HDR overflow)
+        (local.set $remaining (local.get $payload_len))
+        (block $skip_done
+          (loop $skip_loop
+            (br_if $skip_done (i32.eqz (local.get $remaining)))
+            (local.set $chunk (local.get $remaining))
+            (if (i32.gt_u (local.get $chunk) (local.get $scap))
+              (then (local.set $chunk (local.get $scap))))
+            (drop (call $pipe_read (local.get $pipe) (local.get $scratch) (local.get $chunk)))
+            (local.set $remaining (i32.sub (local.get $remaining) (local.get $chunk)))
+            (br $skip_loop)))
         (return (call $pack (global.get $OVERFLOW) (local.get $stream_id)))))
     ;; Write payload_len to scratch[0..4], payload to scratch[4..]
     (i32.store (local.get $scratch) (local.get $payload_len))

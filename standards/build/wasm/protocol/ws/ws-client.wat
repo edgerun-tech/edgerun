@@ -1,92 +1,30 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "memcpy" (func $memcpy (param i32 i32 i32)))
+  (import "socket-core" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))
+  (import "socket-core" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))
+  (import "socket-core" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))
+  (import "socket-core" "sock_close" (func $sock_close (param i32) (result i32)))
+  (import "encoding-base64" "base64_standard_encode" (func $base64_encode (param i32 i32 i32 i32) (result i64)))
 ;; WebSocket client — HTTP Upgrade handshake + masked frame send/recv.
   ;; Uses abstract socket for transport.
   (func (export "proto_standard_id") (result i32) i32.const 300507)
 
-  ;; Memory layout:
-  ;; 4096-5119  request buffer
-  ;; 5120-6143  response buffer
-  ;; 6144-6167  stored key (24 bytes base64)
-  ;; 6168-6195  stored accept (28 bytes base64)
-  ;; 6196-6199  stored masking key (4 bytes BIG-ENDIAN format)
+  ;; Memory layout (safe zone 0x30000+, after LUTs at 0x1000-0x2FFF):
+  ;; 0x30500  request buffer (1024B)
+  ;; 0x30900  response buffer (1024B)
+  ;; 0x30D00  stored key (24B base64)
+  ;; 0x30D18  stored accept (28B base64)
+  ;; 0x30D34  stored masking key (4B BE)
+  ;; 0x30000  scratch for payload (1024B)
+  ;; 0x30400  frame header (256B)
 
   ;; ── Internal helpers ──
 
-  (func $m198memcpy (param $dst i32) (param $src i32) (param $len i32)
-    (local $i i32)
-    i32.const 0 local.set $i
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add
-      local.get $src local.get $i i32.add i32.load8_u
-      i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end)
+  ;; memcpy imported from edgerun-core as $memcpy(dst, src, len)
 
-  (func $m198b64_char (param $v i32) (result i32)
-    local.get $v i32.const 26 i32.lt_u
-    if i32.const 65 local.get $v i32.add return end
-    local.get $v i32.const 52 i32.lt_u
-    if i32.const 97 local.get $v i32.const 26 i32.sub i32.add return end
-    local.get $v i32.const 62 i32.lt_u
-    if i32.const 48 local.get $v i32.const 52 i32.sub i32.add return end
-    local.get $v i32.const 62 i32.eq
-    if i32.const 43 return end
-    i32.const 47)
-
-  ;; b64_encode_3(b0, b1, b2, out) — 3 bytes → 4 base64 chars
-  (func $b64_3 (param $b0 i32) (param $b1 i32) (param $b2 i32) (param $out i32)
-    local.get $out i32.const 0 i32.add
-    local.get $b0 i32.const 2 i32.shr_u call $m198b64_char i32.store8
-    local.get $out i32.const 1 i32.add
-    local.get $b0 i32.const 4 i32.shl local.get $b1 i32.const 4 i32.shr_u i32.or i32.const 0x3F i32.and
-    call $m198b64_char i32.store8
-    local.get $out i32.const 2 i32.add
-    local.get $b1 i32.const 2 i32.shl local.get $b2 i32.const 6 i32.shr_u i32.or i32.const 0x3F i32.and
-    call $m198b64_char i32.store8
-    local.get $out i32.const 3 i32.add
-    local.get $b2 i32.const 0x3F i32.and call $m198b64_char i32.store8)
-
-  ;; b64_encode_16(in, out) — 16 bytes → 24-byte base64 key
-  (func $b64_16 (param $in i32) (param $out i32)
-    (local $i i32)
-    i32.const 0 local.set $i
-    block $done
-    loop $loop
-      local.get $i i32.const 5 i32.ge_u br_if $done
-      local.get $in local.get $i i32.const 3 i32.mul i32.add i32.load8_u
-      local.get $in local.get $i i32.const 3 i32.mul i32.const 1 i32.add i32.add i32.load8_u
-      local.get $in local.get $i i32.const 3 i32.mul i32.const 2 i32.add i32.add i32.load8_u
-      local.get $out local.get $i i32.const 3 i32.mul i32.add
-      call $b64_3
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end
-    ;; remaining byte 15 → 2 chars + "=="
-    local.get $out i32.const 20 i32.add
-    local.get $in i32.const 15 i32.add i32.load8_u
-    local.tee $i
-    i32.const 2 i32.shr_u
-    call $m198b64_char
-    i32.store8
-    local.get $out i32.const 21 i32.add
-    local.get $i i32.const 3 i32.and i32.const 4 i32.shl
-    call $m198b64_char
-    i32.store8
-    local.get $out i32.const 22 i32.add i32.const 0x3D i32.store8
-    local.get $out i32.const 23 i32.add i32.const 0x3D i32.store8)
-  ;; BUG in $b64_16: the call to $b64_3 pushes arguments in wrong order.
-  ;; The WAT stack order is: push b0, push b1, push b2, push out → but the function expects (b0,b1,b2,out).
-  ;; Actually in unfolded WAT, arguments are NOT pushed like in stack-based WASM.
-  ;; In unfolded WAT: local.get param1 local.get param2 ... call func
-  ;; This means param1 is pushed first, param2 second, etc.
-  ;; So I need: local.get $b0 local.get $b1 local.get $b2 local.get $out call $b64_3
-  ;; Let me fix this in the next revision.
+  ;; base64 functions now imported from encoding-base64 as $base64_encode
+  ;; (replaces the buggy local $b64_3/$b64_16 implementations)
 
   ;; ── apply_mask(ptr, len, mask_be) ──
   ;; XOR mask with data. Mask is a big-endian i32 (byte0=MSB, byte3=LSB).
@@ -119,15 +57,15 @@
     (local $fd i32) (local $rc i32) (local $rlen i32)
     (local $b i32)
 
-    i32.const 4096 local.set $req
-    i32.const 5120 local.set $rsp
+    i32.const 0x30500 local.set $req
+    i32.const 0x30900 local.set $rsp
 
-    ;; 1. Base64-encode key → 6144
-    i32.const 6144 local.set $fd
-    local.get $key16 local.get $fd call $b64_16
+    ;; 1. Base64-encode key → 0x30D00 (24 bytes padding)
+    local.get $key16 i32.const 16 i32.const 0x30D00 i32.const 24
+    call $base64_encode drop
 
     ;; 2. Copy first 4 key bytes as mask → 6196 (stored big-endian)
-    i32.const 6196 local.get $key16 i32.load align=1 i32.store
+    i32.const 0x30D34 local.get $key16 i32.load align=1 i32.store
 
     ;; 3. Build HTTP Upgrade request
     local.get $req local.set $p
@@ -137,7 +75,7 @@
     local.get $p i32.const 4 i32.add local.set $p
 
     ;; path
-    local.get $p local.get $path local.get $plen call $m198memcpy
+    local.get $p local.get $path local.get $plen call $memcpy
     local.get $p local.get $plen i32.add local.set $p
 
     ;; " HTTP/1.1\r\n" — 11 bytes
@@ -182,7 +120,7 @@
     local.get $p i32.const 19 i32.add local.set $p
 
     ;; key (24 bytes from 6144)
-    local.get $p i32.const 6144 i32.const 24 call $m198memcpy
+    local.get $p i32.const 0x30D00 i32.const 24 call $memcpy
     local.get $p i32.const 24 i32.add local.set $p
 
     ;; "\r\n"
@@ -248,7 +186,7 @@
     if local.get $fd call $sock_close drop i64.const -6 return end
 
     ;; 9. Extract Sec-WebSocket-Accept value → 6168
-    local.get $rsp local.get $rlen i32.const 6168 call $extract_accept
+    local.get $rsp local.get $rlen i32.const 0x30D18 call $extract_accept
 
     ;; 10. Return packed(0, fd)
     i64.const 0
@@ -490,8 +428,8 @@
     (local $hdr i32) (local $hlen i32) (local $mask i32)
     (local $i i32) (local $buf i32)
 
-    i32.const 4000 local.set $hdr
-    i32.const 6196 local.set $mask
+    i32.const 0x30400 local.set $hdr
+    i32.const 0x30D34 local.set $mask
     local.get $mask i32.load local.set $mask
 
     ;; Byte 0: FIN(1) | opcode
@@ -551,8 +489,8 @@
     if i32.const -8 return end
 
     ;; Copy data to scratch buffer for masking
-    i32.const 3000 local.set $buf
-    local.get $buf local.get $data local.get $dlen call $m198memcpy
+    i32.const 0x30000 local.set $buf
+    local.get $buf local.get $data local.get $dlen call $memcpy
 
     ;; Mask payload in-place
     local.get $buf local.get $dlen local.get $mask call $apply_mask
@@ -575,7 +513,7 @@
     (local $mask i32) (local $mask_present i32)
     (local $rc i32)
 
-    i32.const 2000 local.set $hdr
+    i32.const 0x30100 local.set $hdr
 
     ;; Read first 2 bytes (frame prefix)
     local.get $fd local.get $hdr i32.const 2 call $sock_recv

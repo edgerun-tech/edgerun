@@ -4,6 +4,7 @@
   (import "edgerun-core" "STATUS_INPUT_SHORT" (global $INPUT_SHORT i32))
   (import "edgerun-core" "STATUS_OUTPUT_SHORT" (global $OUTPUT_SHORT i32))
   (import "edgerun-core" "STATUS_OVERFLOW" (global $OVERFLOW i32))
+  (import "edgerun-core" "memcpy_off" (func $memcpy (param i32 i32 i32 i32 i32)))
 
   (func (export "proto_standard_id") (result i32) i32.const 300101)
 
@@ -110,6 +111,19 @@
   (func (export "pipe_close") (param $p i32)
     (i32.store offset=12 (local.get $p) (i32.const 1)))
 
+  ;; ── Heap lifecycle management ──
+  ;; Snapshot saves current heap pointer; Restore rolls back to snapshot.
+  ;; Intermediate allocations (pipes, nodes) above the snapshot are freed.
+  ;; Persistent allocations below the snapshot are preserved.
+  (func (export "pipe_snapshot") (result i32)
+    (global.get $heap_ptr))
+
+  (func (export "pipe_restore") (param $snap i32)
+    (global.set $heap_ptr (local.get $snap)))
+
+  (func (export "pipe_reset_heap")
+    (global.set $heap_ptr (global.get $HEAP_START)))
+
   (func (export "pipe_reset") (param $p i32)
     (i32.store offset=0 (local.get $p) (i32.const 0))
     (i32.store offset=4 (local.get $p) (i32.const 0))
@@ -126,16 +140,5 @@
     (call $pipe_write (local.get $dst) (local.get $tmp) (local.get $n))
     (return (local.get $n)))
 
-  ;; ── memcpy: dst[doff..doff+len) = src[soff..soff+len) ──
-  (func $memcpy (param $dst i32) (param $doff i32) (param $src i32) (param $soff i32) (param $len i32)
-    (local $i i32)
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (i32.store8
-          (i32.add (i32.add (local.get $dst) (local.get $doff)) (local.get $i))
-          (i32.load8_u
-            (i32.add (i32.add (local.get $src) (local.get $soff)) (local.get $i))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
+  ;; memcpy imported from edgerun-core as $memcpy(dst, doff, src, soff, len)
 )

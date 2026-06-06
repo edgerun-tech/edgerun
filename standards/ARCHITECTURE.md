@@ -169,3 +169,87 @@ i8x16.extract_lane_s  →  OP_i8x16_extract_lane_s
 f32x4.convert_i32x4_s →  OP_f32x4_convert_i32x4_s
 v128.load8_splat      →  OP_v128_load8_splat
 ```
+
+## Pipeline Infrastructure (`build/wasm/`)
+
+Composable WAT modules for in-memory data processing. Data flows through shared
+linear memory pipes (`pipe-core`). Stages are wired into a 64-slot dispatch
+table (`pipeline-core`) and registered via `stage-registry`.
+
+### Module Dependency DAG
+
+```
+edgerun-core (system/runtime/)
+  ├─ pipe-core        — byte pipes + bump allocators
+  │    ├─ frame-core  — framed I/O (8-byte headers)
+  │    ├─ mux-core    — static/dynamic mux + demux stages
+  │    ├─ pipeline-core — pipeline_run + 64-slot dispatch table
+  │    └─ socket-core — abstract socket I/O stage
+  ├─ encoding-text    — hex/base64 encode/decode stages
+  ├─ ws-stage         — WebSocket frame transform stages
+  ├─ wasm-interpreter — pipeline-local copy of the WASM interpreter
+  │    └─ wasm-exec-stage — process_wasm_exec stage_fn wrapper
+  └─ stage-registry   — wires all stages into dispatch table slots
+```
+
+### Stage Registry (64-slot dispatch table)
+
+| Slot | Name | Module | Type | Description |
+|------|------|--------|------|-------------|
+| 0 | passthrough | pipeline-core | batch | Pipe drain input → output |
+| 1 | hex_encode | encoding-text | batch | Hex lowercase encode |
+| 2 | hex_decode | encoding-text | batch | Hex strict decode |
+| 3 | b64_encode | encoding-text | batch | Base64URL no-pad encode |
+| 4 | b64_decode | encoding-text | batch | Base64URL no-pad decode |
+| 5 | transport | socket-core | streaming | Socket I/O: send+recv with timeout |
+| 6 | mux_static | mux-core | batch | Round-robin drain, epoch batching |
+| 7 | demux_static | mux-core | batch | Frame read → route by stream_id |
+| 8 | mux_dynamic | mux-core | batch | Linked-list mux |
+| 9 | demux_dynamic | mux-core | batch | Hash-table demux |
+| 10 | ws_frame | ws-stage | streaming | Bidirectional WS framing |
+| 11 | **wasm_exec** | **wasm-exec-stage** | batch | **Load + execute WASM binary** |
+| 12–63 | (empty) | — | — | Available |
+
+### wasm_exec Stage
+
+Slot 11 in the dispatch table. Config format (variable length):
+
+```
++0:  func_idx  i32  (function index to call; -1 = function 0)
++4:  arg_count i32  (number of i32 arguments)
++8:  args[]    i32  (inline argument values)
+```
+
+**Flow:**
+1. Read WASM binary from input pipe into scratch buffer
+2. Call `interpreter.load(scratch, len)` to parse + decode all sections
+3. Call `interpreter.call(func_idx, args_ptr, arg_count)`
+4. Read first result via `get_result_value(0)`, write 4 bytes to output pipe
+
+**Example pipeline (hex → wasm_exec):**
+```
+hex_decode → wasm_exec → transport
+```
+Feed hex-encoded WASM over the wire, decode to binary, execute, send result back.
+
+**Linking:** The runtime instantiates `interpreter.wasm` under module name
+`"wasm-interpreter"`. The stage imports `load`, `call`, `get_result_value`,
+and `get_result_count` from it. Both share linear memory via `edgerun-core`.
+
+### Building
+
+```bash
+# Full pipeline build (from build/wasm/pipeline/)
+./build.sh
+
+# Or individual modules:
+wasm-tools wat2wasm wasm-exec-stage.wat -o wasm-exec-stage.wasm
+wasm-tools wat2wasm stage-registry.wat -o stage-registry.wasm
+```
+
+### Testing
+
+```bash
+# Integration test: WASM module → pipe → pipeline_run → result
+node test-pipeline-interpreter.js
+```

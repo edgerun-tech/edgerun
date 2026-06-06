@@ -11,6 +11,7 @@
   (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
   (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
   (import "pipe-core" "pipe_available" (func $pipe_available (param i32) (result i32)))
+  (import "edgerun-core" "memcpy_off" (func $memcpy (param i32 i32 i32 i32 i32)))
 
   (func (export "proto_standard_id") (result i32) i32.const 300104)
 
@@ -124,18 +125,25 @@
 
   (func (export "mux_dynamic_create") (param $output i32) (result i32)
     (local $mux i32)
-    (local.set $mux (call $pipe_alloc (i32.const 16)))
+    (local.set $mux (call $pipe_alloc (i32.const 20)))
     (if (i32.eq (local.get $mux) (i32.const -1)) (then (return (i32.const -1))))
     (i32.store offset=0 (local.get $mux) (i32.const 1))
     (i32.store offset=4 (local.get $mux) (local.get $output))
     (i32.store offset=8 (local.get $mux) (i32.const 0))
     (i32.store offset=12 (local.get $mux) (i32.const 0))
+    (i32.store offset=16 (local.get $mux) (i32.const 0))  ;; freelist
     local.get $mux)
 
   (func (export "mux_add_stream") (param $mux i32) (param $stream_id i32) (param $pipe i32) (result i32)
     (local $node i32)
-    (local.set $node (call $pipe_alloc (i32.const 12)))
-    (if (i32.eq (local.get $node) (i32.const -1)) (then (return (global.get $OVERFLOW))))
+    ;; Try freelist first, then allocate
+    (local.set $node (i32.load offset=16 (local.get $mux)))
+    (if (local.get $node)
+      (then
+        (i32.store offset=16 (local.get $mux) (i32.load offset=8 (local.get $node))))
+      (else
+        (local.set $node (call $pipe_alloc (i32.const 12)))
+        (if (i32.eq (local.get $node) (i32.const -1)) (then (return (global.get $OVERFLOW))))))
     (i32.store offset=0 (local.get $node) (local.get $stream_id))
     (i32.store offset=4 (local.get $node) (local.get $pipe))
     (i32.store offset=8 (local.get $node) (i32.load offset=8 (local.get $mux)))
@@ -157,6 +165,9 @@
               (else (i32.store offset=8 (local.get $mux) (local.get $next))))
             (i32.store offset=12 (local.get $mux)
               (i32.sub (i32.load offset=12 (local.get $mux)) (i32.const 1)))
+            ;; Add node to freelist
+            (i32.store offset=8 (local.get $curr) (i32.load offset=16 (local.get $mux)))
+            (i32.store offset=16 (local.get $mux) (local.get $curr))
             (br $found)))
         (local.set $prev (local.get $curr))
         (local.set $curr (i32.load offset=8 (local.get $curr)))
@@ -403,16 +414,5 @@
     (local.set $demux (i32.load (local.get $cfg)))
     (call $demux_dynamic_run (local.get $demux) (local.get $scratch) (local.get $scap)))
 
-  ;; ── memcpy ──
-  (func $memcpy (param $dst i32) (param $doff i32) (param $src i32) (param $soff i32) (param $len i32)
-    (local $i i32)
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (i32.store8
-          (i32.add (i32.add (local.get $dst) (local.get $doff)) (local.get $i))
-          (i32.load8_u
-            (i32.add (i32.add (local.get $src) (local.get $soff)) (local.get $i))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
+  ;; memcpy imported from edgerun-core as $memcpy(dst, doff, src, soff, len)
 )
