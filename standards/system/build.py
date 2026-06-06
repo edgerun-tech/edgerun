@@ -464,20 +464,21 @@ def transform_module(wat_text, sid, mid, module_key, module_info):
                         result)
         return result
 
+    # Second pass: rewrite with reordering (types, globals, then everything else)
+    type_lines = []
+    global_lines = []
+    body_lines = []
+
     for line in content_lines:
         stripped = line.strip()
         if not stripped:
-            output_lines.append('')
+            body_lines.append('')
             continue
 
-        # Keep type declarations but rename them to avoid collisions
+        # Rename type declarations: buffer first
         if stripped.startswith('(type '):
-            line = re.sub(
-                r'\(;(\d+);\)',
-                lambda m: f'$t_{mid}_{m.group(1)}',
-                stripped
-            )
-            output_lines.append(f'  {line}')
+            tl = re.sub(r'\(;(\d+);\)', lambda m: f'$t_{mid}_{m.group(1)}', stripped)
+            type_lines.append(f'  {tl}')
             continue
 
         # Skip memory, import
@@ -491,14 +492,10 @@ def transform_module(wat_text, sid, mid, module_key, module_info):
         if stripped.startswith('(export "memory"'):
             continue
 
-        # Handle global declarations: rename (;N;) to $g_{mid}_{N}
+        # Rename global declarations: buffer first
         if stripped.startswith('(global '):
-            line = re.sub(
-                r'\(;(\d+);\)',
-                lambda m: f'$g_{mid}_{m.group(1)}',
-                stripped
-            )
-            output_lines.append(f'  {line}')
+            gl = re.sub(r'\(;(\d+);\)', lambda m: f'$g_{mid}_{m.group(1)}', stripped)
+            global_lines.append(f'  {gl}')
             continue
 
         # Handle function declarations
@@ -513,22 +510,22 @@ def transform_module(wat_text, sid, mid, module_key, module_info):
                 continue
 
             # Strip (type N) reference
-            line = re.sub(r'\s*\(type\s+\d+\)', '', stripped)
+            fl = re.sub(r'\s*\(type\s+\d+\)', '', stripped)
 
             # Replace anonymous function name with explicit name
             if not explicit_name:
-                m_anon = re.match(r'^\s*\(func\s+\(;(\d+);\)', line)
+                m_anon = re.match(r'^\s*\(func\s+\(;(\d+);\)', fl)
                 if m_anon:
                     fidx = int(m_anon.group(1))
                     new_name = func_map_bin_idx.get(fidx)
                     if new_name is None:
                         new_name = f'$anon_{fidx}'
-                    line = re.sub(r'\(;\d+;\)', new_name, line, count=1)
+                    fl = re.sub(r'\(;\d+;\)', new_name, fl, count=1)
             elif explicit_name in renames:
-                line = line.replace(explicit_name, renames[explicit_name], 1)
+                fl = fl.replace(explicit_name, renames[explicit_name], 1)
 
-            line = rewrite_line(line)
-            output_lines.append(f'  {line}')
+            fl = rewrite_line(fl)
+            body_lines.append(f'  {fl}')
             continue
 
         # Handle exports (from ABI, rename and re-export)
@@ -540,30 +537,15 @@ def transform_module(wat_text, sid, mid, module_key, module_info):
                     continue
                 func_ref = m.group(2)
                 new_ref = renames.get(func_ref, func_ref)
-                output_lines.append(f'  (export "{sid}_{export_name}" (func {new_ref}))')
+                body_lines.append(f'  (export "{sid}_{export_name}" (func {new_ref}))')
             continue
 
-        # For other constructs (data, comments, function body lines, etc.),
-        # apply call rewriting and pass through
-        line = rewrite_line(line)
-        output_lines.append(f'  {line}')
-        continue
+        # For other constructs (data, comments, function body lines, etc.)
+        line = rewrite_line(stripped)
+        body_lines.append(f'  {line}')
 
-        # Handle exports (from ABI, rename and re-export)
-        if stripped.startswith('(export "'):
-            m = RE_EXPORT.match(stripped)
-            if m:
-                export_name = m.group(1)
-                if export_name in ABI_EXPORTS:
-                    continue
-                func_ref = m.group(2)
-                new_ref = renames.get(func_ref, func_ref)
-                output_lines.append(f'  (export "{sid}_{export_name}" (func {new_ref}))')
-            continue
-
-        # For other constructs (data, comments, etc.), just pass through
-        output_lines.append(f'  {line}')
-
+    # Assemble in order: types, globals, everything else
+    output_lines = type_lines + global_lines + body_lines
     return '\n'.join(output_lines)
 
 

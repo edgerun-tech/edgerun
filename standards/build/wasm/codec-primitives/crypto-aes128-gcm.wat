@@ -325,17 +325,17 @@
     ;; V = H
     global.get $V global.get $H i32.const 16 call $memcpy
 
-    i32.const 15 local.set $byte_idx
+    i32.const 0 local.set $byte_idx
     block $byte_done
     loop $byte_loop
-      local.get $byte_idx i32.const 0 i32.lt_s br_if $byte_done
+      local.get $byte_idx i32.const 16 i32.ge_u br_if $byte_done
 
       global.get $X local.get $byte_idx i32.add i32.load8_u local.set $byte_val
-      i32.const 1 local.set $bit_mask
+      i32.const 0x80 local.set $bit_mask
 
       block $bit_done
       loop $bit_loop
-        local.get $bit_mask i32.const 0x100 i32.eq br_if $bit_done
+        local.get $bit_mask i32.eqz br_if $bit_done
 
         local.get $byte_val local.get $bit_mask i32.and
         if
@@ -355,12 +355,12 @@
         end
 
         call $shift_v
-        local.get $bit_mask i32.const 1 i32.shl local.set $bit_mask
+        local.get $bit_mask i32.const 1 i32.shr_u local.set $bit_mask
         br $bit_loop
       end
       end
 
-      local.get $byte_idx i32.const 1 i32.sub local.set $byte_idx
+      local.get $byte_idx i32.const 1 i32.add local.set $byte_idx
       br $byte_loop
     end
     end
@@ -495,7 +495,7 @@
     global.get $LEN_BLOCK i32.const 16 call $ghash_absorb
 
     ;; Tag = X XOR tagmask
-    global.get $X local.get $tag i32.const 16 call $memcpy
+    local.get $tag global.get $X i32.const 16 call $memcpy
     local.get $tag global.get $TAGMASK i32.const 16 call $crypto_xor
 
     i32.const 0)
@@ -545,7 +545,7 @@
     global.get $LEN_BLOCK i32.const 16 call $ghash_absorb
 
     ;; Expected tag = X XOR tagmask
-    global.get $X global.get $TMP i32.const 16 call $memcpy
+    global.get $TMP global.get $X i32.const 16 call $memcpy
     global.get $TMP global.get $TAGMASK i32.const 16 call $crypto_xor
 
     ;; Constant-time compare tag == expected
