@@ -9582,7 +9582,7 @@
   (func $m_22_16 (type $t_22_9) (result i32)
     i32.const 1)
   (func $m_22_17 (type $t_22_9) (result i32)
-    i32.const 300218)
+    i32.const 300225)
   (table  1 1 funcref)(global $g_22_0 (mut i32) (i32.const 1048576))
   (export "tor_relay_aes128_ctr_crypt" (func 0))
   (export "tor_relay_digest4_le" (func 7))

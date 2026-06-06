@@ -5,7 +5,7 @@
   (type $t3 (func (param i32 i32 i32) (result i64)))
   (import "edgerun-core" "memory" (memory $memory 1))
   (func $proto_standard_id (export "proto_standard_id") (type $t0) (result i32)
-    (i32.const 300085))
+    (i32.const 300159))
   (func $wallet_status_valid (export "wallet_status_valid") (type $t1) (param $p0 i32) (result i32)
     (i32.and
       (i32.ge_u

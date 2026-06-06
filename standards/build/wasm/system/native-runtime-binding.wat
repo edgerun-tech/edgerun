@@ -3,7 +3,7 @@
   (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
-    i32.const 300135)
+    i32.const 300154)
 
   (func $is_upper_ascii (param $b i32) (result i32)
     local.get $b

@@ -1,7 +1,7 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32)
-    i32.const 300135)
+    i32.const 300155)
 
   (func $m37min (param $a i32) (param $b i32) (result i32)
     local.get $a

@@ -1,12 +1,10 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
+  (import "edgerun-core" "is_hex" (func $is_hex (param i32) (result i32)))
 ;; Captures edgerun-opentelemetry-upstream API semantics: W3C baggage,
   ;; tracestate/traceparent validation, metric builders, span status/kind, and log severity.
   (func $m145is_hex (param $c i32) (result i32)
-    (i32.or
-      (i32.or (i32.and (i32.ge_u (local.get $c) (i32.const 48)) (i32.le_u (local.get $c) (i32.const 57)))
-              (i32.and (i32.ge_u (local.get $c) (i32.const 97)) (i32.le_u (local.get $c) (i32.const 102))))
-      (i32.and (i32.ge_u (local.get $c) (i32.const 65)) (i32.le_u (local.get $c) (i32.const 70)))))
+    (call $is_hex (local.get $c)))
 
   (func $is_lower_or_digit (param $c i32) (result i32)
     (i32.or
@@ -50,7 +48,7 @@
         (br $loop)))
     (local.get $nonzero))
 
-  (func (export "proto_standard_id") (result i32) (i32.const 300135))
+  (func (export "proto_standard_id") (result i32) (i32.const 300141))
 
   (func (export "otel_baggage_key_valid") (param $ptr i32) (param $len i32) (result i32)
     (local $end i32) (local $c i32)

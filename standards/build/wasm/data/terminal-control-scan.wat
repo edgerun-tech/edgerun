@@ -5,7 +5,7 @@
 
 
   (func (export "proto_standard_id") (result i32)
-    i32.const 300112)
+    i32.const 300166)
 
 
   (func $m175emit

@@ -640,3 +640,4 @@
     else
       local.get $found
     end)
+)

@@ -3,7 +3,7 @@
   (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
-    i32.const 300102)
+    i32.const 300163)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid,
   ;; 4 invalid_cookie, 5 invalid_option_length.

@@ -5,7 +5,7 @@
   (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
-    i32.const 300101)
+    i32.const 300162)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
   ;; DNSSEC result values mirror dnssec.rs: 0 Valid, 1 Expired, 2 NoSignature,

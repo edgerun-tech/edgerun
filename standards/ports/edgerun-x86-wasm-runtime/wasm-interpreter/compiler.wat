@@ -17,9 +17,9 @@
   (import "edgerun-core" "OFF_DECODED_OPS" (global $OFF_DECODED_OPS i32))
   (import "edgerun-core" "OFF_DECODED_COUNT" (global $OFF_DECODED_COUNT i32))
   (import "edgerun-core" "DEC_SZ" (global $DEC_SZ i32))
-  (import "edgerun-core" "SZ_TYPE" (global $FUNC_TYPE_SIZE i32))
-  (import "edgerun-core" "SZ_CODE" (global $CODE_SIZE i32))
-  (import "edgerun-core" "SZ_FUNC" (global $FUNCTION_SIZE i32))
+  (import "edgerun-core" "SZ_TYPE" (global $SZ_TYPE i32))
+  (import "edgerun-core" "SZ_CODE" (global $SZ_CODE i32))
+  (import "edgerun-core" "SZ_FUNC" (global $SZ_FUNC i32))
 
   ;; JIT code cache: 1MB starting at 0x100000
   (global $JIT_CACHE      i32 (i32.const 0x100000))
@@ -3417,7 +3417,7 @@
     (i32.store (global.get $JS_RESULT_COUNT) (local.get $result_count))
 
     ;; Get decoded ops range
-    (local.set $code_off (i32.mul (local.get $func_idx) (global.get $CODE_SIZE)))
+    (local.set $code_off (i32.mul (local.get $func_idx) (global.get $SZ_CODE)))
     (local.set $dec_start (i32.load (i32.add (i32.add (global.get $OFF_CODE_BUF) (local.get $code_off)) (i32.const 24))))
     (local.set $dec_end (i32.add (local.get $dec_start) (i32.load (i32.add (i32.add (global.get $OFF_CODE_BUF) (local.get $code_off)) (i32.const 32)))))
     (local.set $dec_ptr (i32.add (global.get $OFF_DECODED_OPS) (i32.mul (local.get $dec_start) (global.get $DEC_SZ))))

@@ -7,7 +7,7 @@
   (global $q3 (mut i64) (i64.const 0))
 
   (func (export "proto_standard_id") (result i32)
-    i32.const 300087)
+    i32.const 300161)
 
   (func (export "marketplace_listing_status_valid") (param $id i32) (result i32)
     (i32.le_u (local.get $id) (i32.const 3)))

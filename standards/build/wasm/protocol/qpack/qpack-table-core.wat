@@ -3,7 +3,7 @@
   (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
-    i32.const 300103)
+    i32.const 300164)
 
   (func $m155prefix_mask (param $prefix_bits i32) (result i32)
     (if (result i32)

@@ -55,4 +55,4 @@
     (param $security_level i32)
     (result i32)
     (i32.gt_u (local.get $security_level) (i32.const 0))
-  )
+  ))

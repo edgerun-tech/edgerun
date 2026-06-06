@@ -1,6 +1,6 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
-(func (export "proto_standard_id") (result i32) i32.const 300134)
+(func (export "proto_standard_id") (result i32) i32.const 300151)
 
   ;; Poll code: 0 pending, 1 ready value/ok/some, 2 ready none/end, 3 ready err.
   ;; Return code: 0 pending, 1 left/value ready, 2 right ready, 3 end, 4 left err, 5 right err.

@@ -1,6 +1,6 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
-(func (export "proto_standard_id") (result i32) i32.const 300134)
+(func (export "proto_standard_id") (result i32) i32.const 300150)
 
   (func $is_power_of_two (param $value i64) (result i32)
     (i32.and

@@ -1005,3 +1005,4 @@
     else
       i32.const 0
     end)
+)

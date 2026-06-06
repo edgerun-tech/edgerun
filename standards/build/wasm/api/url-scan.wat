@@ -4,7 +4,7 @@
   (import "edgerun-core" "is_scheme_byte" (func $is_scheme_byte (param i32) (result i32)))
 
   (func (export "proto_standard_id") (result i32)
-    i32.const 300104)
+    i32.const 300165)
 
   ;; Status values: 0 ok, 3 invalid.
   ;; Record layout, all little-endian u32:

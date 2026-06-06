@@ -18,7 +18,7 @@
   (global $OFF_FUNCTIONS_BUF (export "OFF_FUNCTIONS_BUF") i32 (i32.const 17688))
   (global $OFF_DECODED_OPS (export "OFF_DECODED_OPS") i32 (i32.const 0xA0000))
   (global $OFF_DECODED_COUNT (export "OFF_DECODED_COUNT") i32 (i32.const 89864))
-  (global $DEC_SZ (export "DEC_SZ") i32 (i32.const 16))
+  (global $DEC_SZ (export "DEC_SZ") i32 (i32.const 32))
   (global $SZ_TYPE (export "SZ_TYPE") i32 (i32.const 256))
   (global $SZ_FUNC (export "SZ_FUNC") i32 (i32.const 16))
   (global $SZ_CODE (export "SZ_CODE") i32 (i32.const 64))
@@ -149,6 +149,123 @@
         (local.set $i (i32.sub (local.get $i) (i32.const 1)))
         (br $r_loop)))
     (i32.const -1))
+
+  ;; ── Shared status codes (all modules should use these) ──
+  (global $STATUS_OK           (export "STATUS_OK")           i32 (i32.const 0))
+  (global $STATUS_INPUT_SHORT  (export "STATUS_INPUT_SHORT")  i32 (i32.const 1))
+  (global $STATUS_OUTPUT_SHORT (export "STATUS_OUTPUT_SHORT") i32 (i32.const 2))
+  (global $STATUS_INVALID      (export "STATUS_INVALID")      i32 (i32.const 3))
+  (global $STATUS_OVERFLOW     (export "STATUS_OVERFLOW")     i32 (i32.const 4))
+  (global $STATUS_TRUNCATED    (export "STATUS_TRUNCATED")    i32 (i32.const 5))
+  (global $STATUS_TOO_LONG     (export "STATUS_TOO_LONG")     i32 (i32.const 6))
+
+  ;; ── Bounds check ──
+  ;; Returns 1 if offset + need <= len, 0 otherwise.
+  (func $bounds_check (export "bounds_check")
+    (param $len i32) (param $offset i32) (param $need i32) (result i32)
+    (if (result i32)
+      (i32.lt_u (local.get $len) (local.get $need))
+      (then (i32.const 0))
+      (else
+        (i32.le_u
+          (local.get $offset)
+          (i32.sub (local.get $len) (local.get $need))))))
+
+  ;; ── Shared big-endian read helpers (returns i64: status<<32 | value) ──
+
+  (func $read_u16_be (export "read_u16_be")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 2))
+      (then
+        (call $pack (i32.const 0)
+          (i32.or
+            (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 8))
+            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  (func $read_u24_be (export "read_u24_be")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 3))
+      (then
+        (call $pack (i32.const 0)
+          (i32.or
+            (i32.or
+              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 16))
+              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))) (i32.const 8)))
+            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 2)))))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  (func $read_u32_be (export "read_u32_be")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 4))
+      (then
+        (call $pack (i32.const 0)
+          (i32.or
+            (i32.or
+              (i32.or
+                (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 24))
+                (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))) (i32.const 16)))
+              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 2)))) (i32.const 8)))
+            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 3)))))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  ;; ── LEB128 decoders ──
+
+  (func $read_leb128_u (export "read_leb128_u")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (local $pos i32) (local $val i64) (local $b i32) (local $shift i32)
+    (local.set $pos (local.get $offset))
+    (local.set $val (i64.const 0))
+    (local.set $shift (i32.const 0))
+    (block $done
+      (loop $loop
+        (if (i32.ge_u (local.get $pos) (local.get $len))
+          (then
+            (return (call $pack (i32.const 1) (i32.wrap_i64 (local.get $val))))))
+        (local.set $b (i32.load8_u (i32.add (local.get $ptr) (local.get $pos))))
+        (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
+        (local.set $val
+          (i64.or (local.get $val)
+            (i64.shl (i64.extend_i32_u (i32.and (local.get $b) (i32.const 0x7f))) (i64.extend_i32_u (local.get $shift)))))
+        (local.set $shift (i32.add (local.get $shift) (i32.const 7)))
+        (if (i32.eqz (i32.and (local.get $b) (i32.const 0x80)))
+          (then
+            (return (call $pack (i32.const 0)
+              (i32.or (local.get $pos) (i32.shl (i32.wrap_i64 (local.get $val)) (i32.const 8)))))))
+        (br $loop)))
+    (call $pack (i32.const 5) (i32.const 0)))
+
+  (func $read_leb128_s (export "read_leb128_s")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (local $pos i32) (local $val i64) (local $b i32) (local $shift i32)
+    (local.set $pos (local.get $offset))
+    (local.set $val (i64.const 0))
+    (local.set $shift (i32.const 0))
+    (block $done
+      (loop $loop
+        (if (i32.ge_u (local.get $pos) (local.get $len))
+          (then
+            (return (call $pack (i32.const 1) (i32.wrap_i64 (local.get $val))))))
+        (local.set $b (i32.load8_u (i32.add (local.get $ptr) (local.get $pos))))
+        (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
+        (local.set $val
+          (i64.or (local.get $val)
+            (i64.shl (i64.extend_i32_u (i32.and (local.get $b) (i32.const 0x7f))) (i64.extend_i32_u (local.get $shift)))))
+        (local.set $shift (i32.add (local.get $shift) (i32.const 7)))
+        (if (i32.eqz (i32.and (local.get $b) (i32.const 0x80)))
+          (then
+            (if (i32.and (local.get $b) (i32.const 0x40))
+              (then
+                (local.set $val
+                  (i64.or (local.get $val)
+                    (i64.shl (i64.const -1) (i64.extend_i32_u (local.get $shift)))))))
+            (return (call $pack (i32.const 0)
+              (i32.or (local.get $pos) (i32.shl (i32.wrap_i64 (local.get $val)) (i32.const 8)))))))
+        (br $loop)))
+    (call $pack (i32.const 5) (i32.const 0)))
 
   ;; ── Protocol exports ──
 

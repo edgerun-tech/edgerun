@@ -1,6 +1,7 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
   (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
+  (import "edgerun-core" "is_hex" (func $is_hex (param i32) (result i32)))
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
   ;; Scalar kinds: 1 quoted string, 2 literal string, 3 bool, 4 int, 5 float, 6 array, 7 bare string.
@@ -17,11 +18,7 @@
 
 
   (func $m185is_hex (param $c i32) (result i32)
-    (i32.or
-      (call $is_digit (local.get $c))
-      (i32.or
-        (i32.and (i32.ge_u (local.get $c) (i32.const 65)) (i32.le_u (local.get $c) (i32.const 70)))
-        (i32.and (i32.ge_u (local.get $c) (i32.const 97)) (i32.le_u (local.get $c) (i32.const 102))))))
+    (call $is_hex (local.get $c)))
 
   (func $is_radix_digit (param $c i32) (param $marker i32) (result i32)
     (if (i32.eq (local.get $marker) (i32.const 120))

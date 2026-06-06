@@ -2,6 +2,7 @@
   (import "edgerun-core" "memory" (memory 1))
   (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
   (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+  (import "edgerun-core" "is_hex" (func $is_hex (param i32) (result i32)))
 
   (global $in_ptr (mut i32) (i32.const 0))
   (global $in_len (mut i32) (i32.const 0))
@@ -70,29 +71,7 @@
     local.get $p)
 
   (func $m125is_hex (param $c i32) (result i32)
-    local.get $c
-    i32.const 48
-    i32.ge_u
-    local.get $c
-    i32.const 57
-    i32.le_u
-    i32.and
-    local.get $c
-    i32.const 65
-    i32.ge_u
-    local.get $c
-    i32.const 70
-    i32.le_u
-    i32.and
-    i32.or
-    local.get $c
-    i32.const 97
-    i32.ge_u
-    local.get $c
-    i32.const 102
-    i32.le_u
-    i32.and
-    i32.or)
+    (call $is_hex (local.get $c)))
 
 
   (func $m125is_digit_1_9 (param $c i32) (result i32)

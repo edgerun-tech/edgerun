@@ -5,7 +5,7 @@
 (global $parsed_kind (mut i32) (i32.const 0))
 
   (func (export "proto_standard_id") (result i32)
-    i32.const 300073)
+    i32.const 300157)
 
   (func $write_summary
     (param $rec i32) (param $kind i32) (param $arg_count i32)
