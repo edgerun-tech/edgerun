@@ -11,35 +11,28 @@ workspace.
 WAT projects are standalone — NOT Rust workspace members. Build with
 `wat2wasm`, test via the interpreter.
 
-### edgerun-x86-wasm-runtime
+### wasm-tooling
 
 Porting the x86_64 WASM compiler runtime from assembly to WAT.
 
 - **Source**: `~/edgerun-c/kernel/x86_64/wasm/` (wasm_exec.asm,
   wasm_interpreter.asm.erobj, etc.)
-- **Port**: `standards/ports/edgerun-x86-wasm-runtime/wasm-interpreter/`
-  - `compiler.wat` — WASM → x86_64 compiler: decodes decoded_ops and emits
-    x86_64 machine code into code cache at 0x100000
+- **Port**: `standards/ports/wasm-tooling/wasm-interpreter/`
+  - `compiler-x86_64.wat` — WASM → x86_64 compiler (standalone, monolithic)
+  - `compiler-aarch64.wat` — WASM → AArch64 compiler (concatenated from parts)
+  - `compiler-arm32.wat` — WASM → ARM32 compiler (concatenated from parts)
   - `interpreter.wat` — WASM interpreter, shares linear memory with compiler
-  - `test-compiler-all.js` — 145 compiler tests
-  - `test-interpreter.js` — 123 interpreter tests
-  - `test-elf.js` — ELF binary emission test (compiles WASM → native binary)
 
 **Build**:
 ```bash
-wat2wasm compiler.wat -o compiler.wasm
-wat2wasm interpreter.wat -o interpreter.wasm
+wat2wasm compiler-x86_64.wat -o compiler-x86_64.wasm
+bash build.sh aarch64    # builds compiler-aarch64.wasm
+bash build.sh arm32      # builds compiler-arm32.wasm
+wat2wasm interpreter.wat -o interpreter.wasm 2>/dev/null; true
 ```
 
-**Test** (all tests load interpreter.wasm and compiler.wasm):
-```bash
-node test-compiler-all.js
-node test-interpreter.js
-node test-elf.js
-```
-
-**ELF / Flat binary output**:
-- `compiler.compile_to_elf(func_idx)` → returns `(buffer_addr, size)` of a
+**ELF / Flat binary output** (x86-64 only):
+- `compiler-x86_64.compile_to_elf(func_idx)` → returns `(buffer_addr, size)` of a
   self-contained ELF64 executable that runs the compiled WASM function and
   exits with its return value
 - `compiler.compile_to_bin(func_idx)` → returns `(buffer_addr, size)` of a
@@ -50,20 +43,22 @@ node test-elf.js
 - Flat binary uses the same JitGlobals/BSS layout; no OS dependencies
 
 **Key architecture**:
-- Two-pass: interpreter decodes WASM bytecode into decoded_op buffer (16 bytes
-  per op: opcode + pad + imm0 + offset + imm2). Compiler reads decoded ops and
-  emits x86_64 machine code.
+- Two-pass: interpreter decodes WASM bytecode into decoded_op buffer (now 32
+  bytes per op: opcode + pad + imm0 + offset + imm2 + v128_imm); compiler reads
+  decoded ops and emits native machine code.
 - Compiler and interpreter share the same linear memory.
 - Compiler output goes to code cache at 0x100000.
 
 **Style rules** (WAT):
-- Emit helpers write x86_64 instruction bytes via `$emit_byte`, `$emit_dword`,
+- Emit helpers write instruction bytes via `$emit_byte`, `$emit_dword`,
   `$emit_modrm`
 - Template functions implement one WASM opcode pattern using emit helpers
 - The compile loop in `$jit_compile` dispatches by opcode via if/else chain
 - 0xFC prefix ops (trunc_sat) dispatch on `$imm0` sub-opcode
-- Unsigned conversions use branch-free cmov/sar/and patterns
-- Saturating truncations use rel8 conditional jumps with `$patch_rel8`
+- 0xFD prefix ops (SIMD) dispatch on `$imm0` sub-opcode
+- AArch64/ARM32 compilers are built by concatenating parts via `build.sh`:
+  `base.wat` + `emit.wat` + `templates/all.wat` + `templates/simd-${ARCH}.wat` + `dispatch.wat`
+- x86-64 compiler is monolithic (`compiler-x86_64.wat`)
 
 ## Engineering Rules
 

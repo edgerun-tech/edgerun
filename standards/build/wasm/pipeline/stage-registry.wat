@@ -1,0 +1,11 @@
+(module
+  (import "pipeline-core" "stage_table" (table $tbl 64 funcref))
+  (import "encoding-text" "process_hex_encode" (func $hex_encode (param i32 i32 i32 i32 i32 i32) (result i32)))
+  (import "encoding-text" "process_hex_decode" (func $hex_decode (param i32 i32 i32 i32 i32 i32) (result i32)))
+  (import "encoding-text" "process_b64_encode" (func $b64_encode (param i32 i32 i32 i32 i32 i32) (result i32)))
+  (import "encoding-text" "process_b64_decode" (func $b64_decode (param i32 i32 i32 i32 i32 i32) (result i32)))
+  (import "socket-core" "process_transport" (func $transport (param i32 i32 i32 i32 i32 i32) (result i32)))
+  (elem (table $tbl) (i32.const 1) funcref (ref.func $hex_encode) (ref.func $hex_decode))
+  (elem (table $tbl) (i32.const 3) funcref (ref.func $b64_encode) (ref.func $b64_decode))
+  (elem (table $tbl) (i32.const 5) funcref (ref.func $transport))
+)

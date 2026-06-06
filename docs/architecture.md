@@ -21,7 +21,7 @@ External standards such as HTTP, DNS, TLS, QUIC, OCI, HPACK, QPACK, JSON, DHCP,
 NFC, TPM, and device protocols are implementation domains, not alternate
 EdgeRun authority or wire protocols.
 
-The WAT app-runtime path under `standards/ports/edgerun-x86-wasm-runtime`
+The WAT app-runtime path under `standards/ports/wasm-tooling`
 exercises this boundary with the ER-owned native x86 WASM runtime. App fixtures
 use the strict untrusted ABI path; internal Tor primitives use trusted native
 loads. Local Tor harness code may choose identities, sealed payload sizes, and

@@ -127,35 +127,35 @@ skips that policy gate.
 ## Smoke Runner
 
 ```bash
-node standards/runners/edgerun-x86-wasm-runtime-smoke.js
+node standards/runners/wasm-tooling-smoke.js
 ```
 
 The simulator can also be run directly:
 
 ```bash
-node standards/ports/edgerun-x86-wasm-runtime/sim/local-memory-sim.js \
-  standards/ports/edgerun-x86-wasm-runtime/tests/app-abi-v0.wat
+node standards/ports/wasm-tooling/sim/local-memory-sim.js \
+  standards/ports/wasm-tooling/tests/app-abi-v0.wat
 ```
 
 The local kernel commit simulator can be run directly:
 
 ```bash
-node standards/ports/edgerun-x86-wasm-runtime/sim/local-kernel-commit-v0.js \
-  standards/ports/edgerun-x86-wasm-runtime/tests/app-abi-v0.wat
+node standards/ports/wasm-tooling/sim/local-kernel-commit-v0.js \
+  standards/ports/wasm-tooling/tests/app-abi-v0.wat
 ```
 
 The local identity relay simulator can be run directly:
 
 ```bash
-node standards/ports/edgerun-x86-wasm-runtime/sim/local-identity-relay-v0.js \
-  standards/ports/edgerun-x86-wasm-runtime/tests/app-abi-v0.wat
+node standards/ports/wasm-tooling/sim/local-identity-relay-v0.js \
+  standards/ports/wasm-tooling/tests/app-abi-v0.wat
 ```
 
 The local Tor circuit simulator can be run directly:
 
 ```bash
-node standards/ports/edgerun-x86-wasm-runtime/sim/local-tor-circuit-v0.js \
-  standards/ports/edgerun-x86-wasm-runtime/tests/app-abi-v0.wat
+node standards/ports/wasm-tooling/sim/local-tor-circuit-v0.js \
+  standards/ports/wasm-tooling/tests/app-abi-v0.wat
 ```
 
 The runner assembles copied test fixtures with `yasm`, links them with the

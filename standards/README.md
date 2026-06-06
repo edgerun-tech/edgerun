@@ -63,9 +63,9 @@ standards/
       app-primitives/
       codec-primitives/
   ports/
-    edgerun-x86-wasm-runtime/
+    wasm-tooling/
   runners/
-    edgerun-x86-wasm-runtime-smoke.js
+    wasm-tooling-smoke.js
   registries/
     iana/
       README.md
@@ -160,12 +160,12 @@ explicit requirement/severity signatures match.
 
 ## Native WAT Runtime Port
 
-`ports/edgerun-x86-wasm-runtime` vendors the ER-owned x86_64 WASM runtime from
+`ports/wasm-tooling` vendors the ER-owned x86_64 WASM runtime from
 the metal tree so WAT app/runtime checks can run without using Node's
 WebAssembly engine as the execution authority. The smoke runner is:
 
 ```bash
-node standards/runners/edgerun-x86-wasm-runtime-smoke.js
+node standards/runners/wasm-tooling-smoke.js
 ```
 
 The runner keeps untrusted app WAT on the strict app ABI path and uses trusted

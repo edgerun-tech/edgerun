@@ -1,6 +1,8 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
   (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+  (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
+  (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300002)
@@ -163,7 +165,7 @@
       end
     end)
 
-  (func (export "hex_encode_lower")
+  (func $hex_encode_lower (export "hex_encode_lower")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $i i32)
@@ -233,7 +235,7 @@
       end
     end)
 
-  (func (export "hex_decode_strict")
+  (func $hex_decode_strict (export "hex_decode_strict")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $i i32)
@@ -320,7 +322,7 @@
       end
     end)
 
-  (func (export "base64url_nopad_encode")
+  (func $b64_encode (export "base64url_nopad_encode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $groups i32)
@@ -553,7 +555,7 @@
       end
     end)
 
-  (func (export "base64url_nopad_decode")
+  (func $b64_decode (export "base64url_nopad_decode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $groups i32)
@@ -880,9 +882,89 @@
           i32.or
           i32.store8
         end
-        i32.const 0
+         i32.const 0
         local.get $out_len
         call $pack
       end
     end)
+
+  ;; ── Pipeline stage: hex encode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_hex_encode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $hex_encode_lower
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
+
+  ;; ── Pipeline stage: base64url nopad encode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_b64_encode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $b64_encode
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
+
+  ;; ── Pipeline stage: base64url nopad decode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_b64_decode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 2)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $b64_decode
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
+
+  ;; ── Pipeline stage: hex decode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_hex_decode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (i32.mul (local.get $scap) (i32.const 2)) (i32.const 3)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $hex_decode_strict
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
 )

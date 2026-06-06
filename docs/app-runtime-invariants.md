@@ -204,7 +204,7 @@ available as an explicit capability on an identity-routed path, but apps do not
 receive raw TLS sockets, exported TLS keys, or authority from TLS alone.
 
 The local runtime smoke path in
-`standards/ports/edgerun-x86-wasm-runtime` treats JavaScript as harness glue
+`standards/ports/wasm-tooling` treats JavaScript as harness glue
 only. Tor cell bytes are built by `tor-cell-codec.wat`, hidden-service
 fetch/publish/frame artifacts are built by `tor-library.wat`, and the relay
 decodes/hashes WAT-owned hidden-service contact/message state from module

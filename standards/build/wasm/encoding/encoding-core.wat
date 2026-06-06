@@ -608,4 +608,33 @@
     (i32.or
       (i32.shl (local.get $b) (i32.const 16))
       (local.get $a)))
+
+  ;; ── Byte-at-a-time CRC-32 update ──
+  ;; crc32_update_byte(crc, byte) → crc
+  (func (export "crc32_update_byte") (param $crc i32) (param $byte i32) (result i32)
+    (local $c i32) (local $i i32)
+    (local.set $c (i32.xor (local.get $crc) (local.get $byte)))
+    (local.set $i (i32.const 0))
+    (block $done
+      (loop $bits
+        (br_if $done (i32.eq (local.get $i) (i32.const 8)))
+        (if (i32.and (local.get $c) (i32.const 1))
+          (then
+            (local.set $c
+              (i32.xor (i32.shr_u (local.get $c) (i32.const 1)) (i32.const 0xedb88320))))
+          (else
+            (local.set $c (i32.shr_u (local.get $c) (i32.const 1)))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $bits)))
+    (local.get $c))
+
+  ;; ── Byte-at-a-time Adler-32 update ──
+  ;; adler32_update_byte(adler, byte) → adler
+  (func (export "adler32_update_byte") (param $adler i32) (param $byte i32) (result i32)
+    (local $s1 i32) (local $s2 i32)
+    (local.set $s1 (i32.and (local.get $adler) (i32.const 65535)))
+    (local.set $s2 (i32.shr_u (local.get $adler) (i32.const 16)))
+    (local.set $s1 (i32.rem_u (i32.add (local.get $s1) (local.get $byte)) (i32.const 65521)))
+    (local.set $s2 (i32.rem_u (i32.add (local.get $s2) (local.get $s1)) (i32.const 65521)))
+    (i32.or (local.get $s1) (i32.shl (local.get $s2) (i32.const 16))))
 )

@@ -448,4 +448,31 @@
     (call $pipe_write
       (i32.load offset=0 (local.get $to)) (local.get $tmp) (local.get $n))
     (return (local.get $n)))
+
+  ;; ── Pipeline stage: transport ──
+  ;; Reads from input pipe, sends via socket, reads response, writes to output pipe.
+  ;; Config: pointer to a 4-byte i32 socket handle.
+  ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap) → bytes_written | error
+  (func (export "process_transport")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (result i32)
+    (local $sock i32) (local $n i32)
+    (if (i32.lt_u (local.get $clen) (i32.const 4))
+      (then (return (i32.const -1))))
+    (local.set $sock (i32.load (local.get $cfg)))
+    ;; Read data to send from input pipe
+    (local.set $n (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (if (i32.lt_s (local.get $n) (i32.const 0))
+      (then (return (local.get $n))))
+    (if (i32.gt_s (local.get $n) (i32.const 0))
+      (then
+        (drop (call $pipe_write (i32.load offset=0 (local.get $sock)) (local.get $scratch) (local.get $n)))))
+    ;; Read response from socket recv pipe
+    (local.set $n (call $pipe_read (i32.load offset=4 (local.get $sock)) (local.get $scratch) (local.get $scap)))
+    (if (i32.lt_s (local.get $n) (i32.const 0))
+      (then (return (local.get $n))))
+    (if (i32.eqz (local.get $n)) (then (return (i32.const 0))))
+    ;; Write response to output pipe
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
+    local.get $n)
 )

@@ -1,6 +1,8 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
   (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
+  (import "encoding-core" "crc32_update_byte" (func $crc32_update_byte (param i32 i32) (result i32)))
+  (import "encoding-core" "adler32_update_byte" (func $adler32_update_byte (param i32 i32) (result i32)))
 (func (export "proto_standard_id") (result i32)
     i32.const 300067)
 
@@ -324,33 +326,6 @@
     (i32.store (i32.add (local.get $out) (i32.const 12)) (local.get $last_block_type))
     (i32.store (i32.add (local.get $out) (i32.const 16)) (local.get $crc32))
     (i32.store (i32.add (local.get $out) (i32.const 20)) (local.get $adler32)))
-
-  (func $crc32_update_byte (param $crc i32) (param $byte i32) (result i32)
-    (local $c i32)
-    (local $i i32)
-    (local.set $c (i32.xor (local.get $crc) (local.get $byte)))
-    (local.set $i (i32.const 0))
-    (loop $bits
-      (if (i32.and (local.get $c) (i32.const 1))
-        (then
-          (local.set $c
-            (i32.xor
-              (i32.shr_u (local.get $c) (i32.const 1))
-              (i32.const 0xedb88320))))
-        (else
-          (local.set $c (i32.shr_u (local.get $c) (i32.const 1)))))
-      (local.set $i (i32.add (local.get $i) (i32.const 1)))
-      (br_if $bits (i32.lt_u (local.get $i) (i32.const 8))))
-    (local.get $c))
-
-  (func $adler32_update_byte (param $adler i32) (param $byte i32) (result i32)
-    (local $s1 i32)
-    (local $s2 i32)
-    (local.set $s1 (i32.and (local.get $adler) (i32.const 65535)))
-    (local.set $s2 (i32.shr_u (local.get $adler) (i32.const 16)))
-    (local.set $s1 (i32.rem_u (i32.add (local.get $s1) (local.get $byte)) (i32.const 65521)))
-    (local.set $s2 (i32.rem_u (i32.add (local.get $s2) (local.get $s1)) (i32.const 65521)))
-    (i32.or (local.get $s1) (i32.shl (local.get $s2) (i32.const 16))))
 
   (func (export "deflate_scan_blocks")
     (param $src_ptr i32)

@@ -18,7 +18,7 @@ buffers, while the browser page is only a JavaScript/WebGL byte bridge.
 - `docs/app-runtime-invariants.md`: app identity, release/developer mode,
   preallocated memory and storage, child apps, object requirements, logical
   clocks, append-only event logs, and derived query backends.
-- `standards/ports/edgerun-x86-wasm-runtime`: native x86 WASM runtime port for
+- `standards/ports/wasm-tooling`: native x86 WASM runtime port for
   WAT app/runtime smoke tests, including codec-backed local Tor circuit checks
   and WAT-backed hidden-service state checks.
 - `standards/build/wasm/app-primitives/tor-wat`: real Tor WAT primitives used by
@@ -38,7 +38,7 @@ storage, compute, payment, and deployment paths are still experimental.
 rustup run stable cargo check -p edgerun-docs-ui-web --target wasm32-unknown-unknown
 rustup run stable cargo test -p edgerun-ui-core
 rustup run stable cargo test -p edgerun-work
-node standards/runners/edgerun-x86-wasm-runtime-smoke.js
+node standards/runners/wasm-tooling-smoke.js
 ```
 
 The repository also contains a local `./cargo` shim. If that shim cannot

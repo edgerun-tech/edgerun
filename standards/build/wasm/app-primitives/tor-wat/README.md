@@ -25,7 +25,7 @@ Current executable coverage:
   WAT-owned contact/message state records.
 
 The native smoke path in
-`standards/ports/edgerun-x86-wasm-runtime` runs these exports through trusted
+`standards/ports/wasm-tooling` runs these exports through trusted
 x86 WASM calls. Local harness code may choose identities and sealed payload
 sizes, but HSDir bytes, descriptor armor, frame bytes, and persisted
 contact/message state are produced by this WAT module and hashed from module
