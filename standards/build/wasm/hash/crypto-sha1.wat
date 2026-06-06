@@ -1,9 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-
-(func (export "proto_standard_id") (result i32)
-    i32.const 300077)
+;; crypto-sha1 — SHA-1 hash (work buffer at 0x10000, 80×4 = 320 bytes)
 
   (func $m61range_ok (param $ptr i32) (param $len i32) (result i32)
     (local $end i32)
@@ -157,7 +152,7 @@
     local.get $value
     i32.store8)
 
-  (func (export "sha1")
+  (func $sha1 (export "sha1")
     (param $ptr i32)
     (param $len i32)
     (param $out_ptr i32)
@@ -473,4 +468,3 @@
     i32.const 0
     i32.const 20
     call $pack)
-)

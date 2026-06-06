@@ -1,16 +1,9 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "crypto-sha1" "sha1" (func $sha1 (param i32 i32 i32) (result i64)))
-  (import "encoding-base64" "base64_standard_encode" (func $base64_encode (param i32 i32 i32 i32) (result i64)))
+;; ws-accept — WebSocket accept handshake (key + GUID → SHA-1 → base64)
 
   (data (i32.const 62024) "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
   (global $MSG_ADDR i32 (i32.const 62000))
   (global $DIGEST_ADDR i32 (i32.const 62100))
-
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300048)
 
   (func $b64val (param $ch i32) (result i32)
     local.get $ch
@@ -165,4 +158,3 @@
     else
       (call $pack (i32.const 0) (i32.const 28))
     end)
-)

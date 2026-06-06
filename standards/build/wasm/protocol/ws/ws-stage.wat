@@ -1,21 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "STATUS_OK" (global $OK i32))
-  (import "edgerun-core" "STATUS_MORE" (global $MORE i32))
-  (import "edgerun-core" "STATUS_TIMEOUT" (global $TIMEOUT i32))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-
-  (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_available" (func $pipe_available (param i32) (result i32)))
-
-  (import "ws-frame" "ws_parse_header" (func $ws_parse_header (param i32 i32 i32 i32) (result i32)))
-  (import "ws-frame" "ws_apply_mask_in_place" (func $ws_apply_mask (param i32 i32 i32) (result i32)))
-  (import "ws-frame" "ws_write_server_frame_header" (func $ws_write_srv_hdr (param i32 i32 i32 i32 i32) (result i64)))
-  (import "ws-frame" "ws_write_frame_header" (func $ws_write_hdr (param i32 i32 i32 i32 i32 i32 i32 i32) (result i64)))
-  (import "edgerun-core" "memcpy" (func $memcpy (param i32 i32 i32)))
-
-  (func (export "proto_standard_id") (result i32) i32.const 300508)
+;; Standard ID removed — merged into single module
 
   ;; ════════════════════════════════════════════════════════════════
   ;; ws_encode — payload → WS frame (pure transform, batch)
@@ -127,7 +110,7 @@
         (if (i32.load offset=12 (local.get $state))
           (then
             (if (i32.ge_u (local.get $elapsed) (i32.load offset=12 (local.get $state)))
-              (then (return (global.get $TIMEOUT))))))
+              (then (return (global.get $STATUS_TIMEOUT))))))
 
         ;; Decode from recv pipe
         (local.set $n (call $decode_frame_socket
@@ -135,13 +118,13 @@
           (local.get $state) (i32.const 20) (local.get $output) (local.get $send_pipe)))
         (if (i32.gt_s (local.get $n) (i32.const 0))
           (then
-            (if (i32.ne (local.get $n) (global.get $MORE))
+            (if (i32.ne (local.get $n) (global.get $STATUS_MORE))
               (then
                 (i32.store offset=4 (local.get $state) (i32.const 0))
                 (return (local.get $n))))))
         (if (i32.lt_s (local.get $n) (i32.const 0))
           (then (return (local.get $n))))
-        (return (global.get $MORE))))
+        (return (global.get $STATUS_MORE))))
 
     ;; Phase 0 (idle): encode + try decode
 
@@ -171,7 +154,7 @@
       (local.get $state) (i32.const 20) (local.get $output) (local.get $send_pipe)))
     (if (i32.gt_s (local.get $n) (i32.const 0))
       (then
-        (if (i32.ne (local.get $n) (global.get $MORE))
+        (if (i32.ne (local.get $n) (global.get $STATUS_MORE))
           (then (return (local.get $n))))))
     (if (i32.lt_s (local.get $n) (i32.const 0))
       (then (return (local.get $n))))
@@ -181,7 +164,7 @@
       (then
         (i32.store offset=4 (local.get $state) (i32.const 1))
         (i32.store offset=8 (local.get $state) (i32.load (local.get $state)))))
-    (global.get $MORE))
+    (global.get $STATUS_MORE))
 
   ;; ── $decode_frame_socket — same as ws_decode but reads from recv pipe ──
   ;; and handles control frames (ping→pong, close→close echo).
@@ -219,7 +202,7 @@
     (if (i32.lt_u (local.get $total) (i32.const 2))
       (then
         (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (local.get $total))
-        (return (global.get $MORE))))
+        (return (global.get $STATUS_MORE))))
 
     (local.set $hdr_out (i32.sub (local.get $scap) (i32.const 32)))
     (local.set $r (call $ws_parse_header
@@ -232,7 +215,7 @@
         (call $memcpy (i32.add (local.get $state) (i32.add (local.get $dbuf_off) (i32.const 4)))
           (local.get $scratch) (local.get $total))
         (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (local.get $total))
-        (return (global.get $MORE))))
+        (return (global.get $STATUS_MORE))))
 
     (if (i32.eq (local.get $r) (i32.const 3)) (then (return (i32.const -3))))
     (if (i32.eq (local.get $r) (i32.const 4)) (then (return (i32.const -4))))
@@ -252,7 +235,7 @@
         (call $memcpy (i32.add (local.get $state) (i32.add (local.get $dbuf_off) (i32.const 4)))
           (local.get $scratch) (local.get $total))
         (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (local.get $total))
-        (return (global.get $MORE))))
+        (return (global.get $STATUS_MORE))))
 
     (local.set $off (local.get $hdr_len))
 
@@ -338,4 +321,3 @@
     (i32.const 1))
 
   ;; memcpy imported from edgerun-core as $memcpy(dst, src, len)
-)

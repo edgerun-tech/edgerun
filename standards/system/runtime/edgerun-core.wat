@@ -1,4 +1,3 @@
-(module
   ;; EdgeRun shared runtime core — owns linear memory, exports shared helpers.
   ;; All other modules import memory + helpers from here.
 
@@ -308,4 +307,3 @@
 
   (func $simd_capabilities (export "simd_capabilities") (result i32)
     (i32.const 1))
-)

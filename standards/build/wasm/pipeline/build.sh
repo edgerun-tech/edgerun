@@ -1,54 +1,77 @@
-#!/bin/sh
-# Build all pipeline modules including WASM interpreter integration
-set -e
+#!/bin/bash
+# Build unified pipeline.wasm from source fragments
+# Concatenates in dependency order, compiles with wasm-tools parse
+set -euo pipefail
 
-W2W="wasm-tools parse"
-DIR="$(dirname "$(realpath "$0")")"
-ROOT="$(dirname "$DIR")"
-RUNTIME="$(realpath "$DIR/../../../system/runtime")"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE="$(cd "$DIR/../../.." && pwd)"
+OUT="$DIR/pipeline.wat"
+WASM="${OUT%.wat}.wasm"
 
-echo "=== Building pipeline modules ==="
-echo "  root:    $ROOT"
-echo "  runtime: $RUNTIME"
-echo ""
+PREAMBLE='(module'
+FOOTER=')'
 
-# Runtime core (shared memory + offset globals + status codes)
-echo "  edgerun-core..."
-$W2W "$RUNTIME/edgerun-core.wat" -o "$ROOT/io/edgerun-core.wasm"
+cat > "$OUT" << 'EOF'
+(module
+EOF
 
-# I/O primitives
-echo "  pipe-core..."
-$W2W "$ROOT/io/pipe-core.wat" -o "$ROOT/io/pipe-core.wasm"
-echo "  frame-core..."
-$W2W "$ROOT/io/frame-core.wat" -o "$ROOT/io/frame-core.wasm"
-echo "  mux-core..."
-$W2W "$ROOT/io/mux-core.wat" -o "$ROOT/io/mux-core.wasm"
-echo "  socket-core..."
-$W2W "$ROOT/net/socket-core.wat" -o "$ROOT/net/socket-core.wasm"
-echo "  pipeline-core..."
-$W2W "$ROOT/io/pipeline-core.wat" -o "$ROOT/io/pipeline-core.wasm"
+# Fragment order (dependencies first):
+# 1. edgerun-core — memory, globals, LUTs, helpers
+# 2. encoding-base64url — base64url encode/decode
+# 2a. encoding-base64 — base64 standard encode/decode
+# 2b. ws-accept — WebSocket handshake (needs sha1 + base64)
+# 2c. encoding-core — binary I/O, varint, crc32, adler32
+# 2c. crypto-sha1 — SHA-1 hash (work buffer at 0x10000)
+# 3. deflate-inflate — raw deflate scan & inflate (wasm memory at 0x90000+)
+# 4. pipe-core — byte pipes
+# 5. frame-core — framed I/O
+# 6. pipeline-core — pipeline_run + dispatch table
+# 7. encoding-text — hex/base64 pipeline stages
+# 8. socket-core — transport stage
+# 9. mux-core — mux/demux stages
+# 10. ws-frame — WebSocket frame parsing
+# 11. ws-stage — WebSocket pipeline stages
+# 12. wasm-interpreter — WASM interpreter
+# 13. wasm-exec-stage — interpreter pipeline stage
 
-# Encoding stages
-echo "  encoding-text..."
-$W2W "$ROOT/encoding/encoding-text.wat" -o "$ROOT/encoding/encoding-text.wasm"
+cat >> "$OUT" "$BASE/system/runtime/edgerun-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/encoding/encoding-base64url.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/encoding/encoding-base64.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/protocol/ws/ws-accept.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/encoding/encoding-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/hash/crypto-sha1.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/serialization/deflate-inflate.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/io/pipe-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/io/frame-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/io/pipeline-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/encoding/encoding-text.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/net/socket-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/io/mux-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/protocol/ws/ws-frame.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/protocol/ws/ws-stage.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/pipeline/wasm-interpreter.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/pipeline/wasm-exec-stage.wat"
 
-# WS stage
-echo "  ws-stage..."
-$W2W "$ROOT/protocol/ws/ws-stage.wat" -o "$ROOT/protocol/ws/ws-stage.wasm"
+echo ")" >> "$OUT"
 
-# ── WASM interpreter integration ──
-echo "  wasm-interpreter (pipeline-local copy)..."
-$W2W "$DIR/wasm-interpreter.wat" -o "$DIR/wasm-interpreter.wasm"
-echo "  wasm-exec-stage..."
-$W2W "$DIR/wasm-exec-stage.wat" -o "$DIR/wasm-exec-stage.wasm"
-echo "  wat-parse-core..."
-$W2W "$ROOT/text/wat-parse-core.wat" -o "$ROOT/text/wat-parse-core.wasm"
-echo "  process-wat-parse..."
-$W2W "$DIR/process-wat-parse.wat" -o "$DIR/process-wat-parse.wasm"
+echo "Generated $OUT ($(wc -l < "$OUT") lines)"
 
-# Stage registry (wires all stages into 64-slot dispatch table)
-echo "  stage-registry..."
-$W2W "$DIR/stage-registry.wat" -o "$DIR/stage-registry.wasm"
-
-echo ""
-echo "=== All modules built successfully ==="
+# Compile with wasm-tools parse
+wasm-tools parse "$OUT" -o "$WASM"
+echo "Compiled $WASM ($(wc -c < "$WASM") bytes)"

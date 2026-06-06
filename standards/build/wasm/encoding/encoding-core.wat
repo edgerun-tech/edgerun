@@ -1,11 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-
-  (func (export "proto_standard_id") (result i32)
-    (i32.const 300001))
-
-  (func $has (param $len i32) (param $offset i32) (param $need i32) (result i32)
+(func $ec_has (param $len i32) (param $offset i32) (param $need i32) (result i32)
     (if (result i32)
       (i32.lt_u (local.get $len) (local.get $need))
       (then (i32.const 0))
@@ -14,78 +7,9 @@
           (local.get $offset)
           (i32.sub (local.get $len) (local.get $need))))))
 
-  (func (export "read_u16_be") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
-    (if (result i64)
-      (call $has (local.get $len) (local.get $offset) (i32.const 2))
-      (then
-        (call $pack
-          (i32.const 0)
-          (i32.or
-            (i32.shl
-              (i32.load8_u (i32.add (local.get $ptr) (local.get $offset)))
-              (i32.const 8))
-            (i32.load8_u
-              (i32.add
-                (local.get $ptr)
-                (i32.add (local.get $offset) (i32.const 1)))))))
-      (else (call $pack (i32.const 1) (i32.const 0)))))
-
-  (func (export "read_u24_be") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
-    (if (result i64)
-      (call $has (local.get $len) (local.get $offset) (i32.const 3))
-      (then
-        (call $pack
-          (i32.const 0)
-          (i32.or
-            (i32.or
-              (i32.shl
-                (i32.load8_u (i32.add (local.get $ptr) (local.get $offset)))
-                (i32.const 16))
-              (i32.shl
-                (i32.load8_u
-                  (i32.add
-                    (local.get $ptr)
-                    (i32.add (local.get $offset) (i32.const 1))))
-                (i32.const 8)))
-            (i32.load8_u
-              (i32.add
-                (local.get $ptr)
-                (i32.add (local.get $offset) (i32.const 2)))))))
-      (else (call $pack (i32.const 1) (i32.const 0)))))
-
-  (func (export "read_u32_be") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
-    (if (result i64)
-      (call $has (local.get $len) (local.get $offset) (i32.const 4))
-      (then
-        (call $pack
-          (i32.const 0)
-          (i32.or
-            (i32.or
-              (i32.shl
-                (i32.load8_u (i32.add (local.get $ptr) (local.get $offset)))
-                (i32.const 24))
-              (i32.shl
-                (i32.load8_u
-                  (i32.add
-                    (local.get $ptr)
-                    (i32.add (local.get $offset) (i32.const 1))))
-                (i32.const 16)))
-            (i32.or
-              (i32.shl
-                (i32.load8_u
-                  (i32.add
-                    (local.get $ptr)
-                    (i32.add (local.get $offset) (i32.const 2))))
-                (i32.const 8))
-              (i32.load8_u
-                (i32.add
-                  (local.get $ptr)
-                  (i32.add (local.get $offset) (i32.const 3))))))))
-      (else (call $pack (i32.const 1) (i32.const 0)))))
-
   (func (export "read_u16_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
     (if (result i64)
-      (call $has (local.get $len) (local.get $offset) (i32.const 2))
+      (call $ec_has (local.get $len) (local.get $offset) (i32.const 2))
       (then
         (call $pack
           (i32.const 0)
@@ -101,7 +25,7 @@
 
   (func (export "read_u32_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
     (if (result i64)
-      (call $has (local.get $len) (local.get $offset) (i32.const 4))
+      (call $ec_has (local.get $len) (local.get $offset) (i32.const 4))
       (then
         (call $pack
           (i32.const 0)
@@ -370,9 +294,6 @@
   (func (export "adler32") (param $ptr i32) (param $len i32) (result i32)
     (call $adler32_update (i32.const 1) (local.get $ptr) (local.get $len)))
 
-  (func (export "simd_capabilities") (result i32)
-    i32.const 1)
-
   (func (export "crc32_simd") (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $j i32)
@@ -611,7 +532,7 @@
 
   ;; ── Byte-at-a-time CRC-32 update ──
   ;; crc32_update_byte(crc, byte) → crc
-  (func (export "crc32_update_byte") (param $crc i32) (param $byte i32) (result i32)
+  (func $crc32_update_byte (export "crc32_update_byte") (param $crc i32) (param $byte i32) (result i32)
     (local $c i32) (local $i i32)
     (local.set $c (i32.xor (local.get $crc) (local.get $byte)))
     (local.set $i (i32.const 0))
@@ -630,11 +551,10 @@
 
   ;; ── Byte-at-a-time Adler-32 update ──
   ;; adler32_update_byte(adler, byte) → adler
-  (func (export "adler32_update_byte") (param $adler i32) (param $byte i32) (result i32)
+  (func $adler32_update_byte (export "adler32_update_byte") (param $adler i32) (param $byte i32) (result i32)
     (local $s1 i32) (local $s2 i32)
     (local.set $s1 (i32.and (local.get $adler) (i32.const 65535)))
     (local.set $s2 (i32.shr_u (local.get $adler) (i32.const 16)))
     (local.set $s1 (i32.rem_u (i32.add (local.get $s1) (local.get $byte)) (i32.const 65521)))
     (local.set $s2 (i32.rem_u (i32.add (local.get $s2) (local.get $s1)) (i32.const 65521)))
     (i32.or (local.get $s1) (i32.shl (local.get $s2) (i32.const 16))))
-)

@@ -1,13 +1,6 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
-  (import "encoding-base64url" "base64url_encode" (func $b64_encode (param i32 i32 i32 i32) (result i64)))
-  (import "encoding-base64url" "base64url_decode" (func $b64_decode (param i32 i32 i32 i32) (result i64)))
+  ;; Encoding Text — hex + base64url pipeline stages
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300002)
+    ;; Standard ID removed — merged into single module
 
 
   (func $hex_char (param $n i32) (result i32)
@@ -306,4 +299,3 @@
     (drop (call $pipe_write (local.get $output)
       (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
     local.get $out_len)
-)

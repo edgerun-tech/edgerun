@@ -1,10 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "encoding-core" "crc32_update_byte" (func $crc32_update_byte (param i32 i32) (result i32)))
-  (import "encoding-core" "adler32_update_byte" (func $adler32_update_byte (param i32 i32) (result i32)))
-(func (export "proto_standard_id") (result i32)
-    i32.const 300067)
+;; deflate-inflate — raw deflate scan & inflate
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid_data,
   ;; 6 limit_exceeded, 7 unsupported.
@@ -465,7 +459,7 @@
           (loop $zero_cl_lens
             (if (i32.lt_u (local.get $i) (i32.const 19))
               (then
-                (i32.store8 (i32.add (i32.const 301900) (local.get $i)) (i32.const 0))
+                (i32.store8 (i32.add (i32.const 591724) (local.get $i)) (i32.const 0))
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
                 (br $zero_cl_lens))))
           (local.set $i (i32.const 0))
@@ -475,16 +469,16 @@
                 (local.set $code (call $br_read (i32.const 3)))
                 (if (i32.lt_s (local.get $code) (i32.const 0)) (then (return (i32.const 1))))
                 (i32.store8
-                  (i32.add (i32.const 301900) (call $cl_order (local.get $i)))
+                  (i32.add (i32.const 591724) (call $cl_order (local.get $i)))
                   (local.get $code))
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
                 (br $read_cl_lens))))
           (if (call $build_table
-                (i32.const 301900)
+                (i32.const 591724)
                 (i32.const 19)
-                (i32.const 300128)
-                (i32.const 300000)
-                (i32.const 300064)
+                (i32.const 589952)
+                (i32.const 589824)
+                (i32.const 589888)
                 (i32.const 7))
             (then (return (i32.const 3))))
           (local.set $total_lens (i32.add (local.get $hlit) (local.get $hdist)))
@@ -492,7 +486,7 @@
           (loop $zero_dyn_lens
             (if (i32.lt_u (local.get $i) (i32.const 320))
               (then
-                (i32.store8 (i32.add (i32.const 301900) (local.get $i)) (i32.const 0))
+                (i32.store8 (i32.add (i32.const 591724) (local.get $i)) (i32.const 0))
                 (local.set $i (i32.add (local.get $i) (i32.const 1)))
                 (br $zero_dyn_lens))))
           (local.set $lens_index (i32.const 0))
@@ -500,7 +494,7 @@
           (loop $read_dyn_lens
             (if (i32.lt_u (local.get $lens_index) (local.get $total_lens))
               (then
-                (local.set $code (call $decode_symbol (i32.const 300128) (i32.const 300000) (i32.const 7)))
+                (local.set $code (call $decode_symbol (i32.const 589952) (i32.const 589824) (i32.const 7)))
                 (if (i32.lt_s (local.get $code) (i32.const 0))
                   (then
                     (if (i32.eq (local.get $code) (i32.const -1))
@@ -508,7 +502,7 @@
                       (else (return (i32.const 3))))))
                 (if (i32.le_u (local.get $code) (i32.const 15))
                   (then
-                    (i32.store8 (i32.add (i32.const 301900) (local.get $lens_index)) (local.get $code))
+                    (i32.store8 (i32.add (i32.const 591724) (local.get $lens_index)) (local.get $code))
                     (local.set $prev_len (local.get $code))
                     (local.set $lens_index (i32.add (local.get $lens_index) (i32.const 1)))
                     (br $read_dyn_lens)))
@@ -523,7 +517,7 @@
                     (loop $repeat_prev
                       (if (local.get $repeat_count)
                         (then
-                          (i32.store8 (i32.add (i32.const 301900) (local.get $lens_index)) (local.get $prev_len))
+                          (i32.store8 (i32.add (i32.const 591724) (local.get $lens_index)) (local.get $prev_len))
                           (local.set $lens_index (i32.add (local.get $lens_index) (i32.const 1)))
                           (local.set $repeat_count (i32.sub (local.get $repeat_count) (i32.const 1)))
                           (br $repeat_prev))))
@@ -549,26 +543,26 @@
                     (local.set $lens_index (i32.add (local.get $lens_index) (local.get $repeat_count)))
                     (br $read_dyn_lens)))
                 (return (i32.const 3)))))
-          (if (i32.eqz (i32.load8_u (i32.add (i32.const 301900) (i32.const 256))))
+          (if (i32.eqz (i32.load8_u (i32.add (i32.const 591724) (i32.const 256))))
             (then (return (i32.const 3))))
           (if (call $build_table
-                (i32.const 301900)
+                (i32.const 591724)
                 (local.get $hlit)
-                (i32.const 300384)
-                (i32.const 300256)
-                (i32.const 300320)
+                (i32.const 590208)
+                (i32.const 590080)
+                (i32.const 590144)
                 (i32.const 15))
             (then (return (i32.const 3))))
           (if (call $build_table
-                (i32.add (i32.const 301900) (local.get $hlit))
+                (i32.add (i32.const 591724) (local.get $hlit))
                 (local.get $hdist)
-                (i32.const 301728)
-                (i32.const 301600)
-                (i32.const 301664)
+                (i32.const 591552)
+                (i32.const 591424)
+                (i32.const 591488)
                 (i32.const 15))
             (then (return (i32.const 3))))
           (loop $dynamic
-            (local.set $sym (call $decode_symbol (i32.const 300384) (i32.const 300256) (i32.const 15)))
+            (local.set $sym (call $decode_symbol (i32.const 590208) (i32.const 590080) (i32.const 15)))
             (if (i32.lt_s (local.get $sym) (i32.const 0))
               (then
                 (if (i32.eq (local.get $sym) (i32.const -1))
@@ -607,7 +601,7 @@
                 (local.set $extra_val (call $br_read (local.get $extra_bits)))
                 (if (i32.lt_s (local.get $extra_val) (i32.const 0)) (then (return (i32.const 1))))
                 (local.set $length (i32.add (local.get $length) (local.get $extra_val)))))
-            (local.set $dist_sym (call $decode_symbol (i32.const 301728) (i32.const 301600) (i32.const 15)))
+            (local.set $dist_sym (call $decode_symbol (i32.const 591552) (i32.const 591424) (i32.const 15)))
             (if (i32.lt_s (local.get $dist_sym) (i32.const 0))
               (then
                 (if (i32.eq (local.get $dist_sym) (i32.const -1))
@@ -787,4 +781,3 @@
           (return (i32.const 0))))
       (br $blocks))
     (i32.const 1))
-)

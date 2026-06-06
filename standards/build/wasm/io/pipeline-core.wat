@@ -1,15 +1,6 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "STATUS_OK" (global $OK i32))
-  (import "edgerun-core" "STATUS_MORE" (global $MORE i32))
-  (import "pipe-core" "pipe_alloc" (func $pipe_alloc (param i32) (result i32)))
-  (import "pipe-core" "pipe_create" (func $pipe_create (param i32) (result i32)))
-  (import "pipe-core" "pipe_drain" (func $pipe_drain (param i32 i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_close" (func $pipe_close (param i32)))
-  (import "pipe-core" "pipe_snapshot" (func $pipe_snapshot (result i32)))
-  (import "pipe-core" "pipe_restore" (func $pipe_restore (param i32)))
+  ;; Pipeline Core — pipeline_run + dispatch table
 
-  (func (export "proto_standard_id") (result i32) i32.const 300102)
+    ;; Standard ID removed — merged into single module
 
   ;; ── Stage dispatch table ──
   (table (export "stage_table") 64 funcref)
@@ -117,9 +108,10 @@
     (local $out i32) (local $prev i32) (local $result i32)
     (local $stages i32) (local $slot i32)
     (local $cfg i32) (local $clen i32) (local $state i32)
-    (local $snapshot i32)
+    (local $snapshot i32) (local $last_i i32)
 
     (local.set $count (i32.load offset=12 (local.get $desc)))
+    (local.set $last_i (i32.sub (local.get $count) (i32.const 1)))
     (local.set $pcap (i32.load offset=8 (local.get $desc)))
     (local.set $stages (i32.add (local.get $desc) (global.get $PD_STAGES)))
     (local.set $prev (local.get $input))
@@ -134,8 +126,6 @@
     (block $done
       (loop $loop
         (br_if $done (i32.ge_u (local.get $i) (local.get $count)))
-        (local.set $slot (i32.mul (local.get $i) (global.get $PS_SIZE)))
-
         (local.set $stype (i32.load (i32.add (local.get $stages) (local.get $slot))))
         (local.set $cfg (i32.load offset=4 (i32.add (local.get $stages) (local.get $slot))))
         (local.set $clen (i32.load offset=8 (i32.add (local.get $stages) (local.get $slot))))
@@ -146,7 +136,7 @@
           (then (i32.store (local.get $state) (i32.load offset=16 (local.get $desc)))))
 
         ;; Last stage → output pipe, others → intermediate pipe
-        (if (i32.eq (local.get $i) (i32.sub (local.get $count) (i32.const 1)))
+        (if (i32.eq (local.get $i) (local.get $last_i))
           (then (local.set $out (local.get $output)))
           (else
             (local.set $out (call $pipe_create (local.get $pcap)))
@@ -160,25 +150,27 @@
             (local.get $scratch) (local.get $scap) (local.get $state)
             (local.get $stype)))
 
-        (if (i32.lt_s (local.get $result) (i32.const 0))
+        ;; Break on error or yield
+        (if (i32.or
+              (i32.lt_s (local.get $result) (i32.const 0))
+              (i32.eq (local.get $result) (global.get $STATUS_MORE)))
           (then (br $done)))
-        (if (i32.eq (local.get $result) (global.get $MORE))
-          (then (br $done)))
-        (local.set $result (global.get $OK))
 
-        ;; Close previous intermediate pipe (now consumed by this stage)
-        (if (i32.gt_u (local.get $i) (i32.const 0))
-          (then
-            (if (i32.ne (local.get $prev) (local.get $input))
-              (then (call $pipe_close (local.get $prev))))))
+        ;; Stage completed — reset result to OK for pipeline return value
+        (local.set $result (global.get $STATUS_OK))
+
+        ;; Close previous intermediate pipe (i>0 means it was an intermediate, never the user's input)
+        (if (local.get $i)
+          (then (call $pipe_close (local.get $prev))))
 
         (local.set $prev (local.get $out))
+        (local.set $slot (i32.add (local.get $slot) (global.get $PS_SIZE)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop)))
 
     ;; On full success, restore heap to free intermediate pipes.
     ;; On MORE (yield), intermediate pipes must persist for next call.
-    (if (i32.eq (local.get $result) (global.get $OK))
+    (if (i32.eq (local.get $result) (global.get $STATUS_OK))
       (then (call $pipe_restore (local.get $snapshot))))
     local.get $result)
 
@@ -189,4 +181,3 @@
     (call $pipe_drain (local.get $input) (local.get $output) (local.get $scratch) (local.get $scap)))
 
   (elem (i32.const 0) $stage_passthrough)
-)

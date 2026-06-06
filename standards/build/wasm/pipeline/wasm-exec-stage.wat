@@ -1,13 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
-  (import "wasm-interpreter" "load" (func $interp_load (param i32 i32) (result i32)))
-  (import "wasm-interpreter" "call" (func $interp_call (param i32 i32 i32) (result i32)))
-  (import "wasm-interpreter" "get_result_value" (func $get_result_value (param i32) (result i64)))
-  (import "wasm-interpreter" "get_result_count" (func $get_result_count (result i32)))
-
-  (func (export "proto_standard_id") (result i32) i32.const 300200)
+    ;; Standard ID removed — merged into single module
 
   ;; Config (variable length):
   ;;   +0: func_idx  i32  (function index; -1 = function 0)
@@ -27,7 +18,7 @@
       (then (return (local.get $wasm_len))))
 
     ;; 2. Load WASM binary via interpreter
-    (local.set $err (call $interp_load (local.get $scratch) (local.get $wasm_len)))
+    (local.set $err (call $load (local.get $scratch) (local.get $wasm_len)))
     (if (local.get $err)
       (then (return (i32.sub (i32.const 0) (local.get $err)))))
 
@@ -48,7 +39,7 @@
             (local.set $arg_ptr (i32.add (local.get $cfg) (i32.const 8)))))))
 
     ;; 4. Call function with args
-    (local.set $err (call $interp_call (local.get $func_idx) (local.get $arg_ptr) (local.get $arg_count)))
+    (local.set $err (call $call (local.get $func_idx) (local.get $arg_ptr) (local.get $arg_count)))
     (if (local.get $err)
       (then (return (i32.sub (i32.const 0) (local.get $err)))))
 
@@ -63,4 +54,3 @@
 
     ;; No result — return 0 bytes written
     (i32.const 0))
-)

@@ -1,9 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-
-(func (export "proto_standard_id") (result i32)
-    i32.const 300004)
+;; Standard ID removed — merged into single module
 
   (func (export "ws_decode_prefix") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $b0 i32)
@@ -302,7 +297,7 @@
     i32.store
     i32.const 0)
 
-  (func (export "ws_apply_mask_in_place") (param $payload_ptr i32) (param $payload_len i32) (param $mask i32) (result i32)
+  (func $ws_apply_mask (export "ws_apply_mask_in_place") (param $payload_ptr i32) (param $payload_len i32) (param $mask i32) (result i32)
     (local $i i32)
     (local $shift i32)
     loop $mask_loop
@@ -343,7 +338,7 @@
     end
     i32.const 0)
 
-  (func (export "ws_parse_header") (param $ptr i32) (param $len i32) (param $max_len i32) (param $out i32) (result i32)
+  (func $ws_parse_header (export "ws_parse_header") (param $ptr i32) (param $len i32) (param $max_len i32) (param $out i32) (result i32)
     (local $b0 i32)
     (local $b1 i32)
     (local $code i32)
@@ -696,7 +691,7 @@
     i32.store
     i32.const 0)
 
-  (func (export "ws_write_frame_header") (param $opcode i32) (param $flags i32) (param $low i32) (param $high i32) (param $mask_present i32) (param $mask i32) (param $out i32) (param $cap i32) (result i64)
+  (func $ws_write_hdr (export "ws_write_frame_header") (param $opcode i32) (param $flags i32) (param $low i32) (param $high i32) (param $mask_present i32) (param $mask i32) (param $out i32) (param $cap i32) (result i64)
     (local $written i32)
     local.get $opcode
     i32.const 0
@@ -1071,7 +1066,7 @@
     i32.const 0
     call $pack)
 
-  (func (export "ws_write_server_frame_header") (param $opcode i32) (param $low i32) (param $high i32) (param $out i32) (param $cap i32) (result i64)
+  (func $ws_write_srv_hdr (export "ws_write_server_frame_header") (param $opcode i32) (param $low i32) (param $high i32) (param $out i32) (param $cap i32) (result i64)
     (local $written i32)
     local.get $opcode
     i32.const 0
@@ -1284,4 +1279,3 @@
     i32.const 0
     local.get $written
     call $pack)
-)

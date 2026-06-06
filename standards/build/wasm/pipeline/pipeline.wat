@@ -1,3 +1,6772 @@
+(module
+  ;; EdgeRun shared runtime core — owns linear memory, exports shared helpers.
+  ;; All other modules import memory + helpers from here.
+
+  (memory (export "memory") 256)
+
+  ;; Character classification LUT at 0x1000 (256 bytes)
+  ;; bit 0: digit, bit 1: uppercase, bit 2: lowercase, bit 3: tchar,
+  ;; bit 4: hex, bit 5: ws, bit 6: scheme, bit 7: dns-label
+  (data (i32.const 0x1000) "\00\00\00\00\00\00\00\00\00\20\20\00\00\20\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\20\08\00\08\08\08\08\08\00\00\08\48\00\c8\48\00\d9\d9\d9\d9\d9\d9\d9\d9\d9\d9\00\00\00\00\00\00\00\da\da\da\da\da\da\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\00\00\00\08\08\08\dc\dc\dc\dc\dc\dc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\00\08\00\08\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+
+  ;; Lowercase mapping LUT at 0x2000 (256 bytes)
+  (data (i32.const 0x2000) "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\61\62\63\64\65\66\67\68\69\6a\6b\6c\6d\6e\6f\70\71\72\73\74\75\76\77\78\79\7a\00\00\00\00\00\00\61\62\63\64\65\66\67\68\69\6a\6b\6c\6d\6e\6f\70\71\72\73\74\75\76\77\78\79\7a\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
+
+  ;; ── Shared memory layout constants (imported by interpreter + compiler) ──
+  (global $OFF_TYPES_BUF (export "OFF_TYPES_BUF") i32 (i32.const 264))
+  (global $OFF_CODE_BUF (export "OFF_CODE_BUF") i32 (i32.const 21792))
+  (global $OFF_FUNCTIONS_BUF (export "OFF_FUNCTIONS_BUF") i32 (i32.const 17688))
+  (global $OFF_DECODED_OPS (export "OFF_DECODED_OPS") i32 (i32.const 0xA0000))
+  (global $OFF_DECODED_COUNT (export "OFF_DECODED_COUNT") i32 (i32.const 89864))
+  (global $DEC_SZ (export "DEC_SZ") i32 (i32.const 32))
+  (global $SZ_TYPE (export "SZ_TYPE") i32 (i32.const 256))
+  (global $SZ_FUNC (export "SZ_FUNC") i32 (i32.const 16))
+  (global $SZ_CODE (export "SZ_CODE") i32 (i32.const 64))
+
+  ;; ── Character classification helpers ──
+
+  (func $char_class (export "char_class") (param $b i32) (result i32)
+    (i32.load8_u offset=0x1000 (local.get $b)))
+
+  (func $is_digit (export "is_digit") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 1)))
+
+  (func $is_upper (export "is_upper") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 2)))
+
+  (func $is_lower (export "is_lower") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 4)))
+
+  (func $is_alpha (export "is_alpha") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 6)))
+
+  (func $is_tchar (export "is_tchar") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 8)))
+
+  (func $is_hex (export "is_hex") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 16)))
+
+  (func $is_ws (export "is_ws") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 32)))
+
+  (func $is_scheme_byte (export "is_scheme_byte") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 64)))
+
+  (func $is_label_byte (export "is_label_byte") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 128)))
+
+  (func $to_lower (export "to_lower") (param $b i32) (result i32)
+    (local $cl i32)
+    (local.set $cl (call $char_class (local.get $b)))
+    (if (i32.and (local.get $cl) (i32.const 2))
+      (then (return (i32.or (local.get $b) (i32.const 32)))))
+    (if (i32.and (local.get $cl) (i32.const 4))
+      (then (return (local.get $b))))
+    (i32.const 0))
+
+  (func $to_upper (export "to_upper") (param $b i32) (result i32)
+    (if (i32.and (call $char_class (local.get $b)) (i32.const 4))
+      (then (return (i32.sub (local.get $b) (i32.const 32)))))
+    (local.get $b))
+
+  (func $is_alnum (export "is_alnum") (param $b i32) (result i32)
+    (i32.and (call $char_class (local.get $b)) (i32.const 7)))
+
+  (func $is_print (export "is_print") (param $b i32) (result i32)
+    (i32.and
+      (i32.ge_u (local.get $b) (i32.const 32))
+      (i32.le_u (local.get $b) (i32.const 126))))
+
+  (func $is_cont (export "is_cont") (param $b i32) (result i32)
+    (i32.eq (i32.and (local.get $b) (i32.const 0xC0)) (i32.const 0x80)))
+
+  ;; ── Pack/unpack helpers ──
+
+  (func $pack (export "pack") (param $status i32) (param $value i32) (result i64)
+    (i64.or
+      (i64.extend_i32_u (local.get $value))
+      (i64.shl (i64.extend_i32_u (local.get $status)) (i64.const 32))))
+
+  (func $pack_u16 (export "pack_u16") (param $a i32) (param $b i32) (result i32)
+    (i32.or
+      (local.get $b)
+      (i32.shl (local.get $a) (i32.const 8))))
+
+  (func $byte (export "byte") (param $v i32) (param $i i32) (result i32)
+    (i32.and
+      (i32.shr_u (local.get $v) (i32.shl (local.get $i) (i32.const 3)))
+      (i32.const 0xFF)))
+
+  (func $has (export "has") (param $v i32) (param $mask i32) (result i32)
+    (i32.ne (i32.and (local.get $v) (local.get $mask)) (i32.const 0)))
+
+  ;; ── Shared memcpy ──
+  (func $memcpy (export "memcpy") (param $dst i32) (param $src i32) (param $len i32)
+    (local $i i32)
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+        (i32.store8
+          (i32.add (local.get $dst) (local.get $i))
+          (i32.load8_u (i32.add (local.get $src) (local.get $i))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop))))
+
+  (func $memcpy_off (export "memcpy_off") (param $dst i32) (param $doff i32) (param $src i32) (param $soff i32) (param $len i32)
+    (local $i i32)
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
+        (i32.store8
+          (i32.add (i32.add (local.get $dst) (local.get $doff)) (local.get $i))
+          (i32.load8_u
+            (i32.add (i32.add (local.get $src) (local.get $soff)) (local.get $i))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop))))
+
+  ;; ── SIMD stubs ──
+
+  (func $simd_memchr (export "simd_memchr") (param $ptr i32) (param $len i32) (param $byte i32) (result i32)
+    (local $i i32) (local $vec v128) (local $cmp v128) (local $mask i32)
+    (local.set $i (local.get $ptr))
+    (block $done
+      (loop $loop
+        (br_if $done (i32.lt_u (local.get $len) (i32.const 16)))
+        (local.set $vec (v128.load (local.get $i)))
+        (local.set $cmp (i8x16.eq (local.get $vec) (i8x16.splat (i32.wrap_i64 (i64.extend_i32_u (local.get $byte))))))
+        (local.set $mask (i32x4.bitmask (local.get $cmp)))
+        (if (local.get $mask)
+          (then (return (i32.add (local.get $i) (i32.ctz (local.get $mask))))))
+        (local.set $i (i32.add (local.get $i) (i32.const 16)))
+        (local.set $len (i32.sub (local.get $len) (i32.const 16)))
+        (br $loop)))
+    (block $r_done
+      (loop $r_loop
+        (br_if $r_done (i32.eqz (local.get $len)))
+        (if (i32.eq (i32.load8_u (local.get $i)) (local.get $byte))
+          (then (return (local.get $i))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (local.set $len (i32.sub (local.get $len) (i32.const 1)))
+        (br $r_loop)))
+    (i32.const -1))
+
+  (func $simd_memrchr (export "simd_memrchr") (param $ptr i32) (param $len i32) (param $byte i32) (result i32)
+    (local $i i32) (local $end i32) (local $vec v128) (local $cmp v128) (local $mask i32)
+    (local.set $end (i32.add (local.get $ptr) (local.get $len)))
+    (local.set $i (i32.sub (local.get $end) (i32.const 16)))
+    (block $done
+      (loop $loop
+        (br_if $done (i32.lt_u (local.get $i) (local.get $ptr)))
+        (local.set $vec (v128.load (local.get $i)))
+        (local.set $cmp (i8x16.eq (local.get $vec) (i8x16.splat (i32.wrap_i64 (i64.extend_i32_u (local.get $byte))))))
+        (local.set $mask (i32x4.bitmask (local.get $cmp)))
+        (if (local.get $mask)
+          (then (return (i32.add (local.get $i) (i32.ctz (local.get $mask))))))
+        (local.set $i (i32.sub (local.get $i) (i32.const 16)))
+        (br $loop)))
+    (local.set $i (i32.sub (local.get $end) (i32.const 1)))
+    (block $r_done
+      (loop $r_loop
+        (br_if $r_done (i32.lt_u (local.get $i) (local.get $ptr)))
+        (if (i32.eq (i32.load8_u (local.get $i)) (local.get $byte))
+          (then (return (local.get $i))))
+        (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+        (br $r_loop)))
+    (i32.const -1))
+
+  ;; ── Shared status codes (all modules should use these) ──
+  (global $STATUS_OK           (export "STATUS_OK")           i32 (i32.const 0))
+  (global $STATUS_INPUT_SHORT  (export "STATUS_INPUT_SHORT")  i32 (i32.const 1))
+  (global $STATUS_OUTPUT_SHORT (export "STATUS_OUTPUT_SHORT") i32 (i32.const 2))
+  (global $STATUS_INVALID      (export "STATUS_INVALID")      i32 (i32.const 3))
+  (global $STATUS_OVERFLOW     (export "STATUS_OVERFLOW")     i32 (i32.const 4))
+  (global $STATUS_TRUNCATED    (export "STATUS_TRUNCATED")    i32 (i32.const 5))
+  (global $STATUS_TOO_LONG     (export "STATUS_TOO_LONG")     i32 (i32.const 6))
+  (global $STATUS_MORE         (export "STATUS_MORE")         i32 (i32.const 7))
+  (global $STATUS_TIMEOUT      (export "STATUS_TIMEOUT")      i32 (i32.const 8))
+
+  ;; ── Global epoch — shared tick counter across all modules ──
+  ;; Schedulers increment this before driving pipelines. Stages read it
+  ;; for cross-pipeline synchronization and tick-based timeouts.
+  (global $epoch (export "epoch") (mut i32) (i32.const 0))
+
+  ;; ── Bounds check ──
+  ;; Returns 1 if offset + need <= len, 0 otherwise.
+  (func $bounds_check (export "bounds_check")
+    (param $len i32) (param $offset i32) (param $need i32) (result i32)
+    (if (result i32)
+      (i32.lt_u (local.get $len) (local.get $need))
+      (then (i32.const 0))
+      (else
+        (i32.le_u
+          (local.get $offset)
+          (i32.sub (local.get $len) (local.get $need))))))
+
+  ;; ── Shared big-endian read helpers (returns i64: status<<32 | value) ──
+
+  (func $read_u16_be (export "read_u16_be")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 2))
+      (then
+        (call $pack (i32.const 0)
+          (i32.or
+            (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 8))
+            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  (func $read_u24_be (export "read_u24_be")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 3))
+      (then
+        (call $pack (i32.const 0)
+          (i32.or
+            (i32.or
+              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 16))
+              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))) (i32.const 8)))
+            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 2)))))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  (func $read_u32_be (export "read_u32_be")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 4))
+      (then
+        (call $pack (i32.const 0)
+          (i32.or
+            (i32.or
+              (i32.or
+                (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 24))
+                (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))) (i32.const 16)))
+              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 2)))) (i32.const 8)))
+            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 3)))))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  ;; ── LEB128 decoders ──
+
+  (func $read_leb128_u (export "read_leb128_u")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (local $pos i32) (local $val i64) (local $b i32) (local $shift i32)
+    (local.set $pos (local.get $offset))
+    (local.set $val (i64.const 0))
+    (local.set $shift (i32.const 0))
+    (block $done
+      (loop $loop
+        (if (i32.ge_u (local.get $pos) (local.get $len))
+          (then
+            (return (call $pack (i32.const 1) (i32.wrap_i64 (local.get $val))))))
+        (local.set $b (i32.load8_u (i32.add (local.get $ptr) (local.get $pos))))
+        (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
+        (local.set $val
+          (i64.or (local.get $val)
+            (i64.shl (i64.extend_i32_u (i32.and (local.get $b) (i32.const 0x7f))) (i64.extend_i32_u (local.get $shift)))))
+        (local.set $shift (i32.add (local.get $shift) (i32.const 7)))
+        (if (i32.eqz (i32.and (local.get $b) (i32.const 0x80)))
+          (then
+            (return (call $pack (i32.const 0)
+              (i32.or (local.get $pos) (i32.shl (i32.wrap_i64 (local.get $val)) (i32.const 8)))))))
+        (br $loop)))
+    (call $pack (i32.const 5) (i32.const 0)))
+
+  (func $read_leb128_s (export "read_leb128_s")
+    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (local $pos i32) (local $val i64) (local $b i32) (local $shift i32)
+    (local.set $pos (local.get $offset))
+    (local.set $val (i64.const 0))
+    (local.set $shift (i32.const 0))
+    (block $done
+      (loop $loop
+        (if (i32.ge_u (local.get $pos) (local.get $len))
+          (then
+            (return (call $pack (i32.const 1) (i32.wrap_i64 (local.get $val))))))
+        (local.set $b (i32.load8_u (i32.add (local.get $ptr) (local.get $pos))))
+        (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
+        (local.set $val
+          (i64.or (local.get $val)
+            (i64.shl (i64.extend_i32_u (i32.and (local.get $b) (i32.const 0x7f))) (i64.extend_i32_u (local.get $shift)))))
+        (local.set $shift (i32.add (local.get $shift) (i32.const 7)))
+        (if (i32.eqz (i32.and (local.get $b) (i32.const 0x80)))
+          (then
+            (if (i32.and (local.get $b) (i32.const 0x40))
+              (then
+                (local.set $val
+                  (i64.or (local.get $val)
+                    (i64.shl (i64.const -1) (i64.extend_i32_u (local.get $shift)))))))
+            (return (call $pack (i32.const 0)
+              (i32.or (local.get $pos) (i32.shl (i32.wrap_i64 (local.get $val)) (i32.const 8)))))))
+        (br $loop)))
+    (call $pack (i32.const 5) (i32.const 0)))
+
+  ;; ── Protocol exports ──
+
+  (func $proto_abi_version (export "proto_abi_version") (result i32)
+    (i32.const 2))
+
+  (func $proto_standard_id (export "proto_standard_id") (result i32)
+    (i32.const 0))
+
+  (func $simd_capabilities (export "simd_capabilities") (result i32)
+    (i32.const 1))
+
+  ;; Base64url encoding (RFC 4648 §5) — no padding, -_ alphabet.
+
+    ;; Standard ID removed — merged into single module
+
+  (func $m86b64url_char (param $n i32) (result i32)
+    local.get $n
+    i32.const 26
+    i32.lt_u
+    if (result i32)
+      local.get $n
+      i32.const 65
+      i32.add
+    else
+      local.get $n
+      i32.const 52
+      i32.lt_u
+      if (result i32)
+        local.get $n
+        i32.const 26
+        i32.sub
+        i32.const 97
+        i32.add
+      else
+        local.get $n
+        i32.const 62
+        i32.lt_u
+        if (result i32)
+          local.get $n
+          i32.const 52
+          i32.sub
+          i32.const 48
+          i32.add
+        else
+          local.get $n
+          i32.const 62
+          i32.eq
+          if (result i32)
+            i32.const 45           ;; '-' instead of '+'
+          else
+            i32.const 95           ;; '_' instead of '/'
+          end
+        end
+      end
+    end)
+
+  ;; base64url_encode(src_ptr, src_len, dst_ptr, dcap) -> status:i32, written:i32 packed as i64
+  ;; No padding. Returns (0,written) on success, (negative,0) on error.
+  (func $b64_encode (export "base64url_encode") (param $src i32) (param $slen i32) (param $dst i32) (param $dcap i32) (result i64)
+    (local $i i32)
+    (local $o i32)
+    (local $b0 i32)
+    (local $b1 i32)
+    (local $b2 i32)
+    (local $triple i32)
+
+    ;; estimate output: ((slen + 2) / 3) * 4
+    local.get $slen
+    i32.const 2
+    i32.add
+    i32.const 3
+    i32.div_u
+    i32.const 4
+    i32.mul
+    local.set $o
+    local.get $dcap
+    local.get $o
+    i32.lt_u
+    if
+      i64.const -1
+      return
+    end
+
+    i32.const 0
+    local.set $o
+
+    block $done
+    loop $main
+      local.get $i
+      local.get $slen
+      i32.ge_u
+      br_if $done
+
+      ;; load 3 bytes
+      local.get $src
+      local.get $i
+      i32.add
+      i32.load8_u
+      local.set $b0
+      local.get $i
+      i32.const 1
+      i32.add
+      local.tee $i
+      local.get $slen
+      i32.ge_u
+      if
+        ;; 1 byte left → 2 chars
+        local.get $b0
+        i32.const 2
+        i32.shl
+        i32.const 255
+        i32.and
+        call $m86b64url_char
+        local.set $b2
+        local.get $dst
+        local.get $o
+        i32.add
+        local.get $b2
+        i32.store8
+        local.get $o
+        i32.const 1
+        i32.add
+        local.set $o
+        local.get $b0
+        i32.const 4
+        i32.shr_u
+        i32.const 15
+        i32.and
+        call $m86b64url_char
+        local.set $b2
+        local.get $dst
+        local.get $o
+        i32.add
+        local.get $b2
+        i32.store8
+        local.get $o
+        i32.const 1
+        i32.add
+        local.set $o
+        br $done
+      end
+
+      local.get $src
+      local.get $i
+      i32.add
+      i32.load8_u
+      local.set $b1
+      local.get $i
+      i32.const 1
+      i32.add
+      local.tee $i
+      local.get $slen
+      i32.ge_u
+      if
+        ;; 2 bytes → 3 chars
+        local.get $b0
+        i32.const 2
+        i32.shl
+        local.get $b1
+        i32.const 6
+        i32.shr_u
+        i32.or
+        i32.const 255
+        i32.and
+        call $m86b64url_char
+        local.set $b2
+        local.get $dst
+        local.get $o
+        i32.add
+        local.get $b2
+        i32.store8
+        local.get $o
+        i32.const 1
+        i32.add
+        local.set $o
+        local.get $b1
+        i32.const 2
+        i32.shl
+        i32.const 63
+        i32.and
+        call $m86b64url_char
+        local.set $b2
+        local.get $dst
+        local.get $o
+        i32.add
+        local.get $b2
+        i32.store8
+        local.get $o
+        i32.const 1
+        i32.add
+        local.set $o
+        local.get $b1
+        i32.const 4
+        i32.shr_u
+        i32.const 15
+        i32.and
+        call $m86b64url_char
+        local.set $b2
+        local.get $dst
+        local.get $o
+        i32.add
+        local.get $b2
+        i32.store8
+        local.get $o
+        i32.const 1
+        i32.add
+        local.set $o
+        br $done
+      end
+
+      ;; 3 bytes → 4 chars
+      local.get $src
+      local.get $i
+      i32.add
+      i32.load8_u
+      local.set $b2
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i
+
+      local.get $b0
+      i32.const 16
+      i32.shl
+      local.get $b1
+      i32.const 8
+      i32.shl
+      i32.or
+      local.get $b2
+      i32.or
+      local.set $triple
+
+      local.get $triple
+      i32.const 18
+      i32.shr_u
+      i32.const 63
+      i32.and
+      call $m86b64url_char
+      local.set $b0
+      local.get $dst
+      local.get $o
+      i32.add
+      local.get $b0
+      i32.store8
+      local.get $o
+      i32.const 1
+      i32.add
+      local.set $o
+
+      local.get $triple
+      i32.const 12
+      i32.shr_u
+      i32.const 63
+      i32.and
+      call $m86b64url_char
+      local.set $b0
+      local.get $dst
+      local.get $o
+      i32.add
+      local.get $b0
+      i32.store8
+      local.get $o
+      i32.const 1
+      i32.add
+      local.set $o
+
+      local.get $triple
+      i32.const 6
+      i32.shr_u
+      i32.const 63
+      i32.and
+      call $m86b64url_char
+      local.set $b0
+      local.get $dst
+      local.get $o
+      i32.add
+      local.get $b0
+      i32.store8
+      local.get $o
+      i32.const 1
+      i32.add
+      local.set $o
+
+      local.get $triple
+      i32.const 63
+      i32.and
+      call $m86b64url_char
+      local.set $b0
+      local.get $dst
+      local.get $o
+      i32.add
+      local.get $b0
+      i32.store8
+      local.get $o
+      i32.const 1
+      i32.add
+      local.set $o
+
+      br $main
+    end
+    end
+
+    ;; result = status=0, written=o
+    i64.const 0
+    local.get $o
+    i64.extend_i32_u
+    i64.const 32
+    i64.shl
+    i64.or)
+
+  ;; base64url_decode(src_ptr, src_len, dst_ptr, dcap) -> status:i32, written:i32 packed as i64
+  ;; Decodes base64url (no padding). Rejects invalid chars.
+  (func $b64_decode (export "base64url_decode") (param $src i32) (param $slen i32) (param $dst i32) (param $dcap i32) (result i64)
+    (local $i i32)
+    (local $o i32)
+    (local $c0 i32)
+    (local $c1 i32)
+    (local $c2 i32)
+    (local $c3 i32)
+    (local $quad i32)
+
+    ;; estimate max output: (slen / 4) * 3
+    local.get $slen
+    i32.const 3
+    i32.mul
+    i32.const 2
+    i32.shr_u
+    local.set $o
+    local.get $dcap
+    local.get $o
+    i32.lt_u
+    if
+      i64.const -2
+      return
+    end
+
+    i32.const 0
+    local.set $o
+
+    block $done
+    loop $main
+      local.get $i
+      i32.const 4
+      i32.add
+      local.tee $i
+      local.get $slen
+      i32.gt_u
+      br_if $done
+
+      ;; decode 4 chars
+      local.get $src
+      local.get $i
+      i32.const 4
+      i32.sub
+      i32.add
+      i32.load8_u
+      call $m86b64url_value
+      local.tee $c0
+      i32.const 0
+      i32.lt_s
+      br_if $done
+
+      local.get $src
+      local.get $i
+      i32.const 3
+      i32.sub
+      i32.add
+      i32.load8_u
+      call $m86b64url_value
+      local.tee $c1
+      i32.const 0
+      i32.lt_s
+      br_if $done
+
+      local.get $src
+      local.get $i
+      i32.const 2
+      i32.sub
+      i32.add
+      i32.load8_u
+      call $m86b64url_value
+      local.tee $c2
+      i32.const 0
+      i32.lt_s
+      br_if $done
+
+      local.get $src
+      local.get $i
+      i32.const 1
+      i32.sub
+      i32.add
+      i32.load8_u
+      call $m86b64url_value
+      local.tee $c3
+      i32.const 0
+      i32.lt_s
+      br_if $done
+
+      ;; reconstruct 4*6 = 24 bits → 3 bytes
+      local.get $c0
+      i32.const 18
+      i32.shl
+      local.get $c1
+      i32.const 12
+      i32.shl
+      i32.or
+      local.get $c2
+      i32.const 6
+      i32.shl
+      i32.or
+      local.get $c3
+      i32.or
+      local.set $quad
+
+      local.get $dst
+      local.get $o
+      i32.add
+      local.get $quad
+      i32.const 16
+      i32.shr_u
+      i32.const 255
+      i32.and
+      i32.store8
+      local.get $o
+      i32.const 1
+      i32.add
+      local.set $o
+
+      local.get $dst
+      local.get $o
+      i32.add
+      local.get $quad
+      i32.const 8
+      i32.shr_u
+      i32.const 255
+      i32.and
+      i32.store8
+      local.get $o
+      i32.const 1
+      i32.add
+      local.set $o
+
+      local.get $dst
+      local.get $o
+      i32.add
+      local.get $quad
+      i32.const 255
+      i32.and
+      i32.store8
+      local.get $o
+      i32.const 1
+      i32.add
+      local.set $o
+
+      br $main
+    end
+    end
+
+    i64.const 0
+    local.get $o
+    i64.extend_i32_u
+    i64.const 32
+    i64.shl
+    i64.or)
+
+  (func $m86b64url_value (param $c i32) (result i32)
+    local.get $c
+    i32.const 65
+    i32.ge_u
+    local.get $c
+    i32.const 90
+    i32.le_u
+    i32.and
+    if (result i32)
+      local.get $c
+      i32.const 65
+      i32.sub
+    else
+      local.get $c
+      i32.const 97
+      i32.ge_u
+      local.get $c
+      i32.const 122
+      i32.le_u
+      i32.and
+      if (result i32)
+        local.get $c
+        i32.const 97
+        i32.sub
+        i32.const 26
+        i32.add
+      else
+        local.get $c
+        i32.const 48
+        i32.ge_u
+        local.get $c
+        i32.const 57
+        i32.le_u
+        i32.and
+        if (result i32)
+          local.get $c
+          i32.const 48
+          i32.sub
+          i32.const 52
+          i32.add
+        else
+          local.get $c
+          i32.const 45           ;; '-'
+          i32.eq
+          if (result i32)
+            i32.const 62
+          else
+            local.get $c
+          i32.const 95         ;; '_'
+          i32.eq
+          if (result i32)
+            i32.const 63
+          else
+            i32.const -1
+          end
+        end
+      end
+    end
+    end
+  )
+(func $m85b64_char (param $n i32) (result i32)
+    local.get $n
+    i32.const 26
+    i32.lt_u
+    if (result i32)
+      local.get $n
+      i32.const 65
+      i32.add
+    else
+      local.get $n
+      i32.const 52
+      i32.lt_u
+      if (result i32)
+        local.get $n
+        i32.const 26
+        i32.sub
+        i32.const 97
+        i32.add
+      else
+        local.get $n
+        i32.const 62
+        i32.lt_u
+        if (result i32)
+          local.get $n
+          i32.const 52
+          i32.sub
+          i32.const 48
+          i32.add
+        else
+          local.get $n
+          i32.const 62
+          i32.eq
+          if (result i32)
+            i32.const 43
+          else
+            i32.const 47
+          end
+        end
+      end
+    end)
+
+  (func $m85b64_value (param $c i32) (result i32)
+    local.get $c
+    i32.const 65
+    i32.ge_u
+    local.get $c
+    i32.const 90
+    i32.le_u
+    i32.and
+    if (result i32)
+      local.get $c
+      i32.const 65
+      i32.sub
+    else
+      local.get $c
+      i32.const 97
+      i32.ge_u
+      local.get $c
+      i32.const 122
+      i32.le_u
+      i32.and
+      if (result i32)
+        local.get $c
+        i32.const 97
+        i32.sub
+        i32.const 26
+        i32.add
+      else
+        local.get $c
+        i32.const 48
+        i32.ge_u
+        local.get $c
+        i32.const 57
+        i32.le_u
+        i32.and
+        if (result i32)
+          local.get $c
+          i32.const 48
+          i32.sub
+          i32.const 52
+          i32.add
+        else
+          local.get $c
+          i32.const 43
+          i32.eq
+          if (result i32)
+            i32.const 62
+          else
+            local.get $c
+            i32.const 47
+            i32.eq
+            if (result i32)
+              i32.const 63
+            else
+              i32.const -1
+            end
+          end
+        end
+      end
+    end)
+
+  (func $base64_encode (export "base64_standard_encode")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $groups i32)
+    (local $rem i32)
+    (local $out_len i32)
+    (local $i i32)
+    (local $j i32)
+    (local $b0 i32)
+    (local $b1 i32)
+    (local $b2 i32)
+    local.get $in_len
+    i32.const 3
+    i32.div_u
+    local.set $groups
+    local.get $in_len
+    i32.const 3
+    i32.rem_u
+    local.set $rem
+    local.get $groups
+    i32.const 1073741823
+    i32.gt_u
+    if (result i64)
+      i32.const 4
+      i32.const 0
+      call $pack
+    else
+      local.get $groups
+      i32.const 1073741823
+      i32.eq
+      local.get $rem
+      i32.const 0
+      i32.ne
+      i32.and
+      if (result i64)
+        i32.const 4
+        i32.const 0
+        call $pack
+      else
+        local.get $groups
+        local.get $rem
+        i32.const 0
+        i32.ne
+        i32.add
+        i32.const 2
+        i32.shl
+        local.set $out_len
+        local.get $out_len
+        local.get $out_cap
+        i32.gt_u
+        if (result i64)
+          i32.const 2
+          i32.const 0
+          call $pack
+        else
+          loop $loop
+            local.get $i
+            local.get $groups
+            i32.lt_u
+            if
+              local.get $in_ptr
+              local.get $i
+              i32.const 3
+              i32.mul
+              i32.add
+              i32.load8_u
+              local.set $b0
+              local.get $in_ptr
+              local.get $i
+              i32.const 3
+              i32.mul
+              i32.add
+              i32.const 1
+              i32.add
+              i32.load8_u
+              local.set $b1
+              local.get $in_ptr
+              local.get $i
+              i32.const 3
+              i32.mul
+              i32.add
+              i32.const 2
+              i32.add
+              i32.load8_u
+              local.set $b2
+              local.get $out_ptr
+              local.get $j
+              i32.add
+              local.get $b0
+              i32.const 2
+              i32.shr_u
+              call $m85b64_char
+              i32.store8
+              local.get $out_ptr
+              local.get $j
+              i32.add
+              i32.const 1
+              i32.add
+              local.get $b0
+              i32.const 4
+              i32.shl
+              local.get $b1
+              i32.const 4
+              i32.shr_u
+              i32.or
+              i32.const 63
+              i32.and
+              call $m85b64_char
+              i32.store8
+              local.get $out_ptr
+              local.get $j
+              i32.add
+              i32.const 2
+              i32.add
+              local.get $b1
+              i32.const 2
+              i32.shl
+              local.get $b2
+              i32.const 6
+              i32.shr_u
+              i32.or
+              i32.const 63
+              i32.and
+              call $m85b64_char
+              i32.store8
+              local.get $out_ptr
+              local.get $j
+              i32.add
+              i32.const 3
+              i32.add
+              local.get $b2
+              i32.const 63
+              i32.and
+              call $m85b64_char
+              i32.store8
+              local.get $i
+              i32.const 1
+              i32.add
+              local.set $i
+              local.get $j
+              i32.const 4
+              i32.add
+              local.set $j
+              br $loop
+            end
+          end
+          local.get $rem
+          i32.const 1
+          i32.eq
+          if
+            local.get $in_ptr
+            local.get $groups
+            i32.const 3
+            i32.mul
+            i32.add
+            i32.load8_u
+            local.set $b0
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            local.get $b0
+            i32.const 2
+            i32.shr_u
+            call $m85b64_char
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 1
+            i32.add
+            local.get $b0
+            i32.const 4
+            i32.shl
+            i32.const 63
+            i32.and
+            call $m85b64_char
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 2
+            i32.add
+            i32.const 61
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 3
+            i32.add
+            i32.const 61
+            i32.store8
+          end
+          local.get $rem
+          i32.const 2
+          i32.eq
+          if
+            local.get $in_ptr
+            local.get $groups
+            i32.const 3
+            i32.mul
+            i32.add
+            i32.load8_u
+            local.set $b0
+            local.get $in_ptr
+            local.get $groups
+            i32.const 3
+            i32.mul
+            i32.add
+            i32.const 1
+            i32.add
+            i32.load8_u
+            local.set $b1
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            local.get $b0
+            i32.const 2
+            i32.shr_u
+            call $m85b64_char
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 1
+            i32.add
+            local.get $b0
+            i32.const 4
+            i32.shl
+            local.get $b1
+            i32.const 4
+            i32.shr_u
+            i32.or
+            i32.const 63
+            i32.and
+            call $m85b64_char
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 2
+            i32.add
+            local.get $b1
+            i32.const 2
+            i32.shl
+            i32.const 63
+            i32.and
+            call $m85b64_char
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 3
+            i32.add
+            i32.const 61
+            i32.store8
+          end
+          i32.const 0
+          local.get $out_len
+          call $pack
+        end
+      end
+    end)
+
+  (func (export "base64_standard_decode")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $groups i32)
+    (local $full_groups i32)
+    (local $pad i32)
+    (local $out_len i32)
+    (local $i i32)
+    (local $j i32)
+    (local $v0 i32)
+    (local $v1 i32)
+    (local $v2 i32)
+    (local $v3 i32)
+    local.get $in_len
+    i32.const 3
+    i32.and
+    if (result i64)
+      i32.const 3
+      i32.const 0
+      call $pack
+    else
+      local.get $in_len
+      i32.const 4
+      i32.div_u
+      local.set $groups
+      local.get $groups
+      local.set $full_groups
+      local.get $in_len
+      if
+        local.get $in_ptr
+        local.get $in_len
+        i32.add
+        i32.const 1
+        i32.sub
+        i32.load8_u
+        i32.const 61
+        i32.eq
+        if
+          i32.const 1
+          local.set $pad
+          local.get $in_ptr
+          local.get $in_len
+          i32.add
+          i32.const 2
+          i32.sub
+          i32.load8_u
+          i32.const 61
+          i32.eq
+          if
+            i32.const 2
+            local.set $pad
+          end
+        end
+      end
+      local.get $pad
+      if
+        local.get $groups
+        i32.const 0
+        i32.eq
+        if
+          i32.const 3
+          i32.const 0
+          call $pack
+          return
+        end
+        local.get $groups
+        i32.const 1
+        i32.sub
+        local.set $full_groups
+      end
+      local.get $groups
+      i32.const 3
+      i32.mul
+      local.get $pad
+      i32.sub
+      local.set $out_len
+      local.get $out_len
+      local.get $out_cap
+      i32.gt_u
+      if (result i64)
+        i32.const 2
+        i32.const 0
+        call $pack
+      else
+        loop $loop
+          local.get $i
+          local.get $full_groups
+          i32.lt_u
+          if
+            local.get $in_ptr
+            local.get $i
+            i32.const 4
+            i32.mul
+            i32.add
+            i32.load8_u
+            call $m85b64_value
+            local.tee $v0
+            i32.const 0
+            i32.lt_s
+            if
+              i32.const 3
+              i32.const 0
+              call $pack
+              return
+            end
+            local.get $in_ptr
+            local.get $i
+            i32.const 4
+            i32.mul
+            i32.add
+            i32.const 1
+            i32.add
+            i32.load8_u
+            call $m85b64_value
+            local.tee $v1
+            i32.const 0
+            i32.lt_s
+            if
+              i32.const 3
+              i32.const 0
+              call $pack
+              return
+            end
+            local.get $in_ptr
+            local.get $i
+            i32.const 4
+            i32.mul
+            i32.add
+            i32.const 2
+            i32.add
+            i32.load8_u
+            call $m85b64_value
+            local.tee $v2
+            i32.const 0
+            i32.lt_s
+            if
+              i32.const 3
+              i32.const 0
+              call $pack
+              return
+            end
+            local.get $in_ptr
+            local.get $i
+            i32.const 4
+            i32.mul
+            i32.add
+            i32.const 3
+            i32.add
+            i32.load8_u
+            call $m85b64_value
+            local.tee $v3
+            i32.const 0
+            i32.lt_s
+            if
+              i32.const 3
+              i32.const 0
+              call $pack
+              return
+            end
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            local.get $v0
+            i32.const 2
+            i32.shl
+            local.get $v1
+            i32.const 4
+            i32.shr_u
+            i32.or
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 1
+            i32.add
+            local.get $v1
+            i32.const 4
+            i32.shl
+            local.get $v2
+            i32.const 2
+            i32.shr_u
+            i32.or
+            i32.store8
+            local.get $out_ptr
+            local.get $j
+            i32.add
+            i32.const 2
+            i32.add
+            local.get $v2
+            i32.const 6
+            i32.shl
+            local.get $v3
+            i32.or
+            i32.store8
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            local.get $j
+            i32.const 3
+            i32.add
+            local.set $j
+            br $loop
+          end
+        end
+        local.get $pad
+        i32.const 1
+        i32.eq
+        if
+          local.get $in_ptr
+          local.get $full_groups
+          i32.const 4
+          i32.mul
+          i32.add
+          i32.load8_u
+          call $m85b64_value
+          local.tee $v0
+          i32.const 0
+          i32.lt_s
+          if
+            i32.const 3
+            i32.const 0
+            call $pack
+            return
+          end
+          local.get $in_ptr
+          local.get $full_groups
+          i32.const 4
+          i32.mul
+          i32.add
+          i32.const 1
+          i32.add
+          i32.load8_u
+          call $m85b64_value
+          local.tee $v1
+          i32.const 0
+          i32.lt_s
+          if
+            i32.const 3
+            i32.const 0
+            call $pack
+            return
+          end
+          local.get $in_ptr
+          local.get $full_groups
+          i32.const 4
+          i32.mul
+          i32.add
+          i32.const 2
+          i32.add
+          i32.load8_u
+          call $m85b64_value
+          local.tee $v2
+          i32.const 0
+          i32.lt_s
+          if
+            i32.const 3
+            i32.const 0
+            call $pack
+            return
+          end
+          local.get $v2
+          i32.const 3
+          i32.and
+          if
+            i32.const 3
+            i32.const 0
+            call $pack
+            return
+          end
+          local.get $out_ptr
+          local.get $j
+          i32.add
+          local.get $v0
+          i32.const 2
+          i32.shl
+          local.get $v1
+          i32.const 4
+          i32.shr_u
+          i32.or
+          i32.store8
+          local.get $out_ptr
+          local.get $j
+          i32.add
+          i32.const 1
+          i32.add
+          local.get $v1
+          i32.const 4
+          i32.shl
+          local.get $v2
+          i32.const 2
+          i32.shr_u
+          i32.or
+          i32.store8
+        end
+        local.get $pad
+        i32.const 2
+        i32.eq
+        if
+          local.get $in_ptr
+          local.get $full_groups
+          i32.const 4
+          i32.mul
+          i32.add
+          i32.load8_u
+          call $m85b64_value
+          local.tee $v0
+          i32.const 0
+          i32.lt_s
+          if
+            i32.const 3
+            i32.const 0
+            call $pack
+            return
+          end
+          local.get $in_ptr
+          local.get $full_groups
+          i32.const 4
+          i32.mul
+          i32.add
+          i32.const 1
+          i32.add
+          i32.load8_u
+          call $m85b64_value
+          local.tee $v1
+          i32.const 0
+          i32.lt_s
+          if
+            i32.const 3
+            i32.const 0
+            call $pack
+            return
+          end
+          local.get $v1
+          i32.const 15
+          i32.and
+          if
+            i32.const 3
+            i32.const 0
+            call $pack
+            return
+          end
+          local.get $out_ptr
+          local.get $j
+          i32.add
+          local.get $v0
+          i32.const 2
+          i32.shl
+          local.get $v1
+          i32.const 4
+          i32.shr_u
+          i32.or
+          i32.store8
+        end
+        i32.const 0
+        local.get $out_len
+        call $pack
+            end
+    end)
+
+
+;; ws-accept — WebSocket accept handshake (key + GUID → SHA-1 → base64)
+
+  (data (i32.const 62024) "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+
+  (global $MSG_ADDR i32 (i32.const 62000))
+  (global $DIGEST_ADDR i32 (i32.const 62100))
+
+  (func $b64val (param $ch i32) (result i32)
+    local.get $ch
+    i32.const 65
+    i32.ge_u
+    local.get $ch
+    i32.const 90
+    i32.le_u
+    i32.and
+    if
+      local.get $ch
+      i32.const 65
+      i32.sub
+      return
+    end
+    local.get $ch
+    i32.const 97
+    i32.ge_u
+    local.get $ch
+    i32.const 122
+    i32.le_u
+    i32.and
+    if
+      local.get $ch
+      i32.const 71
+      i32.sub
+      return
+    end
+    local.get $ch
+    i32.const 48
+    i32.ge_u
+    local.get $ch
+    i32.const 57
+    i32.le_u
+    i32.and
+    if
+      local.get $ch
+      i32.const 4
+      i32.add
+      return
+    end
+    local.get $ch
+    i32.const 43
+    i32.eq
+    if
+      i32.const 62
+      return
+    end
+    local.get $ch
+    i32.const 47
+    i32.eq
+    if
+      i32.const 63
+      return
+    end
+    i32.const -1)
+
+  ;; base64 encode imported from encoding-base64 as $base64_encode
+
+  (func (export "ws_accept_key") (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32) (result i64)
+    (local $i i32)
+    (local $v i32)
+    (local $out_i i32)
+    (local $result i64)
+    (local $digest i32)
+    local.get $in_len
+    i32.const 24
+    i32.ne
+    if
+      (return (call $pack (i32.const 4) (i32.const 0)))
+    end
+    local.get $in_ptr
+    i32.const 22
+    i32.add
+    i32.load8_u
+    i32.const 61
+    i32.ne
+    local.get $in_ptr
+    i32.const 23
+    i32.add
+    i32.load8_u
+    i32.const 61
+    i32.ne
+    i32.or
+    if
+      (return (call $pack (i32.const 3) (i32.const 0)))
+    end
+    (loop $validate
+      local.get $in_ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      call $b64val
+      local.set $v
+      local.get $v
+      i32.const 0
+      i32.lt_s
+      if
+        (return (call $pack (i32.const 3) (i32.const 0)))
+      end
+      local.get $i
+      i32.const 21
+      i32.eq
+      local.get $v
+      i32.const 15
+      i32.and
+      i32.const 0
+      i32.ne
+      i32.and
+      if
+        (return (call $pack (i32.const 3) (i32.const 0)))
+      end
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i
+      local.get $i
+      i32.const 22
+      i32.lt_u
+      br_if $validate)
+    local.get $out_cap
+    i32.const 28
+    i32.lt_u
+    if
+      (return (call $pack (i32.const 2) (i32.const 0)))
+    end
+    ;; Assemble 60-byte message: key + GUID
+    (local.set $i (i32.const 0))
+    (loop $copy_key
+      (i32.store8
+        (i32.add (global.get $MSG_ADDR) (local.get $i))
+        (i32.load8_u (i32.add (local.get $in_ptr) (local.get $i))))
+      (local.set $i (i32.add (local.get $i) (i32.const 1)))
+      (br_if $copy_key (i32.lt_u (local.get $i) (i32.const 24))))
+    ;; Compute SHA-1 of message
+    (local.set $result
+      (call $sha1 (global.get $MSG_ADDR) (i32.const 60) (global.get $DIGEST_ADDR)))
+    (local.set $v (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $v)
+      (then (return (call $pack (local.get $v) (i32.const 0)))))
+    (local.set $digest (global.get $DIGEST_ADDR))
+    ;; Base64-encode the 20-byte digest into 28-byte output (standard base64 with padding)
+    local.get $digest i32.const 20 local.get $out_ptr local.get $out_cap
+    call $base64_encode
+    local.set $result
+    local.get $result
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    if (result i64)
+      local.get $result
+    else
+      (call $pack (i32.const 0) (i32.const 28))
+    end)
+
+(func $ec_has (param $len i32) (param $offset i32) (param $need i32) (result i32)
+    (if (result i32)
+      (i32.lt_u (local.get $len) (local.get $need))
+      (then (i32.const 0))
+      (else
+        (i32.le_u
+          (local.get $offset)
+          (i32.sub (local.get $len) (local.get $need))))))
+
+  (func (export "read_u16_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $ec_has (local.get $len) (local.get $offset) (i32.const 2))
+      (then
+        (call $pack
+          (i32.const 0)
+          (i32.or
+            (i32.load8_u (i32.add (local.get $ptr) (local.get $offset)))
+            (i32.shl
+              (i32.load8_u
+                (i32.add
+                  (local.get $ptr)
+                  (i32.add (local.get $offset) (i32.const 1))))
+              (i32.const 8)))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  (func (export "read_u32_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+    (if (result i64)
+      (call $ec_has (local.get $len) (local.get $offset) (i32.const 4))
+      (then
+        (call $pack
+          (i32.const 0)
+          (i32.or
+            (i32.or
+              (i32.load8_u (i32.add (local.get $ptr) (local.get $offset)))
+              (i32.shl
+                (i32.load8_u
+                  (i32.add
+                    (local.get $ptr)
+                    (i32.add (local.get $offset) (i32.const 1))))
+                (i32.const 8)))
+            (i32.or
+              (i32.shl
+                (i32.load8_u
+                  (i32.add
+                    (local.get $ptr)
+                    (i32.add (local.get $offset) (i32.const 2))))
+                (i32.const 16))
+              (i32.shl
+                (i32.load8_u
+                  (i32.add
+                    (local.get $ptr)
+                    (i32.add (local.get $offset) (i32.const 3))))
+                (i32.const 24))))))
+      (else (call $pack (i32.const 1) (i32.const 0)))))
+
+  (func (export "varint_encode_u64")
+    (param $value_low i32) (param $value_high i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $value i64)
+    (local $next i64)
+    (local $written i32)
+    (local $byte i32)
+    (local.set $value
+      (i64.or
+        (i64.extend_i32_u (local.get $value_low))
+        (i64.shl (i64.extend_i32_u (local.get $value_high)) (i64.const 32))))
+    (loop $again
+      (if (i32.ge_u (local.get $written) (local.get $out_cap))
+        (then (return (call $pack (i32.const 2) (local.get $written)))))
+      (local.set $next (i64.shr_u (local.get $value) (i64.const 7)))
+      (local.set $byte (i32.and (i32.wrap_i64 (local.get $value)) (i32.const 127)))
+      (if (i64.ne (local.get $next) (i64.const 0))
+        (then (local.set $byte (i32.or (local.get $byte) (i32.const 128)))))
+      (i32.store8
+        (i32.add (local.get $out_ptr) (local.get $written))
+        (local.get $byte))
+      (local.set $written (i32.add (local.get $written) (i32.const 1)))
+      (local.set $value (local.get $next))
+      (br_if $again (i64.ne (local.get $value) (i64.const 0))))
+    (call $pack (i32.const 0) (local.get $written)))
+
+  (func (export "varint_decode_u64")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32)
+    (result i64)
+    (local $i i32)
+    (local $shift i32)
+    (local $b i32)
+    (local $result i64)
+    (if (i32.eqz (local.get $in_len))
+      (then (return (call $pack (i32.const 1) (i32.const 0)))))
+    (loop $again
+      (if (i32.ge_u (local.get $i) (local.get $in_len))
+        (then (return (call $pack (i32.const 5) (local.get $i)))))
+      (if (i32.ge_u (local.get $i) (i32.const 10))
+        (then (return (call $pack (i32.const 6) (local.get $i)))))
+      (local.set $b (i32.load8_u (i32.add (local.get $in_ptr) (local.get $i))))
+      (if
+        (i32.and
+          (i32.eq (local.get $shift) (i32.const 63))
+          (i32.ne (i32.and (local.get $b) (i32.const 126)) (i32.const 0)))
+        (then (return (call $pack (i32.const 4) (local.get $i)))))
+      (local.set $result
+        (i64.or
+          (local.get $result)
+          (i64.shl
+            (i64.extend_i32_u (i32.and (local.get $b) (i32.const 127)))
+            (i64.extend_i32_u (local.get $shift)))))
+      (local.set $i (i32.add (local.get $i) (i32.const 1)))
+      (if (i32.eqz (i32.and (local.get $b) (i32.const 128)))
+        (then
+          (i64.store (local.get $out_ptr) (local.get $result))
+          (return (call $pack (i32.const 0) (local.get $i)))))
+      (if (i32.eq (local.get $i) (i32.const 10))
+        (then (return (call $pack (i32.const 6) (local.get $i)))))
+      (local.set $shift (i32.add (local.get $shift) (i32.const 7)))
+      (br $again))
+    (call $pack (i32.const 5) (local.get $i)))
+
+  (func (export "quic_varint_encode_u64")
+    (param $value_low i32) (param $value_high i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $value i64)
+    (local.set $value
+      (i64.or
+        (i64.extend_i32_u (local.get $value_low))
+        (i64.shl (i64.extend_i32_u (local.get $value_high)) (i64.const 32))))
+    (if (i64.gt_u (local.get $value) (i64.const 4611686018427387903))
+      (then (return (call $pack (i32.const 4) (i32.const 0)))))
+    (if (i64.le_u (local.get $value) (i64.const 63))
+      (then
+        (if (i32.lt_u (local.get $out_cap) (i32.const 1))
+          (then (return (call $pack (i32.const 2) (i32.const 0)))))
+        (i32.store8 (local.get $out_ptr) (i32.wrap_i64 (local.get $value)))
+        (return (call $pack (i32.const 0) (i32.const 1)))))
+    (if (i64.le_u (local.get $value) (i64.const 16383))
+      (then
+        (if (i32.lt_u (local.get $out_cap) (i32.const 2))
+          (then (return (call $pack (i32.const 2) (i32.const 0)))))
+        (i32.store8
+          (local.get $out_ptr)
+          (i32.or
+            (i32.const 64)
+            (i32.and
+              (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 8)))
+              (i32.const 63))))
+        (i32.store8
+          (i32.add (local.get $out_ptr) (i32.const 1))
+          (i32.wrap_i64 (local.get $value)))
+        (return (call $pack (i32.const 0) (i32.const 2)))))
+    (if (i64.le_u (local.get $value) (i64.const 1073741823))
+      (then
+        (if (i32.lt_u (local.get $out_cap) (i32.const 4))
+          (then (return (call $pack (i32.const 2) (i32.const 0)))))
+        (i32.store8
+          (local.get $out_ptr)
+          (i32.or
+            (i32.const 128)
+            (i32.and
+              (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 24)))
+              (i32.const 63))))
+        (i32.store8
+          (i32.add (local.get $out_ptr) (i32.const 1))
+          (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 16))))
+        (i32.store8
+          (i32.add (local.get $out_ptr) (i32.const 2))
+          (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 8))))
+        (i32.store8
+          (i32.add (local.get $out_ptr) (i32.const 3))
+          (i32.wrap_i64 (local.get $value)))
+        (return (call $pack (i32.const 0) (i32.const 4)))))
+    (if (i32.lt_u (local.get $out_cap) (i32.const 8))
+      (then (return (call $pack (i32.const 2) (i32.const 0)))))
+    (i32.store8
+      (local.get $out_ptr)
+      (i32.or
+        (i32.const 192)
+        (i32.and
+          (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 56)))
+          (i32.const 63))))
+    (i32.store8
+      (i32.add (local.get $out_ptr) (i32.const 1))
+      (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 48))))
+    (i32.store8
+      (i32.add (local.get $out_ptr) (i32.const 2))
+      (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 40))))
+    (i32.store8
+      (i32.add (local.get $out_ptr) (i32.const 3))
+      (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 32))))
+    (i32.store8
+      (i32.add (local.get $out_ptr) (i32.const 4))
+      (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 24))))
+    (i32.store8
+      (i32.add (local.get $out_ptr) (i32.const 5))
+      (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 16))))
+    (i32.store8
+      (i32.add (local.get $out_ptr) (i32.const 6))
+      (i32.wrap_i64 (i64.shr_u (local.get $value) (i64.const 8))))
+    (i32.store8
+      (i32.add (local.get $out_ptr) (i32.const 7))
+      (i32.wrap_i64 (local.get $value)))
+    (call $pack (i32.const 0) (i32.const 8)))
+
+  (func (export "quic_varint_decode_u64")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32)
+    (result i64)
+    (local $first i32)
+    (local $need i32)
+    (local $i i32)
+    (local $value i64)
+    (if (i32.eqz (local.get $in_len))
+      (then (return (call $pack (i32.const 1) (i32.const 0)))))
+    (local.set $first (i32.load8_u (local.get $in_ptr)))
+    (local.set $need
+      (i32.shl
+        (i32.const 1)
+        (i32.shr_u (local.get $first) (i32.const 6))))
+    (if (i32.lt_u (local.get $in_len) (local.get $need))
+      (then (return (call $pack (i32.const 5) (i32.const 0)))))
+    (local.set $value (i64.extend_i32_u (i32.and (local.get $first) (i32.const 63))))
+    (local.set $i (i32.const 1))
+    (loop $again
+      (if (i32.lt_u (local.get $i) (local.get $need))
+        (then
+          (local.set $value
+            (i64.or
+              (i64.shl (local.get $value) (i64.const 8))
+              (i64.extend_i32_u
+                (i32.load8_u
+                  (i32.add (local.get $in_ptr) (local.get $i))))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $again))))
+    (i64.store (local.get $out_ptr) (local.get $value))
+    (call $pack (i32.const 0) (local.get $need)))
+
+  (func (export "crc32") (param $ptr i32) (param $len i32) (result i32)
+    (local $i i32)
+    (local $j i32)
+    (local $crc i32)
+    (local.set $crc (i32.const -1))
+    (loop $bytes
+      (if (i32.lt_u (local.get $i) (local.get $len))
+        (then
+          (local.set $crc
+            (i32.xor
+              (local.get $crc)
+              (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
+          (local.set $j (i32.const 0))
+          (loop $bits
+            (if (i32.lt_u (local.get $j) (i32.const 8))
+              (then
+                (if (i32.and (local.get $crc) (i32.const 1))
+                  (then
+                    (local.set $crc
+                      (i32.xor
+                        (i32.shr_u (local.get $crc) (i32.const 1))
+                        (i32.const 0xedb88320))))
+                  (else
+                    (local.set $crc
+                      (i32.shr_u (local.get $crc) (i32.const 1)))))
+                (local.set $j (i32.add (local.get $j) (i32.const 1)))
+                (br $bits))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $bytes))))
+    (i32.xor (local.get $crc) (i32.const -1)))
+
+  (func $adler32_update (export "adler32_update") (param $initial i32) (param $ptr i32) (param $len i32) (result i32)
+    (local $i i32)
+    (local $a i32)
+    (local $b i32)
+    (local.set $a (i32.and (local.get $initial) (i32.const 65535)))
+    (local.set $b
+      (i32.and
+        (i32.shr_u (local.get $initial) (i32.const 16))
+        (i32.const 65535)))
+    (loop $bytes
+      (if (i32.lt_u (local.get $i) (local.get $len))
+        (then
+          (local.set $a
+            (i32.rem_u
+              (i32.add
+                (local.get $a)
+                (i32.load8_u (i32.add (local.get $ptr) (local.get $i))))
+              (i32.const 65521)))
+          (local.set $b
+            (i32.rem_u
+              (i32.add (local.get $b) (local.get $a))
+              (i32.const 65521)))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $bytes))))
+    (i32.or
+      (i32.shl (local.get $b) (i32.const 16))
+      (local.get $a)))
+
+  (func (export "adler32") (param $ptr i32) (param $len i32) (result i32)
+    (call $adler32_update (i32.const 1) (local.get $ptr) (local.get $len)))
+
+  (func (export "crc32_simd") (param $ptr i32) (param $len i32) (result i32)
+    (local $i i32)
+    (local $j i32)
+    (local $k i32)
+    (local $crc i32)
+    (local $word i32)
+    (local.set $crc (i32.const -1))
+    (loop $loop
+      (if (i32.lt_u (local.get $i) (local.get $len))
+        (then
+          (if (i32.le_u (i32.add (local.get $i) (i32.const 4)) (local.get $len))
+            (then
+              (local.set $word
+                (i32.load (i32.add (local.get $ptr) (local.get $i))))
+              (local.set $k (i32.const 0))
+              (loop $quad
+                (if (i32.lt_u (local.get $k) (i32.const 4))
+                  (then
+                    (local.set $crc
+                      (i32.xor
+                        (local.get $crc)
+                        (i32.and (local.get $word) (i32.const 0xff))))
+                    (local.set $j (i32.const 0))
+                    (loop $bits
+                      (if (i32.lt_u (local.get $j) (i32.const 8))
+                        (then
+                          (if (i32.and (local.get $crc) (i32.const 1))
+                            (then
+                              (local.set $crc
+                                (i32.xor
+                                  (i32.shr_u (local.get $crc) (i32.const 1))
+                                  (i32.const 0xedb88320))))
+                            (else
+                              (local.set $crc
+                                (i32.shr_u (local.get $crc) (i32.const 1)))))
+                          (local.set $j (i32.add (local.get $j) (i32.const 1)))
+                          (br $bits))))
+                    (local.set $word
+                      (i32.shr_u (local.get $word) (i32.const 8)))
+                    (local.set $k (i32.add (local.get $k) (i32.const 1)))
+                    (br $quad))))
+              (local.set $i (i32.add (local.get $i) (i32.const 4)))
+              (br $loop))
+            (else
+              (local.set $crc
+                (i32.xor
+                  (local.get $crc)
+                  (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
+              (local.set $j (i32.const 0))
+              (loop $bits_tail
+                (if (i32.lt_u (local.get $j) (i32.const 8))
+                  (then
+                    (if (i32.and (local.get $crc) (i32.const 1))
+                      (then
+                        (local.set $crc
+                          (i32.xor
+                            (i32.shr_u (local.get $crc) (i32.const 1))
+                            (i32.const 0xedb88320))))
+                      (else
+                        (local.set $crc
+                          (i32.shr_u (local.get $crc) (i32.const 1)))))
+                    (local.set $j (i32.add (local.get $j) (i32.const 1)))
+                    (br $bits_tail))))
+              (local.set $i (i32.add (local.get $i) (i32.const 1)))
+              (br $loop))))))
+    (i32.xor (local.get $crc) (i32.const -1)))
+
+  (func (export "adler32_simd") (param $ptr i32) (param $len i32) (result i32)
+    (call $adler32_update_simd (i32.const 1) (local.get $ptr) (local.get $len)))
+
+  (func $adler32_update_simd (export "adler32_update_simd")
+    (param $initial i32) (param $ptr i32) (param $len i32) (result i32)
+    (local $i i32)
+    (local $a i32)
+    (local $b i32)
+    (local $a0 i32)
+    (local $sum i32)
+    (local $wsum i32)
+    (local $v v128)
+    (local $b0 i32)
+    (local $b1 i32)
+    (local $b2 i32)
+    (local $b3 i32)
+    (local $b4 i32)
+    (local $b5 i32)
+    (local $b6 i32)
+    (local $b7 i32)
+    (local $b8 i32)
+    (local $b9 i32)
+    (local $b10 i32)
+    (local $b11 i32)
+    (local $b12 i32)
+    (local $b13 i32)
+    (local $b14 i32)
+    (local $b15 i32)
+    (local.set $a
+      (i32.and (local.get $initial) (i32.const 65535)))
+    (local.set $b
+      (i32.and
+        (i32.shr_u (local.get $initial) (i32.const 16))
+        (i32.const 65535)))
+    (loop $loop
+      (if (i32.le_u (i32.add (local.get $i) (i32.const 16)) (local.get $len))
+        (then
+          (local.set $v
+            (v128.load (i32.add (local.get $ptr) (local.get $i))))
+          (local.set $a0 (local.get $a))
+          (local.set $b0
+            (i8x16.extract_lane_u 0 (local.get $v)))
+          (local.set $b1
+            (i8x16.extract_lane_u 1 (local.get $v)))
+          (local.set $b2
+            (i8x16.extract_lane_u 2 (local.get $v)))
+          (local.set $b3
+            (i8x16.extract_lane_u 3 (local.get $v)))
+          (local.set $b4
+            (i8x16.extract_lane_u 4 (local.get $v)))
+          (local.set $b5
+            (i8x16.extract_lane_u 5 (local.get $v)))
+          (local.set $b6
+            (i8x16.extract_lane_u 6 (local.get $v)))
+          (local.set $b7
+            (i8x16.extract_lane_u 7 (local.get $v)))
+          (local.set $b8
+            (i8x16.extract_lane_u 8 (local.get $v)))
+          (local.set $b9
+            (i8x16.extract_lane_u 9 (local.get $v)))
+          (local.set $b10
+            (i8x16.extract_lane_u 10 (local.get $v)))
+          (local.set $b11
+            (i8x16.extract_lane_u 11 (local.get $v)))
+          (local.set $b12
+            (i8x16.extract_lane_u 12 (local.get $v)))
+          (local.set $b13
+            (i8x16.extract_lane_u 13 (local.get $v)))
+          (local.set $b14
+            (i8x16.extract_lane_u 14 (local.get $v)))
+          (local.set $b15
+            (i8x16.extract_lane_u 15 (local.get $v)))
+          (local.set $sum
+            (i32.add
+              (i32.add
+                (i32.add
+                  (i32.add
+                    (i32.add
+                      (i32.add
+                        (i32.add
+                          (i32.add
+                            (i32.add
+                              (i32.add
+                                (i32.add
+                                  (i32.add
+                                    (i32.add
+                                      (i32.add
+                                        (i32.add
+                                          (local.get $b0)
+                                          (local.get $b1))
+                                        (local.get $b2))
+                                      (local.get $b3))
+                                    (local.get $b4))
+                                  (local.get $b5))
+                                (local.get $b6))
+                              (local.get $b7))
+                            (local.get $b8))
+                          (local.get $b9))
+                        (local.get $b10))
+                      (local.get $b11))
+                    (local.get $b12))
+                  (local.get $b13))
+                (local.get $b14))
+              (local.get $b15)))
+          (local.set $wsum
+            (i32.add
+              (i32.add
+                (i32.add
+                  (i32.add
+                    (i32.add
+                      (i32.add
+                        (i32.add
+                          (i32.add
+                            (i32.add
+                              (i32.add
+                                (i32.add
+                                  (i32.add
+                                    (i32.add
+                                      (i32.add
+                                        (i32.add
+                                          (i32.mul (i32.const 16) (local.get $b0))
+                                          (i32.mul (i32.const 15) (local.get $b1)))
+                                        (i32.mul (i32.const 14) (local.get $b2)))
+                                      (i32.mul (i32.const 13) (local.get $b3)))
+                                    (i32.mul (i32.const 12) (local.get $b4)))
+                                  (i32.mul (i32.const 11) (local.get $b5)))
+                                (i32.mul (i32.const 10) (local.get $b6)))
+                              (i32.mul (i32.const 9) (local.get $b7)))
+                            (i32.mul (i32.const 8) (local.get $b8)))
+                          (i32.mul (i32.const 7) (local.get $b9)))
+                        (i32.mul (i32.const 6) (local.get $b10)))
+                      (i32.mul (i32.const 5) (local.get $b11)))
+                    (i32.mul (i32.const 4) (local.get $b12)))
+                  (i32.mul (i32.const 3) (local.get $b13)))
+                (i32.mul (i32.const 2) (local.get $b14)))
+              (i32.mul (i32.const 1) (local.get $b15))))
+          (local.set $a
+            (i32.rem_u
+              (i32.add (local.get $a) (local.get $sum))
+              (i32.const 65521)))
+          (local.set $b
+            (i32.rem_u
+              (i32.add
+                (i32.add
+                  (local.get $b)
+                  (i32.mul (i32.const 16) (local.get $a0)))
+                (local.get $wsum))
+              (i32.const 65521)))
+          (local.set $i (i32.add (local.get $i) (i32.const 16)))
+          (br $loop))
+        (else
+          (if (i32.lt_u (local.get $i) (local.get $len))
+            (then
+              (local.set $a
+                (i32.rem_u
+                  (i32.add
+                    (local.get $a)
+                    (i32.load8_u (i32.add (local.get $ptr) (local.get $i))))
+                  (i32.const 65521)))
+              (local.set $b
+                (i32.rem_u
+                  (i32.add (local.get $b) (local.get $a))
+                  (i32.const 65521)))
+              (local.set $i (i32.add (local.get $i) (i32.const 1)))
+              (br $loop))))))
+    (i32.or
+      (i32.shl (local.get $b) (i32.const 16))
+      (local.get $a)))
+
+  ;; ── Byte-at-a-time CRC-32 update ──
+  ;; crc32_update_byte(crc, byte) → crc
+  (func $crc32_update_byte (export "crc32_update_byte") (param $crc i32) (param $byte i32) (result i32)
+    (local $c i32) (local $i i32)
+    (local.set $c (i32.xor (local.get $crc) (local.get $byte)))
+    (local.set $i (i32.const 0))
+    (block $done
+      (loop $bits
+        (br_if $done (i32.eq (local.get $i) (i32.const 8)))
+        (if (i32.and (local.get $c) (i32.const 1))
+          (then
+            (local.set $c
+              (i32.xor (i32.shr_u (local.get $c) (i32.const 1)) (i32.const 0xedb88320))))
+          (else
+            (local.set $c (i32.shr_u (local.get $c) (i32.const 1)))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $bits)))
+    (local.get $c))
+
+  ;; ── Byte-at-a-time Adler-32 update ──
+  ;; adler32_update_byte(adler, byte) → adler
+  (func $adler32_update_byte (export "adler32_update_byte") (param $adler i32) (param $byte i32) (result i32)
+    (local $s1 i32) (local $s2 i32)
+    (local.set $s1 (i32.and (local.get $adler) (i32.const 65535)))
+    (local.set $s2 (i32.shr_u (local.get $adler) (i32.const 16)))
+    (local.set $s1 (i32.rem_u (i32.add (local.get $s1) (local.get $byte)) (i32.const 65521)))
+    (local.set $s2 (i32.rem_u (i32.add (local.get $s2) (local.get $s1)) (i32.const 65521)))
+    (i32.or (local.get $s1) (i32.shl (local.get $s2) (i32.const 16))))
+;; crypto-sha1 — SHA-1 hash (work buffer at 0x10000, 80×4 = 320 bytes)
+
+  (func $m61range_ok (param $ptr i32) (param $len i32) (result i32)
+    (local $end i32)
+    local.get $ptr
+    local.get $len
+    i32.add
+    local.set $end
+    local.get $end
+    local.get $ptr
+    i32.lt_u
+    if
+      i32.const 0
+      return
+    end
+    local.get $end
+    i32.const 65536
+    i32.le_u)
+
+  (func $m61w_addr (param $i i32) (result i32)
+    i32.const 65536
+    local.get $i
+    i32.const 2
+    i32.shl
+    i32.add)
+
+  (func $padded_byte
+    (param $ptr i32)
+    (param $len i32)
+    (param $padded_len i32)
+    (param $index i32)
+    (result i32)
+    (local $bit_len i64)
+    (local $tail_index i32)
+    local.get $index
+    local.get $len
+    i32.lt_u
+    if
+      local.get $ptr
+      local.get $index
+      i32.add
+      i32.load8_u
+      return
+    end
+    local.get $index
+    local.get $len
+    i32.eq
+    if
+      i32.const 0x80
+      return
+    end
+    local.get $index
+    local.get $padded_len
+    i32.const 8
+    i32.sub
+    i32.ge_u
+    if
+      local.get $len
+      i64.extend_i32_u
+      i64.const 3
+      i64.shl
+      local.set $bit_len
+      local.get $index
+      local.get $padded_len
+      i32.const 8
+      i32.sub
+      i32.sub
+      local.set $tail_index
+      local.get $bit_len
+      i64.const 7
+      local.get $tail_index
+      i64.extend_i32_u
+      i64.sub
+      i64.const 8
+      i64.mul
+      i64.shr_u
+      i32.wrap_i64
+      i32.const 0xff
+      i32.and
+      return
+    end
+    i32.const 0)
+
+  (func $word
+    (param $ptr i32)
+    (param $len i32)
+    (param $padded_len i32)
+    (param $index i32)
+    (result i32)
+    (local $base i32)
+    local.get $index
+    local.set $base
+    local.get $ptr
+    local.get $len
+    local.get $padded_len
+    local.get $base
+    call $padded_byte
+    i32.const 24
+    i32.shl
+    local.get $ptr
+    local.get $len
+    local.get $padded_len
+    local.get $base
+    i32.const 1
+    i32.add
+    call $padded_byte
+    i32.const 16
+    i32.shl
+    i32.or
+    local.get $ptr
+    local.get $len
+    local.get $padded_len
+    local.get $base
+    i32.const 2
+    i32.add
+    call $padded_byte
+    i32.const 8
+    i32.shl
+    i32.or
+    local.get $ptr
+    local.get $len
+    local.get $padded_len
+    local.get $base
+    i32.const 3
+    i32.add
+    call $padded_byte
+    i32.or)
+
+  (func $m61store_be32 (param $ptr i32) (param $value i32)
+    local.get $ptr
+    local.get $value
+    i32.const 24
+    i32.shr_u
+    i32.store8
+    local.get $ptr
+    i32.const 1
+    i32.add
+    local.get $value
+    i32.const 16
+    i32.shr_u
+    i32.store8
+    local.get $ptr
+    i32.const 2
+    i32.add
+    local.get $value
+    i32.const 8
+    i32.shr_u
+    i32.store8
+    local.get $ptr
+    i32.const 3
+    i32.add
+    local.get $value
+    i32.store8)
+
+  (func $sha1 (export "sha1")
+    (param $ptr i32)
+    (param $len i32)
+    (param $out_ptr i32)
+    (result i64)
+    (local $padded_len i32)
+    (local $block i32)
+    (local $i i32)
+    (local $a i32)
+    (local $b i32)
+    (local $c i32)
+    (local $d i32)
+    (local $e i32)
+    (local $f i32)
+    (local $k i32)
+    (local $temp i32)
+    (local $h0 i32)
+    (local $h1 i32)
+    (local $h2 i32)
+    (local $h3 i32)
+    (local $h4 i32)
+
+    local.get $out_ptr
+    i32.const 20
+    call $m61range_ok
+    i32.eqz
+    if
+      i32.const 2
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $ptr
+    local.get $len
+    call $m61range_ok
+    i32.eqz
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+
+    local.get $len
+    i32.const 9
+    i32.add
+    i32.const 63
+    i32.add
+    i32.const -64
+    i32.and
+    local.set $padded_len
+
+    i32.const 0x67452301
+    local.set $h0
+    i32.const 0xefcdab89
+    local.set $h1
+    i32.const 0x98badcfe
+    local.set $h2
+    i32.const 0x10325476
+    local.set $h3
+    i32.const 0xc3d2e1f0
+    local.set $h4
+
+    i32.const 0
+    local.set $block
+    block $done_blocks
+      loop $blocks
+        local.get $block
+        local.get $padded_len
+        i32.ge_u
+        br_if $done_blocks
+
+        i32.const 0
+        local.set $i
+        block $done_load
+          loop $load
+            local.get $i
+            i32.const 16
+            i32.ge_u
+            br_if $done_load
+            local.get $i
+            call $m61w_addr
+            local.get $ptr
+            local.get $len
+            local.get $padded_len
+            local.get $block
+            local.get $i
+            i32.const 2
+            i32.shl
+            i32.add
+            call $word
+            i32.store
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $load
+          end
+        end
+
+        i32.const 16
+        local.set $i
+        block $done_expand
+          loop $expand
+            local.get $i
+            i32.const 80
+            i32.ge_u
+            br_if $done_expand
+            local.get $i
+            call $m61w_addr
+            local.get $i
+            i32.const 3
+            i32.sub
+            call $m61w_addr
+            i32.load
+            local.get $i
+            i32.const 8
+            i32.sub
+            call $m61w_addr
+            i32.load
+            i32.xor
+            local.get $i
+            i32.const 14
+            i32.sub
+            call $m61w_addr
+            i32.load
+            i32.xor
+            local.get $i
+            i32.const 16
+            i32.sub
+            call $m61w_addr
+            i32.load
+            i32.xor
+            i32.const 1
+            i32.rotl
+            i32.store
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $expand
+          end
+        end
+
+        local.get $h0
+        local.set $a
+        local.get $h1
+        local.set $b
+        local.get $h2
+        local.set $c
+        local.get $h3
+        local.set $d
+        local.get $h4
+        local.set $e
+
+        i32.const 0
+        local.set $i
+        block $done_rounds
+          loop $rounds
+            local.get $i
+            i32.const 80
+            i32.ge_u
+            br_if $done_rounds
+
+            local.get $i
+            i32.const 20
+            i32.lt_u
+            if
+              local.get $b
+              local.get $c
+              i32.and
+              local.get $b
+              i32.const -1
+              i32.xor
+              local.get $d
+              i32.and
+              i32.or
+              local.set $f
+              i32.const 0x5a827999
+              local.set $k
+            else
+              local.get $i
+              i32.const 40
+              i32.lt_u
+              if
+                local.get $b
+                local.get $c
+                i32.xor
+                local.get $d
+                i32.xor
+                local.set $f
+                i32.const 0x6ed9eba1
+                local.set $k
+              else
+                local.get $i
+                i32.const 60
+                i32.lt_u
+                if
+                  local.get $b
+                  local.get $c
+                  i32.and
+                  local.get $b
+                  local.get $d
+                  i32.and
+                  i32.or
+                  local.get $c
+                  local.get $d
+                  i32.and
+                  i32.or
+                  local.set $f
+                  i32.const 0x8f1bbcdc
+                  local.set $k
+                else
+                  local.get $b
+                  local.get $c
+                  i32.xor
+                  local.get $d
+                  i32.xor
+                  local.set $f
+                  i32.const 0xca62c1d6
+                  local.set $k
+                end
+              end
+            end
+
+            local.get $a
+            i32.const 5
+            i32.rotl
+            local.get $f
+            i32.add
+            local.get $e
+            i32.add
+            local.get $k
+            i32.add
+            local.get $i
+            call $m61w_addr
+            i32.load
+            i32.add
+            local.set $temp
+            local.get $d
+            local.set $e
+            local.get $c
+            local.set $d
+            local.get $b
+            i32.const 30
+            i32.rotl
+            local.set $c
+            local.get $a
+            local.set $b
+            local.get $temp
+            local.set $a
+
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $rounds
+          end
+        end
+
+        local.get $h0
+        local.get $a
+        i32.add
+        local.set $h0
+        local.get $h1
+        local.get $b
+        i32.add
+        local.set $h1
+        local.get $h2
+        local.get $c
+        i32.add
+        local.set $h2
+        local.get $h3
+        local.get $d
+        i32.add
+        local.set $h3
+        local.get $h4
+        local.get $e
+        i32.add
+        local.set $h4
+
+        local.get $block
+        i32.const 64
+        i32.add
+        local.set $block
+        br $blocks
+      end
+    end
+
+    local.get $out_ptr
+    local.get $h0
+    call $m61store_be32
+    local.get $out_ptr
+    i32.const 4
+    i32.add
+    local.get $h1
+    call $m61store_be32
+    local.get $out_ptr
+    i32.const 8
+    i32.add
+    local.get $h2
+    call $m61store_be32
+    local.get $out_ptr
+    i32.const 12
+    i32.add
+    local.get $h3
+    call $m61store_be32
+    local.get $out_ptr
+    i32.const 16
+    i32.add
+    local.get $h4
+    call $m61store_be32
+
+    i32.const 0
+    i32.const 20
+    call $pack)
+
+;; deflate-inflate — raw deflate scan & inflate
+
+  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid_data,
+  ;; 6 limit_exceeded, 7 unsupported.
+  ;; Record, little-endian u32:
+  ;; 0: consumed
+  ;; 4: written or scanned stored payload total
+  ;; 8: block_count
+  ;; 12: last_block_type
+  ;; 16: crc32 over emitted bytes
+  ;; 20: adler32 over emitted bytes
+  (global $br_src_ptr (mut i32) (i32.const 0))
+  (global $br_src_len (mut i32) (i32.const 0))
+  (global $br_bitpos (mut i32) (i32.const 0))
+  (global $br_bitbuf (mut i32) (i32.const 0))
+  (global $br_bitcnt (mut i32) (i32.const 0))
+
+  (func $br_init (param $src_ptr i32) (param $src_len i32)
+    (global.set $br_src_ptr (local.get $src_ptr))
+    (global.set $br_src_len (local.get $src_len))
+    (global.set $br_bitpos (i32.const 0))
+    (global.set $br_bitbuf (i32.const 0))
+    (global.set $br_bitcnt (i32.const 0)))
+
+  (func $br_read (param $n i32) (result i32)
+    (local $byte_off i32)
+    (local $byte i32)
+    (local $mask i32)
+    (local $bits i32)
+    (block $ready
+      (loop $fill
+        (br_if $ready (i32.ge_u (global.get $br_bitcnt) (local.get $n)))
+        (local.set $byte_off (i32.shr_u (global.get $br_bitpos) (i32.const 3)))
+        (if (i32.ge_u (local.get $byte_off) (global.get $br_src_len))
+          (then (return (i32.const -1))))
+        (local.set $byte
+          (i32.load8_u (i32.add (global.get $br_src_ptr) (local.get $byte_off))))
+        (global.set $br_bitbuf
+          (i32.or
+            (global.get $br_bitbuf)
+            (i32.shl (local.get $byte) (global.get $br_bitcnt))))
+        (global.set $br_bitcnt (i32.add (global.get $br_bitcnt) (i32.const 8)))
+        (global.set $br_bitpos (i32.add (global.get $br_bitpos) (i32.const 8)))
+        (br $fill)))
+    (local.set $mask (i32.sub (i32.shl (i32.const 1) (local.get $n)) (i32.const 1)))
+    (local.set $bits (i32.and (global.get $br_bitbuf) (local.get $mask)))
+    (global.set $br_bitbuf (i32.shr_u (global.get $br_bitbuf) (local.get $n)))
+    (global.set $br_bitcnt (i32.sub (global.get $br_bitcnt) (local.get $n)))
+    (local.get $bits))
+
+  (func $br_align_byte
+    (local $used_bits i32)
+    (local.set $used_bits (i32.sub (global.get $br_bitpos) (global.get $br_bitcnt)))
+    (global.set $br_bitpos
+      (i32.and
+        (i32.add (local.get $used_bits) (i32.const 7))
+        (i32.const -8)))
+    (global.set $br_bitbuf (i32.const 0))
+    (global.set $br_bitcnt (i32.const 0)))
+
+  (func $br_consumed_bytes (result i32)
+    (local $used_bits i32)
+    (local.set $used_bits (i32.sub (global.get $br_bitpos) (global.get $br_bitcnt)))
+    (i32.shr_u (i32.add (local.get $used_bits) (i32.const 7)) (i32.const 3)))
+
+  (func $reverse_bits (param $v i32) (param $n i32) (result i32)
+    (local $r i32)
+    (loop $bits
+      (if (i32.eqz (local.get $n))
+        (then (return (local.get $r))))
+      (local.set $r
+        (i32.or
+          (i32.shl (local.get $r) (i32.const 1))
+          (i32.and (local.get $v) (i32.const 1))))
+      (local.set $v (i32.shr_u (local.get $v) (i32.const 1)))
+      (local.set $n (i32.sub (local.get $n) (i32.const 1)))
+      (br $bits))
+    (local.get $r))
+
+  (func $fixed_symbol (result i32)
+    (local $bits i32)
+    (local $next i32)
+    (local $rev i32)
+    (local.set $bits (call $br_read (i32.const 7)))
+    (if (i32.lt_s (local.get $bits) (i32.const 0))
+      (then (return (i32.const -1))))
+    (local.set $rev (call $reverse_bits (local.get $bits) (i32.const 7)))
+    (if (i32.le_u (local.get $rev) (i32.const 23))
+      (then (return
+        (i32.or (i32.shl (i32.const 7) (i32.const 16))
+                (i32.add (i32.const 256) (local.get $rev))))))
+
+    (local.set $next (call $br_read (i32.const 1)))
+    (if (i32.lt_s (local.get $next) (i32.const 0))
+      (then (return (i32.const -1))))
+    (local.set $bits (i32.or (local.get $bits) (i32.shl (local.get $next) (i32.const 7))))
+    (local.set $rev (call $reverse_bits (local.get $bits) (i32.const 8)))
+    (if (i32.and
+          (i32.ge_u (local.get $rev) (i32.const 48))
+          (i32.le_u (local.get $rev) (i32.const 191)))
+      (then (return
+        (i32.or (i32.shl (i32.const 8) (i32.const 16))
+                (i32.sub (local.get $rev) (i32.const 48))))))
+    (if (i32.and
+          (i32.ge_u (local.get $rev) (i32.const 192))
+          (i32.le_u (local.get $rev) (i32.const 199)))
+      (then (return
+        (i32.or (i32.shl (i32.const 8) (i32.const 16))
+                (i32.add (i32.const 280) (i32.sub (local.get $rev) (i32.const 192)))))))
+
+    (local.set $next (call $br_read (i32.const 1)))
+    (if (i32.lt_s (local.get $next) (i32.const 0))
+      (then (return (i32.const -1))))
+    (local.set $bits (i32.or (local.get $bits) (i32.shl (local.get $next) (i32.const 8))))
+    (local.set $rev (call $reverse_bits (local.get $bits) (i32.const 9)))
+    (if (i32.and
+          (i32.ge_u (local.get $rev) (i32.const 400))
+          (i32.le_u (local.get $rev) (i32.const 511)))
+      (then (return
+        (i32.or (i32.shl (i32.const 9) (i32.const 16))
+                (i32.add (i32.const 144) (i32.sub (local.get $rev) (i32.const 400)))))))
+    (i32.const -3))
+
+  (func $length_base (param $sym i32) (result i32)
+    (if (i32.le_u (local.get $sym) (i32.const 264))
+      (then (return (i32.add (i32.const 3) (i32.sub (local.get $sym) (i32.const 257))))))
+    (if (i32.le_u (local.get $sym) (i32.const 268))
+      (then (return (i32.add (i32.const 11) (i32.shl (i32.sub (local.get $sym) (i32.const 265)) (i32.const 1))))))
+    (if (i32.le_u (local.get $sym) (i32.const 272))
+      (then (return (i32.add (i32.const 19) (i32.shl (i32.sub (local.get $sym) (i32.const 269)) (i32.const 2))))))
+    (if (i32.le_u (local.get $sym) (i32.const 276))
+      (then (return (i32.add (i32.const 35) (i32.shl (i32.sub (local.get $sym) (i32.const 273)) (i32.const 3))))))
+    (if (i32.le_u (local.get $sym) (i32.const 280))
+      (then (return (i32.add (i32.const 67) (i32.shl (i32.sub (local.get $sym) (i32.const 277)) (i32.const 4))))))
+    (if (i32.le_u (local.get $sym) (i32.const 284))
+      (then (return (i32.add (i32.const 131) (i32.shl (i32.sub (local.get $sym) (i32.const 281)) (i32.const 5))))))
+    (if (i32.eq (local.get $sym) (i32.const 285))
+      (then (return (i32.const 258))))
+    (i32.const -1))
+
+  (func $length_extra (param $sym i32) (result i32)
+    (if (i32.le_u (local.get $sym) (i32.const 264)) (then (return (i32.const 0))))
+    (if (i32.le_u (local.get $sym) (i32.const 268)) (then (return (i32.const 1))))
+    (if (i32.le_u (local.get $sym) (i32.const 272)) (then (return (i32.const 2))))
+    (if (i32.le_u (local.get $sym) (i32.const 276)) (then (return (i32.const 3))))
+    (if (i32.le_u (local.get $sym) (i32.const 280)) (then (return (i32.const 4))))
+    (if (i32.le_u (local.get $sym) (i32.const 284)) (then (return (i32.const 5))))
+    (if (i32.eq (local.get $sym) (i32.const 285)) (then (return (i32.const 0))))
+    (i32.const -1))
+
+  (func $dist_base (param $sym i32) (result i32)
+    (local $extra i32)
+    (local $base i32)
+    (if (i32.gt_u (local.get $sym) (i32.const 29))
+      (then (return (i32.const -1))))
+    (if (i32.lt_u (local.get $sym) (i32.const 4))
+      (then (return (i32.add (local.get $sym) (i32.const 1)))))
+    (local.set $extra (i32.sub (i32.shr_u (local.get $sym) (i32.const 1)) (i32.const 1)))
+    (local.set $base (i32.add (i32.shl (i32.const 1) (i32.add (local.get $extra) (i32.const 1))) (i32.const 1)))
+    (if (i32.and (local.get $sym) (i32.const 1))
+      (then (local.set $base (i32.add (local.get $base) (i32.shl (i32.const 1) (local.get $extra))))))
+    (local.get $base))
+
+  (func $dist_extra (param $sym i32) (result i32)
+    (if (i32.gt_u (local.get $sym) (i32.const 29))
+      (then (return (i32.const -1))))
+    (if (i32.lt_u (local.get $sym) (i32.const 4))
+      (then (return (i32.const 0))))
+    (i32.sub (i32.shr_u (local.get $sym) (i32.const 1)) (i32.const 1)))
+
+  (func $cl_order (param $idx i32) (result i32)
+    (if (i32.eq (local.get $idx) (i32.const 0)) (then (return (i32.const 16))))
+    (if (i32.eq (local.get $idx) (i32.const 1)) (then (return (i32.const 17))))
+    (if (i32.eq (local.get $idx) (i32.const 2)) (then (return (i32.const 18))))
+    (if (i32.eq (local.get $idx) (i32.const 3)) (then (return (i32.const 0))))
+    (if (i32.eq (local.get $idx) (i32.const 4)) (then (return (i32.const 8))))
+    (if (i32.eq (local.get $idx) (i32.const 5)) (then (return (i32.const 7))))
+    (if (i32.eq (local.get $idx) (i32.const 6)) (then (return (i32.const 9))))
+    (if (i32.eq (local.get $idx) (i32.const 7)) (then (return (i32.const 6))))
+    (if (i32.eq (local.get $idx) (i32.const 8)) (then (return (i32.const 10))))
+    (if (i32.eq (local.get $idx) (i32.const 9)) (then (return (i32.const 5))))
+    (if (i32.eq (local.get $idx) (i32.const 10)) (then (return (i32.const 11))))
+    (if (i32.eq (local.get $idx) (i32.const 11)) (then (return (i32.const 4))))
+    (if (i32.eq (local.get $idx) (i32.const 12)) (then (return (i32.const 12))))
+    (if (i32.eq (local.get $idx) (i32.const 13)) (then (return (i32.const 3))))
+    (if (i32.eq (local.get $idx) (i32.const 14)) (then (return (i32.const 13))))
+    (if (i32.eq (local.get $idx) (i32.const 15)) (then (return (i32.const 2))))
+    (if (i32.eq (local.get $idx) (i32.const 16)) (then (return (i32.const 14))))
+    (if (i32.eq (local.get $idx) (i32.const 17)) (then (return (i32.const 1))))
+    (i32.const 15))
+
+  (func $zero_u32_table (param $ptr i32) (param $count i32)
+    (local $i i32)
+    (loop $zero
+      (if (i32.lt_u (local.get $i) (local.get $count))
+        (then
+          (i32.store (i32.add (local.get $ptr) (i32.shl (local.get $i) (i32.const 2))) (i32.const 0))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $zero)))))
+
+  (func $build_table
+    (param $lens_ptr i32)
+    (param $symbol_count i32)
+    (param $symbols_ptr i32)
+    (param $counts_ptr i32)
+    (param $offsets_ptr i32)
+    (param $maxbits i32)
+    (result i32)
+    (local $i i32)
+    (local $len i32)
+    (local $total i32)
+    (local $left i32)
+    (local $sum i32)
+    (local $pos i32)
+    (call $zero_u32_table (local.get $counts_ptr) (i32.const 16))
+    (call $zero_u32_table (local.get $offsets_ptr) (i32.const 16))
+    (local.set $i (i32.const 0))
+    (loop $count_lens
+      (if (i32.lt_u (local.get $i) (local.get $symbol_count))
+        (then
+          (local.set $len (i32.load8_u (i32.add (local.get $lens_ptr) (local.get $i))))
+          (if (i32.gt_u (local.get $len) (local.get $maxbits)) (then (return (i32.const 3))))
+          (if (local.get $len)
+            (then
+              (i32.store
+                (i32.add (local.get $counts_ptr) (i32.shl (local.get $len) (i32.const 2)))
+                (i32.add
+                  (i32.load (i32.add (local.get $counts_ptr) (i32.shl (local.get $len) (i32.const 2))))
+                  (i32.const 1)))
+              (local.set $total (i32.add (local.get $total) (i32.const 1)))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $count_lens))))
+    (if (i32.eqz (local.get $total)) (then (return (i32.const 3))))
+    (local.set $left (i32.const 1))
+    (local.set $i (i32.const 1))
+    (loop $check_left
+      (if (i32.le_u (local.get $i) (local.get $maxbits))
+        (then
+          (local.set $left
+            (i32.sub
+              (i32.shl (local.get $left) (i32.const 1))
+              (i32.load (i32.add (local.get $counts_ptr) (i32.shl (local.get $i) (i32.const 2))))))
+          (if (i32.lt_s (local.get $left) (i32.const 0)) (then (return (i32.const 3))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $check_left))))
+    (local.set $sum (i32.const 0))
+    (local.set $i (i32.const 1))
+    (loop $make_offsets
+      (if (i32.le_u (local.get $i) (local.get $maxbits))
+        (then
+          (i32.store (i32.add (local.get $offsets_ptr) (i32.shl (local.get $i) (i32.const 2))) (local.get $sum))
+          (local.set $sum
+            (i32.add
+              (local.get $sum)
+              (i32.load (i32.add (local.get $counts_ptr) (i32.shl (local.get $i) (i32.const 2))))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $make_offsets))))
+    (local.set $i (i32.const 0))
+    (loop $sort_symbols
+      (if (i32.lt_u (local.get $i) (local.get $symbol_count))
+        (then
+          (local.set $len (i32.load8_u (i32.add (local.get $lens_ptr) (local.get $i))))
+          (if (local.get $len)
+            (then
+              (local.set $pos (i32.load (i32.add (local.get $offsets_ptr) (i32.shl (local.get $len) (i32.const 2)))))
+              (i32.store (i32.add (local.get $symbols_ptr) (i32.shl (local.get $pos) (i32.const 2))) (local.get $i))
+              (i32.store
+                (i32.add (local.get $offsets_ptr) (i32.shl (local.get $len) (i32.const 2)))
+                (i32.add (local.get $pos) (i32.const 1)))))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $sort_symbols))))
+    (i32.const 0))
+
+  (func $decode_symbol
+    (param $symbols_ptr i32)
+    (param $counts_ptr i32)
+    (param $maxbits i32)
+    (result i32)
+    (local $code i32)
+    (local $first i32)
+    (local $index i32)
+    (local $len i32)
+    (local $bit i32)
+    (local $count i32)
+    (local.set $len (i32.const 1))
+    (loop $decode
+      (if (i32.le_u (local.get $len) (local.get $maxbits))
+        (then
+          (local.set $bit (call $br_read (i32.const 1)))
+          (if (i32.lt_s (local.get $bit) (i32.const 0)) (then (return (i32.const -1))))
+          (local.set $code (i32.or (local.get $code) (local.get $bit)))
+          (local.set $count (i32.load (i32.add (local.get $counts_ptr) (i32.shl (local.get $len) (i32.const 2)))))
+          (if (i32.lt_u (i32.sub (local.get $code) (local.get $first)) (local.get $count))
+            (then
+              (return
+                (i32.load
+                  (i32.add
+                    (local.get $symbols_ptr)
+                    (i32.shl
+                      (i32.add (local.get $index) (i32.sub (local.get $code) (local.get $first)))
+                      (i32.const 2)))))))
+          (local.set $index (i32.add (local.get $index) (local.get $count)))
+          (local.set $first (i32.shl (i32.add (local.get $first) (local.get $count)) (i32.const 1)))
+          (local.set $code (i32.shl (local.get $code) (i32.const 1)))
+          (local.set $len (i32.add (local.get $len) (i32.const 1)))
+          (br $decode))))
+    (i32.const -3))
+
+  (func $m66write_record
+    (param $out i32)
+    (param $consumed i32)
+    (param $written i32)
+    (param $block_count i32)
+    (param $last_block_type i32)
+    (param $crc32 i32)
+    (param $adler32 i32)
+    (i32.store (local.get $out) (local.get $consumed))
+    (i32.store (i32.add (local.get $out) (i32.const 4)) (local.get $written))
+    (i32.store (i32.add (local.get $out) (i32.const 8)) (local.get $block_count))
+    (i32.store (i32.add (local.get $out) (i32.const 12)) (local.get $last_block_type))
+    (i32.store (i32.add (local.get $out) (i32.const 16)) (local.get $crc32))
+    (i32.store (i32.add (local.get $out) (i32.const 20)) (local.get $adler32)))
+
+  (func (export "deflate_scan_blocks")
+    (param $src_ptr i32)
+    (param $src_len i32)
+    (param $out_record i32)
+    (result i32)
+    (local $bfinal i32)
+    (local $btype i32)
+    (local $off i32)
+    (local $block_len i32)
+    (local $nlen i32)
+    (local $payload_end i32)
+    (local $block_count i32)
+    (local $payload_total i32)
+    (call $br_init (local.get $src_ptr) (local.get $src_len))
+    (loop $blocks
+      (local.set $bfinal (call $br_read (i32.const 1)))
+      (if (i32.lt_s (local.get $bfinal) (i32.const 0)) (then (return (i32.const 1))))
+      (local.set $btype (call $br_read (i32.const 2)))
+      (if (i32.lt_s (local.get $btype) (i32.const 0)) (then (return (i32.const 1))))
+      (if (i32.eq (local.get $btype) (i32.const 3)) (then (return (i32.const 3))))
+      (if (i32.ne (local.get $btype) (i32.const 0))
+        (then
+          (call $m66write_record
+            (local.get $out_record)
+            (call $br_consumed_bytes)
+            (local.get $payload_total)
+            (local.get $block_count)
+            (local.get $btype)
+            (i32.const 0)
+            (i32.const 1))
+          (return (i32.const 7))))
+      (call $br_align_byte)
+      (local.set $off (i32.shr_u (global.get $br_bitpos) (i32.const 3)))
+      (if (i32.gt_u (i32.add (local.get $off) (i32.const 4)) (local.get $src_len))
+        (then (return (i32.const 1))))
+      (local.set $block_len
+        (i32.or
+          (i32.load8_u (i32.add (local.get $src_ptr) (local.get $off)))
+          (i32.shl
+            (i32.load8_u (i32.add (local.get $src_ptr) (i32.add (local.get $off) (i32.const 1))))
+            (i32.const 8))))
+      (local.set $nlen
+        (i32.or
+          (i32.load8_u (i32.add (local.get $src_ptr) (i32.add (local.get $off) (i32.const 2))))
+          (i32.shl
+            (i32.load8_u (i32.add (local.get $src_ptr) (i32.add (local.get $off) (i32.const 3))))
+            (i32.const 8))))
+      (if (i32.ne (i32.and (i32.xor (local.get $block_len) (local.get $nlen)) (i32.const 65535)) (i32.const 65535))
+        (then (return (i32.const 3))))
+      (local.set $payload_end (i32.add (i32.add (local.get $off) (i32.const 4)) (local.get $block_len)))
+      (if (i32.or
+            (i32.lt_u (local.get $payload_end) (local.get $off))
+            (i32.gt_u (local.get $payload_end) (local.get $src_len)))
+        (then (return (i32.const 1))))
+      (local.set $block_count (i32.add (local.get $block_count) (i32.const 1)))
+      (local.set $payload_total (i32.add (local.get $payload_total) (local.get $block_len)))
+      (global.set $br_bitpos (i32.shl (local.get $payload_end) (i32.const 3)))
+      (global.set $br_bitbuf (i32.const 0))
+      (global.set $br_bitcnt (i32.const 0))
+      (if (local.get $bfinal)
+        (then
+          (call $m66write_record
+            (local.get $out_record)
+            (local.get $payload_end)
+            (local.get $payload_total)
+            (local.get $block_count)
+            (i32.const 0)
+            (i32.const 0)
+            (i32.const 1))
+          (return (i32.const 0))))
+      (br $blocks))
+    (i32.const 1))
+
+  (func (export "deflate_inflate_raw")
+    (param $src_ptr i32)
+    (param $src_len i32)
+    (param $out_ptr i32)
+    (param $out_cap i32)
+    (param $out_limit i32)
+    (param $out_record i32)
+    (result i32)
+    (local $bfinal i32)
+    (local $btype i32)
+    (local $off i32)
+    (local $block_len i32)
+    (local $nlen i32)
+    (local $payload_off i32)
+    (local $payload_end i32)
+    (local $written i32)
+    (local $block_count i32)
+    (local $crc i32)
+    (local $adler i32)
+    (local $i i32)
+    (local $byte i32)
+    (local $packed i32)
+    (local $sym i32)
+    (local $extra_bits i32)
+    (local $extra_val i32)
+    (local $length i32)
+    (local $dist_sym i32)
+    (local $dist i32)
+    (local $copy_from i32)
+    (local $hlit i32)
+    (local $hdist i32)
+    (local $hclen i32)
+    (local $total_lens i32)
+    (local $lens_index i32)
+    (local $code i32)
+    (local $repeat_count i32)
+    (local $prev_len i32)
+    (local.set $crc (i32.const -1))
+    (local.set $adler (i32.const 1))
+    (call $br_init (local.get $src_ptr) (local.get $src_len))
+    (loop $blocks
+      (local.set $bfinal (call $br_read (i32.const 1)))
+      (if (i32.lt_s (local.get $bfinal) (i32.const 0)) (then (return (i32.const 1))))
+      (local.set $btype (call $br_read (i32.const 2)))
+      (if (i32.lt_s (local.get $btype) (i32.const 0)) (then (return (i32.const 1))))
+      (if (i32.eq (local.get $btype) (i32.const 3)) (then (return (i32.const 3))))
+      (if (i32.eq (local.get $btype) (i32.const 2))
+        (then
+          (local.set $hlit (call $br_read (i32.const 5)))
+          (if (i32.lt_s (local.get $hlit) (i32.const 0)) (then (return (i32.const 1))))
+          (local.set $hlit (i32.add (local.get $hlit) (i32.const 257)))
+          (local.set $hdist (call $br_read (i32.const 5)))
+          (if (i32.lt_s (local.get $hdist) (i32.const 0)) (then (return (i32.const 1))))
+          (local.set $hdist (i32.add (local.get $hdist) (i32.const 1)))
+          (local.set $hclen (call $br_read (i32.const 4)))
+          (if (i32.lt_s (local.get $hclen) (i32.const 0)) (then (return (i32.const 1))))
+          (local.set $hclen (i32.add (local.get $hclen) (i32.const 4)))
+          (if (i32.or
+                (i32.or (i32.gt_u (local.get $hlit) (i32.const 286)) (i32.gt_u (local.get $hdist) (i32.const 32)))
+                (i32.gt_u (local.get $hclen) (i32.const 19)))
+            (then (return (i32.const 3))))
+          (local.set $i (i32.const 0))
+          (loop $zero_cl_lens
+            (if (i32.lt_u (local.get $i) (i32.const 19))
+              (then
+                (i32.store8 (i32.add (i32.const 591724) (local.get $i)) (i32.const 0))
+                (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                (br $zero_cl_lens))))
+          (local.set $i (i32.const 0))
+          (loop $read_cl_lens
+            (if (i32.lt_u (local.get $i) (local.get $hclen))
+              (then
+                (local.set $code (call $br_read (i32.const 3)))
+                (if (i32.lt_s (local.get $code) (i32.const 0)) (then (return (i32.const 1))))
+                (i32.store8
+                  (i32.add (i32.const 591724) (call $cl_order (local.get $i)))
+                  (local.get $code))
+                (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                (br $read_cl_lens))))
+          (if (call $build_table
+                (i32.const 591724)
+                (i32.const 19)
+                (i32.const 589952)
+                (i32.const 589824)
+                (i32.const 589888)
+                (i32.const 7))
+            (then (return (i32.const 3))))
+          (local.set $total_lens (i32.add (local.get $hlit) (local.get $hdist)))
+          (local.set $i (i32.const 0))
+          (loop $zero_dyn_lens
+            (if (i32.lt_u (local.get $i) (i32.const 320))
+              (then
+                (i32.store8 (i32.add (i32.const 591724) (local.get $i)) (i32.const 0))
+                (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                (br $zero_dyn_lens))))
+          (local.set $lens_index (i32.const 0))
+          (local.set $prev_len (i32.const 0))
+          (loop $read_dyn_lens
+            (if (i32.lt_u (local.get $lens_index) (local.get $total_lens))
+              (then
+                (local.set $code (call $decode_symbol (i32.const 589952) (i32.const 589824) (i32.const 7)))
+                (if (i32.lt_s (local.get $code) (i32.const 0))
+                  (then
+                    (if (i32.eq (local.get $code) (i32.const -1))
+                      (then (return (i32.const 1)))
+                      (else (return (i32.const 3))))))
+                (if (i32.le_u (local.get $code) (i32.const 15))
+                  (then
+                    (i32.store8 (i32.add (i32.const 591724) (local.get $lens_index)) (local.get $code))
+                    (local.set $prev_len (local.get $code))
+                    (local.set $lens_index (i32.add (local.get $lens_index) (i32.const 1)))
+                    (br $read_dyn_lens)))
+                (if (i32.eq (local.get $code) (i32.const 16))
+                  (then
+                    (if (i32.eqz (local.get $lens_index)) (then (return (i32.const 3))))
+                    (local.set $repeat_count (call $br_read (i32.const 2)))
+                    (if (i32.lt_s (local.get $repeat_count) (i32.const 0)) (then (return (i32.const 1))))
+                    (local.set $repeat_count (i32.add (local.get $repeat_count) (i32.const 3)))
+                    (if (i32.gt_u (i32.add (local.get $lens_index) (local.get $repeat_count)) (local.get $total_lens))
+                      (then (return (i32.const 3))))
+                    (loop $repeat_prev
+                      (if (local.get $repeat_count)
+                        (then
+                          (i32.store8 (i32.add (i32.const 591724) (local.get $lens_index)) (local.get $prev_len))
+                          (local.set $lens_index (i32.add (local.get $lens_index) (i32.const 1)))
+                          (local.set $repeat_count (i32.sub (local.get $repeat_count) (i32.const 1)))
+                          (br $repeat_prev))))
+                    (br $read_dyn_lens)))
+                (if (i32.eq (local.get $code) (i32.const 17))
+                  (then
+                    (local.set $repeat_count (call $br_read (i32.const 3)))
+                    (if (i32.lt_s (local.get $repeat_count) (i32.const 0)) (then (return (i32.const 1))))
+                    (local.set $repeat_count (i32.add (local.get $repeat_count) (i32.const 3)))
+                    (if (i32.gt_u (i32.add (local.get $lens_index) (local.get $repeat_count)) (local.get $total_lens))
+                      (then (return (i32.const 3))))
+                    (local.set $prev_len (i32.const 0))
+                    (local.set $lens_index (i32.add (local.get $lens_index) (local.get $repeat_count)))
+                    (br $read_dyn_lens)))
+                (if (i32.eq (local.get $code) (i32.const 18))
+                  (then
+                    (local.set $repeat_count (call $br_read (i32.const 7)))
+                    (if (i32.lt_s (local.get $repeat_count) (i32.const 0)) (then (return (i32.const 1))))
+                    (local.set $repeat_count (i32.add (local.get $repeat_count) (i32.const 11)))
+                    (if (i32.gt_u (i32.add (local.get $lens_index) (local.get $repeat_count)) (local.get $total_lens))
+                      (then (return (i32.const 3))))
+                    (local.set $prev_len (i32.const 0))
+                    (local.set $lens_index (i32.add (local.get $lens_index) (local.get $repeat_count)))
+                    (br $read_dyn_lens)))
+                (return (i32.const 3)))))
+          (if (i32.eqz (i32.load8_u (i32.add (i32.const 591724) (i32.const 256))))
+            (then (return (i32.const 3))))
+          (if (call $build_table
+                (i32.const 591724)
+                (local.get $hlit)
+                (i32.const 590208)
+                (i32.const 590080)
+                (i32.const 590144)
+                (i32.const 15))
+            (then (return (i32.const 3))))
+          (if (call $build_table
+                (i32.add (i32.const 591724) (local.get $hlit))
+                (local.get $hdist)
+                (i32.const 591552)
+                (i32.const 591424)
+                (i32.const 591488)
+                (i32.const 15))
+            (then (return (i32.const 3))))
+          (loop $dynamic
+            (local.set $sym (call $decode_symbol (i32.const 590208) (i32.const 590080) (i32.const 15)))
+            (if (i32.lt_s (local.get $sym) (i32.const 0))
+              (then
+                (if (i32.eq (local.get $sym) (i32.const -1))
+                  (then (return (i32.const 1)))
+                  (else (return (i32.const 3))))))
+            (if (i32.lt_u (local.get $sym) (i32.const 256))
+              (then
+                (if (i32.ge_u (local.get $written) (local.get $out_cap)) (then (return (i32.const 2))))
+                (if (i32.ge_u (local.get $written) (local.get $out_limit)) (then (return (i32.const 6))))
+                (i32.store8 (i32.add (local.get $out_ptr) (local.get $written)) (local.get $sym))
+                (local.set $crc (call $crc32_update_byte (local.get $crc) (local.get $sym)))
+                (local.set $adler (call $adler32_update_byte (local.get $adler) (local.get $sym)))
+                (local.set $written (i32.add (local.get $written) (i32.const 1)))
+                (br $dynamic)))
+            (if (i32.eq (local.get $sym) (i32.const 256))
+              (then
+                (local.set $block_count (i32.add (local.get $block_count) (i32.const 1)))
+                (if (local.get $bfinal)
+                  (then
+                    (call $m66write_record
+                      (local.get $out_record)
+                      (call $br_consumed_bytes)
+                      (local.get $written)
+                      (local.get $block_count)
+                      (i32.const 2)
+                      (i32.xor (local.get $crc) (i32.const -1))
+                      (local.get $adler))
+                    (return (i32.const 0))))
+                (br $blocks)))
+            (if (i32.gt_u (local.get $sym) (i32.const 285)) (then (return (i32.const 3))))
+            (local.set $length (call $length_base (local.get $sym)))
+            (local.set $extra_bits (call $length_extra (local.get $sym)))
+            (if (i32.lt_s (local.get $length) (i32.const 0)) (then (return (i32.const 3))))
+            (if (local.get $extra_bits)
+              (then
+                (local.set $extra_val (call $br_read (local.get $extra_bits)))
+                (if (i32.lt_s (local.get $extra_val) (i32.const 0)) (then (return (i32.const 1))))
+                (local.set $length (i32.add (local.get $length) (local.get $extra_val)))))
+            (local.set $dist_sym (call $decode_symbol (i32.const 591552) (i32.const 591424) (i32.const 15)))
+            (if (i32.lt_s (local.get $dist_sym) (i32.const 0))
+              (then
+                (if (i32.eq (local.get $dist_sym) (i32.const -1))
+                  (then (return (i32.const 1)))
+                  (else (return (i32.const 3))))))
+            (if (i32.gt_u (local.get $dist_sym) (i32.const 29)) (then (return (i32.const 3))))
+            (local.set $dist (call $dist_base (local.get $dist_sym)))
+            (local.set $extra_bits (call $dist_extra (local.get $dist_sym)))
+            (if (local.get $extra_bits)
+              (then
+                (local.set $extra_val (call $br_read (local.get $extra_bits)))
+                (if (i32.lt_s (local.get $extra_val) (i32.const 0)) (then (return (i32.const 1))))
+                (local.set $dist (i32.add (local.get $dist) (local.get $extra_val)))))
+            (if (i32.or
+                  (i32.gt_u (local.get $dist) (local.get $written))
+                  (i32.gt_u (local.get $dist) (i32.const 32768)))
+              (then (return (i32.const 3))))
+            (if (i32.gt_u (i32.add (local.get $written) (local.get $length)) (local.get $out_cap)) (then (return (i32.const 2))))
+            (if (i32.gt_u (i32.add (local.get $written) (local.get $length)) (local.get $out_limit)) (then (return (i32.const 6))))
+            (local.set $i (i32.const 0))
+            (loop $copy_dyn_match
+              (if (i32.lt_u (local.get $i) (local.get $length))
+                (then
+                  (local.set $copy_from
+                    (i32.sub
+                      (i32.add (local.get $written) (local.get $i))
+                      (local.get $dist)))
+                  (local.set $byte (i32.load8_u (i32.add (local.get $out_ptr) (local.get $copy_from))))
+                  (i32.store8
+                    (i32.add (local.get $out_ptr) (i32.add (local.get $written) (local.get $i)))
+                    (local.get $byte))
+                  (local.set $crc (call $crc32_update_byte (local.get $crc) (local.get $byte)))
+                  (local.set $adler (call $adler32_update_byte (local.get $adler) (local.get $byte)))
+                  (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                  (br $copy_dyn_match))))
+            (local.set $written (i32.add (local.get $written) (local.get $length)))
+            (br $dynamic))))
+      (if (i32.eq (local.get $btype) (i32.const 1))
+        (then
+          (loop $fixed
+            (local.set $packed (call $fixed_symbol))
+            (if (i32.lt_s (local.get $packed) (i32.const 0))
+              (then
+                (if (i32.eq (local.get $packed) (i32.const -1))
+                  (then (return (i32.const 1)))
+                  (else (return (i32.const 3))))))
+            (local.set $sym (i32.and (local.get $packed) (i32.const 65535)))
+            (if (i32.lt_u (local.get $sym) (i32.const 256))
+              (then
+                (if (i32.ge_u (local.get $written) (local.get $out_cap)) (then (return (i32.const 2))))
+                (if (i32.ge_u (local.get $written) (local.get $out_limit)) (then (return (i32.const 6))))
+                (i32.store8 (i32.add (local.get $out_ptr) (local.get $written)) (local.get $sym))
+                (local.set $crc (call $crc32_update_byte (local.get $crc) (local.get $sym)))
+                (local.set $adler (call $adler32_update_byte (local.get $adler) (local.get $sym)))
+                (local.set $written (i32.add (local.get $written) (i32.const 1)))
+                (br $fixed)))
+            (if (i32.eq (local.get $sym) (i32.const 256))
+              (then
+                (local.set $block_count (i32.add (local.get $block_count) (i32.const 1)))
+                (if (local.get $bfinal)
+                  (then
+                    (call $m66write_record
+                      (local.get $out_record)
+                      (call $br_consumed_bytes)
+                      (local.get $written)
+                      (local.get $block_count)
+                      (i32.const 1)
+                      (i32.xor (local.get $crc) (i32.const -1))
+                      (local.get $adler))
+                    (return (i32.const 0))))
+                (br $blocks)))
+            (if (i32.gt_u (local.get $sym) (i32.const 285)) (then (return (i32.const 3))))
+            (local.set $length (call $length_base (local.get $sym)))
+            (local.set $extra_bits (call $length_extra (local.get $sym)))
+            (if (i32.lt_s (local.get $length) (i32.const 0)) (then (return (i32.const 3))))
+            (if (local.get $extra_bits)
+              (then
+                (local.set $extra_val (call $br_read (local.get $extra_bits)))
+                (if (i32.lt_s (local.get $extra_val) (i32.const 0)) (then (return (i32.const 1))))
+                (local.set $length (i32.add (local.get $length) (local.get $extra_val)))))
+            (local.set $dist_sym (call $br_read (i32.const 5)))
+            (if (i32.lt_s (local.get $dist_sym) (i32.const 0)) (then (return (i32.const 1))))
+            (local.set $dist_sym (call $reverse_bits (local.get $dist_sym) (i32.const 5)))
+            (if (i32.gt_u (local.get $dist_sym) (i32.const 29)) (then (return (i32.const 3))))
+            (local.set $dist (call $dist_base (local.get $dist_sym)))
+            (local.set $extra_bits (call $dist_extra (local.get $dist_sym)))
+            (if (local.get $extra_bits)
+              (then
+                (local.set $extra_val (call $br_read (local.get $extra_bits)))
+                (if (i32.lt_s (local.get $extra_val) (i32.const 0)) (then (return (i32.const 1))))
+                (local.set $dist (i32.add (local.get $dist) (local.get $extra_val)))))
+            (if (i32.or
+                  (i32.gt_u (local.get $dist) (local.get $written))
+                  (i32.gt_u (local.get $dist) (i32.const 32768)))
+              (then (return (i32.const 3))))
+            (if (i32.gt_u (i32.add (local.get $written) (local.get $length)) (local.get $out_cap)) (then (return (i32.const 2))))
+            (if (i32.gt_u (i32.add (local.get $written) (local.get $length)) (local.get $out_limit)) (then (return (i32.const 6))))
+            (local.set $i (i32.const 0))
+            (loop $copy_match
+              (if (i32.lt_u (local.get $i) (local.get $length))
+                (then
+                  (local.set $copy_from
+                    (i32.sub
+                      (i32.add (local.get $written) (local.get $i))
+                      (local.get $dist)))
+                  (local.set $byte (i32.load8_u (i32.add (local.get $out_ptr) (local.get $copy_from))))
+                  (i32.store8
+                    (i32.add (local.get $out_ptr) (i32.add (local.get $written) (local.get $i)))
+                    (local.get $byte))
+                  (local.set $crc (call $crc32_update_byte (local.get $crc) (local.get $byte)))
+                  (local.set $adler (call $adler32_update_byte (local.get $adler) (local.get $byte)))
+                  (local.set $i (i32.add (local.get $i) (i32.const 1)))
+                  (br $copy_match))))
+            (local.set $written (i32.add (local.get $written) (local.get $length)))
+            (br $fixed))))
+      (if (i32.ne (local.get $btype) (i32.const 0))
+        (then
+          (call $m66write_record
+            (local.get $out_record)
+            (call $br_consumed_bytes)
+            (local.get $written)
+            (local.get $block_count)
+            (local.get $btype)
+            (i32.xor (local.get $crc) (i32.const -1))
+            (local.get $adler))
+          (return (i32.const 7))))
+      (call $br_align_byte)
+      (local.set $off (i32.shr_u (global.get $br_bitpos) (i32.const 3)))
+      (if (i32.gt_u (i32.add (local.get $off) (i32.const 4)) (local.get $src_len)) (then (return (i32.const 1))))
+      (local.set $block_len
+        (i32.or
+          (i32.load8_u (i32.add (local.get $src_ptr) (local.get $off)))
+          (i32.shl
+            (i32.load8_u (i32.add (local.get $src_ptr) (i32.add (local.get $off) (i32.const 1))))
+            (i32.const 8))))
+      (local.set $nlen
+        (i32.or
+          (i32.load8_u (i32.add (local.get $src_ptr) (i32.add (local.get $off) (i32.const 2))))
+          (i32.shl
+            (i32.load8_u (i32.add (local.get $src_ptr) (i32.add (local.get $off) (i32.const 3))))
+            (i32.const 8))))
+      (if (i32.ne (i32.and (i32.xor (local.get $block_len) (local.get $nlen)) (i32.const 65535)) (i32.const 65535))
+        (then (return (i32.const 3))))
+      (local.set $payload_off (i32.add (local.get $off) (i32.const 4)))
+      (local.set $payload_end (i32.add (local.get $payload_off) (local.get $block_len)))
+      (if (i32.or
+            (i32.lt_u (local.get $payload_end) (local.get $payload_off))
+            (i32.gt_u (local.get $payload_end) (local.get $src_len)))
+        (then (return (i32.const 1))))
+      (if (i32.gt_u (i32.add (local.get $written) (local.get $block_len)) (local.get $out_cap)) (then (return (i32.const 2))))
+      (if (i32.gt_u (i32.add (local.get $written) (local.get $block_len)) (local.get $out_limit)) (then (return (i32.const 6))))
+      (local.set $i (i32.const 0))
+      (loop $copy
+        (if (i32.lt_u (local.get $i) (local.get $block_len))
+          (then
+            (local.set $byte (i32.load8_u (i32.add (local.get $src_ptr) (i32.add (local.get $payload_off) (local.get $i)))))
+            (i32.store8 (i32.add (local.get $out_ptr) (i32.add (local.get $written) (local.get $i))) (local.get $byte))
+            (local.set $crc (call $crc32_update_byte (local.get $crc) (local.get $byte)))
+            (local.set $adler (call $adler32_update_byte (local.get $adler) (local.get $byte)))
+            (local.set $i (i32.add (local.get $i) (i32.const 1)))
+            (br $copy))))
+      (local.set $written (i32.add (local.get $written) (local.get $block_len)))
+      (local.set $block_count (i32.add (local.get $block_count) (i32.const 1)))
+      (global.set $br_bitpos (i32.shl (local.get $payload_end) (i32.const 3)))
+      (global.set $br_bitbuf (i32.const 0))
+      (global.set $br_bitcnt (i32.const 0))
+      (if (local.get $bfinal)
+        (then
+          (call $m66write_record
+            (local.get $out_record)
+            (local.get $payload_end)
+            (local.get $written)
+            (local.get $block_count)
+            (i32.const 0)
+            (i32.xor (local.get $crc) (i32.const -1))
+            (local.get $adler))
+          (return (i32.const 0))))
+      (br $blocks))
+    (i32.const 1))
+
+  ;; Pipe Core — byte pipes + bump allocators
+
+    ;; Standard ID removed — merged into single module
+
+  ;; ── Pipe struct layout (16 byte header + data[cap]) ──
+  ;; +0:  rd    read cursor from data start
+  ;; +4:  wr    write cursor from data start
+  ;; +8:  cap   total data capacity
+  ;; +12: state 0=open 1=closed
+  ;; +16: data[cap]
+  (global $PIPE_RD     i32 (i32.const 0))
+  (global $PIPE_WR     i32 (i32.const 4))
+  (global $PIPE_CAP    i32 (i32.const 8))
+  (global $PIPE_STATE  i32 (i32.const 12))
+  (global $PIPE_HEADER i32 (i32.const 16))
+
+  ;; ── Bump allocator: 0x40000 – 0x80000 ──
+  (global $HEAP_START i32 (i32.const 0x40000))
+  (global $HEAP_END   i32 (i32.const 0x80000))
+  (global $heap_ptr (mut i32) (i32.const 0x40000))
+
+  (func $pipe_alloc (export "pipe_alloc") (param $size i32) (result i32)
+    (local $ptr i32)
+    (local.set $ptr (global.get $heap_ptr))
+    (if (i32.gt_u (i32.add (local.get $ptr) (local.get $size)) (global.get $HEAP_END))
+      (then (return (i32.const -1))))
+    (global.set $heap_ptr (i32.add (global.get $heap_ptr) (local.get $size)))
+    local.get $ptr)
+
+  ;; ── Pipe creation ──
+
+  (func $pipe_create (export "pipe_create") (param $cap i32) (result i32)
+    (local $p i32)
+    (if (i32.eqz (local.get $cap)) (then (return (i32.const -1))))
+    (local.set $p (call $pipe_alloc
+      (i32.add (global.get $PIPE_HEADER) (local.get $cap))))
+    (if (i32.eq (local.get $p) (i32.const -1)) (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $p) (i32.const 0))
+    (i32.store offset=4 (local.get $p) (i32.const 0))
+    (i32.store offset=8 (local.get $p) (local.get $cap))
+    (i32.store offset=12 (local.get $p) (i32.const 0))
+    local.get $p)
+
+  ;; ── Write ──
+
+  (func $pipe_write (export "pipe_write")
+    (param $p i32) (param $src i32) (param $len i32) (result i32)
+    (local $wr i32) (local $cap i32)
+    (if (i32.eqz (local.get $len)) (then (return (global.get $STATUS_OK))))
+    (local.set $wr (i32.load offset=4 (local.get $p)))
+    (local.set $cap (i32.load offset=8 (local.get $p)))
+    (if (i32.gt_u (i32.add (local.get $wr) (local.get $len)) (local.get $cap))
+      (then (return (global.get $STATUS_OVERFLOW))))
+    (call $memcpy_off
+      (i32.add (local.get $p) (global.get $PIPE_HEADER))
+      (local.get $wr)
+      (local.get $src)
+      (i32.const 0)
+      (local.get $len))
+    (i32.store offset=4 (local.get $p)
+      (i32.add (i32.load offset=4 (local.get $p)) (local.get $len)))
+    global.get $STATUS_OK)
+
+  ;; ── Read ──
+
+  (func $pipe_read (export "pipe_read")
+    (param $p i32) (param $dst i32) (param $max i32) (result i32)
+    (local $avail i32) (local $rd i32)
+    (local.set $avail
+      (i32.sub (i32.load offset=4 (local.get $p))
+               (i32.load offset=0 (local.get $p))))
+    (if (i32.eqz (local.get $avail)) (then (return (i32.const 0))))
+    (if (i32.gt_u (local.get $avail) (local.get $max))
+      (then (local.set $avail (local.get $max))))
+    (local.set $rd (i32.load offset=0 (local.get $p)))
+    (call $memcpy_off
+      (local.get $dst) (i32.const 0)
+      (i32.add (local.get $p) (global.get $PIPE_HEADER))
+      (local.get $rd)
+      (local.get $avail))
+    (i32.store offset=0 (local.get $p)
+      (i32.add (local.get $rd) (local.get $avail)))
+    (if (i32.eq (i32.load offset=0 (local.get $p))
+                (i32.load offset=4 (local.get $p)))
+      (then
+        (i32.store offset=0 (local.get $p) (i32.const 0))
+        (i32.store offset=4 (local.get $p) (i32.const 0))))
+    local.get $avail)
+
+  ;; ── Query ──
+
+  (func $pipe_available (export "pipe_available") (param $p i32) (result i32)
+    (i32.sub (i32.load offset=4 (local.get $p))
+             (i32.load offset=0 (local.get $p))))
+
+  (func (export "pipe_space") (param $p i32) (result i32)
+    (i32.sub (i32.load offset=8 (local.get $p))
+             (i32.load offset=4 (local.get $p))))
+
+  (func (export "pipe_state") (param $p i32) (result i32)
+    (i32.load offset=12 (local.get $p)))
+
+  ;; ── Close / Reset ──
+
+  (func $pipe_close (export "pipe_close") (param $p i32)
+    (i32.store offset=12 (local.get $p) (i32.const 1)))
+
+  ;; ── Heap lifecycle management ──
+  ;; Snapshot saves current heap pointer; Restore rolls back to snapshot.
+  ;; Intermediate allocations (pipes, nodes) above the snapshot are freed.
+  ;; Persistent allocations below the snapshot are preserved.
+  (func $pipe_snapshot (export "pipe_snapshot") (result i32)
+    (global.get $heap_ptr))
+
+  (func $pipe_restore (export "pipe_restore") (param $snap i32)
+    (global.set $heap_ptr (local.get $snap)))
+
+  (func (export "pipe_reset_heap")
+    (global.set $heap_ptr (global.get $HEAP_START)))
+
+  (func (export "pipe_reset") (param $p i32)
+    (i32.store offset=0 (local.get $p) (i32.const 0))
+    (i32.store offset=4 (local.get $p) (i32.const 0))
+    (i32.store offset=12 (local.get $p) (i32.const 0)))
+
+  ;; ── Pipe drain ──
+
+  (func $pipe_drain (export "pipe_drain")
+    (param $src i32) (param $dst i32) (param $tmp i32) (param $tcap i32) (result i32)
+    (local $n i32)
+    (local.set $n (call $pipe_read (local.get $src) (local.get $tmp) (local.get $tcap)))
+    (if (i32.le_s (local.get $n) (i32.const 0))
+      (then (return (local.get $n))))
+    (call $pipe_write (local.get $dst) (local.get $tmp) (local.get $n))
+    (return (local.get $n)))
+
+  ;; memcpy imported from edgerun-core as $memcpy_off(dst, doff, src, soff, len)
+
+  ;; Frame Core — framed I/O (8-byte header)
+
+    ;; Standard ID removed — merged into single module
+
+  ;; ── Shared header scratch ──
+  (global $HDR i32 (i32.const 0x3FFF0))
+
+  ;; ── Frame: [stream_id:u32_le][payload_len:u32_le][payload] ──
+
+  ;; frame_write(pipe, stream_id, data, len) → status
+  (func $frame_write (export "frame_write")
+    (param $pipe i32) (param $stream_id i32) (param $data i32) (param $len i32) (result i32)
+    (local $r i32)
+    (i32.store (global.get $HDR) (local.get $stream_id))
+    (i32.store offset=4 (global.get $HDR) (local.get $len))
+    (local.set $r (call $pipe_write (local.get $pipe) (global.get $HDR) (i32.const 8)))
+    (if (i32.ne (local.get $r) (global.get $STATUS_OK)) (then (return (local.get $r))))
+    (call $pipe_write (local.get $pipe) (local.get $data) (local.get $len)))
+
+  ;; frame_read(pipe, scratch, scap) → pack(status, stream_id)
+  ;; On success: stores payload_len at scratch[0..4], payload at scratch[4..4+payload_len)
+  ;; scratch must be at least payload_len + 4 bytes
+  (func $frame_read (export "frame_read")
+    (param $pipe i32) (param $scratch i32) (param $scap i32) (result i64)
+    (local $r i32) (local $avail i32) (local $stream_id i32) (local $payload_len i32)
+    (local $remaining i32) (local $chunk i32)
+    ;; Read 8-byte header
+    (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (i32.const 8)))
+    (if (i32.lt_s (local.get $r) (i32.const 8))
+      (then (return (call $pack (global.get $STATUS_INPUT_SHORT) (i32.const 0)))))
+    (local.set $stream_id (i32.load (local.get $scratch)))
+    (local.set $payload_len (i32.load offset=4 (local.get $scratch)))
+    ;; Check space
+    (if (i32.gt_u (i32.add (local.get $payload_len) (i32.const 4)) (local.get $scap))
+      (then
+        ;; Skip payload in chunks using scratch as temp buffer (avoids HDR overflow)
+        (local.set $remaining (local.get $payload_len))
+        (block $skip_done
+          (loop $skip_loop
+            (br_if $skip_done (i32.eqz (local.get $remaining)))
+            (local.set $chunk (local.get $remaining))
+            (if (i32.gt_u (local.get $chunk) (local.get $scap))
+              (then (local.set $chunk (local.get $scap))))
+            (drop (call $pipe_read (local.get $pipe) (local.get $scratch) (local.get $chunk)))
+            (local.set $remaining (i32.sub (local.get $remaining) (local.get $chunk)))
+            (br $skip_loop)))
+        (return (call $pack (global.get $STATUS_OVERFLOW) (local.get $stream_id)))))
+    ;; Write payload_len to scratch[0..4], payload to scratch[4..]
+    (i32.store (local.get $scratch) (local.get $payload_len))
+    (local.set $r (call $pipe_read (local.get $pipe)
+      (i32.add (local.get $scratch) (i32.const 4)) (local.get $payload_len)))
+    (if (i32.lt_s (local.get $r) (i32.const 0))
+      (then (return (call $pack (i32.sub (i32.const 0) (local.get $r)) (i32.const 0)))))
+    (call $pack (global.get $STATUS_OK) (local.get $stream_id)))
+
+  ;; ── Convenience: read frame payload directly to output pipe ──
+  ;; frame_route(pipe, stream_dst, scratch) → pack(status, stream_id)
+  ;; Reads header from pipe, then reads payload directly to stream_dst
+  ;; scratch[0..7] used for header only
+  (func (export "frame_route")
+    (param $pipe i32) (param $stream_dst i32) (param $scratch i32) (result i64)
+    (local $r i32) (local $stream_id i32) (local $payload_len i32)
+    (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (i32.const 8)))
+    (if (i32.lt_s (local.get $r) (i32.const 8))
+      (then (return (call $pack (global.get $STATUS_INPUT_SHORT) (i32.const 0)))))
+    (local.set $stream_id (i32.load (local.get $scratch)))
+    (local.set $payload_len (i32.load offset=4 (local.get $scratch)))
+    ;; Read payload directly to output pipe via scratch in chunks
+    (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (local.get $payload_len)))
+    (if (i32.lt_s (local.get $r) (i32.const 0))
+      (then (return (call $pack (i32.sub (i32.const 0) (local.get $r)) (i32.const 0)))))
+    (drop (call $pipe_write (local.get $stream_dst) (local.get $scratch) (local.get $payload_len)))
+    (return (call $pack (global.get $STATUS_OK) (local.get $stream_id))))
+
+  ;; ── Message queue: [len:u32_le][payload] ──
+
+  (func (export "msg_write")
+    (param $pipe i32) (param $data i32) (param $len i32) (result i32)
+    (local $r i32)
+    (i32.store (global.get $HDR) (local.get $len))
+    (local.set $r (call $pipe_write (local.get $pipe) (global.get $HDR) (i32.const 4)))
+    (if (i32.ne (local.get $r) (global.get $STATUS_OK)) (then (return (local.get $r))))
+    (call $pipe_write (local.get $pipe) (local.get $data) (local.get $len)))
+
+  ;; msg_read(pipe, scratch, scap) → payload_len (bytes in scratch) | 0 | negative error
+  ;; On success: stores payload_len at scratch[0..4], payload at scratch[4..4+payload_len)
+  (func (export "msg_read")
+    (param $pipe i32) (param $scratch i32) (param $scap i32) (result i32)
+    (local $r i32) (local $payload_len i32)
+    (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (i32.const 4)))
+    (if (i32.lt_s (local.get $r) (i32.const 4))
+      (then (return (i32.const 0))))
+    (local.set $payload_len (i32.load (local.get $scratch)))
+    (if (i32.gt_u (i32.add (local.get $payload_len) (i32.const 4)) (local.get $scap))
+      (then (return (i32.sub (i32.const 0) (global.get $STATUS_OVERFLOW)))))
+    (i32.store (local.get $scratch) (local.get $payload_len))
+    (local.set $r (call $pipe_read (local.get $pipe)
+      (i32.add (local.get $scratch) (i32.const 4)) (local.get $payload_len)))
+    (if (i32.lt_s (local.get $r) (i32.const 0))
+      (then (return (local.get $r))))
+    local.get $payload_len)
+
+  ;; Pipeline Core — pipeline_run + dispatch table
+
+    ;; Standard ID removed — merged into single module
+
+  ;; ── Stage dispatch table ──
+  (table (export "stage_table") 64 funcref)
+
+  ;; ── Stage type constants (dispatch table indices) ──
+  (func (export "STAGE_PASSTHROUGH") (result i32) i32.const 0)
+  (func (export "STAGE_HEX_ENCODE")  (result i32) i32.const 1)
+  (func (export "STAGE_HEX_DECODE")  (result i32) i32.const 2)
+  (func (export "STAGE_B64_ENCODE")  (result i32) i32.const 3)
+  (func (export "STAGE_B64_DECODE")  (result i32) i32.const 4)
+  (func (export "STAGE_TRANSPORT")   (result i32) i32.const 5)
+  (func (export "STAGE_MUX_STATIC")  (result i32) i32.const 6)
+  (func (export "STAGE_DEMUX_STATIC") (result i32) i32.const 7)
+  (func (export "STAGE_MUX_DYNAMIC") (result i32) i32.const 8)
+  (func (export "STAGE_DEMUX_DYNAMIC") (result i32) i32.const 9)
+  (func (export "STAGE_WS_FRAME")     (result i32) i32.const 10)
+  (func (export "STAGE_WS_ENCODE")    (result i32) i32.const 11)
+  (func (export "STAGE_WS_DECODE")    (result i32) i32.const 12)
+  (func (export "STAGE_WASM_EXEC")    (result i32) i32.const 13)
+  (func (export "STAGE_WAT_PARSE")    (result i32) i32.const 14)
+
+  ;; ── Stage function type ──
+  ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) -> result
+  (type $stage_fn (func (param i32 i32 i32 i32 i32 i32 i32) (result i32)))
+
+  ;; ── Pipeline descriptor layout ──
+  ;; +0:  magic      i32
+  ;; +4:  version    i32
+  ;; +8:  pipe_cap   i32  — intermediate pipe capacity
+  ;; +12: stage_count i32
+  ;; +16: tick       i32  — incremented per pipeline_run call
+  ;; +20: stages[] — each:
+  ;;   +0:  stage_type i32
+  ;;   +4:  config     i32
+  ;;   +8:  config_len i32
+  ;;   +12: state_ptr  i32
+  ;;   total: 16 bytes
+  (func (export "PIPELINE_MAGIC")   (result i32) i32.const 0x50495045)
+  (func (export "PIPELINE_VERSION") (result i32) i32.const 1)
+
+  (global $PD_MAGIC    i32 (i32.const 0))
+  (global $PD_VERSION  i32 (i32.const 4))
+  (global $PD_PIPE_CAP i32 (i32.const 8))
+  (global $PD_COUNT    i32 (i32.const 12))
+  (global $PD_TICK     i32 (i32.const 16))
+  (global $PD_STAGES   i32 (i32.const 20))
+  (global $PS_TYPE     i32 (i32.const 0))
+  (global $PS_CONFIG   i32 (i32.const 4))
+  (global $PS_CLEN     i32 (i32.const 8))
+  (global $PS_STATE    i32 (i32.const 12))
+  (global $PS_SIZE     i32 (i32.const 16))
+
+  ;; pipeline_create(pipe_cap, stage_count) → desc_ptr | -1
+  (func (export "pipeline_create") (param $pcap i32) (param $count i32) (result i32)
+    (local $desc i32) (local $sz i32)
+    (local.set $sz (i32.add (global.get $PD_STAGES)
+      (i32.mul (local.get $count) (global.get $PS_SIZE))))
+    (local.set $desc (call $pipe_alloc (local.get $sz)))
+    (if (i32.eq (local.get $desc) (i32.const -1))
+      (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $desc) (i32.const 0x50495045))
+    (i32.store offset=4 (local.get $desc) (i32.const 1))
+    (i32.store offset=8 (local.get $desc) (local.get $pcap))
+    (i32.store offset=12 (local.get $desc) (local.get $count))
+    (i32.store offset=16 (local.get $desc) (i32.const 0))
+    local.get $desc)
+
+  ;; pipeline_set_stage(desc, index, stage_type, config, config_len)
+  (func (export "pipeline_set_stage")
+    (param $desc i32) (param $idx i32) (param $stype i32)
+    (param $cfg i32) (param $clen i32)
+    (local $slot i32)
+    (local.set $slot
+      (i32.add (global.get $PD_STAGES)
+        (i32.mul (local.get $idx) (global.get $PS_SIZE))))
+    (i32.store (i32.add (local.get $desc) (local.get $slot)) (local.get $stype))
+    (i32.store offset=4 (i32.add (local.get $desc) (local.get $slot)) (local.get $cfg))
+    (i32.store offset=8 (i32.add (local.get $desc) (local.get $slot)) (local.get $clen)))
+
+  ;; pipeline_set_stage_state(desc, index, state_ptr)
+  (func (export "pipeline_set_stage_state")
+    (param $desc i32) (param $idx i32) (param $state i32)
+    (local $slot i32)
+    (local.set $slot
+      (i32.add (global.get $PD_STAGES)
+        (i32.mul (local.get $idx) (global.get $PS_SIZE))))
+    (i32.store offset=12 (i32.add (local.get $desc) (local.get $slot)) (local.get $state)))
+
+  (func (export "pipeline_get_stage_type") (param $desc i32) (param $idx i32) (result i32)
+    (local $slot i32)
+    (local.set $slot
+      (i32.add (global.get $PD_STAGES)
+        (i32.mul (local.get $idx) (global.get $PS_SIZE))))
+    (i32.load (i32.add (local.get $desc) (local.get $slot))))
+
+  (func (export "pipeline_get_tick") (param $desc i32) (result i32)
+    (i32.load offset=16 (local.get $desc)))
+
+  ;; pipeline_run(desc, input_pipe, output_pipe, scratch, scap) → OK | MORE | error
+  (func (export "pipeline_run")
+    (param $desc i32) (param $input i32) (param $output i32)
+    (param $scratch i32) (param $scap i32) (result i32)
+    (local $count i32) (local $pcap i32)
+    (local $i i32) (local $stype i32)
+    (local $out i32) (local $prev i32) (local $result i32)
+    (local $stages i32) (local $slot i32)
+    (local $cfg i32) (local $clen i32) (local $state i32)
+    (local $snapshot i32) (local $last_i i32)
+
+    (local.set $count (i32.load offset=12 (local.get $desc)))
+    (local.set $last_i (i32.sub (local.get $count) (i32.const 1)))
+    (local.set $pcap (i32.load offset=8 (local.get $desc)))
+    (local.set $stages (i32.add (local.get $desc) (global.get $PD_STAGES)))
+    (local.set $prev (local.get $input))
+
+    ;; Increment tick for this run
+    (i32.store offset=16 (local.get $desc)
+      (i32.add (i32.load offset=16 (local.get $desc)) (i32.const 1)))
+
+    ;; Save heap snapshot before allocating intermediate pipes
+    (local.set $snapshot (call $pipe_snapshot))
+
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $count)))
+        (local.set $stype (i32.load (i32.add (local.get $stages) (local.get $slot))))
+        (local.set $cfg (i32.load offset=4 (i32.add (local.get $stages) (local.get $slot))))
+        (local.set $clen (i32.load offset=8 (i32.add (local.get $stages) (local.get $slot))))
+        (local.set $state (i32.load offset=12 (i32.add (local.get $stages) (local.get $slot))))
+
+        ;; Write current tick to state[0] if stage has state
+        (if (local.get $state)
+          (then (i32.store (local.get $state) (i32.load offset=16 (local.get $desc)))))
+
+        ;; Last stage → output pipe, others → intermediate pipe
+        (if (i32.eq (local.get $i) (local.get $last_i))
+          (then (local.set $out (local.get $output)))
+          (else
+            (local.set $out (call $pipe_create (local.get $pcap)))
+            (if (i32.eq (local.get $out) (i32.const -1))
+              (then (local.set $result (i32.const -1)) (br $done)))))
+
+        ;; Call stage via dispatch table
+        (local.set $result
+          (call_indirect (type $stage_fn)
+            (local.get $prev) (local.get $out) (local.get $cfg) (local.get $clen)
+            (local.get $scratch) (local.get $scap) (local.get $state)
+            (local.get $stype)))
+
+        ;; Break on error or yield
+        (if (i32.or
+              (i32.lt_s (local.get $result) (i32.const 0))
+              (i32.eq (local.get $result) (global.get $STATUS_MORE)))
+          (then (br $done)))
+
+        ;; Stage completed — reset result to OK for pipeline return value
+        (local.set $result (global.get $STATUS_OK))
+
+        ;; Close previous intermediate pipe (i>0 means it was an intermediate, never the user's input)
+        (if (local.get $i)
+          (then (call $pipe_close (local.get $prev))))
+
+        (local.set $prev (local.get $out))
+        (local.set $slot (i32.add (local.get $slot) (global.get $PS_SIZE)))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop)))
+
+    ;; On full success, restore heap to free intermediate pipes.
+    ;; On MORE (yield), intermediate pipes must persist for next call.
+    (if (i32.eq (local.get $result) (global.get $STATUS_OK))
+      (then (call $pipe_restore (local.get $snapshot))))
+    local.get $result)
+
+  ;; ── Built-in passthrough stage (table index 0) ──
+  (func $stage_passthrough
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (call $pipe_drain (local.get $input) (local.get $output) (local.get $scratch) (local.get $scap)))
+
+  (elem (i32.const 0) $stage_passthrough)
+
+  ;; Encoding Text — hex + base64url pipeline stages
+
+    ;; Standard ID removed — merged into single module
+
+
+  (func $hex_char (param $n i32) (result i32)
+    local.get $n
+    i32.const 10
+    i32.lt_u
+    if (result i32)
+      local.get $n
+      i32.const 48
+      i32.add
+    else
+      local.get $n
+      i32.const 87
+      i32.add
+    end)
+
+  (func $m90hex_nibble (param $c i32) (result i32)
+    local.get $c
+    i32.const 48
+    i32.ge_u
+    local.get $c
+    i32.const 57
+    i32.le_u
+    i32.and
+    if (result i32)
+      local.get $c
+      i32.const 48
+      i32.sub
+    else
+      local.get $c
+      i32.const 97
+      i32.ge_u
+      local.get $c
+      i32.const 102
+      i32.le_u
+      i32.and
+      if (result i32)
+        local.get $c
+        i32.const 87
+        i32.sub
+      else
+        local.get $c
+        i32.const 65
+        i32.ge_u
+        local.get $c
+        i32.const 70
+        i32.le_u
+        i32.and
+        if (result i32)
+          local.get $c
+          i32.const 55
+          i32.sub
+        else
+          i32.const -1
+        end
+      end
+    end)
+
+  ;; base64url functions imported from encoding-base64url as $b64_encode/$b64_decode
+
+  (func $hex_encode_lower (export "hex_encode_lower")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $i i32)
+    (local $out_len i32)
+    (local $b i32)
+    local.get $in_len
+    i32.const 2147483647
+    i32.gt_u
+    if (result i64)
+      i32.const 4
+      i32.const 0
+      call $pack
+    else
+      local.get $in_len
+      i32.const 1
+      i32.shl
+      local.tee $out_len
+      local.get $out_cap
+      i32.gt_u
+      if (result i64)
+        i32.const 2
+        i32.const 0
+        call $pack
+      else
+        loop $loop
+          local.get $i
+          local.get $in_len
+          i32.lt_u
+          if
+            local.get $in_ptr
+            local.get $i
+            i32.add
+            i32.load8_u
+            local.set $b
+            local.get $out_ptr
+            local.get $i
+            i32.const 1
+            i32.shl
+            i32.add
+            local.get $b
+            i32.const 4
+            i32.shr_u
+            call $hex_char
+            i32.store8
+            local.get $out_ptr
+            local.get $i
+            i32.const 1
+            i32.shl
+            i32.add
+            i32.const 1
+            i32.add
+            local.get $b
+            i32.const 15
+            i32.and
+            call $hex_char
+            i32.store8
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $loop
+          end
+        end
+        i32.const 0
+        local.get $out_len
+        call $pack
+      end
+    end)
+
+  (func $hex_decode_strict (export "hex_decode_strict")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $i i32)
+    (local $out_len i32)
+    (local $hi i32)
+    (local $lo i32)
+    local.get $in_len
+    i32.const 1
+    i32.and
+    if (result i64)
+      i32.const 3
+      i32.const 0
+      call $pack
+    else
+      local.get $in_len
+      i32.const 1
+      i32.shr_u
+      local.tee $out_len
+      local.get $out_cap
+      i32.gt_u
+      if (result i64)
+        i32.const 2
+        i32.const 0
+        call $pack
+      else
+        loop $loop
+          local.get $i
+          local.get $out_len
+          i32.lt_u
+          if
+            local.get $in_ptr
+            local.get $i
+            i32.const 1
+            i32.shl
+            i32.add
+            i32.load8_u
+            call $m90hex_nibble
+            local.tee $hi
+            i32.const 0
+            i32.lt_s
+            if
+              i32.const 3
+              i32.const 0
+              call $pack
+              return
+            end
+            local.get $in_ptr
+            local.get $i
+            i32.const 1
+            i32.shl
+            i32.add
+            i32.const 1
+            i32.add
+            i32.load8_u
+            call $m90hex_nibble
+            local.tee $lo
+            i32.const 0
+            i32.lt_s
+            if
+              i32.const 3
+              i32.const 0
+              call $pack
+              return
+            end
+            local.get $out_ptr
+            local.get $i
+            i32.add
+            local.get $hi
+            i32.const 4
+            i32.shl
+            local.get $lo
+            i32.or
+            i32.store8
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br $loop
+          end
+        end
+        i32.const 0
+        local.get $out_len
+        call $pack
+      end
+    end)
+
+  ;; base64url functions imported from encoding-base64url as $b64_encode/$b64_decode
+
+  ;; ── Pipeline stage: hex encode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_hex_encode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $hex_encode_lower
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
+
+  ;; ── Pipeline stage: base64url nopad encode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_b64_encode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $b64_encode
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
+
+  ;; ── Pipeline stage: base64url nopad decode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_b64_decode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 2)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $b64_decode
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
+
+  ;; ── Pipeline stage: hex decode ──
+  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  (func (export "process_hex_decode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $max_in (i32.div_u (i32.mul (local.get $scap) (i32.const 2)) (i32.const 3)))
+    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local.set $result (call $hex_decode_strict
+      (local.get $scratch) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $max_in))
+      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    local.get $out_len)
+  ;; Socket Core — transport stage with tick-based timeout
+;; Abstract socket layer — transport-agnostic byte stream I/O.
+  ;;
+  ;; Socket types define the transport. Config structs are fixed-size
+  ;; records stored in linear memory, passed by pointer to the host's
+  ;; sock_open implementation.
+  ;;
+  ;; Socket type  Config struct (ptr+len)
+  ;; ───────────  ─────────────────────────────────
+  ;; TCP=0        host_ptr[4] host_len[4] port[2] pad[2]   (12 bytes)
+  ;; TLS=1        host_ptr[4] host_len[4] port[2] pad[2]   (12 bytes)
+  ;; CDP=2        ws_url_ptr[4] ws_url_len[4]              (8 bytes)
+  ;; SOCKS5=3     proxy_host_ptr[4] proxy_host_len[4]
+  ;;              proxy_port[2] pad[2]
+  ;;              target_host_ptr[4] target_host_len[4]
+  ;;              target_port[2] pad[2]                    (24 bytes)
+  ;; HTTP_PROXY=4 proxy_host_ptr[4] proxy_host_len[4]
+  ;;              proxy_port[2] pad[2]
+  ;;              target_host_ptr[4] target_host_len[4]
+  ;;              target_port[2] pad[2]                    (24 bytes)
+  ;; UDP=5        host_ptr[4] host_len[4] port[2] pad[2]   (12 bytes)
+    ;; Standard ID removed — merged into single module
+
+  ;; ── Socket type constants ──
+  (func (export "SOCK_TCP")        (result i32) i32.const 0)
+  (func (export "SOCK_TLS")        (result i32) i32.const 1)
+  (func (export "SOCK_CDP")        (result i32) i32.const 2)
+  (func (export "SOCK_SOCKS5")     (result i32) i32.const 3)
+  (func (export "SOCK_HTTP_PROXY") (result i32) i32.const 4)
+  (func (export "SOCK_UDP")        (result i32) i32.const 5)
+
+  ;; ── Config struct sizes ──
+  (func (export "SOCK_CFG_TCP_SIZE")        (result i32) i32.const 12)
+  (func (export "SOCK_CFG_TLS_SIZE")        (result i32) i32.const 12)
+  (func (export "SOCK_CFG_CDP_SIZE")        (result i32) i32.const 8)
+  (func (export "SOCK_CFG_SOCKS5_SIZE")     (result i32) i32.const 24)
+  (func (export "SOCK_CFG_HTTP_PROXY_SIZE") (result i32) i32.const 24)
+  (func (export "SOCK_CFG_UDP_SIZE")        (result i32) i32.const 12)
+
+  ;; ── SOCKS5 handshake builders ──
+
+  ;; socks5_build_greeting(out_ptr, out_cap) -> i64
+  ;; Builds SOCKS5 greeting: [0x05, 0x01, 0x00] (no auth).
+  ;; Returns packed (status, length)
+  (func (export "socks5_build_greeting")
+    (param $out i32) (param $ocap i32) (result i64)
+    local.get $ocap i32.const 3 i32.lt_u
+    if i64.const -2 return end
+    local.get $out i32.const 0 i32.add i32.const 5 i32.store8
+    local.get $out i32.const 1 i32.add i32.const 1 i32.store8
+    local.get $out i32.const 2 i32.add i32.const 0 i32.store8
+    i64.const 0 i32.const 3 i64.extend_i32_u i64.const 32 i64.shl i64.or)
+
+  ;; socks5_parse_greeting_response(data_ptr, data_len) -> i32
+  ;; Returns 0 if server accepted no-auth, -1 on error.
+  (func (export "socks5_parse_greeting_response")
+    (param $data i32) (param $dlen i32) (result i32)
+    local.get $dlen i32.const 2 i32.lt_u
+    if i32.const -1 return end
+    local.get $data i32.load8_u offset=0 i32.const 5 i32.ne
+    if i32.const -1 return end
+    local.get $data i32.load8_u offset=1 i32.const 0 i32.ne
+    if i32.const -1 return end
+    i32.const 0)
+
+  ;; socks5_build_connect(out_ptr, out_cap, host_ptr, host_len, port) -> i64
+  ;; Builds SOCKS5 connect request with domain name.
+  ;; Returns packed (status, length)
+  (func (export "socks5_build_connect")
+    (param $out i32) (param $ocap i32)
+    (param $host i32) (param $hlen i32)
+    (param $port i32) (result i64)
+    (local $need i32) (local $i i32)
+
+    i32.const 7  ;; ver+cmd+rsv+atype+len = 5 bytes, +hlen + 2 port
+    local.get $hlen
+    i32.add
+    local.set $need
+
+    local.get $ocap local.get $need i32.lt_u
+    if i64.const -2 return end
+
+    local.get $out i32.const 0 i32.add i32.const 5 i32.store8     ;; ver = 5
+    local.get $out i32.const 1 i32.add i32.const 1 i32.store8     ;; cmd = CONNECT
+    local.get $out i32.const 2 i32.add i32.const 0 i32.store8     ;; rsv = 0
+    local.get $out i32.const 3 i32.add i32.const 3 i32.store8     ;; atyp = DOMAINNAME
+    local.get $out i32.const 4 i32.add local.get $hlen i32.store8 ;; domain length
+
+    ;; copy host name
+    i32.const 0 local.set $i
+    block $cpy_done
+    loop $cpy
+      local.get $i local.get $hlen i32.ge_u br_if $cpy_done
+      local.get $out i32.const 5 i32.add local.get $i i32.add
+      local.get $host local.get $i i32.add i32.load8_u
+      i32.store8
+      local.get $i i32.const 1 i32.add local.set $i
+      br $cpy
+    end
+    end
+
+    ;; port (big-endian)
+    local.get $out i32.const 5 i32.add local.get $hlen i32.add
+    local.get $port i32.const 8 i32.shr_u i32.const 255 i32.and
+    i32.store8
+    local.get $out i32.const 6 i32.add local.get $hlen i32.add
+    local.get $port i32.const 255 i32.and
+    i32.store8
+
+    i64.const 0
+    local.get $need
+    i64.extend_i32_u
+    i64.const 32
+    i64.shl
+    i64.or)
+
+  ;; socks5_parse_connect_response(data_ptr, data_len) -> i32
+  ;; Returns 0 if connect succeeded, -1 on error.
+  ;; On success, the proxy has connected to the target.
+  (func (export "socks5_parse_connect_response")
+    (param $data i32) (param $dlen i32) (result i32)
+    local.get $dlen i32.const 10 i32.lt_u
+    if i32.const -1 return end
+    local.get $data i32.load8_u offset=0 i32.const 5 i32.ne
+    if i32.const -1 return end
+    local.get $data i32.load8_u offset=1 i32.const 0 i32.ne  ;; rep must be 0 (succeeded)
+    if i32.const -1 return end
+    i32.const 0)
+
+  ;; ── HTTP CONNECT proxy handshake builders ──
+
+  ;; http_proxy_build_request(out_ptr, out_cap, host_ptr, host_len, port) -> i64
+  ;; Builds "CONNECT host:port HTTP/1.1\r\nHost: host:port\r\n\r\n"
+  ;; Returns packed (status, length)
+  (func (export "http_proxy_build_request")
+    (param $out i32) (param $ocap i32)
+    (param $host i32) (param $hlen i32)
+    (param $port i32) (result i64)
+    (local $o i32)
+
+    ;; "CONNECT "
+    local.get $o i32.const 7 i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $out local.get $o i32.add i32.const 67 i32.store8   ;; 'C'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 79 i32.store8   ;; 'O'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 78 i32.store8   ;; 'N'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 78 i32.store8   ;; 'N'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 69 i32.store8   ;; 'E'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 67 i32.store8   ;; 'C'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 84 i32.store8   ;; 'T'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 32 i32.store8   ;; ' '
+    local.get $o i32.const 1 i32.add local.set $o
+
+    ;; host
+    local.get $o local.get $hlen i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $host local.get $out local.get $o local.get $hlen call $m166memcpy_to_off
+    local.get $o local.get $hlen i32.add local.set $o
+
+    ;; ":port "
+    local.get $o i32.const 1 i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $out local.get $o i32.add i32.const 58 i32.store8   ;; ':'
+    local.get $o i32.const 1 i32.add local.set $o
+
+    local.get $port local.get $out local.get $o call $m166emit_u32_dec
+    local.set $o
+
+    local.get $o i32.const 1 i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $out local.get $o i32.add i32.const 32 i32.store8   ;; ' '
+    local.get $o i32.const 1 i32.add local.set $o
+
+    ;; "HTTP/1.1\r\n"
+    local.get $o i32.const 10 i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $out local.get $o i32.add i32.const 72 i32.store8   ;; 'H'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 84 i32.store8   ;; 'T'
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 84 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 80 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 47 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 49 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 46 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 49 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 13 i32.store8   ;; CR
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 10 i32.store8   ;; LF
+    local.get $o i32.const 1 i32.add local.set $o
+
+    ;; "Host: "
+    local.get $o i32.const 6 i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $out local.get $o i32.add i32.const 72 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 111 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 115 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 116 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 58 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 32 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+
+    ;; host again
+    local.get $o local.get $hlen i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $host local.get $out local.get $o local.get $hlen call $m166memcpy_to_off
+    local.get $o local.get $hlen i32.add local.set $o
+
+    ;; ":port"
+    local.get $out local.get $o i32.add i32.const 58 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+
+    local.get $port local.get $out local.get $o call $m166emit_u32_dec
+    local.set $o
+
+    ;; "\r\n\r\n"
+    local.get $o i32.const 4 i32.add local.get $ocap i32.gt_u
+    if i64.const -2 return end
+    local.get $out local.get $o i32.add i32.const 13 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 10 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 13 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+    local.get $out local.get $o i32.add i32.const 10 i32.store8
+    local.get $o i32.const 1 i32.add local.set $o
+
+    i64.const 0
+    local.get $o
+    i64.extend_i32_u
+    i64.const 32
+    i64.shl
+    i64.or)
+
+  ;; http_proxy_parse_response(data_ptr, data_len) -> i32
+  ;; Check for "200" in HTTP response line.
+  ;; Returns 0 if connected, -1 on error.
+  (func (export "http_proxy_parse_response")
+    (param $data i32) (param $dlen i32) (result i32)
+    local.get $dlen i32.const 12 i32.lt_u
+    if i32.const -1 return end
+    ;; check for "HTTP/1.1 200" or "HTTP/1.0 200"
+    local.get $data i32.load8_u offset=0 i32.const 72 i32.ne  ;; 'H'
+    if i32.const -1 return end
+    local.get $data i32.load8_u offset=9 i32.const 50 i32.ne  ;; '2'
+    if i32.const -1 return end
+    local.get $data i32.load8_u offset=10 i32.const 48 i32.ne ;; '0'
+    if i32.const -1 return end
+    local.get $data i32.load8_u offset=11 i32.const 48 i32.ne ;; '0'
+    if i32.const -1 return end
+    i32.const 0)
+
+  ;; ── Config struct builders ──
+
+  ;; sock_cfg_build_tcp(out, cap, host_ptr, host_len, port) -> i64
+  ;; Writes TCP config struct, returns (0, 12)
+  (func (export "sock_cfg_build_tcp")
+    (param $out i32) (param $ocap i32)
+    (param $host i32) (param $hlen i32)
+    (param $port i32) (result i64)
+    local.get $ocap i32.const 12 i32.lt_u
+    if i64.const -2 return end
+    local.get $out i32.const 0 i32.add local.get $host i32.store
+    local.get $out i32.const 4 i32.add local.get $hlen i32.store
+    local.get $out i32.const 8 i32.add local.get $port i32.store16
+    i64.const 0 i32.const 12 i64.extend_i32_u i64.const 32 i64.shl i64.or)
+
+  ;; sock_cfg_build_tls(out, cap, host_ptr, host_len, port) -> i64
+  ;; TLS config is same layout as TCP (host+port+SNI)
+  (func (export "sock_cfg_build_tls")
+    (param $out i32) (param $ocap i32)
+    (param $host i32) (param $hlen i32)
+    (param $port i32) (result i64)
+    local.get $ocap i32.const 12 i32.lt_u
+    if i64.const -2 return end
+    local.get $out i32.const 0 i32.add local.get $host i32.store
+    local.get $out i32.const 4 i32.add local.get $hlen i32.store
+    local.get $out i32.const 8 i32.add local.get $port i32.store16
+    i64.const 0 i32.const 12 i64.extend_i32_u i64.const 32 i64.shl i64.or)
+
+  ;; sock_cfg_build_socks5(out, cap,
+  ;;                       proxy_host, proxy_hlen, proxy_port,
+  ;;                       target_host, target_hlen, target_port) -> i64
+  (func (export "sock_cfg_build_socks5")
+    (param $out i32) (param $ocap i32)
+    (param $phost i32) (param $phlen i32) (param $pport i32)
+    (param $thost i32) (param $thlen i32) (param $tport i32) (result i64)
+    local.get $ocap i32.const 24 i32.lt_u
+    if i64.const -2 return end
+    local.get $out i32.const 0 i32.add local.get $phost i32.store
+    local.get $out i32.const 4 i32.add local.get $phlen i32.store
+    local.get $out i32.const 8 i32.add local.get $pport i32.store16
+    local.get $out i32.const 12 i32.add local.get $thost i32.store
+    local.get $out i32.const 16 i32.add local.get $thlen i32.store
+    local.get $out i32.const 20 i32.add local.get $tport i32.store16
+    i64.const 0 i32.const 24 i64.extend_i32_u i64.const 32 i64.shl i64.or)
+
+  ;; ── helpers ──
+
+  ;; memcpy_to_off(src, dst, dst_off, len)
+  (func $m166memcpy_to_off (param $src i32) (param $dst i32) (param $off i32) (param $len i32)
+    (local $i i32)
+    block $done
+    loop $loop
+      local.get $i local.get $len i32.ge_u br_if $done
+      local.get $dst local.get $off i32.add local.get $i i32.add
+      local.get $src local.get $i i32.add i32.load8_u
+      i32.store8
+      local.get $i i32.const 1 i32.add local.set $i
+      br $loop
+    end
+    end)
+
+  ;; emit_u32_dec(n, out, offset) -> new_offset
+  (func $m166emit_u32_dec (param $n i32) (param $out i32) (param $off i32) (result i32)
+    (local $buf i32) (local $digits i32) (local $d i32)
+    i32.const 768 local.set $buf
+    i32.const 0 local.set $digits
+    local.get $n i32.eqz
+    if
+      local.get $out local.get $off i32.add i32.const 48 i32.store8
+      local.get $off i32.const 1 i32.add
+      return
+    end
+    block $extract_done
+    loop $extract
+      local.get $n i32.eqz br_if $extract_done
+      local.get $buf local.get $digits i32.add
+      local.get $n i32.const 10 i32.rem_u i32.const 48 i32.add
+      i32.store8
+      local.get $digits i32.const 1 i32.add local.set $digits
+      local.get $n i32.const 10 i32.div_u local.set $n
+      br $extract
+    end
+    end
+    block $emit_done
+    loop $emit_loop
+      local.get $d local.get $digits i32.ge_u br_if $emit_done
+      local.get $out local.get $off i32.add local.get $d i32.add
+      local.get $buf local.get $digits i32.const 1 i32.sub local.get $d i32.sub i32.add
+      i32.load8_u
+      i32.store8
+      local.get $d i32.const 1 i32.add local.set $d
+      br $emit_loop
+    end
+    end
+    local.get $off local.get $digits i32.add)
+
+  ;; ── Socket abstraction (pipe-based I/O) ──
+  ;;
+  ;; Socket struct (24 bytes):
+  ;;   +0:  send_pipe  — pipe handle for outgoing data
+  ;;   +4:  recv_pipe  — pipe handle for incoming data
+  ;;   +8:  state      — 0=closed 1=open 2=connecting 3=connected
+  ;;   +12: sock_type  — TCP=0 TLS=1 ...
+  ;;   +16: cfg_ptr    — pointer to stored config
+  ;;   +20: cfg_len    — config length
+
+  (func (export "SOCK_OPEN")       (result i32) i32.const 1)
+  (func (export "SOCK_CONNECTING") (result i32) i32.const 2)
+  (func (export "SOCK_CONNECTED")  (result i32) i32.const 3)
+  (func (export "SOCK_STRUCT_SIZE") (result i32) i32.const 24)
+
+  ;; sock_open(type, cfg_ptr, cfg_len, pipe_cap) → socket_handle | -1
+  ;; Allocates a socket struct + two pipes (send + recv).
+  (func (export "sock_open")
+    (param $type i32) (param $cfg i32) (param $clen i32) (param $pcap i32) (result i32)
+    (local $s i32) (local $snd i32) (local $rcv i32)
+    (local.set $s (call $pipe_alloc (i32.const 24)))
+    (if (i32.eq (local.get $s) (i32.const -1)) (then (return (i32.const -1))))
+    (local.set $snd (call $pipe_create (local.get $pcap)))
+    (if (i32.eq (local.get $snd) (i32.const -1)) (then (return (i32.const -1))))
+    (local.set $rcv (call $pipe_create (local.get $pcap)))
+    (if (i32.eq (local.get $rcv) (i32.const -1)) (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $s) (local.get $snd))
+    (i32.store offset=4 (local.get $s) (local.get $rcv))
+    (i32.store offset=8 (local.get $s) (i32.const 1))  ;; state = open
+    (i32.store offset=12 (local.get $s) (local.get $type))
+    (i32.store offset=16 (local.get $s) (local.get $cfg))
+    (i32.store offset=20 (local.get $s) (local.get $clen))
+    local.get $s)
+
+  ;; sock_send(socket, data, len) → status
+  ;; Writes data to the socket's send pipe.
+  (func (export "sock_send")
+    (param $s i32) (param $data i32) (param $len i32) (result i32)
+    (call $pipe_write (i32.load offset=0 (local.get $s)) (local.get $data) (local.get $len)))
+
+  ;; sock_recv(socket, dst, max) → bytes_read
+  ;; Reads from the socket's recv pipe.
+  (func (export "sock_recv")
+    (param $s i32) (param $dst i32) (param $max i32) (result i32)
+    (call $pipe_read (i32.load offset=4 (local.get $s)) (local.get $dst) (local.get $max)))
+
+  ;; sock_close(socket) — closes both pipes, marks socket closed
+  (func (export "sock_close") (param $s i32)
+    (call $pipe_close (i32.load offset=0 (local.get $s)))
+    (call $pipe_close (i32.load offset=4 (local.get $s)))
+    (i32.store offset=8 (local.get $s) (i32.const 0)))
+
+  ;; sock_get_state(socket) → state
+  (func (export "sock_get_state") (param $s i32) (result i32)
+    (i32.load offset=8 (local.get $s)))
+
+  ;; sock_get_send_pipe(socket) → pipe_handle
+  (func (export "sock_get_send_pipe") (param $s i32) (result i32)
+    (i32.load offset=0 (local.get $s)))
+
+  ;; sock_get_recv_pipe(socket) → pipe_handle
+  (func (export "sock_get_recv_pipe") (param $s i32) (result i32)
+    (i32.load offset=4 (local.get $s)))
+
+  ;; sock_pipe(from, to, tmp, tcap) → bytes_piped | error
+  ;; Pipes data from from_sock's recv pipe into to_sock's send pipe.
+  ;; Uses tmp buffer of tcap bytes as scratch space.
+  (func $sock_pipe (export "sock_pipe")
+    (param $from i32) (param $to i32) (param $tmp i32) (param $tcap i32) (result i32)
+    (local $n i32)
+    (local.set $n (call $pipe_read
+      (i32.load offset=4 (local.get $from)) (local.get $tmp) (local.get $tcap)))
+    (if (i32.le_s (local.get $n) (i32.const 0))
+      (then (return (local.get $n))))
+    (call $pipe_write
+      (i32.load offset=0 (local.get $to)) (local.get $tmp) (local.get $n))
+    (return (local.get $n)))
+
+  ;; ── Pipeline stage: transport ──
+  ;; Reads from input pipe, sends via socket, reads response, writes to output pipe.
+  ;; Config: pointer to a 4-byte i32 socket handle.
+  ;; State layout (16 bytes):
+  ;;   +0:  tick         i32 (RO, written by pipeline_run)
+  ;;   +4:  phase        i32 (0=idle, 1=awaiting recv)
+  ;;   +8:  start_tick   i32 (tick when phase=1 was entered)
+  ;;   +12: timeout_ticks i32 (max ticks to wait before returning TIMEOUT, 0=infinite)
+  ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) → OK | MORE | error
+  (func (export "process_transport")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $sock i32) (local $n i32) (local $phase i32) (local $sent i32)
+    (local $elapsed i32)
+    (if (i32.lt_u (local.get $clen) (i32.const 4))
+      (then (return (i32.const -1))))
+    (local.set $sock (i32.load (local.get $cfg)))
+    (local.set $phase (i32.load offset=4 (local.get $state)))
+
+    ;; Phase 1 (awaiting response): check timeout, then try recv again
+    (if (i32.eq (local.get $phase) (i32.const 1))
+      (then
+        ;; Compute elapsed ticks since entering phase 1
+        (local.set $elapsed
+          (i32.sub (i32.load (local.get $state)) (i32.load offset=8 (local.get $state))))
+        ;; If timeout_ticks > 0 and elapsed >= timeout_ticks, return TIMEOUT
+        (if (i32.load offset=12 (local.get $state))
+          (then
+            (if (i32.ge_u (local.get $elapsed) (i32.load offset=12 (local.get $state)))
+              (then (return (global.get $STATUS_TIMEOUT))))))
+        (local.set $n (call $pipe_read (i32.load offset=4 (local.get $sock)) (local.get $scratch) (local.get $scap)))
+        (if (i32.gt_s (local.get $n) (i32.const 0))
+          (then
+            (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
+            (i32.store offset=4 (local.get $state) (i32.const 0))
+            (return (local.get $n))))
+        (return (global.get $STATUS_MORE))))
+
+    ;; Phase 0 (idle): try send + recv
+    ;; Read data to send from input pipe
+    (local.set $n (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (if (i32.gt_s (local.get $n) (i32.const 0))
+      (then
+        (drop (call $pipe_write (i32.load offset=0 (local.get $sock)) (local.get $scratch) (local.get $n)))))
+    (local.set $sent (local.get $n))
+
+    ;; Read response from socket recv pipe
+    (local.set $n (call $pipe_read (i32.load offset=4 (local.get $sock)) (local.get $scratch) (local.get $scap)))
+    (if (i32.gt_s (local.get $n) (i32.const 0))
+      (then
+        (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
+        (return (local.get $n))))
+    (if (i32.eqz (local.get $n))
+      (then
+        ;; No response yet — if we sent something, mark awaiting and return MORE
+        (if (i32.gt_s (local.get $sent) (i32.const 0))
+          (then
+            (i32.store offset=4 (local.get $state) (i32.const 1))
+            (i32.store offset=8 (local.get $state) (i32.load (local.get $state)))
+            (return (global.get $STATUS_MORE))))
+        (return (i32.const 0))))
+    local.get $n)
+
+  ;; Mux Core — static/dynamic mux + demux
+
+    ;; Standard ID removed — merged into single module
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; Static Mux — fixed array of stream pipes → framed output
+  ;; Config blob: [output_pipe:i32][count:i32][pipe_0:i32][pipe_1:i32]...
+  ;; Mux descriptor: [type:i32=0][output:i32][count:i32][pipe_0:i32]...
+  ;; ════════════════════════════════════════════════════════════════
+
+  (func (export "mux_static_create") (param $cfg i32) (result i32)
+    (local $count i32) (local $sz i32) (local $mux i32)
+    (local.set $count (i32.load offset=4 (local.get $cfg)))
+    (local.set $sz (i32.add (i32.const 12) (i32.mul (local.get $count) (i32.const 4))))
+    (local.set $mux (call $pipe_alloc (local.get $sz)))
+    (if (i32.eq (local.get $mux) (i32.const -1)) (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $mux) (i32.const 0))
+    (i32.store offset=4 (local.get $mux) (i32.load (local.get $cfg)))
+    (i32.store offset=8 (local.get $mux) (local.get $count))
+    (call $memcpy_off (local.get $mux) (i32.const 12) (local.get $cfg) (i32.const 8)
+      (i32.mul (local.get $count) (i32.const 4)))
+    local.get $mux)
+
+  ;; mux_static_run(mux, scratch, scap) → frames_written | error
+  ;; Round-robin: read from each stream pipe, frame and write to output
+  (func (export "mux_static_run")
+    (param $mux i32) (param $scratch i32) (param $scap i32) (result i32)
+    (local $output i32) (local $count i32) (local $i i32)
+    (local $pipe i32) (local $avail i32) (local $r i32) (local $total i32)
+    (local.set $output (i32.load offset=4 (local.get $mux)))
+    (local.set $count (i32.load offset=8 (local.get $mux)))
+    (block $done
+      (loop $streams
+        (br_if $done (i32.ge_u (local.get $i) (local.get $count)))
+        (local.set $pipe (i32.load (i32.add (local.get $mux)
+          (i32.add (i32.const 12) (i32.mul (local.get $i) (i32.const 4))))))
+        (local.set $avail (call $pipe_available (local.get $pipe)))
+        (if (i32.gt_u (local.get $avail) (i32.const 0))
+          (then
+            (if (i32.gt_u (local.get $avail) (local.get $scap))
+              (then (local.set $avail (local.get $scap))))
+            (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (local.get $avail)))
+            (if (i32.lt_s (local.get $r) (i32.const 0))
+              (then (local.set $total (local.get $r)) (br $done)))
+            (local.set $r (call $frame_write (local.get $output) (local.get $i) (local.get $scratch) (local.get $r)))
+            (if (i32.ne (local.get $r) (global.get $STATUS_OK))
+              (then (local.set $total (i32.sub (i32.const 0) (local.get $r))) (br $done)))
+            (local.set $total (i32.add (local.get $total) (i32.const 1)))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $streams)))
+    local.get $total)
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; Static Demux — read framed input, route to output by stream_id
+  ;; Config blob: [input_pipe:i32][count:i32][pipe_0:i32][pipe_1:i32]...
+  ;; Demux descriptor: [type:i32=2][input:i32][count:i32][pipe_0:i32]...
+  ;; ════════════════════════════════════════════════════════════════
+
+  (func (export "demux_static_create") (param $cfg i32) (result i32)
+    (local $count i32) (local $sz i32) (local $demux i32)
+    (local.set $count (i32.load offset=4 (local.get $cfg)))
+    (local.set $sz (i32.add (i32.const 12) (i32.mul (local.get $count) (i32.const 4))))
+    (local.set $demux (call $pipe_alloc (local.get $sz)))
+    (if (i32.eq (local.get $demux) (i32.const -1)) (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $demux) (i32.const 2))
+    (i32.store offset=4 (local.get $demux) (i32.load (local.get $cfg)))
+    (i32.store offset=8 (local.get $demux) (local.get $count))
+    (call $memcpy_off (local.get $demux) (i32.const 12) (local.get $cfg) (i32.const 8)
+      (i32.mul (local.get $count) (i32.const 4)))
+    local.get $demux)
+
+  ;; demux_static_run(demux, scratch, scap) → 1 (routed) | 0 (no frame) | error
+  ;; Read one frame from input, route payload to output pipe[stream_id]
+  (func (export "demux_static_run")
+    (param $demux i32) (param $scratch i32) (param $scap i32) (result i32)
+    (local $input i32) (local $count i32) (local $result i64)
+    (local $status i32) (local $stream_id i32) (local $pipe i32)
+    (local $avail i32)
+    (local.set $input (i32.load offset=4 (local.get $demux)))
+    (local.set $count (i32.load offset=8 (local.get $demux)))
+    ;; Peek available bytes — need at least 8 for header
+    (local.set $avail (call $pipe_available (local.get $input)))
+    (if (i32.lt_u (local.get $avail) (i32.const 8))
+      (then (return (i32.const 0))))
+    ;; Read header bytes to get stream_id
+    (local.set $result (call $frame_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (i32.ne (local.get $status) (global.get $STATUS_OK))
+      (then
+        ;; OVERFLOW means scratch too small — skip the frame
+        (if (i32.eq (local.get $status) (global.get $STATUS_OVERFLOW))
+          (then
+            ;; frame_read already skipped the payload, so this frame is lost
+            (return (i32.const 0))))
+        (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $stream_id (i32.wrap_i64 (local.get $result)))
+    ;; Route
+    (if (i32.ge_u (local.get $stream_id) (local.get $count))
+      (then (return (i32.const -1))))
+    (local.set $pipe (i32.load (i32.add (local.get $demux)
+      (i32.add (i32.const 12) (i32.mul (local.get $stream_id) (i32.const 4))))))
+    ;; payload_len at scratch[0..4], payload at scratch[4..]
+    (local.set $avail (i32.load (local.get $scratch)))
+    (drop (call $pipe_write (local.get $pipe) (i32.add (local.get $scratch) (i32.const 4)) (local.get $avail)))
+    (return (i32.const 1)))
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; Dynamic Mux — linked list of (stream_id, pipe) → framed output
+  ;; ════════════════════════════════════════════════════════════════
+
+  ;; stream_node: +0 stream_id, +4 pipe, +8 next
+
+  (func (export "mux_dynamic_create") (param $output i32) (result i32)
+    (local $mux i32)
+    (local.set $mux (call $pipe_alloc (i32.const 20)))
+    (if (i32.eq (local.get $mux) (i32.const -1)) (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $mux) (i32.const 1))
+    (i32.store offset=4 (local.get $mux) (local.get $output))
+    (i32.store offset=8 (local.get $mux) (i32.const 0))
+    (i32.store offset=12 (local.get $mux) (i32.const 0))
+    (i32.store offset=16 (local.get $mux) (i32.const 0))  ;; freelist
+    local.get $mux)
+
+  (func (export "mux_add_stream") (param $mux i32) (param $stream_id i32) (param $pipe i32) (result i32)
+    (local $node i32)
+    ;; Try freelist first, then allocate
+    (local.set $node (i32.load offset=16 (local.get $mux)))
+    (if (local.get $node)
+      (then
+        (i32.store offset=16 (local.get $mux) (i32.load offset=8 (local.get $node))))
+      (else
+        (local.set $node (call $pipe_alloc (i32.const 12)))
+        (if (i32.eq (local.get $node) (i32.const -1)) (then (return (global.get $STATUS_OVERFLOW))))))
+    (i32.store offset=0 (local.get $node) (local.get $stream_id))
+    (i32.store offset=4 (local.get $node) (local.get $pipe))
+    (i32.store offset=8 (local.get $node) (i32.load offset=8 (local.get $mux)))
+    (i32.store offset=8 (local.get $mux) (local.get $node))
+    (i32.store offset=12 (local.get $mux) (i32.add (i32.load offset=12 (local.get $mux)) (i32.const 1)))
+    global.get $STATUS_OK)
+
+  (func (export "mux_remove_stream") (param $mux i32) (param $stream_id i32) (result i32)
+    (local $prev i32) (local $curr i32) (local $next i32)
+    (local.set $curr (i32.load offset=8 (local.get $mux)))
+    (block $found
+      (loop $walk
+        (br_if $found (i32.eqz (local.get $curr)))
+        (if (i32.eq (i32.load (local.get $curr)) (local.get $stream_id))
+          (then
+            (local.set $next (i32.load offset=8 (local.get $curr)))
+            (if (local.get $prev)
+              (then (i32.store offset=8 (local.get $prev) (local.get $next)))
+              (else (i32.store offset=8 (local.get $mux) (local.get $next))))
+            (i32.store offset=12 (local.get $mux)
+              (i32.sub (i32.load offset=12 (local.get $mux)) (i32.const 1)))
+            ;; Add node to freelist
+            (i32.store offset=8 (local.get $curr) (i32.load offset=16 (local.get $mux)))
+            (i32.store offset=16 (local.get $mux) (local.get $curr))
+            (br $found)))
+        (local.set $prev (local.get $curr))
+        (local.set $curr (i32.load offset=8 (local.get $curr)))
+        (br $walk)))
+    global.get $STATUS_OK)
+
+  ;; mux_dynamic_run(mux, scratch, scap) → frames_written | error
+  (func $mux_dynamic_run (export "mux_dynamic_run")
+    (param $mux i32) (param $scratch i32) (param $scap i32) (result i32)
+    (local $output i32) (local $curr i32) (local $stream_id i32)
+    (local $pipe i32) (local $avail i32) (local $r i32) (local $total i32)
+    (local.set $output (i32.load offset=4 (local.get $mux)))
+    (local.set $curr (i32.load offset=8 (local.get $mux)))
+    (block $done
+      (loop $walk
+        (br_if $done (i32.eqz (local.get $curr)))
+        (local.set $stream_id (i32.load (local.get $curr)))
+        (local.set $pipe (i32.load offset=4 (local.get $curr)))
+        (local.set $avail (call $pipe_available (local.get $pipe)))
+        (if (i32.gt_u (local.get $avail) (i32.const 0))
+          (then
+            (if (i32.gt_u (local.get $avail) (local.get $scap))
+              (then (local.set $avail (local.get $scap))))
+            (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (local.get $avail)))
+            (if (i32.lt_s (local.get $r) (i32.const 0))
+              (then (local.set $total (local.get $r)) (br $done)))
+            (local.set $r (call $frame_write (local.get $output) (local.get $stream_id) (local.get $scratch) (local.get $r)))
+            (if (i32.ne (local.get $r) (global.get $STATUS_OK))
+              (then (local.set $total (i32.sub (i32.const 0) (local.get $r))) (br $done)))
+            (local.set $total (i32.add (local.get $total) (i32.const 1)))))
+        (local.set $curr (i32.load offset=8 (local.get $curr)))
+        (br $walk)))
+    local.get $total)
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; Dynamic Demux — hash table: stream_id → output_pipe
+  ;; Descriptor: [type:i32=3][input:i32][slot_count:i32][slot_0:stream_id,pipe]...
+  ;; slot = 8 bytes, slot_count must be power of 2
+  ;; stream_id=0 = empty slot
+  ;; ════════════════════════════════════════════════════════════════
+
+  (func (export "demux_dynamic_create") (param $input i32) (param $slot_count i32) (result i32)
+    (local $demux i32) (local $sz i32)
+    (local.set $sz (i32.add (i32.const 12) (i32.mul (local.get $slot_count) (i32.const 8))))
+    (local.set $demux (call $pipe_alloc (local.get $sz)))
+    (if (i32.eq (local.get $demux) (i32.const -1)) (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $demux) (i32.const 3))
+    (i32.store offset=4 (local.get $demux) (local.get $input))
+    (i32.store offset=8 (local.get $demux) (local.get $slot_count))
+    local.get $demux)
+
+  ;; Linear probe: hash(stream_id) = stream_id & mask
+  ;; Returns slot address or 0 if not found
+  (func $demux_lookup (param $demux i32) (param $stream_id i32) (result i32)
+    (local $slot_count i32) (local $mask i32) (local $base i32)
+    (local $sid i32) (local $i i32)
+    (if (i32.eqz (local.get $stream_id)) (then (return (i32.const 0))))
+    (local.set $slot_count (i32.load offset=8 (local.get $demux)))
+    (local.set $mask (i32.sub (local.get $slot_count) (i32.const 1)))
+    (local.set $base (i32.add (local.get $demux) (i32.const 12)))
+    (local.set $i (i32.and (local.get $stream_id) (local.get $mask)))
+    (block $found
+      (loop $probe
+        (local.set $sid (i32.load (i32.add (local.get $base) (i32.mul (local.get $i) (i32.const 8)))))
+        (if (i32.eq (local.get $sid) (local.get $stream_id))
+          (then (return (i32.add (local.get $base) (i32.mul (local.get $i) (i32.const 8))))))
+        (if (i32.eqz (local.get $sid))
+          (then (return (i32.const 0))))
+        (local.set $i (i32.and (i32.add (local.get $i) (i32.const 1)) (local.get $mask)))
+        (br $probe)))
+    (i32.const 0))
+
+  (func (export "demux_register_stream")
+    (param $demux i32) (param $stream_id i32) (param $pipe i32) (result i32)
+    (local $slot_count i32) (local $mask i32) (local $base i32)
+    (local $i i32) (local $sid i32)
+    (if (i32.eqz (local.get $stream_id)) (then (return (global.get $STATUS_OVERFLOW))))
+    (local.set $slot_count (i32.load offset=8 (local.get $demux)))
+    (local.set $mask (i32.sub (local.get $slot_count) (i32.const 1)))
+    (local.set $base (i32.add (local.get $demux) (i32.const 12)))
+    (local.set $i (i32.and (local.get $stream_id) (local.get $mask)))
+    (block $done
+      (loop $probe
+        (local.set $sid (i32.load (i32.add (local.get $base) (i32.mul (local.get $i) (i32.const 8)))))
+        (if (i32.eqz (local.get $sid))
+          (then
+            (i32.store (i32.add (local.get $base) (i32.mul (local.get $i) (i32.const 8))) (local.get $stream_id))
+            (i32.store offset=4 (i32.add (local.get $base) (i32.mul (local.get $i) (i32.const 8))) (local.get $pipe))
+            (br $done)))
+        (if (i32.eq (local.get $sid) (local.get $stream_id))
+          (then
+            (i32.store offset=4 (i32.add (local.get $base) (i32.mul (local.get $i) (i32.const 8))) (local.get $pipe))
+            (br $done)))
+        (local.set $i (i32.and (i32.add (local.get $i) (i32.const 1)) (local.get $mask)))
+        (br $probe)))
+    global.get $STATUS_OK)
+
+  (func (export "demux_unregister_stream") (param $demux i32) (param $stream_id i32) (result i32)
+    (local $slot i32)
+    (local.set $slot (call $demux_lookup (local.get $demux) (local.get $stream_id)))
+    (if (local.get $slot)
+      (then
+        (i32.store (local.get $slot) (i32.const 0))
+        (i32.store offset=4 (local.get $slot) (i32.const 0))))
+    global.get $STATUS_OK)
+
+  ;; demux_dynamic_run(demux, scratch, scap) → 1 (routed) | 0 (no frame) | error
+  (func $demux_dynamic_run (export "demux_dynamic_run")
+    (param $demux i32) (param $scratch i32) (param $scap i32) (result i32)
+    (local $input i32) (local $result i64) (local $status i32)
+    (local $stream_id i32) (local $slot i32) (local $pipe i32)
+    (local $avail i32)
+    (local.set $input (i32.load offset=4 (local.get $demux)))
+    ;; Need at least 8 bytes
+    (local.set $avail (call $pipe_available (local.get $input)))
+    (if (i32.lt_u (local.get $avail) (i32.const 8))
+      (then (return (i32.const 0))))
+    (local.set $result (call $frame_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (i32.ne (local.get $status) (global.get $STATUS_OK))
+      (then
+        (if (i32.eq (local.get $status) (global.get $STATUS_OVERFLOW))
+          (then (return (i32.const 0))))
+        (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $stream_id (i32.wrap_i64 (local.get $result)))
+    (local.set $slot (call $demux_lookup (local.get $demux) (local.get $stream_id)))
+    (if (i32.eqz (local.get $slot))
+      (then (return (i32.const -1))))
+    (local.set $pipe (i32.load offset=4 (local.get $slot)))
+    (local.set $avail (i32.load (local.get $scratch)))
+    (drop (call $pipe_write (local.get $pipe) (i32.add (local.get $scratch) (i32.const 4)) (local.get $avail)))
+    (i32.const 1))
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; Pipeline stage process functions
+  ;; Signature: (input, output, config, clen, scratch, scap) → result
+  ;; ════════════════════════════════════════════════════════════════
+
+  ;; process_mux_static — reads from stream pipes in config, frame-writes to output
+  ;; Config: [count][pipe_0][pipe_1]...
+  ;; State layout (12 bytes):
+  ;;   +0: tick          i32 (RO, written by pipeline_run)
+  ;;   +4: epoch_len     i32 (0 = no batching, drain every call)
+  ;;   +8: last_flush_tick i32 (last tick when drain occurred)
+  (func (export "process_mux_static")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $count i32) (local $i i32) (local $pipe i32)
+    (local $avail i32) (local $r i32) (local $total i32)
+    (local $tick i32) (local $epoch_len i32) (local $last_flush i32)
+    (local.set $count (i32.load (local.get $cfg)))
+
+    ;; Epoch batching: if state != 0, check if it's time to drain
+    (if (local.get $state)
+      (then
+        (local.set $tick (i32.load (local.get $state)))
+        (local.set $epoch_len (i32.load offset=4 (local.get $state)))
+        (local.set $last_flush (i32.load offset=8 (local.get $state)))
+        (if (i32.lt_u (i32.sub (local.get $tick) (local.get $last_flush)) (local.get $epoch_len))
+          (then (return (i32.const 0))))))
+
+    (block $done
+      (loop $streams
+        (br_if $done (i32.ge_u (local.get $i) (local.get $count)))
+        (local.set $pipe (i32.load (i32.add (local.get $cfg) (i32.add (i32.const 4) (i32.mul (local.get $i) (i32.const 4))))))
+        (local.set $avail (call $pipe_available (local.get $pipe)))
+        (if (i32.gt_u (local.get $avail) (i32.const 0))
+          (then
+            (if (i32.gt_u (local.get $avail) (local.get $scap))
+              (then (local.set $avail (local.get $scap))))
+            (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (local.get $avail)))
+            (if (i32.lt_s (local.get $r) (i32.const 0))
+              (then (local.set $total (local.get $r)) (br $done)))
+            (local.set $r (call $frame_write (local.get $output) (local.get $i) (local.get $scratch) (local.get $r)))
+            (if (i32.ne (local.get $r) (global.get $STATUS_OK))
+              (then (local.set $total (i32.sub (i32.const 0) (local.get $r))) (br $done)))
+            (local.set $total (i32.add (local.get $total) (i32.const 1)))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $streams)))
+
+    ;; Update last_flush_tick after drain (only if state != 0)
+    (if (local.get $state)
+      (then (i32.store offset=8 (local.get $state) (i32.load (local.get $state)))))
+    local.get $total)
+
+  ;; Helper: configure epoch batching on a mux_static state block
+  ;; State must be non-zero and point to a 12-byte block
+  (func (export "mux_static_set_epoch")
+    (param $state i32) (param $epoch_len i32) (result i32)
+    (if (i32.eqz (local.get $state))
+      (then (return (i32.const -1))))
+    (i32.store offset=4 (local.get $state) (local.get $epoch_len))
+    (i32.store offset=8 (local.get $state) (i32.const 0))
+    (i32.const 0))
+
+  ;; process_demux_static — reads framed from input, routes to stream pipes in config
+  ;; Config: [count][pipe_0][pipe_1]...
+  ;; Drains all available frames in one call
+  (func (export "process_demux_static")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $count i32) (local $avail i32) (local $result i64)
+    (local $status i32) (local $stream_id i32) (local $pipe i32)
+    (local $total i32)
+    (local.set $count (i32.load (local.get $cfg)))
+    (block $done
+      (loop $frames
+        (local.set $avail (call $pipe_available (local.get $input)))
+        (br_if $done (i32.lt_u (local.get $avail) (i32.const 8)))
+        (local.set $result (call $frame_read (local.get $input) (local.get $scratch) (local.get $scap)))
+        (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+        (if (i32.ne (local.get $status) (global.get $STATUS_OK))
+          (then
+            (if (i32.eq (local.get $status) (global.get $STATUS_OVERFLOW))
+              (then (br $done)))
+            (local.set $total (local.get $status)) (br $done)))
+        (local.set $stream_id (i32.wrap_i64 (local.get $result)))
+        (if (i32.ge_u (local.get $stream_id) (local.get $count))
+          (then (local.set $total (i32.const -1)) (br $done)))
+        (local.set $pipe (i32.load (i32.add (local.get $cfg) (i32.add (i32.const 4) (i32.mul (local.get $stream_id) (i32.const 4))))))
+        (local.set $avail (i32.load (local.get $scratch)))
+        (drop (call $pipe_write (local.get $pipe) (i32.add (local.get $scratch) (i32.const 4)) (local.get $avail)))
+        (local.set $total (i32.add (local.get $total) (i32.const 1)))
+        (br $frames)))
+    (if (i32.lt_s (local.get $total) (i32.const 0))
+      (then (return (local.get $total))))
+    (global.get $STATUS_OK))
+
+  ;; process_mux_dynamic — calls mux_dynamic_run on pre-created mux handle
+  ;; Config: [mux_handle:i32]
+  (func (export "process_mux_dynamic")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $mux i32)
+    (local.set $mux (i32.load (local.get $cfg)))
+    (call $mux_dynamic_run (local.get $mux) (local.get $scratch) (local.get $scap)))
+
+  ;; process_demux_dynamic — calls demux_dynamic_run on pre-created demux handle
+  ;; Config: [demux_handle:i32]
+  (func (export "process_demux_dynamic")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $demux i32)
+    (local.set $demux (i32.load (local.get $cfg)))
+    (call $demux_dynamic_run (local.get $demux) (local.get $scratch) (local.get $scap)))
+
+  ;; memcpy imported from edgerun-core as $memcpy_off(dst, doff, src, soff, len)
+
+;; Standard ID removed — merged into single module
+
+  (func (export "ws_decode_prefix") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    (local $b0 i32)
+    (local $b1 i32)
+    (local $opcode i32)
+    (local $code i32)
+    local.get $len
+    i32.const 2
+    i32.lt_u
+    if
+      i32.const 1
+      return
+    end
+    local.get $ptr
+    i32.load8_u
+    local.set $b0
+    local.get $ptr
+    i32.const 1
+    i32.add
+    i32.load8_u
+    local.set $b1
+    local.get $b0
+    i32.const 15
+    i32.and
+    local.set $opcode
+    local.get $b1
+    i32.const 127
+    i32.and
+    local.set $code
+    local.get $opcode
+    i32.const 0
+    i32.eq
+    local.get $opcode
+    i32.const 1
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 2
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 8
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 9
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 10
+    i32.eq
+    i32.or
+    i32.eqz
+    if
+      i32.const 3
+      return
+    end
+    local.get $opcode
+    i32.const 8
+    i32.ge_u
+    if
+      local.get $b0
+      i32.const 128
+      i32.and
+      i32.eqz
+      if
+        i32.const 3
+        return
+      end
+      local.get $code
+      i32.const 125
+      i32.gt_u
+      if
+        i32.const 3
+        return
+      end
+    end
+    local.get $out
+    local.get $b0
+    i32.const 128
+    i32.and
+    if (result i32)
+      i32.const 1
+    else
+      i32.const 0
+    end
+    i32.store
+    local.get $out
+    i32.const 4
+    i32.add
+    local.get $opcode
+    i32.store
+    local.get $out
+    i32.const 8
+    i32.add
+    local.get $b1
+    i32.const 128
+    i32.and
+    if (result i32)
+      i32.const 1
+    else
+      i32.const 0
+    end
+    i32.store
+    local.get $out
+    i32.const 12
+    i32.add
+    local.get $code
+    i32.store
+    local.get $out
+    i32.const 16
+    i32.add
+    local.get $code
+    i32.const 126
+    i32.eq
+    if (result i32)
+      i32.const 2
+    else
+      local.get $code
+      i32.const 127
+      i32.eq
+      if (result i32)
+        i32.const 8
+      else
+        i32.const 0
+      end
+    end
+    i32.store
+    i32.const 0)
+
+  (func (export "ws_decode_payload_len") (param $ptr i32) (param $len i32) (param $code i32) (param $max_len i32) (param $out i32) (result i32)
+    (local $low i32)
+    (local $high i32)
+    (local $extra i32)
+    local.get $code
+    i32.const 126
+    i32.lt_u
+    if
+      local.get $code
+      local.set $low
+      i32.const 0
+      local.set $high
+      i32.const 0
+      local.set $extra
+    else
+      local.get $code
+      i32.const 126
+      i32.eq
+      if
+        local.get $len
+        i32.const 2
+        i32.lt_u
+        if
+          i32.const 1
+          return
+        end
+        local.get $ptr
+        i32.load8_u
+        i32.const 8
+        i32.shl
+        local.get $ptr
+        i32.const 1
+        i32.add
+        i32.load8_u
+        i32.or
+        local.set $low
+        i32.const 0
+        local.set $high
+        i32.const 2
+        local.set $extra
+      else
+        local.get $code
+        i32.const 127
+        i32.ne
+        if
+          i32.const 3
+          return
+        end
+        local.get $len
+        i32.const 8
+        i32.lt_u
+        if
+          i32.const 1
+          return
+        end
+        local.get $ptr
+        i32.load8_u
+        i32.const 128
+        i32.and
+        if
+          i32.const 3
+          return
+        end
+        local.get $ptr
+        i32.load8_u
+        i32.const 24
+        i32.shl
+        local.get $ptr
+        i32.const 1
+        i32.add
+        i32.load8_u
+        i32.const 16
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 2
+        i32.add
+        i32.load8_u
+        i32.const 8
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 3
+        i32.add
+        i32.load8_u
+        i32.or
+        local.set $high
+        local.get $ptr
+        i32.const 4
+        i32.add
+        i32.load8_u
+        i32.const 24
+        i32.shl
+        local.get $ptr
+        i32.const 5
+        i32.add
+        i32.load8_u
+        i32.const 16
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 6
+        i32.add
+        i32.load8_u
+        i32.const 8
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 7
+        i32.add
+        i32.load8_u
+        i32.or
+        local.set $low
+        i32.const 8
+        local.set $extra
+      end
+    end
+    local.get $code
+    i32.const 126
+    i32.eq
+    local.get $high
+    i32.eqz
+    local.get $low
+    i32.const 126
+    i32.lt_u
+    i32.and
+    i32.and
+    local.get $code
+    i32.const 127
+    i32.eq
+    local.get $high
+    i32.eqz
+    local.get $low
+    i32.const 65536
+    i32.lt_u
+    i32.and
+    i32.and
+    i32.or
+    if
+      i32.const 3
+      return
+    end
+    local.get $high
+    i32.eqz
+    i32.eqz
+    local.get $low
+    local.get $max_len
+    i32.gt_u
+    i32.or
+    if
+      i32.const 4
+      return
+    end
+    local.get $out
+    local.get $low
+    i32.store
+    local.get $out
+    i32.const 4
+    i32.add
+    local.get $high
+    i32.store
+    local.get $out
+    i32.const 8
+    i32.add
+    local.get $extra
+    i32.store
+    i32.const 0)
+
+  (func $ws_apply_mask (export "ws_apply_mask_in_place") (param $payload_ptr i32) (param $payload_len i32) (param $mask i32) (result i32)
+    (local $i i32)
+    (local $shift i32)
+    loop $mask_loop
+      local.get $i
+      local.get $payload_len
+      i32.ge_u
+      if
+        i32.const 0
+        return
+      end
+      local.get $i
+      i32.const 3
+      i32.and
+      i32.const 3
+      i32.xor
+      i32.const 8
+      i32.mul
+      local.set $shift
+      local.get $payload_ptr
+      local.get $i
+      i32.add
+      local.get $payload_ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      local.get $mask
+      local.get $shift
+      i32.shr_u
+      i32.const 255
+      i32.and
+      i32.xor
+      i32.store8
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i
+      br $mask_loop
+    end
+    i32.const 0)
+
+  (func $ws_parse_header (export "ws_parse_header") (param $ptr i32) (param $len i32) (param $max_len i32) (param $out i32) (result i32)
+    (local $b0 i32)
+    (local $b1 i32)
+    (local $code i32)
+    (local $extra i32)
+    (local $masked i32)
+    (local $header_len i32)
+    (local $low i32)
+    (local $high i32)
+    local.get $len
+    i32.const 2
+    i32.lt_u
+    if
+      i32.const 1
+      return
+    end
+    local.get $ptr
+    i32.load8_u
+    local.set $b0
+    local.get $ptr
+    i32.const 1
+    i32.add
+    i32.load8_u
+    local.set $b1
+    local.get $b1
+    i32.const 127
+    i32.and
+    local.set $code
+    i32.const 2
+    local.set $header_len
+    local.get $b1
+    i32.const 128
+    i32.and
+    if (result i32)
+      i32.const 1
+    else
+      i32.const 0
+    end
+    local.set $masked
+
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.const 0
+    i32.eq
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.const 1
+    i32.eq
+    i32.or
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.const 2
+    i32.eq
+    i32.or
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.const 8
+    i32.eq
+    i32.or
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.const 9
+    i32.eq
+    i32.or
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.const 10
+    i32.eq
+    i32.or
+    i32.eqz
+    if
+      i32.const 3
+      return
+    end
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.const 8
+    i32.ge_u
+    if
+      local.get $b0
+      i32.const 128
+      i32.and
+      i32.eqz
+      if
+        i32.const 3
+        return
+      end
+      local.get $code
+      i32.const 125
+      i32.gt_u
+      if
+        i32.const 3
+        return
+      end
+    end
+
+    local.get $code
+    i32.const 126
+    i32.lt_u
+    if
+      local.get $code
+      local.set $low
+      i32.const 0
+      local.set $high
+      i32.const 0
+      local.set $extra
+    else
+      local.get $code
+      i32.const 126
+      i32.eq
+      if
+        local.get $len
+        i32.const 4
+        i32.lt_u
+        if
+          i32.const 1
+          return
+        end
+        local.get $ptr
+        i32.const 2
+        i32.add
+        i32.load8_u
+        i32.const 8
+        i32.shl
+        local.get $ptr
+        i32.const 3
+        i32.add
+        i32.load8_u
+        i32.or
+        local.set $low
+        i32.const 0
+        local.set $high
+        i32.const 2
+        local.set $extra
+        i32.const 4
+        local.set $header_len
+      else
+        local.get $len
+        i32.const 10
+        i32.lt_u
+        if
+          i32.const 1
+          return
+        end
+        local.get $ptr
+        i32.const 2
+        i32.add
+        i32.load8_u
+        i32.const 128
+        i32.and
+        if
+          i32.const 3
+          return
+        end
+        local.get $ptr
+        i32.const 2
+        i32.add
+        i32.load8_u
+        i32.const 24
+        i32.shl
+        local.get $ptr
+        i32.const 3
+        i32.add
+        i32.load8_u
+        i32.const 16
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 4
+        i32.add
+        i32.load8_u
+        i32.const 8
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 5
+        i32.add
+        i32.load8_u
+        i32.or
+        local.set $high
+        local.get $ptr
+        i32.const 6
+        i32.add
+        i32.load8_u
+        i32.const 24
+        i32.shl
+        local.get $ptr
+        i32.const 7
+        i32.add
+        i32.load8_u
+        i32.const 16
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 8
+        i32.add
+        i32.load8_u
+        i32.const 8
+        i32.shl
+        i32.or
+        local.get $ptr
+        i32.const 9
+        i32.add
+        i32.load8_u
+        i32.or
+        local.set $low
+        i32.const 8
+        local.set $extra
+        i32.const 10
+        local.set $header_len
+      end
+    end
+
+    local.get $code
+    i32.const 126
+    i32.eq
+    local.get $low
+    i32.const 126
+    i32.lt_u
+    i32.and
+    local.get $code
+    i32.const 127
+    i32.eq
+    local.get $high
+    i32.eqz
+    local.get $low
+    i32.const 65536
+    i32.lt_u
+    i32.and
+    i32.and
+    i32.or
+    if
+      i32.const 3
+      return
+    end
+    local.get $high
+    i32.eqz
+    i32.eqz
+    local.get $low
+    local.get $max_len
+    i32.gt_u
+    i32.or
+    if
+      i32.const 4
+      return
+    end
+    local.get $masked
+    if
+      local.get $len
+      local.get $header_len
+      i32.const 4
+      i32.add
+      i32.lt_u
+      if
+        i32.const 1
+        return
+      end
+    end
+
+    local.get $out
+    local.get $b0
+    i32.const 128
+    i32.and
+    if (result i32) i32.const 1 else i32.const 0 end
+    i32.store
+    local.get $out
+    i32.const 4
+    i32.add
+    local.get $b0
+    i32.const 112
+    i32.and
+    i32.const 4
+    i32.shr_u
+    i32.store
+    local.get $out
+    i32.const 8
+    i32.add
+    local.get $b0
+    i32.const 15
+    i32.and
+    i32.store
+    local.get $out
+    i32.const 12
+    i32.add
+    local.get $masked
+    i32.store
+    local.get $out
+    i32.const 16
+    i32.add
+    local.get $low
+    i32.store
+    local.get $out
+    i32.const 20
+    i32.add
+    local.get $high
+    i32.store
+    local.get $out
+    i32.const 24
+    i32.add
+    local.get $header_len
+    local.get $masked
+    if (result i32) i32.const 4 else i32.const 0 end
+    i32.add
+    i32.store
+    local.get $out
+    i32.const 28
+    i32.add
+    local.get $masked
+    if (result i32)
+      local.get $ptr
+      local.get $header_len
+      i32.add
+      i32.load8_u
+      i32.const 24
+      i32.shl
+      local.get $ptr
+      local.get $header_len
+      i32.add
+      i32.const 1
+      i32.add
+      i32.load8_u
+      i32.const 16
+      i32.shl
+      i32.or
+      local.get $ptr
+      local.get $header_len
+      i32.add
+      i32.const 2
+      i32.add
+      i32.load8_u
+      i32.const 8
+      i32.shl
+      i32.or
+      local.get $ptr
+      local.get $header_len
+      i32.add
+      i32.const 3
+      i32.add
+      i32.load8_u
+      i32.or
+    else
+      i32.const 0
+    end
+    i32.store
+    i32.const 0)
+
+  (func $ws_write_hdr (export "ws_write_frame_header") (param $opcode i32) (param $flags i32) (param $low i32) (param $high i32) (param $mask_present i32) (param $mask i32) (param $out i32) (param $cap i32) (result i64)
+    (local $written i32)
+    local.get $opcode
+    i32.const 0
+    i32.eq
+    local.get $opcode
+    i32.const 1
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 2
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 8
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 9
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 10
+    i32.eq
+    i32.or
+    i32.eqz
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $opcode
+    i32.const 8
+    i32.ge_u
+    if
+      local.get $flags
+      i32.const 128
+      i32.and
+      i32.eqz
+      local.get $high
+      i32.const 0
+      i32.ne
+      i32.or
+      local.get $low
+      i32.const 125
+      i32.gt_u
+      i32.or
+      if
+        i32.const 3
+        i32.const 0
+        call $pack
+        return
+      end
+    end
+    local.get $high
+    i32.const 2147483648
+    i32.ge_u
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $high
+    i32.eqz
+    local.get $low
+    i32.const 126
+    i32.lt_u
+    i32.and
+    if
+      i32.const 2
+      local.set $written
+    else
+      local.get $high
+      i32.eqz
+      local.get $low
+      i32.const 65536
+      i32.lt_u
+      i32.and
+      if
+        i32.const 4
+        local.set $written
+      else
+        i32.const 10
+        local.set $written
+      end
+    end
+    local.get $mask_present
+    if
+      local.get $written
+      i32.const 4
+      i32.add
+      local.set $written
+    end
+    local.get $cap
+    local.get $written
+    i32.lt_u
+    if
+      i32.const 2
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $out
+    local.get $flags
+    i32.const 240
+    i32.and
+    local.get $opcode
+    i32.const 15
+    i32.and
+    i32.or
+    i32.store8
+    local.get $out
+    i32.const 1
+    i32.add
+    local.get $mask_present
+    if (result i32) i32.const 128 else i32.const 0 end
+    local.get $written
+    local.get $mask_present
+    if (result i32) i32.const 4 else i32.const 0 end
+    i32.sub
+    i32.const 2
+    i32.eq
+    if (result i32)
+      local.get $low
+    else
+      local.get $written
+      local.get $mask_present
+      if (result i32) i32.const 4 else i32.const 0 end
+      i32.sub
+      i32.const 4
+      i32.eq
+      if (result i32) i32.const 126 else i32.const 127 end
+    end
+    i32.or
+    i32.store8
+    local.get $written
+    local.get $mask_present
+    if (result i32) i32.const 4 else i32.const 0 end
+    i32.sub
+    i32.const 4
+    i32.eq
+    if
+      local.get $out
+      i32.const 2
+      i32.add
+      local.get $low
+      i32.const 8
+      i32.shr_u
+      i32.store8
+      local.get $out
+      i32.const 3
+      i32.add
+      local.get $low
+      i32.store8
+    end
+    local.get $written
+    local.get $mask_present
+    if (result i32) i32.const 4 else i32.const 0 end
+    i32.sub
+    i32.const 10
+    i32.eq
+    if
+      local.get $out
+      i32.const 2
+      i32.add
+      local.get $high
+      i32.const 24
+      i32.shr_u
+      i32.store8
+      local.get $out
+      i32.const 3
+      i32.add
+      local.get $high
+      i32.const 16
+      i32.shr_u
+      i32.store8
+      local.get $out
+      i32.const 4
+      i32.add
+      local.get $high
+      i32.const 8
+      i32.shr_u
+      i32.store8
+      local.get $out
+      i32.const 5
+      i32.add
+      local.get $high
+      i32.store8
+      local.get $out
+      i32.const 6
+      i32.add
+      local.get $low
+      i32.const 24
+      i32.shr_u
+      i32.store8
+      local.get $out
+      i32.const 7
+      i32.add
+      local.get $low
+      i32.const 16
+      i32.shr_u
+      i32.store8
+      local.get $out
+      i32.const 8
+      i32.add
+      local.get $low
+      i32.const 8
+      i32.shr_u
+      i32.store8
+      local.get $out
+      i32.const 9
+      i32.add
+      local.get $low
+      i32.store8
+    end
+    local.get $mask_present
+    if
+      local.get $out
+      local.get $written
+      i32.const 4
+      i32.sub
+      i32.add
+      local.get $mask
+      i32.const 24
+      i32.shr_u
+      i32.store8
+      local.get $out
+      local.get $written
+      i32.const 3
+      i32.sub
+      i32.add
+      local.get $mask
+      i32.const 16
+      i32.shr_u
+      i32.store8
+      local.get $out
+      local.get $written
+      i32.const 2
+      i32.sub
+      i32.add
+      local.get $mask
+      i32.const 8
+      i32.shr_u
+      i32.store8
+      local.get $out
+      local.get $written
+      i32.const 1
+      i32.sub
+      i32.add
+      local.get $mask
+      i32.store8
+    end
+    i32.const 0
+    local.get $written
+    call $pack)
+
+  (func (export "ws_parse_close_payload") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+    local.get $len
+    i32.const 125
+    i32.gt_u
+    if
+      i32.const 3
+      return
+    end
+    local.get $out
+    local.get $len
+    i32.const 2
+    i32.ge_u
+    if (result i32) i32.const 1 else i32.const 0 end
+    i32.store
+    local.get $out
+    i32.const 4
+    i32.add
+    local.get $len
+    i32.const 2
+    i32.ge_u
+    if (result i32)
+      local.get $ptr
+      i32.load8_u
+      i32.const 8
+      i32.shl
+      local.get $ptr
+      i32.const 1
+      i32.add
+      i32.load8_u
+      i32.or
+    else
+      i32.const 0
+    end
+    i32.store
+    local.get $out
+    i32.const 8
+    i32.add
+    local.get $len
+    i32.const 2
+    i32.ge_u
+    if (result i32) local.get $len i32.const 2 i32.sub else i32.const 0 end
+    i32.store
+    i32.const 0)
+
+  (func (export "ws_write_close_payload") (param $code i32) (param $reason_ptr i32) (param $reason_len i32) (param $out i32) (param $cap i32) (result i64)
+    (local $i i32)
+    local.get $code
+    i32.const 65535
+    i32.gt_u
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $reason_len
+    i32.const 123
+    i32.gt_u
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $cap
+    local.get $reason_len
+    i32.const 2
+    i32.add
+    i32.lt_u
+    if
+      i32.const 2
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $out
+    local.get $code
+    i32.const 8
+    i32.shr_u
+    i32.store8
+    local.get $out
+    i32.const 1
+    i32.add
+    local.get $code
+    i32.store8
+    loop $copy
+      local.get $i
+      local.get $reason_len
+      i32.ge_u
+      if
+        i32.const 0
+        local.get $reason_len
+        i32.const 2
+        i32.add
+        call $pack
+        return
+      end
+      local.get $out
+      i32.const 2
+      i32.add
+      local.get $i
+      i32.add
+      local.get $reason_ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      i32.store8
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i
+      br $copy
+    end
+    i32.const 0
+    i32.const 0
+    call $pack)
+
+  (func $ws_write_srv_hdr (export "ws_write_server_frame_header") (param $opcode i32) (param $low i32) (param $high i32) (param $out i32) (param $cap i32) (result i64)
+    (local $written i32)
+    local.get $opcode
+    i32.const 0
+    i32.eq
+    local.get $opcode
+    i32.const 1
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 2
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 8
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 9
+    i32.eq
+    i32.or
+    local.get $opcode
+    i32.const 10
+    i32.eq
+    i32.or
+    i32.eqz
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $opcode
+    i32.const 8
+    i32.ge_u
+    local.get $high
+    i32.eqz
+    local.get $low
+    i32.const 125
+    i32.gt_u
+    i32.and
+    i32.and
+    local.get $opcode
+    i32.const 8
+    i32.ge_u
+    local.get $high
+    i32.const 0
+    i32.ne
+    i32.and
+    i32.or
+    if
+      i32.const 3
+      i32.const 0
+      call $pack
+      return
+    end
+    local.get $high
+    i32.eqz
+    local.get $low
+    i32.const 126
+    i32.lt_u
+    i32.and
+    if
+      i32.const 2
+      local.set $written
+      local.get $cap
+      local.get $written
+      i32.lt_u
+      if
+        i32.const 2
+        i32.const 0
+        call $pack
+        return
+      end
+      local.get $out
+      local.get $opcode
+      i32.const 128
+      i32.or
+      i32.store8
+      local.get $out
+      i32.const 1
+      i32.add
+      local.get $low
+      i32.store8
+    else
+      local.get $high
+      i32.eqz
+      local.get $low
+      i32.const 65536
+      i32.lt_u
+      i32.and
+      if
+        i32.const 4
+        local.set $written
+        local.get $cap
+        local.get $written
+        i32.lt_u
+        if
+          i32.const 2
+          i32.const 0
+          call $pack
+          return
+        end
+        local.get $out
+        local.get $opcode
+        i32.const 128
+        i32.or
+        i32.store8
+        local.get $out
+        i32.const 1
+        i32.add
+        i32.const 126
+        i32.store8
+        local.get $out
+        i32.const 2
+        i32.add
+        local.get $low
+        i32.const 8
+        i32.shr_u
+        i32.store8
+        local.get $out
+        i32.const 3
+        i32.add
+        local.get $low
+        i32.store8
+      else
+        i32.const 10
+        local.set $written
+        local.get $high
+        i32.const 2147483648
+        i32.ge_u
+        if
+          i32.const 3
+          i32.const 0
+          call $pack
+          return
+        end
+        local.get $cap
+        local.get $written
+        i32.lt_u
+        if
+          i32.const 2
+          i32.const 0
+          call $pack
+          return
+        end
+        local.get $out
+        local.get $opcode
+        i32.const 128
+        i32.or
+        i32.store8
+        local.get $out
+        i32.const 1
+        i32.add
+        i32.const 127
+        i32.store8
+        local.get $out
+        i32.const 2
+        i32.add
+        local.get $high
+        i32.const 24
+        i32.shr_u
+        i32.store8
+        local.get $out
+        i32.const 3
+        i32.add
+        local.get $high
+        i32.const 16
+        i32.shr_u
+        i32.store8
+        local.get $out
+        i32.const 4
+        i32.add
+        local.get $high
+        i32.const 8
+        i32.shr_u
+        i32.store8
+        local.get $out
+        i32.const 5
+        i32.add
+        local.get $high
+        i32.store8
+        local.get $out
+        i32.const 6
+        i32.add
+        local.get $low
+        i32.const 24
+        i32.shr_u
+        i32.store8
+        local.get $out
+        i32.const 7
+        i32.add
+        local.get $low
+        i32.const 16
+        i32.shr_u
+        i32.store8
+        local.get $out
+        i32.const 8
+        i32.add
+        local.get $low
+        i32.const 8
+        i32.shr_u
+        i32.store8
+        local.get $out
+        i32.const 9
+        i32.add
+        local.get $low
+        i32.store8
+      end
+    end
+    i32.const 0
+    local.get $written
+    call $pack)
+
+;; Standard ID removed — merged into single module
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; ws_encode — payload → WS frame (pure transform, batch)
+  ;;
+  ;; Config (optional, 4 bytes): [opcode:i32]
+  ;;   +0: opcode (1=text, 2=binary, default=2). 0 defaults to binary.
+  ;;
+  ;; Reads payload from input pipe, wraps in WS server frame (FIN, no mask),
+  ;; writes complete WS frame to output pipe.
+  ;;
+  ;; Signature: (input, output, cfg, clen, scratch, scap, state) → bytes_written
+  ;; Batch stage: state is ignored (pass 0).
+  ;; ════════════════════════════════════════════════════════════════
+
+  (func (export "ws_encode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $opcode i32) (local $n i32) (local $result i64)
+    (local $status i32) (local $hdr_len i32)
+
+    (local.set $opcode (i32.const 2))
+    (if (i32.ge_u (local.get $clen) (i32.const 4))
+      (then
+        (local.set $opcode (i32.load (local.get $cfg)))
+        (if (i32.eqz (local.get $opcode))
+          (then (local.set $opcode (i32.const 2))))))
+
+    (if (i32.lt_u (local.get $scap) (i32.const 17))
+      (then (return (i32.const -1))))
+    ;; Read payload into scratch+16 (leave 16 bytes for max header)
+    (local.set $n (call $pipe_read (local.get $input)
+      (i32.add (local.get $scratch) (i32.const 16))
+      (i32.sub (local.get $scap) (i32.const 16))))
+    (if (i32.le_s (local.get $n) (i32.const 0))
+      (then (return (local.get $n))))
+
+    ;; Write WS server frame header to scratch[0..9] (max 10 bytes, no mask)
+    (local.set $result (call $ws_write_srv_hdr
+      (local.get $opcode) (local.get $n) (i32.const 0)
+      (local.get $scratch) (i32.const 10)))
+    (local.set $status (i32.wrap_i64 (local.get $result)))
+    (if (i32.ne (local.get $status) (i32.const 0))
+      (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $hdr_len (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+
+    ;; Write header to output
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $hdr_len)))
+    ;; Write payload to output
+    (drop (call $pipe_write (local.get $output)
+      (i32.add (local.get $scratch) (i32.const 16)) (local.get $n)))
+    (i32.add (local.get $hdr_len) (local.get $n)))
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; ws_decode — WS frame → payload (pure transform, streaming)
+  ;;
+  ;; Config: none (pass 0, 0).
+  ;;
+  ;; State layout (148 bytes):
+  ;;   +0:   tick      i32 (RO)
+  ;;   +4:   (reserved)
+  ;;   +8:   dbuf_len  i32
+  ;;   +12:  dbuf[136] decode buffer (partial frame data)
+  ;;
+  ;; Thin wrapper around $decode_frame_socket with dbuf_off=8 and no send_pipe.
+  ;; ════════════════════════════════════════════════════════════════
+
+  (func (export "ws_decode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (call $decode_frame_socket
+      (local.get $input) (local.get $scratch) (local.get $scap)
+      (local.get $state) (i32.const 8) (local.get $output) (i32.const 0)))
+
+  ;; ════════════════════════════════════════════════════════════════
+  ;; process_ws_frame — bidirectional WS framing (socket mode)
+  ;; Config: pointer to socket handle (4 bytes)
+  ;; State layout (148 bytes):
+  ;;   +0:   tick          i32 (RO)
+  ;;   +4:   phase         i32 (0=idle, 1=awaiting)
+  ;;   +8:   start_tick    i32
+  ;;   +12:  timeout_ticks i32
+  ;;   +16:  dbuf_len      i32
+  ;;   +20:  dbuf[128]     decode buffer
+  ;;
+  ;; Reads payload from input, wraps in WS frame, writes to socket send pipe.
+  ;; Reads raw bytes from socket recv pipe, decodes WS frames, writes payload
+  ;; to output pipe. Ping→Pong, Close→Close echo.
+  ;; ════════════════════════════════════════════════════════════════
+
+  (func (export "process_ws_frame")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $sock i32) (local $send_pipe i32) (local $recv_pipe i32)
+    (local $phase i32) (local $elapsed i32) (local $sent i32)
+    (local $n i32) (local $result i64) (local $status i32)
+
+    (if (i32.lt_u (local.get $clen) (i32.const 4))
+      (then (return (i32.const -1))))
+    (local.set $sock (i32.load (local.get $cfg)))
+    (local.set $send_pipe (i32.load (local.get $sock)))
+    (local.set $recv_pipe (i32.load offset=4 (local.get $sock)))
+    (local.set $phase (i32.load offset=4 (local.get $state)))
+
+    ;; Phase 1 (awaiting response)
+    (if (i32.eq (local.get $phase) (i32.const 1))
+      (then
+        (local.set $elapsed
+          (i32.sub (i32.load (local.get $state)) (i32.load offset=8 (local.get $state))))
+        (if (i32.load offset=12 (local.get $state))
+          (then
+            (if (i32.ge_u (local.get $elapsed) (i32.load offset=12 (local.get $state)))
+              (then (return (global.get $STATUS_TIMEOUT))))))
+
+        ;; Decode from recv pipe
+        (local.set $n (call $decode_frame_socket
+          (local.get $recv_pipe) (local.get $scratch) (local.get $scap)
+          (local.get $state) (i32.const 20) (local.get $output) (local.get $send_pipe)))
+        (if (i32.gt_s (local.get $n) (i32.const 0))
+          (then
+            (if (i32.ne (local.get $n) (global.get $STATUS_MORE))
+              (then
+                (i32.store offset=4 (local.get $state) (i32.const 0))
+                (return (local.get $n))))))
+        (if (i32.lt_s (local.get $n) (i32.const 0))
+          (then (return (local.get $n))))
+        (return (global.get $STATUS_MORE))))
+
+    ;; Phase 0 (idle): encode + try decode
+
+    ;; Encode: read payload, wrap in WS frame, send
+    (if (i32.lt_u (local.get $scap) (i32.const 17))
+      (then (return (i32.const -1))))
+    (local.set $n (call $pipe_read (local.get $input)
+      (i32.add (local.get $scratch) (i32.const 16))
+      (i32.sub (local.get $scap) (i32.const 16))))
+    (if (i32.gt_s (local.get $n) (i32.const 0))
+      (then
+        (local.set $sent (local.get $n))
+        (local.set $result (call $ws_write_srv_hdr
+          (i32.const 2) (local.get $n) (i32.const 0)
+          (local.get $scratch) (i32.const 10)))
+        (local.set $status (i32.wrap_i64 (local.get $result)))
+        (if (i32.eqz (local.get $status))
+          (then
+            (local.set $n (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+            (drop (call $pipe_write (local.get $send_pipe) (local.get $scratch) (local.get $n)))
+            (drop (call $pipe_write (local.get $send_pipe)
+              (i32.add (local.get $scratch) (i32.const 16)) (local.get $sent)))))))
+
+    ;; Decode from recv pipe
+    (local.set $n (call $decode_frame_socket
+      (local.get $recv_pipe) (local.get $scratch) (local.get $scap)
+      (local.get $state) (i32.const 20) (local.get $output) (local.get $send_pipe)))
+    (if (i32.gt_s (local.get $n) (i32.const 0))
+      (then
+        (if (i32.ne (local.get $n) (global.get $STATUS_MORE))
+          (then (return (local.get $n))))))
+    (if (i32.lt_s (local.get $n) (i32.const 0))
+      (then (return (local.get $n))))
+
+    ;; Decode returned MORE
+    (if (local.get $sent)
+      (then
+        (i32.store offset=4 (local.get $state) (i32.const 1))
+        (i32.store offset=8 (local.get $state) (i32.load (local.get $state)))))
+    (global.get $STATUS_MORE))
+
+  ;; ── $decode_frame_socket — same as ws_decode but reads from recv pipe ──
+  ;; and handles control frames (ping→pong, close→close echo).
+  ;; dbuf stored at state + dbuf_off (rather than fixed offset +8).
+  (func $decode_frame_socket
+    (param $recv i32) (param $scratch i32) (param $scap i32)
+    (param $state i32) (param $dbuf_off i32)
+    (param $output i32) (param $send_pipe i32) (result i32)
+    (local $dbuf_len i32) (local $n i32) (local $total i32) (local $r i32)
+    (local $hdr_out i32)
+    (local $fin i32) (local $opcode i32) (local $masked i32)
+    (local $hdr_len i32) (local $payload_len i32) (local $mask_key i32)
+    (local $frame_size i32) (local $off i32)
+    (local $result i64) (local $status i32) (local $written i32)
+    (local $dbuf_cap i32)
+
+    (if (i32.lt_u (local.get $scap) (i32.const 32))
+      (then (return (i32.const -1))))
+    (local.set $dbuf_cap (i32.sub (i32.const 144) (local.get $dbuf_off)))
+    (local.set $dbuf_len (i32.load (i32.add (local.get $state) (local.get $dbuf_off))))
+
+    (if (i32.gt_u (local.get $dbuf_len) (i32.const 0))
+      (then
+        (call $memcpy (local.get $scratch)
+          (i32.add (local.get $state) (i32.add (local.get $dbuf_off) (i32.const 4)))
+          (local.get $dbuf_len))))
+
+    (local.set $n (call $pipe_read (local.get $recv)
+      (i32.add (local.get $scratch) (local.get $dbuf_len))
+      (i32.sub (local.get $scap) (local.get $dbuf_len))))
+    (if (i32.lt_s (local.get $n) (i32.const 0))
+      (then (local.set $n (i32.const 0))))
+    (local.set $total (i32.add (local.get $dbuf_len) (local.get $n)))
+
+    (if (i32.lt_u (local.get $total) (i32.const 2))
+      (then
+        (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (local.get $total))
+        (return (global.get $STATUS_MORE))))
+
+    (local.set $hdr_out (i32.sub (local.get $scap) (i32.const 32)))
+    (local.set $r (call $ws_parse_header
+      (local.get $scratch) (local.get $total) (local.get $scap) (local.get $hdr_out)))
+
+    (if (i32.eq (local.get $r) (i32.const 1))
+      (then
+        (if (i32.gt_u (local.get $total) (local.get $dbuf_cap))
+          (then (return (i32.const -5))))
+        (call $memcpy (i32.add (local.get $state) (i32.add (local.get $dbuf_off) (i32.const 4)))
+          (local.get $scratch) (local.get $total))
+        (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (local.get $total))
+        (return (global.get $STATUS_MORE))))
+
+    (if (i32.eq (local.get $r) (i32.const 3)) (then (return (i32.const -3))))
+    (if (i32.eq (local.get $r) (i32.const 4)) (then (return (i32.const -4))))
+
+    (local.set $fin    (i32.load offset=0 (local.get $hdr_out)))
+    (local.set $opcode (i32.load offset=8 (local.get $hdr_out)))
+    (local.set $masked (i32.load offset=12 (local.get $hdr_out)))
+    (local.set $payload_len (i32.load offset=16 (local.get $hdr_out)))
+    (local.set $hdr_len (i32.load offset=24 (local.get $hdr_out)))
+    (local.set $mask_key (i32.load offset=28 (local.get $hdr_out)))
+
+    (local.set $frame_size (i32.add (local.get $hdr_len) (local.get $payload_len)))
+    (if (i32.gt_u (local.get $frame_size) (local.get $total))
+      (then
+        (if (i32.gt_u (local.get $total) (local.get $dbuf_cap))
+          (then (return (i32.const -5))))
+        (call $memcpy (i32.add (local.get $state) (i32.add (local.get $dbuf_off) (i32.const 4)))
+          (local.get $scratch) (local.get $total))
+        (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (local.get $total))
+        (return (global.get $STATUS_MORE))))
+
+    (local.set $off (local.get $hdr_len))
+
+    (if (local.get $masked)
+      (then
+        (drop (call $ws_apply_mask
+          (i32.add (local.get $scratch) (local.get $off))
+          (local.get $payload_len) (local.get $mask_key)))))
+
+    (block $ctrl
+      (if (i32.and (i32.ge_u (local.get $opcode) (i32.const 1))
+                   (i32.le_u (local.get $opcode) (i32.const 2)))
+        (then
+          (drop (call $pipe_write (local.get $output)
+            (i32.add (local.get $scratch) (local.get $off))
+            (local.get $payload_len)))
+          (br $ctrl)))
+
+      (if (i32.eq (local.get $opcode) (i32.const 0))
+        (then
+          (drop (call $pipe_write (local.get $output)
+            (i32.add (local.get $scratch) (local.get $off))
+            (local.get $payload_len)))
+          (br $ctrl)))
+
+      (if (i32.eq (local.get $opcode) (i32.const 9))
+        (then
+          (if (local.get $send_pipe)
+            (then
+              (local.set $result (call $ws_write_hdr
+                (i32.const 10) (i32.const 128)
+                (local.get $payload_len) (i32.const 0)
+                (i32.const 0) (i32.const 0)
+                (local.get $scratch) (i32.const 10)))
+              (local.set $status (i32.wrap_i64 (local.get $result)))
+              (if (i32.eqz (local.get $status))
+                (then
+                  (local.set $written (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+                  (drop (call $pipe_write (local.get $send_pipe) (local.get $scratch) (local.get $written)))
+                  (drop (call $pipe_write (local.get $send_pipe)
+                    (i32.add (local.get $scratch) (local.get $off))
+                    (local.get $payload_len)))))))
+          (br $ctrl)))
+
+      (if (i32.eq (local.get $opcode) (i32.const 8))
+        (then
+          (if (local.get $send_pipe)
+            (then
+              (local.set $result (call $ws_write_hdr
+                (i32.const 8) (i32.const 128)
+                (local.get $payload_len) (i32.const 0)
+                (i32.const 0) (i32.const 0)
+                (local.get $scratch) (i32.const 10)))
+              (local.set $status (i32.wrap_i64 (local.get $result)))
+              (if (i32.eqz (local.get $status))
+                (then
+                  (local.set $written (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+                  (drop (call $pipe_write (local.get $send_pipe) (local.get $scratch) (local.get $written)))
+                  (drop (call $pipe_write (local.get $send_pipe)
+                    (i32.add (local.get $scratch) (local.get $off))
+                    (local.get $payload_len)))))))
+          (br $ctrl))))
+
+    ;; Save overflow
+    (local.set $off (i32.add (local.get $off) (local.get $payload_len)))
+    (local.set $n (i32.sub (local.get $total) (local.get $off)))
+    (if (i32.gt_u (local.get $n) (i32.const 0))
+      (then
+        (if (i32.gt_u (local.get $n) (local.get $dbuf_cap))
+          (then (return (i32.const -5))))
+        (call $memcpy (i32.add (local.get $state) (i32.add (local.get $dbuf_off) (i32.const 4)))
+          (i32.add (local.get $scratch) (local.get $off)) (local.get $n))
+        (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (local.get $n)))
+      (else
+        (i32.store (i32.add (local.get $state) (local.get $dbuf_off)) (i32.const 0))))
+
+    (if (i32.le_u (local.get $opcode) (i32.const 2))
+      (then (return (local.get $payload_len))))
+    (if (i32.eq (local.get $opcode) (i32.const 9))
+      (then (return (i32.const 1))))
+    (if (i32.eq (local.get $opcode) (i32.const 8))
+      (then (return (i32.const 1))))
+    (i32.const 1))
+
+  ;; memcpy imported from edgerun-core as $memcpy(dst, src, len)
+
   ;; ── Memory offsets ──────────────────────────────────────────────────
   (global $OFF_ERR         i32 (i32.const 0))
   (global $OFF_SCRATCH0    i32 (i32.const 8))
@@ -7359,3 +14128,61 @@
   (func (export "load_wat") (param $wat_ptr i32) (param $wat_len i32) (result i32)
     (return (call $wat_parse_module (local.get $wat_ptr) (local.get $wat_len)))
   )
+
+    ;; Standard ID removed — merged into single module
+
+  ;; Config (variable length):
+  ;;   +0: func_idx  i32  (function index; -1 = function 0)
+  ;;   +4: arg_count i32  (number of i32 arguments)
+  ;;   +8: args[]    i32  (inline argument values)
+
+  (func (export "process_wasm_exec")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $wasm_len i32) (local $err i32) (local $func_idx i32)
+    (local $arg_count i32) (local $arg_ptr i32)
+    (local $res_count i32) (local $result i64)
+
+    ;; 1. Read WASM binary from input pipe into scratch
+    (local.set $wasm_len (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (if (i32.le_s (local.get $wasm_len) (i32.const 0))
+      (then (return (local.get $wasm_len))))
+
+    ;; 2. Load WASM binary via interpreter
+    (local.set $err (call $load (local.get $scratch) (local.get $wasm_len)))
+    (if (local.get $err)
+      (then (return (i32.sub (i32.const 0) (local.get $err)))))
+
+    ;; 3. Parse config
+    (local.set $func_idx (i32.const 0))
+    (local.set $arg_count (i32.const 0))
+    (local.set $arg_ptr (i32.const 0))
+    (if (i32.ge_s (local.get $clen) (i32.const 4))
+      (then
+        (local.set $func_idx (i32.load (local.get $cfg)))
+        (if (i32.eq (local.get $func_idx) (i32.const -1))
+          (then (local.set $func_idx (i32.const 0))))))
+    (if (i32.ge_s (local.get $clen) (i32.const 8))
+      (then
+        (local.set $arg_count (i32.load offset=4 (local.get $cfg)))
+        (if (i32.gt_s (local.get $arg_count) (i32.const 0))
+          (then
+            (local.set $arg_ptr (i32.add (local.get $cfg) (i32.const 8)))))))
+
+    ;; 4. Call function with args
+    (local.set $err (call $call (local.get $func_idx) (local.get $arg_ptr) (local.get $arg_count)))
+    (if (local.get $err)
+      (then (return (i32.sub (i32.const 0) (local.get $err)))))
+
+    ;; 5. Read first result value and write to output
+    (local.set $res_count (call $get_result_count))
+    (if (i32.gt_s (local.get $res_count) (i32.const 0))
+      (then
+        (local.set $result (call $get_result_value (i32.const 0)))
+        (i32.store (local.get $scratch) (i32.wrap_i64 (local.get $result)))
+        (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 4)))
+        (return (i32.const 4))))
+
+    ;; No result — return 0 bytes written
+    (i32.const 0))
+)

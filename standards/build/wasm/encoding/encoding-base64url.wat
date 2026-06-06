@@ -1,10 +1,6 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-
   ;; Base64url encoding (RFC 4648 §5) — no padding, -_ alphabet.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300500)
+    ;; Standard ID removed — merged into single module
 
   (func $m86b64url_char (param $n i32) (result i32)
     local.get $n
@@ -49,7 +45,7 @@
 
   ;; base64url_encode(src_ptr, src_len, dst_ptr, dcap) -> status:i32, written:i32 packed as i64
   ;; No padding. Returns (0,written) on success, (negative,0) on error.
-  (func (export "base64url_encode") (param $src i32) (param $slen i32) (param $dst i32) (param $dcap i32) (result i64)
+  (func $b64_encode (export "base64url_encode") (param $src i32) (param $slen i32) (param $dst i32) (param $dcap i32) (result i64)
     (local $i i32)
     (local $o i32)
     (local $b0 i32)
@@ -303,7 +299,7 @@
 
   ;; base64url_decode(src_ptr, src_len, dst_ptr, dcap) -> status:i32, written:i32 packed as i64
   ;; Decodes base64url (no padding). Rejects invalid chars.
-  (func (export "base64url_decode") (param $src i32) (param $slen i32) (param $dst i32) (param $dcap i32) (result i64)
+  (func $b64_decode (export "base64url_decode") (param $src i32) (param $slen i32) (param $dst i32) (param $dcap i32) (result i64)
     (local $i i32)
     (local $o i32)
     (local $c0 i32)
@@ -516,4 +512,3 @@
     end
     end
   )
-)

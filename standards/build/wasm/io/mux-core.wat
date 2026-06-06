@@ -1,19 +1,6 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun-core" "STATUS_OK" (global $OK i32))
-  (import "edgerun-core" "STATUS_OVERFLOW" (global $OVERFLOW i32))
-  (import "edgerun-core" "STATUS_INPUT_SHORT" (global $INPUT_SHORT i32))
-  (import "frame-core" "frame_write" (func $frame_write (param i32 i32 i32 i32) (result i32)))
-  (import "frame-core" "frame_read" (func $frame_read (param i32 i32 i32) (result i64)))
-  (import "frame-core" "frame_route" (func $frame_route (param i32 i32 i32) (result i64)))
-  (import "pipe-core" "pipe_alloc" (func $pipe_alloc (param i32) (result i32)))
-  (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_available" (func $pipe_available (param i32) (result i32)))
-  (import "edgerun-core" "memcpy_off" (func $memcpy (param i32 i32 i32 i32 i32)))
+  ;; Mux Core — static/dynamic mux + demux
 
-  (func (export "proto_standard_id") (result i32) i32.const 300104)
+    ;; Standard ID removed — merged into single module
 
   ;; ════════════════════════════════════════════════════════════════
   ;; Static Mux — fixed array of stream pipes → framed output
@@ -30,7 +17,7 @@
     (i32.store offset=0 (local.get $mux) (i32.const 0))
     (i32.store offset=4 (local.get $mux) (i32.load (local.get $cfg)))
     (i32.store offset=8 (local.get $mux) (local.get $count))
-    (call $memcpy (local.get $mux) (i32.const 12) (local.get $cfg) (i32.const 8)
+    (call $memcpy_off (local.get $mux) (i32.const 12) (local.get $cfg) (i32.const 8)
       (i32.mul (local.get $count) (i32.const 4)))
     local.get $mux)
 
@@ -56,7 +43,7 @@
             (if (i32.lt_s (local.get $r) (i32.const 0))
               (then (local.set $total (local.get $r)) (br $done)))
             (local.set $r (call $frame_write (local.get $output) (local.get $i) (local.get $scratch) (local.get $r)))
-            (if (i32.ne (local.get $r) (global.get $OK))
+            (if (i32.ne (local.get $r) (global.get $STATUS_OK))
               (then (local.set $total (i32.sub (i32.const 0) (local.get $r))) (br $done)))
             (local.set $total (i32.add (local.get $total) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -78,7 +65,7 @@
     (i32.store offset=0 (local.get $demux) (i32.const 2))
     (i32.store offset=4 (local.get $demux) (i32.load (local.get $cfg)))
     (i32.store offset=8 (local.get $demux) (local.get $count))
-    (call $memcpy (local.get $demux) (i32.const 12) (local.get $cfg) (i32.const 8)
+    (call $memcpy_off (local.get $demux) (i32.const 12) (local.get $cfg) (i32.const 8)
       (i32.mul (local.get $count) (i32.const 4)))
     local.get $demux)
 
@@ -98,10 +85,10 @@
     ;; Read header bytes to get stream_id
     (local.set $result (call $frame_read (local.get $input) (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
-    (if (i32.ne (local.get $status) (global.get $OK))
+    (if (i32.ne (local.get $status) (global.get $STATUS_OK))
       (then
         ;; OVERFLOW means scratch too small — skip the frame
-        (if (i32.eq (local.get $status) (global.get $OVERFLOW))
+        (if (i32.eq (local.get $status) (global.get $STATUS_OVERFLOW))
           (then
             ;; frame_read already skipped the payload, so this frame is lost
             (return (i32.const 0))))
@@ -143,13 +130,13 @@
         (i32.store offset=16 (local.get $mux) (i32.load offset=8 (local.get $node))))
       (else
         (local.set $node (call $pipe_alloc (i32.const 12)))
-        (if (i32.eq (local.get $node) (i32.const -1)) (then (return (global.get $OVERFLOW))))))
+        (if (i32.eq (local.get $node) (i32.const -1)) (then (return (global.get $STATUS_OVERFLOW))))))
     (i32.store offset=0 (local.get $node) (local.get $stream_id))
     (i32.store offset=4 (local.get $node) (local.get $pipe))
     (i32.store offset=8 (local.get $node) (i32.load offset=8 (local.get $mux)))
     (i32.store offset=8 (local.get $mux) (local.get $node))
     (i32.store offset=12 (local.get $mux) (i32.add (i32.load offset=12 (local.get $mux)) (i32.const 1)))
-    global.get $OK)
+    global.get $STATUS_OK)
 
   (func (export "mux_remove_stream") (param $mux i32) (param $stream_id i32) (result i32)
     (local $prev i32) (local $curr i32) (local $next i32)
@@ -172,7 +159,7 @@
         (local.set $prev (local.get $curr))
         (local.set $curr (i32.load offset=8 (local.get $curr)))
         (br $walk)))
-    global.get $OK)
+    global.get $STATUS_OK)
 
   ;; mux_dynamic_run(mux, scratch, scap) → frames_written | error
   (func $mux_dynamic_run (export "mux_dynamic_run")
@@ -195,7 +182,7 @@
             (if (i32.lt_s (local.get $r) (i32.const 0))
               (then (local.set $total (local.get $r)) (br $done)))
             (local.set $r (call $frame_write (local.get $output) (local.get $stream_id) (local.get $scratch) (local.get $r)))
-            (if (i32.ne (local.get $r) (global.get $OK))
+            (if (i32.ne (local.get $r) (global.get $STATUS_OK))
               (then (local.set $total (i32.sub (i32.const 0) (local.get $r))) (br $done)))
             (local.set $total (i32.add (local.get $total) (i32.const 1)))))
         (local.set $curr (i32.load offset=8 (local.get $curr)))
@@ -244,7 +231,7 @@
     (param $demux i32) (param $stream_id i32) (param $pipe i32) (result i32)
     (local $slot_count i32) (local $mask i32) (local $base i32)
     (local $i i32) (local $sid i32)
-    (if (i32.eqz (local.get $stream_id)) (then (return (global.get $OVERFLOW))))
+    (if (i32.eqz (local.get $stream_id)) (then (return (global.get $STATUS_OVERFLOW))))
     (local.set $slot_count (i32.load offset=8 (local.get $demux)))
     (local.set $mask (i32.sub (local.get $slot_count) (i32.const 1)))
     (local.set $base (i32.add (local.get $demux) (i32.const 12)))
@@ -263,7 +250,7 @@
             (br $done)))
         (local.set $i (i32.and (i32.add (local.get $i) (i32.const 1)) (local.get $mask)))
         (br $probe)))
-    global.get $OK)
+    global.get $STATUS_OK)
 
   (func (export "demux_unregister_stream") (param $demux i32) (param $stream_id i32) (result i32)
     (local $slot i32)
@@ -272,7 +259,7 @@
       (then
         (i32.store (local.get $slot) (i32.const 0))
         (i32.store offset=4 (local.get $slot) (i32.const 0))))
-    global.get $OK)
+    global.get $STATUS_OK)
 
   ;; demux_dynamic_run(demux, scratch, scap) → 1 (routed) | 0 (no frame) | error
   (func $demux_dynamic_run (export "demux_dynamic_run")
@@ -287,9 +274,9 @@
       (then (return (i32.const 0))))
     (local.set $result (call $frame_read (local.get $input) (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
-    (if (i32.ne (local.get $status) (global.get $OK))
+    (if (i32.ne (local.get $status) (global.get $STATUS_OK))
       (then
-        (if (i32.eq (local.get $status) (global.get $OVERFLOW))
+        (if (i32.eq (local.get $status) (global.get $STATUS_OVERFLOW))
           (then (return (i32.const 0))))
         (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $stream_id (i32.wrap_i64 (local.get $result)))
@@ -342,7 +329,7 @@
             (if (i32.lt_s (local.get $r) (i32.const 0))
               (then (local.set $total (local.get $r)) (br $done)))
             (local.set $r (call $frame_write (local.get $output) (local.get $i) (local.get $scratch) (local.get $r)))
-            (if (i32.ne (local.get $r) (global.get $OK))
+            (if (i32.ne (local.get $r) (global.get $STATUS_OK))
               (then (local.set $total (i32.sub (i32.const 0) (local.get $r))) (br $done)))
             (local.set $total (i32.add (local.get $total) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -379,9 +366,9 @@
         (br_if $done (i32.lt_u (local.get $avail) (i32.const 8)))
         (local.set $result (call $frame_read (local.get $input) (local.get $scratch) (local.get $scap)))
         (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
-        (if (i32.ne (local.get $status) (global.get $OK))
+        (if (i32.ne (local.get $status) (global.get $STATUS_OK))
           (then
-            (if (i32.eq (local.get $status) (global.get $OVERFLOW))
+            (if (i32.eq (local.get $status) (global.get $STATUS_OVERFLOW))
               (then (br $done)))
             (local.set $total (local.get $status)) (br $done)))
         (local.set $stream_id (i32.wrap_i64 (local.get $result)))
@@ -394,7 +381,7 @@
         (br $frames)))
     (if (i32.lt_s (local.get $total) (i32.const 0))
       (then (return (local.get $total))))
-    (global.get $OK))
+    (global.get $STATUS_OK))
 
   ;; process_mux_dynamic — calls mux_dynamic_run on pre-created mux handle
   ;; Config: [mux_handle:i32]
@@ -414,5 +401,4 @@
     (local.set $demux (i32.load (local.get $cfg)))
     (call $demux_dynamic_run (local.get $demux) (local.get $scratch) (local.get $scap)))
 
-  ;; memcpy imported from edgerun-core as $memcpy(dst, doff, src, soff, len)
-)
+  ;; memcpy imported from edgerun-core as $memcpy_off(dst, doff, src, soff, len)

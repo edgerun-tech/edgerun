@@ -1,13 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "STATUS_MORE" (global $MORE i32))
-  (import "edgerun-core" "STATUS_TIMEOUT" (global $TIMEOUT i32))
-  (import "pipe-core" "pipe_alloc" (func $pipe_alloc (param i32) (result i32)))
-  (import "pipe-core" "pipe_create" (func $pipe_create (param i32) (result i32)))
-  (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
-  (import "pipe-core" "pipe_available" (func $pipe_available (param i32) (result i32)))
-  (import "pipe-core" "pipe_close" (func $pipe_close (param i32)))
+  ;; Socket Core — transport stage with tick-based timeout
 ;; Abstract socket layer — transport-agnostic byte stream I/O.
   ;;
   ;; Socket types define the transport. Config structs are fixed-size
@@ -28,7 +19,7 @@
   ;;              target_host_ptr[4] target_host_len[4]
   ;;              target_port[2] pad[2]                    (24 bytes)
   ;; UDP=5        host_ptr[4] host_len[4] port[2] pad[2]   (12 bytes)
-  (func (export "proto_standard_id") (result i32) i32.const 300505)
+    ;; Standard ID removed — merged into single module
 
   ;; ── Socket type constants ──
   (func (export "SOCK_TCP")        (result i32) i32.const 0)
@@ -480,14 +471,14 @@
         (if (i32.load offset=12 (local.get $state))
           (then
             (if (i32.ge_u (local.get $elapsed) (i32.load offset=12 (local.get $state)))
-              (then (return (global.get $TIMEOUT))))))
+              (then (return (global.get $STATUS_TIMEOUT))))))
         (local.set $n (call $pipe_read (i32.load offset=4 (local.get $sock)) (local.get $scratch) (local.get $scap)))
         (if (i32.gt_s (local.get $n) (i32.const 0))
           (then
             (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
             (i32.store offset=4 (local.get $state) (i32.const 0))
             (return (local.get $n))))
-        (return (global.get $MORE))))
+        (return (global.get $STATUS_MORE))))
 
     ;; Phase 0 (idle): try send + recv
     ;; Read data to send from input pipe
@@ -510,7 +501,6 @@
           (then
             (i32.store offset=4 (local.get $state) (i32.const 1))
             (i32.store offset=8 (local.get $state) (i32.load (local.get $state)))
-            (return (global.get $MORE))))
+            (return (global.get $STATUS_MORE))))
         (return (i32.const 0))))
     local.get $n)
-)

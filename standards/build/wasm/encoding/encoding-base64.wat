@@ -1,12 +1,4 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300046)
-
-
-  (func $m85b64_char (param $n i32) (result i32)
+(func $m85b64_char (param $n i32) (result i32)
     local.get $n
     i32.const 26
     i32.lt_u
@@ -107,7 +99,7 @@
       end
     end)
 
-  (func (export "base64_standard_encode")
+  (func $base64_encode (export "base64_standard_encode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $groups i32)
@@ -727,6 +719,6 @@
         i32.const 0
         local.get $out_len
         call $pack
-      end
+            end
     end)
-)
+

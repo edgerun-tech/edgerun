@@ -1,12 +1,6 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "STATUS_OK" (global $OK i32))
-  (import "edgerun-core" "STATUS_INPUT_SHORT" (global $INPUT_SHORT i32))
-  (import "edgerun-core" "STATUS_OUTPUT_SHORT" (global $OUTPUT_SHORT i32))
-  (import "edgerun-core" "STATUS_OVERFLOW" (global $OVERFLOW i32))
-  (import "edgerun-core" "memcpy_off" (func $memcpy (param i32 i32 i32 i32 i32)))
+  ;; Pipe Core — byte pipes + bump allocators
 
-  (func (export "proto_standard_id") (result i32) i32.const 300101)
+    ;; Standard ID removed — merged into single module
 
   ;; ── Pipe struct layout (16 byte header + data[cap]) ──
   ;; +0:  rd    read cursor from data start
@@ -35,7 +29,7 @@
 
   ;; ── Pipe creation ──
 
-  (func (export "pipe_create") (param $cap i32) (result i32)
+  (func $pipe_create (export "pipe_create") (param $cap i32) (result i32)
     (local $p i32)
     (if (i32.eqz (local.get $cap)) (then (return (i32.const -1))))
     (local.set $p (call $pipe_alloc
@@ -52,12 +46,12 @@
   (func $pipe_write (export "pipe_write")
     (param $p i32) (param $src i32) (param $len i32) (result i32)
     (local $wr i32) (local $cap i32)
-    (if (i32.eqz (local.get $len)) (then (return (global.get $OK))))
+    (if (i32.eqz (local.get $len)) (then (return (global.get $STATUS_OK))))
     (local.set $wr (i32.load offset=4 (local.get $p)))
     (local.set $cap (i32.load offset=8 (local.get $p)))
     (if (i32.gt_u (i32.add (local.get $wr) (local.get $len)) (local.get $cap))
-      (then (return (global.get $OVERFLOW))))
-    (call $memcpy
+      (then (return (global.get $STATUS_OVERFLOW))))
+    (call $memcpy_off
       (i32.add (local.get $p) (global.get $PIPE_HEADER))
       (local.get $wr)
       (local.get $src)
@@ -65,7 +59,7 @@
       (local.get $len))
     (i32.store offset=4 (local.get $p)
       (i32.add (i32.load offset=4 (local.get $p)) (local.get $len)))
-    global.get $OK)
+    global.get $STATUS_OK)
 
   ;; ── Read ──
 
@@ -79,7 +73,7 @@
     (if (i32.gt_u (local.get $avail) (local.get $max))
       (then (local.set $avail (local.get $max))))
     (local.set $rd (i32.load offset=0 (local.get $p)))
-    (call $memcpy
+    (call $memcpy_off
       (local.get $dst) (i32.const 0)
       (i32.add (local.get $p) (global.get $PIPE_HEADER))
       (local.get $rd)
@@ -95,7 +89,7 @@
 
   ;; ── Query ──
 
-  (func (export "pipe_available") (param $p i32) (result i32)
+  (func $pipe_available (export "pipe_available") (param $p i32) (result i32)
     (i32.sub (i32.load offset=4 (local.get $p))
              (i32.load offset=0 (local.get $p))))
 
@@ -108,17 +102,17 @@
 
   ;; ── Close / Reset ──
 
-  (func (export "pipe_close") (param $p i32)
+  (func $pipe_close (export "pipe_close") (param $p i32)
     (i32.store offset=12 (local.get $p) (i32.const 1)))
 
   ;; ── Heap lifecycle management ──
   ;; Snapshot saves current heap pointer; Restore rolls back to snapshot.
   ;; Intermediate allocations (pipes, nodes) above the snapshot are freed.
   ;; Persistent allocations below the snapshot are preserved.
-  (func (export "pipe_snapshot") (result i32)
+  (func $pipe_snapshot (export "pipe_snapshot") (result i32)
     (global.get $heap_ptr))
 
-  (func (export "pipe_restore") (param $snap i32)
+  (func $pipe_restore (export "pipe_restore") (param $snap i32)
     (global.set $heap_ptr (local.get $snap)))
 
   (func (export "pipe_reset_heap")
@@ -140,5 +134,4 @@
     (call $pipe_write (local.get $dst) (local.get $tmp) (local.get $n))
     (return (local.get $n)))
 
-  ;; memcpy imported from edgerun-core as $memcpy(dst, doff, src, soff, len)
-)
+  ;; memcpy imported from edgerun-core as $memcpy_off(dst, doff, src, soff, len)
