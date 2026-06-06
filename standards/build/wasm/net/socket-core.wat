@@ -1,5 +1,11 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
+  (import "pipe-core" "pipe_alloc" (func $pipe_alloc (param i32) (result i32)))
+  (import "pipe-core" "pipe_create" (func $pipe_create (param i32) (result i32)))
+  (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
+  (import "pipe-core" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
+  (import "pipe-core" "pipe_available" (func $pipe_available (param i32) (result i32)))
+  (import "pipe-core" "pipe_close" (func $pipe_close (param i32)))
 ;; Abstract socket layer — transport-agnostic byte stream I/O.
   ;;
   ;; Socket types define the transport. Config structs are fixed-size
@@ -364,4 +370,82 @@
     end
     end
     local.get $off local.get $digits i32.add)
+
+  ;; ── Socket abstraction (pipe-based I/O) ──
+  ;;
+  ;; Socket struct (24 bytes):
+  ;;   +0:  send_pipe  — pipe handle for outgoing data
+  ;;   +4:  recv_pipe  — pipe handle for incoming data
+  ;;   +8:  state      — 0=closed 1=open 2=connecting 3=connected
+  ;;   +12: sock_type  — TCP=0 TLS=1 ...
+  ;;   +16: cfg_ptr    — pointer to stored config
+  ;;   +20: cfg_len    — config length
+
+  (func (export "SOCK_OPEN")       (result i32) i32.const 1)
+  (func (export "SOCK_CONNECTING") (result i32) i32.const 2)
+  (func (export "SOCK_CONNECTED")  (result i32) i32.const 3)
+  (func (export "SOCK_STRUCT_SIZE") (result i32) i32.const 24)
+
+  ;; sock_open(type, cfg_ptr, cfg_len, pipe_cap) → socket_handle | -1
+  ;; Allocates a socket struct + two pipes (send + recv).
+  (func (export "sock_open")
+    (param $type i32) (param $cfg i32) (param $clen i32) (param $pcap i32) (result i32)
+    (local $s i32) (local $snd i32) (local $rcv i32)
+    (local.set $s (call $pipe_alloc (i32.const 24)))
+    (if (i32.eq (local.get $s) (i32.const -1)) (then (return (i32.const -1))))
+    (local.set $snd (call $pipe_create (local.get $pcap)))
+    (if (i32.eq (local.get $snd) (i32.const -1)) (then (return (i32.const -1))))
+    (local.set $rcv (call $pipe_create (local.get $pcap)))
+    (if (i32.eq (local.get $rcv) (i32.const -1)) (then (return (i32.const -1))))
+    (i32.store offset=0 (local.get $s) (local.get $snd))
+    (i32.store offset=4 (local.get $s) (local.get $rcv))
+    (i32.store offset=8 (local.get $s) (i32.const 1))  ;; state = open
+    (i32.store offset=12 (local.get $s) (local.get $type))
+    (i32.store offset=16 (local.get $s) (local.get $cfg))
+    (i32.store offset=20 (local.get $s) (local.get $clen))
+    local.get $s)
+
+  ;; sock_send(socket, data, len) → status
+  ;; Writes data to the socket's send pipe.
+  (func (export "sock_send")
+    (param $s i32) (param $data i32) (param $len i32) (result i32)
+    (call $pipe_write (i32.load offset=0 (local.get $s)) (local.get $data) (local.get $len)))
+
+  ;; sock_recv(socket, dst, max) → bytes_read
+  ;; Reads from the socket's recv pipe.
+  (func (export "sock_recv")
+    (param $s i32) (param $dst i32) (param $max i32) (result i32)
+    (call $pipe_read (i32.load offset=4 (local.get $s)) (local.get $dst) (local.get $max)))
+
+  ;; sock_close(socket) — closes both pipes, marks socket closed
+  (func (export "sock_close") (param $s i32)
+    (call $pipe_close (i32.load offset=0 (local.get $s)))
+    (call $pipe_close (i32.load offset=4 (local.get $s)))
+    (i32.store offset=8 (local.get $s) (i32.const 0)))
+
+  ;; sock_get_state(socket) → state
+  (func (export "sock_get_state") (param $s i32) (result i32)
+    (i32.load offset=8 (local.get $s)))
+
+  ;; sock_get_send_pipe(socket) → pipe_handle
+  (func (export "sock_get_send_pipe") (param $s i32) (result i32)
+    (i32.load offset=0 (local.get $s)))
+
+  ;; sock_get_recv_pipe(socket) → pipe_handle
+  (func (export "sock_get_recv_pipe") (param $s i32) (result i32)
+    (i32.load offset=4 (local.get $s)))
+
+  ;; sock_pipe(from, to, tmp, tcap) → bytes_piped | error
+  ;; Pipes data from from_sock's recv pipe into to_sock's send pipe.
+  ;; Uses tmp buffer of tcap bytes as scratch space.
+  (func $sock_pipe (export "sock_pipe")
+    (param $from i32) (param $to i32) (param $tmp i32) (param $tcap i32) (result i32)
+    (local $n i32)
+    (local.set $n (call $pipe_read
+      (i32.load offset=4 (local.get $from)) (local.get $tmp) (local.get $tcap)))
+    (if (i32.le_s (local.get $n) (i32.const 0))
+      (then (return (local.get $n))))
+    (call $pipe_write
+      (i32.load offset=0 (local.get $to)) (local.get $tmp) (local.get $n))
+    (return (local.get $n)))
 )

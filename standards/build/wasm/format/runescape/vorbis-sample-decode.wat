@@ -718,7 +718,7 @@
     i32.const 0
   )
 
-  (func (export "vorbis_codebook_decode_scalar")
+  (func $vorbis_codebook_decode_scalar (export "vorbis_codebook_decode_scalar")
     (param $br i32) (param $book_index i32) (param $setup i32) (result i32)
     (local $hdr i32) (local $entries i32) (local $max_len i32) (local $len_offset i32) (local $code_offset i32)
     (local $val i32) (local $len i32) (local $j i32) (local $candidate i32)
@@ -1630,19 +1630,272 @@
     i32.const 0
   )
 
-  (func (export "vorbis_decode_sample_packets")
-    (param $data i32) (param $len i32) (param $sample i32) (param $setup i32) (result i32)
-    global.get $VORBIS_ERR_TODO_DECODE
+  (func $vorbis_decode_sample_packets (export "vorbis_decode_sample_packets")
+    (param $sample i32) (param $setup i32) (result i32)
+    (local $br i32) (local $mode_count i32) (local $mode_bits i32) (local $index i32)
+    (local $packet_ptr i32) (local $packet_len i32) (local $mode_index i32)
+    (local $mode_header i32) (local $prev_flag i32) (local $next_flag i32)
+    (local $result i32) (local $mapping i32) (local $mapping_header i32)
+    (local $mux i32) (local $floor i32) (local $floor_header i32)
+    (local $residue i32) (local $residue_header i32) (local $error i32)
+    (local $flags i32)
+
+    local.get $setup
+    if (result i32)
+      local.get $setup
+    else
+      global.get $BSS_SETUP_STATE
+    end
+    local.set $setup
+
+    global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+    global.get $BSS_LAST_PACKET_COUNT i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_PACKET_MODE i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_PACKET_MAPPING i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_PACKET_FLOOR i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_PACKET_RESIDUE i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_MODE_BITS i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_STATUS global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+    global.get $BSS_LAST_WINDOW_PACKET i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_BLOCK_SIZE i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_PREV_FLAG i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_NEXT_FLAG i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_LEFT_START i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_LEFT_END i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_RIGHT_START i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_RIGHT_END i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_LEFT_FRAMES i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_WINDOW_RIGHT_FRAMES i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_MDCT_BUFFER_FRAMES i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_OVERLAP_FRAMES i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_FLOOR_PACKET_STATUS global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+    global.get $BSS_LAST_FLOOR_PACKET_COUNT i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_FLOOR_PACKET_NONZERO i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_FLOOR_PACKET_Y0 i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_FLOOR_PACKET_Y1 i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_RESIDUE_PACKET_STATUS global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+    global.get $BSS_LAST_RESIDUE_PACKET_COUNT i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_RESIDUE_PACKET_PARTITION_COUNT i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_RESIDUE_PACKET_CLASS_COUNT i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_RESIDUE_PACKET_BOOK_COUNT i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_RESIDUE_PACKET_SCALAR_COUNT i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_RESIDUE_PACKET_VALUE_COUNT i32.const 0 i32.store offset=0
+
+    local.get $setup global.get $SS_READY i32.add i32.load offset=0
+    i32.const 1 i32.ne
+    if
+      global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_ARCHIVE i32.store offset=0
+      global.get $VORBIS_ERR_BAD_ARCHIVE return
+    end
+
+    local.get $setup global.get $SS_MODE_COUNT i32.add i32.load offset=0
+    local.tee $mode_count
+    i32.eqz
+    if
+      global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_ARCHIVE i32.store offset=0
+      global.get $VORBIS_ERR_BAD_ARCHIVE return
+    end
+
+    local.get $mode_count i32.const 1 i32.sub
+    call $ilog_u32
+    local.tee $mode_bits
+    global.get $BSS_LAST_MODE_BITS i32.store offset=0
+
+    global.get $BSS_BITREADER local.set $br
+
+    i32.const 0 local.set $index
+
+    (block $packet_frontier
+      (loop $packet_loop
+        local.get $index
+        local.get $sample global.get $SS_PACKET_COUNT i32.add i32.load offset=0
+        i32.ge_u
+        br_if $packet_frontier
+
+        local.get $sample global.get $SS_PACKET_PTRS i32.add
+        local.get $index i32.const 3 i32.shl i32.add
+        i64.load offset=0 i32.wrap_i64
+        local.tee $packet_ptr
+        i32.eqz
+        if
+          global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_ARCHIVE i32.store offset=0
+          global.get $VORBIS_ERR_BAD_ARCHIVE return
+        end
+
+        local.get $sample global.get $SS_PACKET_LENS i32.add
+        local.get $index i32.const 2 i32.shl i32.add
+        i32.load offset=0
+        local.tee $packet_len
+        i32.eqz
+        if
+          global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_ARCHIVE i32.store offset=0
+          global.get $VORBIS_ERR_BAD_ARCHIVE return
+        end
+
+        local.get $br local.get $packet_ptr local.get $packet_len call $vorbis_bitreader_init
+
+        local.get $br call $read_bit_internal drop
+        local.get $br global.get $BR_ERROR i32.add i32.load offset=0
+        local.tee $error
+        if
+          global.get $BSS_LAST_PACKET_STATUS local.get $error i32.store offset=0
+          local.get $error return
+        end
+
+        local.get $br local.get $mode_bits call $read_bits_internal
+        local.set $mode_index
+        local.get $br global.get $BR_ERROR i32.add i32.load offset=0
+        local.tee $error
+        if
+          global.get $BSS_LAST_PACKET_STATUS local.get $error i32.store offset=0
+          local.get $error return
+        end
+
+        local.get $mode_index local.get $mode_count i32.ge_u
+        if
+          global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_INDEX i32.store offset=0
+          global.get $VORBIS_ERR_BAD_INDEX return
+        end
+
+        global.get $BSS_PACKET_MODES local.get $index i32.const 2 i32.shl i32.add
+        local.get $mode_index i32.store offset=0
+        global.get $BSS_LAST_PACKET_MODE local.get $mode_index i32.store offset=0
+
+        global.get $BSS_MODE_HEADERS
+        local.get $mode_index global.get $SIZEOF_MODE_HEADER i32.mul i32.add
+        local.set $mode_header
+
+        i32.const 0 local.set $prev_flag
+        i32.const 0 local.set $next_flag
+        local.get $mode_header global.get $MD_BLOCK_FLAG i32.add i32.load offset=0
+        if
+          local.get $br i32.const 2 call $read_bits_internal
+          local.set $flags
+          local.get $br global.get $BR_ERROR i32.add i32.load offset=0
+          local.tee $error
+          if
+            global.get $BSS_LAST_PACKET_STATUS local.get $error i32.store offset=0
+            local.get $error return
+          end
+          local.get $flags i32.const 1 i32.and local.set $prev_flag
+          local.get $flags i32.const 1 i32.shr_u i32.const 1 i32.and local.set $next_flag
+        end
+
+        local.get $setup
+        local.get $mode_header
+        local.get $index
+        local.get $prev_flag
+        local.get $next_flag
+        call $vorbis_prepare_packet_window
+        local.tee $result
+        if
+          global.get $BSS_LAST_PACKET_STATUS local.get $result i32.store offset=0
+          local.get $result return
+        end
+
+        local.get $mode_header global.get $MD_MAPPING i32.add i32.load offset=0
+        local.tee $mapping
+        local.get $setup global.get $SS_MAPPING_COUNT i32.add i32.load offset=0
+        i32.ge_u
+        if
+          global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_INDEX i32.store offset=0
+          global.get $VORBIS_ERR_BAD_INDEX return
+        end
+
+        global.get $BSS_PACKET_MAPPINGS local.get $index i32.const 2 i32.shl i32.add
+        local.get $mapping i32.store offset=0
+        global.get $BSS_LAST_PACKET_MAPPING local.get $mapping i32.store offset=0
+
+        global.get $BSS_MAPPING_HEADERS
+        local.get $mapping global.get $SIZEOF_MAPPING_HEADER i32.mul i32.add
+        local.set $mapping_header
+
+        local.get $mapping_header global.get $MH_MUX i32.add i32.load offset=0
+        local.tee $mux
+        local.get $mapping_header global.get $MH_SUBMAPS i32.add i32.load offset=0
+        i32.ge_u
+        if
+          global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_INDEX i32.store offset=0
+          global.get $VORBIS_ERR_BAD_INDEX return
+        end
+
+        global.get $BSS_MAPPING_FLOORS
+        local.get $mapping_header global.get $MH_FLOOR_OFFSET i32.add i32.load offset=0
+        local.get $mux i32.add
+        i32.const 2 i32.shl i32.add
+        i32.load offset=0
+        local.tee $floor
+        local.get $setup global.get $SS_FLOOR_COUNT i32.add i32.load offset=0
+        i32.ge_u
+        if
+          global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_INDEX i32.store offset=0
+          global.get $VORBIS_ERR_BAD_INDEX return
+        end
+
+        global.get $BSS_PACKET_FLOORS local.get $index i32.const 2 i32.shl i32.add
+        local.get $floor i32.store offset=0
+        global.get $BSS_LAST_PACKET_FLOOR local.get $floor i32.store offset=0
+
+        global.get $BSS_FLOOR_HEADERS
+        local.get $floor global.get $SIZEOF_FLOOR_HEADER i32.mul i32.add
+        local.set $floor_header
+
+        local.get $br local.get $floor_header local.get $index
+        call $vorbis_decode_packet_floor
+        local.tee $result
+        if
+          global.get $BSS_LAST_PACKET_STATUS local.get $result i32.store offset=0
+          local.get $result return
+        end
+
+        global.get $BSS_MAPPING_RESIDUES
+        local.get $mapping_header global.get $MH_RESIDUE_OFFSET i32.add i32.load offset=0
+        local.get $mux i32.add
+        i32.const 2 i32.shl i32.add
+        i32.load offset=0
+        local.tee $residue
+        local.get $setup global.get $SS_RESIDUE_COUNT i32.add i32.load offset=0
+        i32.ge_u
+        if
+          global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_BAD_INDEX i32.store offset=0
+          global.get $VORBIS_ERR_BAD_INDEX return
+        end
+
+        global.get $BSS_PACKET_RESIDUES local.get $index i32.const 2 i32.shl i32.add
+        local.get $residue i32.store offset=0
+        global.get $BSS_LAST_PACKET_RESIDUE local.get $residue i32.store offset=0
+
+        global.get $BSS_RESIDUE_HEADERS
+        local.get $residue global.get $SIZEOF_RESIDUE_HEADER i32.mul i32.add
+        local.set $residue_header
+
+        local.get $br local.get $residue_header local.get $index
+        call $vorbis_decode_packet_residue
+        local.tee $result
+        if
+          global.get $BSS_LAST_PACKET_STATUS local.get $result i32.store offset=0
+          local.get $result return
+        end
+
+        local.get $index i32.const 1 i32.add
+        local.tee $index
+        global.get $BSS_LAST_PACKET_COUNT i32.store offset=0
+
+        br $packet_loop
+      )
+    )
+
+    global.get $BSS_LAST_PACKET_STATUS global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+    i32.const 0
   )
 
-  (func $vorbis_decode_packet_floor_inner (export "vorbis_decode_packet_floor")
+  (func (export "vorbis_decode_packet_floor")
     (param $br i32) (param $fh i32) (param $packet_index i32) (result i32)
-    (local $y_bits i32) (local $y_range i32) (local $base i32) (local $part_count i32)
-    (local $class_count i32) (local $val_count i32) (local $i i32) (local $j i32) (local $k i32)
-    (local $class_id i32) (local $dims i32) (local $subbits i32) (local $master i32) (local $selector i32)
-    (local $book_idx i32) (local $entry i32) (local $tmp i32) (local $multi i32)
-    (local $x0 i32) (local $x1 i32) (local $sorted0 i32) (local $sorted1 i32)
-    ;; Clear packet arrays
+    (local $nonzero i32) (local $y_bits i32) (local $y_range i32) (local $base i32) (local $part_count i32)
+    (local $val_count i32) (local $i i32) (local $j i32) (local $k i32)
+    (local $class_id i32) (local $dims i32) (local $subbits i32) (local $selector i32)
+    (local $entry i32) (local $tmp i32) (local $multi i32)
+    (local $x_a i32) (local $x_b i32)
     global.get $BSS_PACKET_FLOOR_NONZERO local.get $packet_index i32.const 2 i32.shl i32.add i32.const 0 i32.store offset=0
     global.get $BSS_PACKET_FLOOR_Y0 local.get $packet_index i32.const 2 i32.shl i32.add i32.const 0 i32.store offset=0
     global.get $BSS_PACKET_FLOOR_Y1 local.get $packet_index i32.const 2 i32.shl i32.add i32.const 0 i32.store offset=0
@@ -1656,10 +1909,212 @@
     global.get $BSS_LAST_FLOOR_PACKET_SORTED_COUNT i32.const 0 i32.store offset=0
     global.get $BSS_LAST_FLOOR_PACKET_SEGMENT_COUNT i32.const 0 i32.store offset=0
     global.get $BSS_LAST_FLOOR_PACKET_Y_RANGE i32.const 0 i32.store offset=0
-    ;; Read nonzero bit
+    global.get $BSS_LAST_FLOOR_PACKET_COUNT
+    global.get $BSS_LAST_FLOOR_PACKET_COUNT i32.load offset=0 i32.const 1 i32.add
+    i32.store offset=0
     local.get $br call $read_bit_internal
+    local.tee $nonzero
     global.get $BSS_PACKET_FLOOR_NONZERO local.get $packet_index i32.const 2 i32.shl i32.add i32.store offset=0
-    global.get $BSS_LAST_FLOOR_PACKET_NONZERO local.get $??? i32.store offset=0
+    local.get $nonzero global.get $BSS_LAST_FLOOR_PACKET_NONZERO i32.store offset=0
+    local.get $nonzero i32.eqz if i32.const 0 return end
+    local.get $fh global.get $FH_MULTIPLIER i32.add i32.load offset=0
+    local.tee $tmp
+    i32.const 1 i32.eq if
+      i32.const 8 local.set $y_bits
+      i32.const 256 local.set $y_range
+    else
+      local.get $tmp
+      i32.const 2 i32.eq if
+        i32.const 7 local.set $y_bits
+        i32.const 128 local.set $y_range
+      else
+        local.get $tmp
+        i32.const 3 i32.eq if
+          i32.const 7 local.set $y_bits
+          i32.const 86 local.set $y_range
+        else
+          local.get $tmp
+          i32.const 4 i32.eq if
+            i32.const 6 local.set $y_bits
+            i32.const 64 local.set $y_range
+          else
+            global.get $VORBIS_ERR_BAD_ARCHIVE return
+          end
+        end
+      end
+    end
+    global.get $BSS_LAST_FLOOR_PACKET_Y_RANGE local.get $y_range i32.store offset=0
+    local.get $br local.get $y_bits call $read_bits_internal
+    local.tee $tmp
+    global.get $BSS_PACKET_FLOOR_Y0 local.get $packet_index i32.const 2 i32.shl i32.add i32.store offset=0
+    local.get $tmp global.get $BSS_LAST_FLOOR_PACKET_Y0 i32.store offset=0
+    local.get $br local.get $y_bits call $read_bits_internal
+    local.tee $tmp
+    global.get $BSS_PACKET_FLOOR_Y1 local.get $packet_index i32.const 2 i32.shl i32.add i32.store offset=0
+    local.get $tmp global.get $BSS_LAST_FLOOR_PACKET_Y1 i32.store offset=0
+    local.get $fh global.get $FH_PARTITION_COUNT i32.add i32.load offset=0 local.tee $part_count
+    global.get $VORBIS_MAX_FLOOR_PARTS i32.gt_u if global.get $VORBIS_ERR_TOO_MANY_SETUP return end
+    local.get $packet_index i32.const 6 i32.shl local.set $base
+    i32.const 0 local.set $i
+    i32.const 0 local.set $val_count
+    (block $class_done
+      (loop $class_loop
+        local.get $i local.get $part_count i32.ge_u br_if $class_done
+        local.get $base local.get $i i32.add local.tee $tmp
+        global.get $VORBIS_MAX_PACKET_FLOOR_CLASSES i32.ge_u if global.get $VORBIS_ERR_TOO_MANY_SETUP return end
+        global.get $BSS_FLOOR_PARTITIONS local.get $i i32.const 2 i32.shl i32.add i32.load offset=0 local.tee $class_id
+        local.get $fh global.get $FH_CLASS_COUNT i32.add i32.load offset=0 i32.ge_u if global.get $VORBIS_ERR_BAD_ARCHIVE return end
+        global.get $BSS_PACKET_FLOOR_CLASS_IDS local.get $tmp i32.const 2 i32.shl i32.add local.get $class_id i32.store offset=0
+        global.get $BSS_FLOOR_CLASS_DIMS local.get $class_id i32.const 2 i32.shl i32.add i32.load offset=0 local.tee $dims
+        i32.eqz if global.get $VORBIS_ERR_BAD_ARCHIVE return end
+        global.get $BSS_PACKET_FLOOR_CLASS_DIMS local.get $tmp i32.const 2 i32.shl i32.add local.get $dims i32.store offset=0
+        global.get $BSS_FLOOR_CLASS_SUBBITS local.get $class_id i32.const 2 i32.shl i32.add i32.load offset=0 local.tee $subbits
+        i32.eqz if
+          i32.const 0 local.set $selector
+        else
+          local.get $br
+          global.get $BSS_FLOOR_CLASS_MASTER local.get $class_id i32.const 2 i32.shl i32.add i32.load offset=0
+          i32.const 0
+          call $vorbis_codebook_decode_scalar
+          local.set $selector
+        end
+        global.get $BSS_PACKET_FLOOR_CLASS_SELECTORS local.get $tmp i32.const 2 i32.shl i32.add local.get $selector i32.store offset=0
+        global.get $BSS_PACKET_FLOOR_CLASS_COUNT local.get $packet_index i32.const 2 i32.shl i32.add
+        global.get $BSS_PACKET_FLOOR_CLASS_COUNT local.get $packet_index i32.const 2 i32.shl i32.add i32.load offset=0 i32.const 1 i32.add
+        i32.store offset=0
+        global.get $BSS_LAST_FLOOR_PACKET_CLASS_COUNT
+        global.get $BSS_LAST_FLOOR_PACKET_CLASS_COUNT i32.load offset=0 i32.const 1 i32.add
+        i32.store offset=0
+        i32.const 0 local.set $j
+        (block $val_done
+          (loop $val_loop
+            local.get $j local.get $dims i32.ge_u br_if $val_done
+            global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT i32.load offset=0
+            global.get $VORBIS_MAX_FLOOR_VALUES i32.ge_u if global.get $VORBIS_ERR_TOO_MANY_SETUP return end
+            local.get $packet_index i32.const 9 i32.shl
+            global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT i32.load offset=0 i32.add
+            global.get $VORBIS_MAX_PACKET_FLOOR_VALUES i32.ge_u if global.get $VORBIS_ERR_TOO_MANY_SETUP return end
+            local.get $subbits i32.eqz
+            if
+              i32.const 0 local.set $multi
+            else
+              i32.const 1 local.get $subbits i32.shl i32.const 1 i32.sub
+              local.get $selector i32.and
+              local.tee $multi
+              local.get $subbits i32.shr_u local.set $selector
+            end
+            local.get $class_id i32.const 3 i32.shl local.get $multi i32.or
+            local.tee $multi
+            global.get $VORBIS_MAX_RESIDUE_BOOKS i32.ge_u if global.get $VORBIS_ERR_TOO_MANY_SETUP return end
+            global.get $BSS_FLOOR_CLASS_BOOKS local.get $multi i32.const 2 i32.shl i32.add i32.load offset=0 local.set $multi
+            global.get $BSS_PACKET_FLOOR_VALUE_BOOKS local.get $packet_index i32.const 9 i32.shl global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT i32.load offset=0 i32.add i32.const 2 i32.shl i32.add local.get $multi i32.store offset=0
+            local.get $multi i32.const -1 i32.eq if
+              global.get $BSS_PACKET_FLOOR_VALUES local.get $packet_index i32.const 9 i32.shl global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT i32.load offset=0 i32.add i32.const 2 i32.shl i32.add i32.const 0 i32.store offset=0
+            else
+              local.get $multi global.get $BSS_LAST_CODEBOOK_COUNT i32.load offset=0 i32.ge_u if global.get $VORBIS_ERR_BAD_INDEX return end
+              local.get $br local.get $multi i32.const 0 call $vorbis_codebook_decode_scalar
+              global.get $BSS_PACKET_FLOOR_VALUES local.get $packet_index i32.const 9 i32.shl global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT i32.load offset=0 i32.add i32.const 2 i32.shl i32.add i32.store offset=0
+              global.get $BSS_LAST_FLOOR_PACKET_SCALAR_COUNT
+              global.get $BSS_LAST_FLOOR_PACKET_SCALAR_COUNT i32.load offset=0 i32.const 1 i32.add
+              i32.store offset=0
+            end
+            global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT
+            global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT i32.load offset=0 i32.const 1 i32.add
+            i32.store offset=0
+            local.get $j i32.const 1 i32.add local.set $j
+            br $val_loop
+          )
+        )
+        local.get $i i32.const 1 i32.add local.set $i
+        br $class_loop
+      )
+    )
+    ;; Prepare points
+    local.get $fh global.get $FH_VALUE_COUNT i32.add i32.load offset=0 local.tee $val_count
+    i32.const 2 i32.lt_u if global.get $VORBIS_ERR_BAD_ARCHIVE return end
+    local.get $val_count global.get $VORBIS_MAX_FLOOR_VALUES i32.gt_u if global.get $VORBIS_ERR_TOO_MANY_SETUP return end
+    global.get $BSS_LAST_FLOOR_PACKET_VALUE_COUNT i32.load offset=0 i32.const 2 i32.add
+    local.get $val_count i32.ne if global.get $VORBIS_ERR_BAD_ARCHIVE return end
+    local.get $packet_index i32.const 9 i32.shl local.set $base
+    i32.const 0 local.set $i
+    (block $pt_done
+      (loop $pt_loop
+        local.get $i local.get $val_count i32.ge_u br_if $pt_done
+        local.get $base local.get $i i32.add local.tee $tmp
+        global.get $VORBIS_MAX_PACKET_FLOOR_VALUES i32.ge_u if global.get $VORBIS_ERR_TOO_MANY_SETUP return end
+        global.get $BSS_FLOOR_VALUES local.get $i i32.const 2 i32.shl i32.add i32.load offset=0
+        global.get $BSS_PACKET_FLOOR_POINT_X local.get $tmp i32.const 2 i32.shl i32.add i32.store offset=0
+        local.get $i i32.const 0 i32.eq
+        if (result i32)
+          global.get $BSS_PACKET_FLOOR_Y0 local.get $packet_index i32.const 2 i32.shl i32.add i32.load offset=0
+        else
+          local.get $i i32.const 1 i32.eq
+          if (result i32)
+            global.get $BSS_PACKET_FLOOR_Y1 local.get $packet_index i32.const 2 i32.shl i32.add i32.load offset=0
+          else
+            global.get $BSS_PACKET_FLOOR_VALUES local.get $base local.get $i i32.const 2 i32.sub i32.add i32.const 2 i32.shl i32.add i32.load offset=0
+          end
+        end
+        global.get $BSS_PACKET_FLOOR_POINT_Y local.get $tmp i32.const 2 i32.shl i32.add i32.store offset=0
+        global.get $BSS_PACKET_FLOOR_POINT_ORDER local.get $tmp i32.const 2 i32.shl i32.add local.get $i i32.store offset=0
+        local.get $i i32.const 1 i32.add local.set $i
+        br $pt_loop
+      )
+    )
+    global.get $BSS_PACKET_FLOOR_POINT_COUNT local.get $packet_index i32.const 2 i32.shl i32.add local.get $val_count i32.store offset=0
+    global.get $BSS_LAST_FLOOR_PACKET_POINT_COUNT local.get $val_count i32.store offset=0
+    ;; Bubble sort points by x
+    i32.const 0 local.set $i
+    (block $sort_done
+      (loop $sort_outer
+        local.get $i local.get $val_count i32.ge_u br_if $sort_done
+        local.get $i i32.const 1 i32.add local.set $j
+        (block $sort_inner_done
+          (loop $sort_inner
+            local.get $j local.get $val_count i32.ge_u br_if $sort_inner_done
+            global.get $BSS_PACKET_FLOOR_POINT_ORDER local.get $base local.get $i i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $tmp
+            global.get $BSS_PACKET_FLOOR_POINT_ORDER local.get $base local.get $j i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $k
+            global.get $BSS_PACKET_FLOOR_POINT_X local.get $base local.get $tmp i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $x_a
+            global.get $BSS_PACKET_FLOOR_POINT_X local.get $base local.get $k i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $x_b
+            local.get $x_b local.get $x_a i32.lt_u
+            if
+              global.get $BSS_PACKET_FLOOR_POINT_ORDER local.get $base local.get $i i32.add i32.const 2 i32.shl i32.add local.get $k i32.store offset=0
+              global.get $BSS_PACKET_FLOOR_POINT_ORDER local.get $base local.get $j i32.add i32.const 2 i32.shl i32.add local.get $tmp i32.store offset=0
+            end
+            local.get $j i32.const 1 i32.add local.set $j
+            br $sort_inner
+          )
+        )
+        local.get $i i32.const 1 i32.add local.set $i
+        br $sort_outer
+      )
+    )
+    global.get $BSS_LAST_FLOOR_PACKET_SORTED_COUNT local.get $val_count i32.store offset=0
+    local.get $val_count i32.const 2 i32.lt_u if i32.const 0 return end
+    ;; Build segments
+    i32.const 0 local.set $i
+    (block $seg_done
+      (loop $seg_loop
+        local.get $val_count i32.const 1 i32.sub local.get $i i32.le_u br_if $seg_done
+        global.get $BSS_PACKET_FLOOR_POINT_ORDER local.get $base local.get $i i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $tmp
+        global.get $BSS_PACKET_FLOOR_POINT_ORDER local.get $base local.get $i i32.add i32.const 4 i32.add i32.load offset=0 local.set $k
+        global.get $BSS_PACKET_FLOOR_SEGMENT_X0 local.get $base local.get $i i32.add i32.const 2 i32.shl i32.add
+        global.get $BSS_PACKET_FLOOR_POINT_X local.get $base local.get $tmp i32.add i32.const 2 i32.shl i32.add i32.load offset=0
+        i32.store offset=0
+        global.get $BSS_PACKET_FLOOR_SEGMENT_Y0 local.get $base local.get $i i32.add i32.const 2 i32.shl i32.add
+        global.get $BSS_PACKET_FLOOR_POINT_Y local.get $base local.get $tmp i32.add i32.const 2 i32.shl i32.add i32.load offset=0
+        i32.store offset=0
+        global.get $BSS_PACKET_FLOOR_POINT_X local.get $base local.get $k i32.add i32.const 2 i32.shl i32.add i32.load offset=0
+        global.get $BSS_PACKET_FLOOR_SEGMENT_X1 local.get $base local.get $i i32.add i32.const 2 i32.shl i32.add i32.store offset=0
+        global.get $BSS_PACKET_FLOOR_POINT_Y local.get $base local.get $k i32.add i32.const 2 i32.shl i32.add i32.load offset=0
+        global.get $BSS_PACKET_FLOOR_SEGMENT_Y1 local.get $base local.get $i i32.add i32.const 2 i32.shl i32.add i32.store offset=0
+        local.get $i i32.const 1 i32.add local.set $i
+        br $seg_loop
+      )
+    )
+    global.get $BSS_PACKET_FLOOR_SEGMENT_COUNT local.get $packet_index i32.const 2 i32.shl i32.add local.get $i i32.store offset=0
+    global.get $BSS_LAST_FLOOR_PACKET_SEGMENT_COUNT local.get $i i32.store offset=0
+    i32.const 0
   )
 
   (func (export "vorbis_decode_packet_residue")
@@ -1808,8 +2263,7 @@
     global.get $BSS_PACKET_FLOOR_POINT_X local.get $base local.get $hi i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $x1
     global.get $BSS_PACKET_FLOOR_POINT_Y local.get $base local.get $hi i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $y1
     local.get $x0 local.get $y0 local.get $x1 local.get $y1 local.get $cur_x call $floor1_predict_y local.set $pred
-    local.get $point_index i32.const 2 i32.sub local.get $base i32.add
-    global.get $BSS_PACKET_FLOOR_VALUES i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $val
+    global.get $BSS_PACKET_FLOOR_VALUES local.get $point_index i32.const 2 i32.sub local.get $base i32.add i32.const 2 i32.shl i32.add i32.load offset=0 local.set $val
     local.get $val i32.eqz
     if
       local.get $pred return
@@ -1819,27 +2273,29 @@
     local.get $pred local.set $lowroom
     local.get $yrange local.get $pred i32.sub local.set $highroom
     local.get $lowroom local.get $highroom i32.le_u
-    if
+    if (result i32)
       local.get $lowroom
     else
       local.get $highroom
     end
     i32.const 1 i32.shl local.set $room2
     local.get $val local.get $room2 i32.lt_u
-    if
-      local.get $val i32.const 1 i32.add i32.const 1 i32.shr_u local.set $room2
+    if (result i32)
+      local.get $val i32.const 1 i32.add i32.const 1 i32.shr_u
+      local.tee $room2
+      drop
       local.get $val i32.const 1 i32.and
-      if
-        local.get $pred local.get $room2 i32.sub return
+      if (result i32)
+        local.get $pred local.get $room2 i32.sub
       else
-        local.get $pred local.get $room2 i32.add return
+        local.get $pred local.get $room2 i32.add
       end
     else
       local.get $highroom local.get $lowroom i32.gt_u
-      if
-        local.get $val return
+      if (result i32)
+        local.get $val
       else
-        local.get $yrange local.get $val i32.sub i32.const 1 i32.sub return
+        local.get $yrange local.get $val i32.sub i32.const 1 i32.sub
       end
     end
   )
@@ -1888,7 +2344,7 @@
         if
           global.get $BSS_LAST_RESIDUE_WORK_VECTOR_COUNT local.get $target i32.store offset=0
         end
-        local.get $val i32.eqz
+        local.get $val i32.eqz if
         else
           global.get $BSS_LAST_RESIDUE_WORK_VECTOR_NONZERO
           global.get $BSS_LAST_RESIDUE_WORK_VECTOR_NONZERO i32.load offset=0 i32.const 1 i32.add
@@ -1956,18 +2412,10 @@
         local.get $g i32.mul
         i32.const 15 i32.shr_s
         i32.store offset=0
-        local.get $gain i32.const 0 i32.lt_s if i32.const 0 local.set $gain end
-        local.get $gain i32.const 255 i32.gt_s if i32.const 255 local.set $gain end
-        global.get $BSS_FLOOR_GAIN_Q15 local.get $gain i32.const 1 i32.shl i32.add i32.load16_u local.set $g
-        global.get $BSS_MDCT_INPUT_Q15 local.get $i i32.const 2 i32.shl i32.add
-        global.get $BSS_MDCT_INPUT_Q15 local.get $i i32.const 2 i32.shl i32.add i32.load offset=0
-        local.get $g i32.mul
-        i32.const 15 i32.shr_s
-        i32.store offset=0
         global.get $BSS_LAST_FLOOR_APPLY_COUNT
         global.get $BSS_LAST_FLOOR_APPLY_COUNT i32.load offset=0 i32.const 1 i32.add
         i32.store offset=0
-        local.get $val i32.eqz
+        local.get $val i32.eqz if
         else
           global.get $BSS_LAST_FLOOR_APPLY_NONZERO
           global.get $BSS_LAST_FLOOR_APPLY_NONZERO i32.load offset=0 i32.const 1 i32.add
@@ -2090,7 +2538,7 @@
         br $samp_loop
       )
     )
-    i32.const 0
+    i32.const 0 return
   )
 
   (func (export "vorbis_publish_floor_residue_pcm")
@@ -2122,16 +2570,189 @@
     i32.const 0
   )
 
-  (func (export "vorbis_synthesize_mdct_window_pcm")
+  (func $vorbis_synthesize_mdct_window_pcm (export "vorbis_synthesize_mdct_window_pcm")
     (param $sample i32) (result i32)
-    global.get $VORBIS_ERR_TODO_DECODE
+    (local $packet_idx i32) (local $frame_cursor i32) (local $block_size i32) (local $half i32)
+    (local $i i32) (local $val i32) (local $frame_count i32) (local $packet_count i32)
+    (local $synth_nonzero i32) (local $overlap_nonzero i32) (local $synth_packets i32)
+    global.get $BSS_LAST_MDCT_SYNTH_PACKETS i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_FRAMES i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_NONZERO i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_OVERLAP_NONZERO i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_IMDCT_KERNEL_BINS i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_IMDCT_KERNEL_SAMPLES i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_IMDCT_KERNEL_CROSS_TERMS i32.const 0 i32.store offset=0
+    global.get $BSS_LAST_FLOOR_RESIDUE_PCM_STATUS global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+    global.get $BSS_LAST_FLOOR_RESIDUE_PCM_FRAMES i32.const 0 i32.store offset=0
+    local.get $sample global.get $SS_FRAME_COUNT i32.add i32.load offset=0
+    local.tee $frame_count
+    i32.const 0 i32.le_s
+    if
+      global.get $VORBIS_ERR_BAD_ARCHIVE
+      global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+      global.get $VORBIS_ERR_BAD_ARCHIVE return
+    end
+    local.get $frame_count global.get $VORBIS_MAX_PCM_FRAMES i32.gt_u
+    if
+      global.get $VORBIS_ERR_PCM_TOO_LARGE
+      global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+      global.get $VORBIS_ERR_PCM_TOO_LARGE return
+    end
+    local.get $sample global.get $SS_PACKET_COUNT i32.add i32.load offset=0
+    local.tee $packet_count
+    i32.eqz
+    if
+      global.get $VORBIS_ERR_BAD_ARCHIVE
+      global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+      global.get $VORBIS_ERR_BAD_ARCHIVE return
+    end
+    local.get $packet_count global.get $BSS_LAST_PACKET_COUNT i32.load offset=0
+    i32.ne
+    if
+      global.get $VORBIS_ERR_BAD_ARCHIVE
+      global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+      global.get $VORBIS_ERR_BAD_ARCHIVE return
+    end
+    i32.const 0 local.set $i
+    (block $zero_pcm_done
+      (loop $zero_pcm_loop
+        local.get $i global.get $VORBIS_MAX_PCM_FRAMES i32.ge_u br_if $zero_pcm_done
+        global.get $BSS_MDCT_SYNTH_PCM local.get $i i32.const 1 i32.shl i32.add i32.const 0 i32.store16 offset=0
+        local.get $i i32.const 1 i32.add local.set $i
+        br $zero_pcm_loop
+      )
+    )
+    i32.const 0 local.set $i
+    (block $zero_overlap_done
+      (loop $zero_overlap_loop
+        local.get $i global.get $VORBIS_MAX_OVERLAP_FRAMES i32.ge_u br_if $zero_overlap_done
+        global.get $BSS_OVERLAP_Q15 local.get $i i32.const 2 i32.shl i32.add i32.const 0 i32.store offset=0
+        local.get $i i32.const 1 i32.add local.set $i
+        br $zero_overlap_loop
+      )
+    )
+    i32.const 0 local.set $packet_idx
+    i32.const 0 local.set $frame_cursor
+    i32.const 0 local.set $synth_nonzero
+    i32.const 0 local.set $overlap_nonzero
+    i32.const 0 local.set $synth_packets
+    (block $publish
+      (loop $packet_loop
+        local.get $packet_idx local.get $packet_count i32.ge_u br_if $publish
+        local.get $frame_cursor local.get $frame_count i32.ge_u br_if $publish
+        local.get $packet_idx call $vorbis_build_residue_work_vector_q15
+        local.tee $val
+        if
+          global.get $BSS_LAST_MDCT_SYNTH_STATUS local.get $val i32.store offset=0
+          local.get $val return
+        end
+        local.get $packet_idx call $vorbis_apply_floor_curve_to_residue_q15
+        local.tee $val
+        if
+          global.get $BSS_LAST_MDCT_SYNTH_STATUS local.get $val i32.store offset=0
+          local.get $val return
+        end
+        global.get $BSS_PACKET_BLOCK_SIZES local.get $packet_idx i32.const 2 i32.shl i32.add i32.load offset=0
+        local.tee $block_size
+        i32.eqz
+        if
+          global.get $VORBIS_ERR_BAD_ARCHIVE
+          global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+          global.get $VORBIS_ERR_BAD_ARCHIVE return
+        end
+        local.get $block_size global.get $VORBIS_MAX_BLOCK_SIZE i32.gt_u
+        if
+          global.get $VORBIS_ERR_TOO_MANY_SETUP
+          global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+          global.get $VORBIS_ERR_TOO_MANY_SETUP return
+        end
+        local.get $block_size i32.const 1 i32.shr_u
+        local.tee $half
+        global.get $VORBIS_MAX_OVERLAP_FRAMES i32.gt_u
+        if
+          global.get $VORBIS_ERR_TOO_MANY_SETUP
+          global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+          global.get $VORBIS_ERR_TOO_MANY_SETUP return
+        end
+        local.get $packet_idx local.get $block_size call $vorbis_build_packet_window_q15
+        local.tee $val
+        if
+          global.get $BSS_LAST_MDCT_SYNTH_STATUS local.get $val i32.store offset=0
+          local.get $val return
+        end
+        local.get $block_size call $vorbis_run_owned_lapped_transform_q15
+        local.tee $val
+        if
+          global.get $BSS_LAST_MDCT_SYNTH_STATUS local.get $val i32.store offset=0
+          local.get $val return
+        end
+        i32.const 0 local.set $i
+        (block $save_overlap
+          (loop $left_loop
+            local.get $i local.get $half i32.ge_u br_if $save_overlap
+            local.get $frame_cursor local.get $frame_count i32.ge_u br_if $save_overlap
+            global.get $BSS_MDCT_OUTPUT_Q15 local.get $i i32.const 2 i32.shl i32.add i32.load offset=0
+            global.get $BSS_OVERLAP_Q15 local.get $i i32.const 2 i32.shl i32.add i32.load offset=0
+            i32.add
+            local.tee $val
+            i32.const 32767 i32.gt_s if i32.const 32767 local.set $val end
+            local.get $val i32.const -32768 i32.lt_s if i32.const -32768 local.set $val end
+            global.get $BSS_MDCT_SYNTH_PCM local.get $frame_cursor i32.const 1 i32.shl i32.add local.get $val i32.store16 offset=0
+            local.get $val i32.eqz if else
+              local.get $synth_nonzero i32.const 1 i32.add local.set $synth_nonzero
+            end
+            local.get $frame_cursor i32.const 1 i32.add local.set $frame_cursor
+            local.get $i i32.const 1 i32.add local.set $i
+            br $left_loop
+          )
+        )
+        i32.const 0 local.set $i
+        (block $next_packet
+          (loop $overlap_loop
+            local.get $i local.get $half i32.ge_u br_if $next_packet
+            global.get $BSS_MDCT_OUTPUT_Q15 local.get $half local.get $i i32.add i32.const 2 i32.shl i32.add i32.load offset=0
+            local.tee $val
+            global.get $BSS_OVERLAP_Q15 local.get $i i32.const 2 i32.shl i32.add i32.store offset=0
+            local.get $val i32.eqz if else
+              local.get $overlap_nonzero i32.const 1 i32.add local.set $overlap_nonzero
+            end
+            local.get $i i32.const 1 i32.add local.set $i
+            br $overlap_loop
+          )
+        )
+        local.get $synth_packets i32.const 1 i32.add local.set $synth_packets
+        local.get $packet_idx i32.const 1 i32.add local.set $packet_idx
+        br $packet_loop
+      )
+    )
+    local.get $frame_cursor i32.eqz
+    if
+      global.get $VORBIS_ERR_BAD_ARCHIVE
+      global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.store offset=0
+      global.get $VORBIS_ERR_BAD_ARCHIVE return
+    end
+    (block $publish_ready
+      (loop $tail_loop
+        local.get $frame_cursor local.get $frame_count i32.ge_u br_if $publish_ready
+        global.get $BSS_MDCT_SYNTH_PCM local.get $frame_cursor i32.const 1 i32.shl i32.add i32.const 0 i32.store16 offset=0
+        local.get $frame_cursor i32.const 1 i32.add local.set $frame_cursor
+        br $tail_loop
+      )
+    )
+    local.get $sample global.get $SS_PCM_PTR i32.add global.get $BSS_MDCT_SYNTH_PCM i64.extend_i32_u i64.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_FRAMES local.get $frame_count i32.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_PACKETS local.get $synth_packets i32.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_NONZERO local.get $synth_nonzero i32.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_OVERLAP_NONZERO local.get $overlap_nonzero i32.store offset=0
+    global.get $BSS_LAST_MDCT_SYNTH_STATUS i32.const 0 i32.store offset=0
+    i32.const 0
   )
 
   (func (export "vorbis_decode_sample_archive")
     (param $data i32) (param $len i32) (param $sample i32) (param $setup i32) (result i32)
     (local $cursor_ptr i32) (local $cursor i32) (local $val i32) (local $br i32)
     (local $i i32) (local $packet_ptr i32) (local $packet_len i32)
-    (local $frame_count i32)
+    (local $frame_count i32) (local $res i32)
     local.get $sample call $vorbis_setup_init
     global.get $BSS_BITREADER local.set $br
     i32.const 0 local.set $cursor
@@ -2192,9 +2813,36 @@
         br $pkt_loop
       )
     )
-    ;; For now, return ok without decoding packet headers
-    local.get $sample global.get $SS_DECODE_STATUS i32.add i32.const 0 i32.store offset=0
-    local.get $sample global.get $SS_PCM_PTR i32.add i64.const 0 i64.store offset=0
+    ;; Decode packet headers (sample, setup)
+    local.get $sample local.get $setup call $vorbis_decode_sample_packets
+    local.tee $res
+    if
+      local.get $sample global.get $SS_DECODE_STATUS i32.add local.get $res i32.store offset=0
+      global.get $BSS_LAST_PCM_STATUS local.get $res i32.store offset=0
+      local.get $res return
+    end
+    ;; Try silence path
+    local.get $sample call $vorbis_publish_silence_if_all_floor_false
+    if
+      ;; Non-silent: try MDCT synthesis
+      local.get $sample call $vorbis_synthesize_mdct_window_pcm
+      if
+        ;; Non-silent fail-closed
+        local.get $sample global.get $SS_PCM_PTR i32.add i64.const 0 i64.store offset=0
+        local.get $sample global.get $SS_DECODE_STATUS i32.add global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+        global.get $BSS_LAST_PCM_STATUS global.get $VORBIS_ERR_TODO_DECODE i32.store offset=0
+      else
+        ;; Non-silent success
+        local.get $sample global.get $SS_DECODE_STATUS i32.add i32.const 0 i32.store offset=0
+        global.get $BSS_LAST_PCM_STATUS i32.const 0 i32.store offset=0
+      end
+    else
+      ;; Silence success
+      local.get $sample global.get $SS_DECODE_STATUS i32.add i32.const 0 i32.store offset=0
+      global.get $BSS_LAST_PCM_STATUS i32.const 0 i32.store offset=0
+    end
+    ;; Publish rawsound (even on fail-closed)
+    local.get $sample call $vorbis_publish_rawsound
     i32.const 0
   )
 

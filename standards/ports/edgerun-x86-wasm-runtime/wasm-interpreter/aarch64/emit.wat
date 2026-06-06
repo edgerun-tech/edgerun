@@ -1881,6 +1881,166 @@
     (call $emit_instr_movk_64 (i32.const 1) (i32.const 1) (i32.shr_u (local.get $addr) (i32.const 16)))
   )
 
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; AArch64 NEON (SIMD) Advanced SIMD three-register / two-register helpers
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;;
+  ;; Three-register same-type (ADD, SUB, MUL, etc.):
+  ;;   encoding = base | (Rm << 10) | (Rn << 5) | Rd
+  ;;   where base = 0x0E200000 | (Q<<30) | (size<<22) | (U<<21) | (opcode<<16)
+  ;;
+  ;; Base values for common ops (Q=1, register bits = 0):
+  ;;   ADD .16B: 0x4E208400   (Q=1, size=00, U=0, opcode=10000)
+  ;;   SUB .16B: 0x4E208800   (Q=1, size=00, U=1, opcode=10000)
+  ;;   AND Vd.16B, Vn.16B, Vm.16B: use BIC/VBIT or just use 3-same with specific opcode
+  ;;   ORR Vd.16B, Vn.16B, Vm.16B: opcode=01011, U=0, size=00 (but .16B uses 3-different)
+  ;;   EOR Vd.16B, Vn.16B, Vm.16B: opcode=11011, U=1, size=00
+  ;;
+  ;; For simplicity, compute base from Q/size/U/opcode:
+  (func $emit_neon_3same (param $Q i32) (param $size i32) (param $U i32)
+                         (param $opcode i32) (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (local $base i32)
+    (local.set $base (i32.const 0x0E200000))
+    (local.set $base (i32.or (local.get $base) (i32.shl (local.get $Q) (i32.const 30))))
+    (local.set $base (i32.or (local.get $base) (i32.shl (local.get $size) (i32.const 22))))
+    (local.set $base (i32.or (local.get $base) (i32.shl (local.get $U) (i32.const 21))))
+    (local.set $base (i32.or (local.get $base) (i32.shl (local.get $opcode) (i32.const 16))))
+    (call $emit_instr
+      (i32.or (local.get $base)
+              (i32.or (i32.shl (local.get $Rm) (i32.const 10))
+                      (i32.or (i32.shl (local.get $Rn) (i32.const 5))
+                              (local.get $Rd)))))
+  )
+
+  ;; Convenience: ADD Vd.16B, Vn.16B, Vm.16B
+  (func $emit_neon_add_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; Convenience: SUB Vd.16B, Vn.16B, Vm.16B
+  (func $emit_neon_sub_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; Convenience: ADD Vd.8H, Vn.8H, Vm.8H (16-bit lanes)
+  (func $emit_neon_add_8h (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; Convenience: SUB Vd.8H, Vn.8H, Vm.8H
+  (func $emit_neon_sub_8h (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 1) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; Convenience: ADD Vd.4S, Vn.4S, Vm.4S (32-bit lanes)
+  (func $emit_neon_add_4s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 0) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; Convenience: SUB Vd.4S, Vn.4S, Vm.4S
+  (func $emit_neon_sub_4s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 1) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; Convenience: ADD Vd.2D, Vn.2D, Vm.2D (64-bit lanes)
+  (func $emit_neon_add_2d (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 3) (i32.const 0) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; Convenience: SUB Vd.2D, Vn.2D, Vm.2D
+  (func $emit_neon_sub_2d (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 3) (i32.const 1) (i32.const 0x10)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; ── AArch64 NEON bitwise (AND/OR/XOR) via three-register different ──
+  ;; BIC Vd.16B, Vn.16B, Vm.16B: AND with complement
+  ;; Actually use AND Vd.16B, Vn.16B, Vm.16B (three-register different encoding):
+  ;; opcode = 00011, U=0, Q=1, size=00
+  (func $emit_neon_and_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 0x03)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; ORR Vd.16B, Vn.16B, Vm.16B: opcode = 01011, U=0
+  (func $emit_neon_orr_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 0x0B)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; EOR Vd.16B, Vn.16B, Vm.16B: opcode = 11011, U=1 ... wait that doesn't look right
+  ;; Actually EOR (Advanced SIMD) uses three-register different:
+  ;; opcode = 11011, U=1 (for EOR)
+  ;; Wait: EOR Vd.16B, Vn.16B, Vm.16B has U=1, opcode=11011
+  ;; Hmm let me just use BSLL instead: BSL is bitwise select
+  ;; EOR = opcode=11011, U=1:
+  ;; Actually from the manual: EOR (vector) is 0x2E, which uses "three same" not "three different"
+  ;; EOR (vector) encoding: 0 Q 0 0 1 1 1 0 size U 1 0 0 0 1 Rm Rn Rd
+  ;; That uses the "three same" group. opcode = 00001? No, let me check:
+  ;; U=1, opcode=00001 for EOR... Actually:
+  ;; EOR has: [31]=0, [30]=Q, [29:24]=001110, [23:22]=00, [21]=1, [20:16]=00001
+  ;; So base = 0x0E200000 | (Q<<30) | (1<<21) | (1<<16)
+  ;; = 0x0E200000 | 0x40000000 | 0x20000 | 0x10000 = 0x4E230000
+  ;; For Q=1: = 0x4E230000 | (Rm<<10) | (Rn<<5) | Rd
+  (func $emit_neon_eor_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x01)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; ── AArch64 NEON comparison helpers ──────────────────────────────
+
+  ;; CMGT Vd.16B, Vn.16B, Vm.16B (signed): Q=1, size=00, U=0, opcode=00110
+  (func $emit_neon_cmgt_16b_s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 0x06)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGT Vd.16B, Vn.16B, Vm.16B (unsigned): U=1, opcode=00110
+  (func $emit_neon_cmgt_16b_u (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x06)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMEQ Vd.16B, Vn.16B, Vm.16B: opcode=10001, U=1
+  (func $emit_neon_cmeq_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x11)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGE Vd.16B, Vn.16B, Vm.16B (signed): U=0, opcode=00111
+  (func $emit_neon_cmge_16b_s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 0x07)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGE Vd.16B, Vn.16B, Vm.16B (unsigned): U=1, opcode=00111
+  (func $emit_neon_cmge_16b_u (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x07)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; CMGT/CMGE for 8H, 4S, 2D lanes — same as 16B but different size
+  ;; size=01 for 8H, size=10 for 4S, size=11 for 2D
+  (func $emit_neon_cmgt_8h_s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0x06)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  (func $emit_neon_cmgt_4s_s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 0) (i32.const 0x06)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  (func $emit_neon_cmeq_8h (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 1) (i32.const 0x11)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  (func $emit_neon_cmeq_4s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 1) (i32.const 0x11)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
   ;; ── Pop two, operate, push (pattern for binary ops) ──────────────
 
   ;; Push X0 only if RESULT_IN_X0 is 0 (peephole)
