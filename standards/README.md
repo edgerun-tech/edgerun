@@ -58,6 +58,14 @@ standards/
       conformance.wit
     manifests/
       component.toml
+  build/
+    wasm/
+      app-primitives/
+      codec-primitives/
+  ports/
+    edgerun-x86-wasm-runtime/
+  runners/
+    edgerun-x86-wasm-runtime-smoke.js
   registries/
     iana/
       README.md
@@ -149,6 +157,24 @@ cargo test -p edgerun-sdk --features standards-seed standards_seed::tests::inval
 When a `check` runner is reintroduced, it should compile the program, validate
 the WASM modules, run the corpus with the Rust core, and verify that the
 explicit requirement/severity signatures match.
+
+## Native WAT Runtime Port
+
+`ports/edgerun-x86-wasm-runtime` vendors the ER-owned x86_64 WASM runtime from
+the metal tree so WAT app/runtime checks can run without using Node's
+WebAssembly engine as the execution authority. The smoke runner is:
+
+```bash
+node standards/runners/edgerun-x86-wasm-runtime-smoke.js
+```
+
+The runner keeps untrusted app WAT on the strict app ABI path and uses trusted
+native loads only for internal primitives that are not app modules. Current Tor
+coverage is real-code backed: circuit cells are serialized by
+`tor-cell-codec.wat`, and hidden-service fetch/publish/frame/state artifacts are
+produced by `tor-library.wat`. Harness code may choose local identities,
+payload sizes, and receipts, but protocol bytes and hidden-service state must
+come from WAT primitives.
 
 ## Requirement Status
 

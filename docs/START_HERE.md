@@ -15,13 +15,22 @@ buffers, while the browser page is only a JavaScript/WebGL byte bridge.
   showcase, shell/workspace surfaces, packed scene buffers, and host contracts.
 - `crates/node/edgerun-docs-ui-web`: the GitHub Pages WASM host for the public
   docs and shadcn showcase.
+- `docs/app-runtime-invariants.md`: app identity, release/developer mode,
+  preallocated memory and storage, child apps, object requirements, logical
+  clocks, append-only event logs, and derived query backends.
+- `standards/ports/edgerun-x86-wasm-runtime`: native x86 WASM runtime port for
+  WAT app/runtime smoke tests, including codec-backed local Tor circuit checks
+  and WAT-backed hidden-service state checks.
+- `standards/build/wasm/app-primitives/tor-wat`: real Tor WAT primitives used by
+  the runtime smoke path.
 
 ## Current Status
 
 This is not production infrastructure. The strongest implemented area is the
 `edgerun-work` proof/admission/settlement model and the shared `edgerun-ui-core`
-scene/component system. Many runtime, storage, compute, payment, and deployment
-paths are still experimental.
+scene/component system. The WAT app-runtime path is experimental but now has a
+native x86 smoke runner and real Tor WAT primitive coverage. Many runtime,
+storage, compute, payment, and deployment paths are still experimental.
 
 ## Useful Checks
 
@@ -29,6 +38,7 @@ paths are still experimental.
 rustup run stable cargo check -p edgerun-docs-ui-web --target wasm32-unknown-unknown
 rustup run stable cargo test -p edgerun-ui-core
 rustup run stable cargo test -p edgerun-work
+node standards/runners/edgerun-x86-wasm-runtime-smoke.js
 ```
 
 The repository also contains a local `./cargo` shim. If that shim cannot

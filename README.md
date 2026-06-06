@@ -63,6 +63,9 @@ Notable repository areas:
 - local compatibility crates under `crates/utility/*` to keep the project less
   dependent on third-party package availability;
 - device and firmware bring-up notes under `devices/` and `firmware/`;
+- WAT/WASM app-runtime and Tor primitive work under `standards/ports/` and
+  `standards/build/wasm/app-primitives/`, including a native x86 WASM runtime
+  smoke path that executes real Tor cell and hidden-service WAT primitives;
 - public example deployment templates under `deploy/server/`.
 
 ### `edgerun-work`

@@ -6,6 +6,13 @@ capability packets, receipts, and settlement evidence. `edgerun-wire` is the
 rkyv ABI boundary. UI, storage, services, SDKs, hardware adapters, and protocol
 parsers are projections or adapters around those records.
 
+The app runtime resource and data invariants are captured in
+`docs/app-runtime-invariants.md`: app identity is the hash of canonical WASM
+bytes with an embedded manifest; release and developer modes are different app
+identities; memory and storage are user-granted preallocated resources; storage
+writes are kernel-queued intents; data carries object requirements; and
+append-only event logs remain the canonical storage authority.
+
 `edgerun-core` is legacy protocol material until its still-useful records are
 migrated into `edgerun-wire`, `edgerun-work`, storage-local audit records, or
 domain crates. New authority semantics should not be added there.
@@ -13,6 +20,15 @@ domain crates. New authority semantics should not be added there.
 External standards such as HTTP, DNS, TLS, QUIC, OCI, HPACK, QPACK, JSON, DHCP,
 NFC, TPM, and device protocols are implementation domains, not alternate
 EdgeRun authority or wire protocols.
+
+The WAT app-runtime path under `standards/ports/edgerun-x86-wasm-runtime`
+exercises this boundary with the ER-owned native x86 WASM runtime. App fixtures
+use the strict untrusted ABI path; internal Tor primitives use trusted native
+loads. Local Tor harness code may choose identities, sealed payload sizes, and
+receipt metadata, but Tor cell bytes and hidden-service protocol artifacts come
+from real WAT primitives (`tor-cell-codec.wat` and `tor-library.wat`), and
+hidden-service delivery is validated by hashing WAT-owned contact/message state
+from module memory.
 
 ## Authority flow
 
@@ -173,14 +189,13 @@ storage, memory for tests, or a remote object provider such as Google Drive,
 GitHub, S3, or another Edgerun node. Apps see `object.get` and `object.put`;
 admission and provider binding decide where the objects live.
 
-Network access is also a capability binding. `RuntimeAppInstall.declared_routes`
-declares which HTTP routes an app can serve, but that declaration does not
-authorize network exposure. Activating a route requires a matching
-`RuntimeNetworkBinding` backed by a `RuntimeCapabilityGrant` and admitted route.
-Apps request
-scoped fetch, socket, HTTP route, or node-message capability. The runtime binds
-that request to an origin, method set, protocol, provider identity, and eventual
-admission route. Raw network is not ambient app authority.
+Network access is also a capability binding. Apps do not receive raw IP, DNS,
+port, socket, or raw TLS authority. Inbound app service is modeled as an
+identity-routed hidden service; outbound app communication is a sealed message
+to an identity. Activating a route requires a matching `RuntimeNetworkBinding`
+backed by a `RuntimeCapabilityGrant` and admitted route. TLS can be requested as
+an explicit capability on an identity route, but it does not replace sealing,
+identity routing, or admitted work. Raw network is not ambient app authority.
 
 Live sessions are intentionally separate from grants. A grant may survive app
 restart or profile unlock, but `RuntimeCapabilitySession` is short-lived and

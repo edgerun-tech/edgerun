@@ -1,0 +1,10 @@
+(module
+  (type (;0;) (func (result i32)))
+  (func (;0;) (type 0) (result i32) i32.const 0)
+  (func (;1;) (type 0) (result i32) i32.const 300224)
+  (memory (;0;) 17)
+  (global (;0;) (mut i32) (i32.const 1048576))
+  (export "memory" (memory 0))
+  (export "f0" (func 0))
+  (export "proto_standard_id" (func 1))
+)

@@ -19,6 +19,18 @@ Current executable coverage:
 - Relay BEGIN cell builder for IPv4:port streams.
 - HSDir publish/fetch HTTP request builders.
 - Base64/base32 helpers used by hidden-service descriptors.
+- Hidden-service descriptor armor.
+- Hidden-service app contact/message frame builders.
+- Hidden-service frame handling, contact/message counts, state pointers, and
+  WAT-owned contact/message state records.
 
-Crypto and the complete live network state machines are being ported as
-separate slices before final integration.
+The native smoke path in
+`standards/ports/edgerun-x86-wasm-runtime` runs these exports through trusted
+x86 WASM calls. Local harness code may choose identities and sealed payload
+sizes, but HSDir bytes, descriptor armor, frame bytes, and persisted
+contact/message state are produced by this WAT module and hashed from module
+memory.
+
+Full crypto and live network state machines are still being ported as separate
+slices before final integration. Do not add placeholder Tor behavior beside
+these WAT primitives; expand the existing exports and native smoke coverage.

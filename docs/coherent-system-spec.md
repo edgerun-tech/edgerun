@@ -45,7 +45,7 @@ These are core concepts that should survive into the minimal workspace.
 | Capability envelope | `edgerun-work::capability_packet` | Generic request/invoke/event/close packet for devices, storage, network, render, input, object, and app capabilities. |
 | Runtime capability grant | `edgerun-wire::RuntimeCapabilityGrant` | User/profile/app/release scoped grant. |
 | Storage binding | `edgerun-wire::RuntimeStorageBinding` | Runtime binding from app namespace to provider capability. |
-| Network binding | `edgerun-wire::RuntimeNetworkBinding` | Runtime binding from app route/fetch/socket scope to provider capability. |
+| Network binding | `edgerun-wire::RuntimeNetworkBinding` | Runtime binding from app identity-route, hidden-service, or explicit TLS-on-identity-route scope to provider capability. |
 | Capability session | `edgerun-wire::RuntimeCapabilitySession` | Short-lived live use of a grant bound to admission and route commitment. |
 | Runtime event | `edgerun-wire::RuntimeEvent`, `edgerun-storage` | Append-only audit/projection event, optionally bound to admitted work evidence. |
 | App manifest/package | `edgerun-wire::AppManifestRecord`, `edgerun-browser-authoring` staged from `edgerun-sdk::browser_authoring`, `package` | Signed content-addressed runnable app record. |
@@ -245,8 +245,10 @@ The current SDK can project a verified package into `RuntimeAppInstall`,
 Run once and Verify & cache make the verified app runnable, while Cancel records
 the user decision without granting app runtime authority.
 
-The app manifest declares possible routes, storage namespaces, and capabilities.
-It does not grant itself authority.
+The app manifest declares possible identity routes, hidden-service intent
+shapes, storage namespaces, and capabilities. It does not grant itself
+authority. `declared_routes` in package metadata does not mean raw HTTP routes,
+listen ports, DNS names, or sockets.
 
 ### Capability Model
 
@@ -273,7 +275,8 @@ Examples:
 
 - object storage: `object.get`, `object.put`, `object.delete`
 - camera/microphone/speaker/display/input: stream and event operations
-- network: scoped fetch, socket, HTTP route, node message
+- network: identity-routed message, hidden-service ingress, explicit TLS on an
+  identity route
 - app-to-app: routed app message
 - Trust Container: sign, verify, seal, unseal, decrypt
 
@@ -1231,7 +1234,8 @@ proof -> RuntimeEvent`.
 - Native hardware signing requirement.
 - Relay payment settlement.
 - OCI app runtime.
-- Full HTTP/DNS/SMTP/IMAP/TLS support.
+- Full external HTTP/DNS/SMTP/IMAP/TLS adapters outside the app-visible
+  identity-routed network model.
 - Linux device adapters.
 - Codex agent UI integration.
 - Cross-device high availability.
