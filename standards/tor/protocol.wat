@@ -170,9 +170,6 @@
       (i32.shl (i32.load8_u (local.get $p)) (i32.const 8))
       (i32.load8_u offset=1 (local.get $p))))
 
-  (func $m25put_u16be (param $p i32) (param $v i32)
-    (i32.store8 (local.get $p) (i32.shr_u (local.get $v) (i32.const 8)))
-    (i32.store8 offset=1 (local.get $p) (local.get $v)))
 
   (func $addr_add (param $base i32) (param $off i32) (result i32)
     (i32.add (local.get $base) (local.get $off)))
@@ -372,9 +369,9 @@
     (if (i32.eqz (local.get $out_cell)) (then (return (global.get $ERR_INVALID_PARAM))))
     (memory.fill (local.get $out_cell) (i32.const 0) (i32.const 9))
     (i32.store8 offset=2 (local.get $out_cell) (global.get $TOR_CELL_VERSIONS))
-    (call $m25put_u16be (i32.add (local.get $out_cell) (i32.const 3)) (i32.const 4))
-    (call $m25put_u16be (i32.add (local.get $out_cell) (i32.const 5)) (global.get $TOR_LINK_V4))
-    (call $m25put_u16be (i32.add (local.get $out_cell) (i32.const 7)) (global.get $TOR_LINK_V5))
+    (call $store_u16_be (i32.add (local.get $out_cell) (i32.const 3)) (i32.const 4))
+    (call $store_u16_be (i32.add (local.get $out_cell) (i32.const 5)) (global.get $TOR_LINK_V4))
+    (call $store_u16_be (i32.add (local.get $out_cell) (i32.const 7)) (global.get $TOR_LINK_V5))
     (i32.const 9))
 
   (func $parse_versions (export "parse_versions") (param $cell i32) (param $len i32) (result i32)
@@ -433,7 +430,7 @@
       (then (return (global.get $ERR_INVALID_PARAM))))
     (i32.store (local.get $out_cell) (local.get $circ_id))
     (i32.store8 offset=4 (local.get $out_cell) (local.get $cmd))
-    (call $m25put_u16be (i32.add (local.get $out_cell) (i32.const 5)) (local.get $data_len))
+    (call $store_u16_be (i32.add (local.get $out_cell) (i32.const 5)) (local.get $data_len))
     (if (local.get $data_len)
       (then (memory.copy (i32.add (local.get $out_cell) (i32.const 7)) (local.get $data) (local.get $data_len))))
     (i32.add (global.get $TOR_CELL_VAR_HEADER) (local.get $data_len)))
@@ -519,7 +516,7 @@
     (i32.store16 offset=1 (local.get $out_payload) (i32.const 0))
     (i32.store16 offset=3 (local.get $out_payload) (local.get $stream_id))
     (i32.store offset=5 (local.get $out_payload) (i32.const 0))
-    (call $m25put_u16be (i32.add (local.get $out_payload) (global.get $m25TOR_RELAY_LEN)) (local.get $data_len))
+    (call $store_u16_be (i32.add (local.get $out_payload) (global.get $m25TOR_RELAY_LEN)) (local.get $data_len))
     (if (local.get $data_len)
       (then
         (memory.copy
@@ -564,8 +561,8 @@
       (then (return (global.get $ERR_TOR_PROTOCOL))))
     (if (i32.eqz (local.get $handshake)) (then (return (global.get $ERR_INVALID_PARAM))))
     (drop (call $m25build_fixed_cell (local.get $out_cell) (local.get $circ_id) (global.get $m25TOR_CELL_CREATE2)))
-    (call $m25put_u16be (i32.add (local.get $out_cell) (global.get $m25TOR_CELL_PAYLOAD)) (i32.const 2))
-    (call $m25put_u16be (i32.add (i32.add (local.get $out_cell) (global.get $m25TOR_CELL_PAYLOAD)) (i32.const 2)) (local.get $handshake_len))
+    (call $store_u16_be (i32.add (local.get $out_cell) (global.get $m25TOR_CELL_PAYLOAD)) (i32.const 2))
+    (call $store_u16_be (i32.add (i32.add (local.get $out_cell) (global.get $m25TOR_CELL_PAYLOAD)) (i32.const 2)) (local.get $handshake_len))
     (memory.copy
       (i32.add (i32.add (local.get $out_cell) (global.get $m25TOR_CELL_PAYLOAD)) (i32.const 4))
       (local.get $handshake)
@@ -609,8 +606,8 @@
     (i32.store8 offset=9 (local.get $out_body) (i32.const 2))
     (i32.store8 offset=10 (local.get $out_body) (i32.const 20))
     (memory.copy (i32.add (local.get $out_body) (i32.const 11)) (local.get $node_id20) (i32.const 20))
-    (call $m25put_u16be (i32.add (local.get $out_body) (i32.const 31)) (i32.const 2))
-    (call $m25put_u16be (i32.add (local.get $out_body) (i32.const 33)) (global.get $TOR_NTOR_CLIENT_HANDSHAKE_LEN))
+    (call $store_u16_be (i32.add (local.get $out_body) (i32.const 31)) (i32.const 2))
+    (call $store_u16_be (i32.add (local.get $out_body) (i32.const 33)) (global.get $TOR_NTOR_CLIENT_HANDSHAKE_LEN))
     (memory.copy (i32.add (local.get $out_body) (i32.const 35)) (local.get $handshake84) (global.get $TOR_NTOR_CLIENT_HANDSHAKE_LEN))
     (i32.const 119))
 

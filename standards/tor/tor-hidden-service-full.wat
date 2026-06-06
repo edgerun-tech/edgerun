@@ -58,9 +58,6 @@
       (i32.and (i32.ge_u (local.get $c) (i32.const 97)) (i32.le_u (local.get $c) (i32.const 122)))
       (i32.and (i32.ge_u (local.get $c) (i32.const 50)) (i32.le_u (local.get $c) (i32.const 55)))))
 
-  (func $m11put_u16be (param $p i32) (param $v i32)
-    (i32.store8 (local.get $p) (i32.shr_u (local.get $v) (i32.const 8)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 1)) (local.get $v)))
 
   (func $put_u32le (param $p i32) (param $v i32)
     (i32.store (local.get $p) (local.get $v)))

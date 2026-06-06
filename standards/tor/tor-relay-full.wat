@@ -84,20 +84,8 @@
   ;; 240 last_action, 244 last_cmd, 248 last_stream, 252 last_len,
   ;; 256 forward_digest20, 288 backward_digest20.
 
-  (func $m23u16be (param $p i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $p)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $p) (i32.const 1)))))
 
-  (func $m23put_u16be (param $p i32) (param $v i32)
-    (i32.store8 (local.get $p) (i32.shr_u (local.get $v) (i32.const 8)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 1)) (local.get $v)))
 
-  (func $put_u32be (param $p i32) (param $v i32)
-    (i32.store8 (local.get $p) (i32.shr_u (local.get $v) (i32.const 24)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 1)) (i32.shr_u (local.get $v) (i32.const 16)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 2)) (i32.shr_u (local.get $v) (i32.const 8)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 3)) (local.get $v)))
 
   (func $circ_ptr (param $circ_id i32) (result i32)
     (local $idx i32)
@@ -120,10 +108,10 @@
     (local.get $action))
 
   (func $relay_payload_len (param $payload i32) (result i32)
-    (call $m23u16be (i32.add (local.get $payload) (i32.const 9))))
+    (call $load_u16_be (i32.add (local.get $payload) (i32.const 9))))
 
   (func $relay_stream_id (param $payload i32) (result i32)
-    (call $m23u16be (i32.add (local.get $payload) (i32.const 3))))
+    (call $load_u16_be (i32.add (local.get $payload) (i32.const 3))))
 
   (func $m23build_fixed_cell (param $out i32) (param $circ_id i32) (param $cmd i32)
     (memory.fill (local.get $out) (i32.const 0) (global.get $CELL_LEN))
@@ -138,10 +126,10 @@
     (call $m23build_fixed_cell (local.get $out) (local.get $circ_id) (local.get $cell_cmd))
     (local.set $payload (i32.add (local.get $out) (global.get $CELL_PAYLOAD)))
     (i32.store8 (local.get $payload) (local.get $relay_cmd))
-    (call $m23put_u16be (i32.add (local.get $payload) (i32.const 1)) (i32.const 0))
-    (call $m23put_u16be (i32.add (local.get $payload) (i32.const 3)) (local.get $stream_id))
+    (call $store_u16_be (i32.add (local.get $payload) (i32.const 1)) (i32.const 0))
+    (call $store_u16_be (i32.add (local.get $payload) (i32.const 3)) (local.get $stream_id))
     (i32.store offset=5 (local.get $payload) (i32.const 0))
-    (call $m23put_u16be (i32.add (local.get $payload) (i32.const 9)) (local.get $data_len))
+    (call $store_u16_be (i32.add (local.get $payload) (i32.const 9)) (local.get $data_len))
     (if (local.get $data_len)
       (then (memory.copy (i32.add (local.get $payload) (global.get $RELAY_HEADER_LEN)) (local.get $data) (local.get $data_len))))
     (global.get $m23OK))
@@ -171,7 +159,7 @@
 
   (func $recognized (param $payload i32) (result i32)
     (i32.and
-      (i32.eqz (call $m23u16be (i32.add (local.get $payload) (i32.const 1))))
+      (i32.eqz (call $load_u16_be (i32.add (local.get $payload) (i32.const 1))))
       (i32.le_u (call $relay_payload_len (local.get $payload)) (global.get $RELAY_DATA_MAX))))
 
   (func $parse_extend2 (param $body i32) (param $body_len i32) (param $out i32) (result i32)
@@ -192,7 +180,7 @@
         (if (i32.and (i32.eqz (local.get $kind)) (i32.eq (local.get $len) (i32.const 6)))
           (then
             (i32.store (local.get $out) (i32.load (local.get $pos)))
-            (i32.store offset=4 (local.get $out) (call $m23u16be (i32.add (local.get $pos) (i32.const 4))))))
+            (i32.store offset=4 (local.get $out) (call $load_u16_be (i32.add (local.get $pos) (i32.const 4))))))
         (if (i32.and (i32.eq (local.get $kind) (i32.const 2)) (i32.eq (local.get $len) (i32.const 20)))
           (then
             (i32.store offset=8 (local.get $out) (local.get $pos))
@@ -201,8 +189,8 @@
         (local.set $n (i32.sub (local.get $n) (i32.const 1)))
         (br $links)))
     (if (i32.gt_u (i32.add (local.get $pos) (i32.const 4)) (local.get $end)) (then (return (global.get $ERR_PROTOCOL))))
-    (local.set $hs_type (call $m23u16be (local.get $pos)))
-    (local.set $hs_len (call $m23u16be (i32.add (local.get $pos) (i32.const 2))))
+    (local.set $hs_type (call $load_u16_be (local.get $pos)))
+    (local.set $hs_len (call $load_u16_be (i32.add (local.get $pos) (i32.const 2))))
     (if (i32.ne (local.get $hs_type) (i32.const 2)) (then (return (global.get $m23ERR_UNSUPPORTED))))
     (if (i32.ne (local.get $hs_len) (global.get $NTOR_CLIENT_HANDSHAKE_LEN)) (then (return (global.get $ERR_PROTOCOL))))
     (if (i32.gt_u (i32.add (i32.add (local.get $pos) (i32.const 4)) (local.get $hs_len)) (local.get $end)) (then (return (global.get $ERR_PROTOCOL))))
@@ -265,8 +253,8 @@
     (param $out_cell i32) (param $circ_id i32) (param $reply64 i32) (result i32)
     (if (i32.eqz (local.get $reply64)) (then (return (global.get $m23ERR_INVALID))))
     (call $m23build_fixed_cell (local.get $out_cell) (local.get $circ_id) (global.get $CELL_CREATED2))
-    (call $m23put_u16be (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 2))
-    (call $m23put_u16be (i32.add (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 2)) (global.get $NTOR_SERVER_REPLY_LEN))
+    (call $store_u16_be (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 2))
+    (call $store_u16_be (i32.add (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 2)) (global.get $NTOR_SERVER_REPLY_LEN))
     (memory.copy (i32.add (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 4)) (local.get $reply64) (global.get $NTOR_SERVER_REPLY_LEN))
     (global.get $m23OK))
 
@@ -275,8 +263,8 @@
     (if (i32.eqz (local.get $reply)) (then (return (global.get $m23ERR_INVALID))))
     (if (i32.gt_u (local.get $reply_len) (i32.const 505)) (then (return (global.get $ERR_PROTOCOL))))
     (call $m23build_fixed_cell (local.get $out_cell) (local.get $circ_id) (global.get $CELL_CREATED2))
-    (call $m23put_u16be (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (local.get $handshake_type))
-    (call $m23put_u16be (i32.add (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 2)) (local.get $reply_len))
+    (call $store_u16_be (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (local.get $handshake_type))
+    (call $store_u16_be (i32.add (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 2)) (local.get $reply_len))
     (memory.copy (i32.add (i32.add (local.get $out_cell) (global.get $CELL_PAYLOAD)) (i32.const 4)) (local.get $reply) (local.get $reply_len))
     (global.get $m23OK))
 
@@ -285,8 +273,8 @@
     (local $circ_id i32) (local $hs_len i32) (local $rc i32)
     (if (i32.lt_u (local.get $len) (global.get $CELL_LEN)) (then (return (global.get $ERR_PROTOCOL))))
     (if (i32.ne (i32.load8_u offset=4 (local.get $in_cell)) (global.get $CELL_CREATE2)) (then (return (global.get $ERR_PROTOCOL))))
-    (if (i32.ne (call $m23u16be (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD))) (i32.const 2)) (then (return (global.get $m23ERR_UNSUPPORTED))))
-    (local.set $hs_len (call $m23u16be (i32.add (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD)) (i32.const 2))))
+    (if (i32.ne (call $load_u16_be (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD))) (i32.const 2)) (then (return (global.get $m23ERR_UNSUPPORTED))))
+    (local.set $hs_len (call $load_u16_be (i32.add (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD)) (i32.const 2))))
     (if (i32.ne (local.get $hs_len) (global.get $NTOR_CLIENT_HANDSHAKE_LEN)) (then (return (global.get $ERR_PROTOCOL))))
     (local.set $circ_id (i32.load (local.get $in_cell)))
     (local.set $rc
@@ -307,8 +295,8 @@
     (local $circ_id i32) (local $hs_len i32) (local $rc i32) (local $reply_len i32)
     (if (i32.lt_u (local.get $len) (global.get $CELL_LEN)) (then (return (global.get $ERR_PROTOCOL))))
     (if (i32.ne (i32.load8_u offset=4 (local.get $in_cell)) (global.get $CELL_CREATE2)) (then (return (global.get $ERR_PROTOCOL))))
-    (if (i32.ne (call $m23u16be (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD))) (i32.const 3)) (then (return (global.get $m23ERR_UNSUPPORTED))))
-    (local.set $hs_len (call $m23u16be (i32.add (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD)) (i32.const 2))))
+    (if (i32.ne (call $load_u16_be (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD))) (i32.const 3)) (then (return (global.get $m23ERR_UNSUPPORTED))))
+    (local.set $hs_len (call $load_u16_be (i32.add (i32.add (local.get $in_cell) (global.get $CELL_PAYLOAD)) (i32.const 2))))
     (if (i32.lt_u (local.get $hs_len) (global.get $NTOR_V3_MIN_HANDSHAKE_LEN)) (then (return (global.get $ERR_PROTOCOL))))
     (if (i32.gt_u (local.get $hs_len) (i32.const 505)) (then (return (global.get $ERR_PROTOCOL))))
     (local.set $circ_id (i32.load (local.get $in_cell)))
@@ -351,8 +339,8 @@
 
   (func $er_tor_relay_build_extended2 (export "er_tor_relay_build_extended2")
     (param $out_cell i32) (param $circ_id i32) (param $reply64 i32) (result i32)
-    (call $m23put_u16be (global.get $TMP_BODY) (i32.const 2))
-    (call $m23put_u16be (i32.add (global.get $TMP_BODY) (i32.const 2)) (global.get $NTOR_SERVER_REPLY_LEN))
+    (call $store_u16_be (global.get $TMP_BODY) (i32.const 2))
+    (call $store_u16_be (i32.add (global.get $TMP_BODY) (i32.const 2)) (global.get $NTOR_SERVER_REPLY_LEN))
     (memory.copy (i32.add (global.get $TMP_BODY) (i32.const 4)) (local.get $reply64) (global.get $NTOR_SERVER_REPLY_LEN))
     (call $m23build_relay_cell (local.get $out_cell) (local.get $circ_id) (global.get $CELL_RELAY) (global.get $RELAY_EXTENDED2) (i32.const 0) (global.get $TMP_BODY) (i32.const 68)))
 

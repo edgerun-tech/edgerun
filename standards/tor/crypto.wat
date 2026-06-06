@@ -48,31 +48,8 @@
       (i32.or (i32.shl (i32.load8_u (i32.add (local.get $p) (i32.const 2))) (i32.const 8))
               (i32.load8_u (i32.add (local.get $p) (i32.const 3))))))
 
-  (func $store32be (param $p i32) (param $v i32)
-    (i32.store8 (local.get $p) (i32.shr_u (local.get $v) (i32.const 24)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 1)) (i32.shr_u (local.get $v) (i32.const 16)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 2)) (i32.shr_u (local.get $v) (i32.const 8)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 3)) (local.get $v)))
 
-  (func $m24memcpy (param $dst i32) (param $src i32) (param $len i32) (result i32)
-    (local $i i32)
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (i32.store8 (i32.add (local.get $dst) (local.get $i))
-          (i32.load8_u (i32.add (local.get $src) (local.get $i))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))
-    (local.get $dst))
 
-  (func $m24memset (param $dst i32) (param $val i32) (param $len i32)
-    (local $i i32)
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (i32.store8 (i32.add (local.get $dst) (local.get $i)) (local.get $val))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
 
   (func $sha256_compress (param $ctx i32) (param $block i32)
     (local $t i32) (local $x i32) (local $s0 i32) (local $s1 i32)
@@ -144,10 +121,10 @@
 
   (func $er_sha256_init (export "er_sha256_init") (param $ctx i32) (result i32)
     (if (i32.eqz (local.get $ctx)) (then (return (i32.const 0))))
-    (drop (call $m24memcpy (local.get $ctx) (i32.const 256) (i32.const 32)))
+    (drop (call $m26memcpy (local.get $ctx) (i32.const 256) (i32.const 32)))
     (i32.store (i32.add (local.get $ctx) (i32.const 32)) (i32.const 0))
     (i32.store (i32.add (local.get $ctx) (i32.const 36)) (i32.const 0))
-    (call $m24memset (i32.add (local.get $ctx) (i32.const 40)) (i32.const 0) (i32.const 64))
+    (call $m26memset (i32.add (local.get $ctx) (i32.const 40)) (i32.const 0) (i32.const 64))
     (i32.store (i32.add (local.get $ctx) (i32.const 104)) (i32.const 0))
     (local.get $ctx))
 
@@ -165,7 +142,7 @@
       (then
         (local.set $take (i32.sub (i32.const 64) (local.get $pos)))
         (if (i32.lt_u (local.get $len) (local.get $take)) (then (local.set $take (local.get $len))))
-        (drop (call $m24memcpy (i32.add (i32.add (local.get $ctx) (i32.const 40)) (local.get $pos)) (local.get $data) (local.get $take)))
+        (drop (call $m26memcpy (i32.add (i32.add (local.get $ctx) (i32.const 40)) (local.get $pos)) (local.get $data) (local.get $take)))
         (local.set $pos (i32.add (local.get $pos) (local.get $take)))
         (local.set $data (i32.add (local.get $data) (local.get $take)))
         (local.set $len (i32.sub (local.get $len) (local.get $take)))
@@ -183,7 +160,7 @@
         (br $blocks)))
     (if (local.get $len)
       (then
-        (drop (call $m24memcpy (i32.add (local.get $ctx) (i32.const 40)) (local.get $data) (local.get $len)))
+        (drop (call $m26memcpy (i32.add (local.get $ctx) (i32.const 40)) (local.get $data) (local.get $len)))
         (i32.store (i32.add (local.get $ctx) (i32.const 104)) (local.get $len))))
     (local.get $ctx))
 
@@ -196,22 +173,22 @@
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
     (if (i32.gt_u (local.get $pos) (i32.const 56))
       (then
-        (call $m24memset (i32.add (i32.add (local.get $ctx) (i32.const 40)) (local.get $pos)) (i32.const 0) (i32.sub (i32.const 64) (local.get $pos)))
+        (call $m26memset (i32.add (i32.add (local.get $ctx) (i32.const 40)) (local.get $pos)) (i32.const 0) (i32.sub (i32.const 64) (local.get $pos)))
         (call $sha256_compress (local.get $ctx) (i32.add (local.get $ctx) (i32.const 40)))
-        (call $m24memset (i32.add (local.get $ctx) (i32.const 40)) (i32.const 0) (i32.const 56)))
+        (call $m26memset (i32.add (local.get $ctx) (i32.const 40)) (i32.const 0) (i32.const 56)))
       (else
-        (call $m24memset (i32.add (i32.add (local.get $ctx) (i32.const 40)) (local.get $pos)) (i32.const 0) (i32.sub (i32.const 56) (local.get $pos)))))
+        (call $m26memset (i32.add (i32.add (local.get $ctx) (i32.const 40)) (local.get $pos)) (i32.const 0) (i32.sub (i32.const 56) (local.get $pos)))))
     (local.set $bits_lo (i32.shl (i32.load (i32.add (local.get $ctx) (i32.const 32))) (i32.const 3)))
     (local.set $bits_hi (i32.or (i32.shl (i32.load (i32.add (local.get $ctx) (i32.const 36))) (i32.const 3))
                                 (i32.shr_u (i32.load (i32.add (local.get $ctx) (i32.const 32))) (i32.const 29))))
-    (call $store32be (i32.add (local.get $ctx) (i32.const 96)) (local.get $bits_hi))
-    (call $store32be (i32.add (local.get $ctx) (i32.const 100)) (local.get $bits_lo))
+    (call $store_u32_be (i32.add (local.get $ctx) (i32.const 96)) (local.get $bits_hi))
+    (call $store_u32_be (i32.add (local.get $ctx) (i32.const 100)) (local.get $bits_lo))
     (call $sha256_compress (local.get $ctx) (i32.add (local.get $ctx) (i32.const 40)))
     (local.set $i (i32.const 0))
     (block $done
       (loop $loop
         (br_if $done (i32.ge_u (local.get $i) (i32.const 8)))
-        (call $store32be (i32.add (local.get $out) (i32.shl (local.get $i) (i32.const 2)))
+        (call $store_u32_be (i32.add (local.get $out) (i32.shl (local.get $i) (i32.const 2)))
           (i32.load (i32.add (local.get $ctx) (i32.shl (local.get $i) (i32.const 2)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop)))
@@ -233,8 +210,8 @@
         (if (i32.ne (call $er_tor_sha256 (local.get $key) (local.get $key_len) (i32.const 4672)) (i32.const 32)) (then (return (i32.const 0))))
         (local.set $kptr (i32.const 4672))
         (local.set $klen (i32.const 32))))
-    (call $m24memset (i32.const 4608) (i32.const 0) (i32.const 64))
-    (if (local.get $klen) (then (drop (call $m24memcpy (i32.const 4608) (local.get $kptr) (local.get $klen)))))
+    (call $m26memset (i32.const 4608) (i32.const 0) (i32.const 64))
+    (if (local.get $klen) (then (drop (call $m26memcpy (i32.const 4608) (local.get $kptr) (local.get $klen)))))
     (local.set $i (i32.const 0))
     (block $ipad_done
       (loop $ipad
@@ -247,8 +224,8 @@
     (drop (call $er_sha256_update (i32.const 4864) (i32.const 4608) (i32.const 64)))
     (if (local.get $msg_len) (then (drop (call $er_sha256_update (i32.const 4864) (local.get $msg) (local.get $msg_len)))))
     (drop (call $er_sha256_final (i32.const 4864) (i32.const 4672)))
-    (call $m24memset (i32.const 4608) (i32.const 0) (i32.const 64))
-    (if (local.get $klen) (then (drop (call $m24memcpy (i32.const 4608) (local.get $kptr) (local.get $klen)))))
+    (call $m26memset (i32.const 4608) (i32.const 0) (i32.const 64))
+    (if (local.get $klen) (then (drop (call $m26memcpy (i32.const 4608) (local.get $kptr) (local.get $klen)))))
     (local.set $i (i32.const 0))
     (block $opad_done
       (loop $opad
@@ -274,7 +251,7 @@
 
   (func $m24aes128_key_expand (param $key i32) (param $rk i32)
     (local $bytes i32) (local $i i32) (local $t0 i32) (local $t1 i32) (local $t2 i32) (local $t3 i32)
-    (drop (call $m24memcpy (local.get $rk) (local.get $key) (i32.const 16)))
+    (drop (call $m26memcpy (local.get $rk) (local.get $key) (i32.const 16)))
     (local.set $bytes (i32.const 16))
     (local.set $i (i32.const 1))
     (block $done
@@ -315,7 +292,7 @@
         (br $loop))))
 
   (func $aes_shift_rows (param $s i32)
-    (drop (call $m24memcpy (i32.const 5344) (local.get $s) (i32.const 16)))
+    (drop (call $m26memcpy (i32.const 5344) (local.get $s) (i32.const 16)))
     (i32.store8 (i32.add (local.get $s) (i32.const 1)) (i32.load8_u (i32.const 5349)))
     (i32.store8 (i32.add (local.get $s) (i32.const 5)) (i32.load8_u (i32.const 5353)))
     (i32.store8 (i32.add (local.get $s) (i32.const 9)) (i32.load8_u (i32.const 5357)))
@@ -389,12 +366,12 @@
     (if (i32.eqz (local.get $key)) (then (return (i32.const 0))))
     (if (i32.eqz (local.get $iv)) (then (return (i32.const 0))))
     (call $m24aes128_key_expand (local.get $key) (i32.const 5120))
-    (drop (call $m24memcpy (i32.const 5312) (local.get $iv) (i32.const 16)))
+    (drop (call $m26memcpy (i32.const 5312) (local.get $iv) (i32.const 16)))
     (block $done
       (loop $blocks
         (br_if $done (i32.eqz (local.get $len)))
         (local.set $n (select (i32.const 16) (local.get $len) (i32.ge_u (local.get $len) (i32.const 16))))
-        (drop (call $m24memcpy (i32.const 5328) (i32.const 5312) (i32.const 16)))
+        (drop (call $m26memcpy (i32.const 5328) (i32.const 5312) (i32.const 16)))
         (call $aes_encrypt_block (i32.const 5328) (i32.const 5120))
         (local.set $i (i32.const 0))
         (block $xor_done
@@ -410,7 +387,7 @@
         (local.set $len (i32.sub (local.get $len) (local.get $n)))
         (call $ctr_inc_be_128 (i32.const 5312))
         (br $blocks)))
-    (drop (call $m24memcpy (local.get $iv) (i32.const 5312) (i32.const 16)))
+    (drop (call $m26memcpy (local.get $iv) (i32.const 5312) (i32.const 16)))
     (i32.const 1))
 
   (func $er_tor_aes_ctr (export "er_tor_aes_ctr") (param $out i32) (param $in i32) (param $len i32) (param $key i32) (param $iv i32) (result i32)

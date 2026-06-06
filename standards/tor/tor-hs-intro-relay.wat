@@ -29,9 +29,6 @@
   (func $m16u16be (param $p i32) (result i32)
     (i32.or (i32.shl (i32.load8_u (local.get $p)) (i32.const 8)) (i32.load8_u (i32.add (local.get $p) (i32.const 1)))))
 
-  (func $m16put_u16be (param $p i32) (param $v i32)
-    (i32.store8 (local.get $p) (i32.shr_u (local.get $v) (i32.const 8)))
-    (i32.store8 (i32.add (local.get $p) (i32.const 1)) (local.get $v)))
 
   (func $m16mem_eq (param $a i32) (param $b i32) (param $len i32) (result i32)
     (local $i i32) (local $acc i32)
@@ -201,16 +198,16 @@
 
   (func (export "tor_hs_intro_relay_build_introduce_ack")
     (param $out i32) (param $status i32) (result i32)
-    (call $m16put_u16be (local.get $out) (local.get $status))
+    (call $store_u16_be (local.get $out) (local.get $status))
     (i32.store8 (i32.add (local.get $out) (i32.const 2)) (i32.const 0))
     (i32.const 3))
 
   (func (export "tor_hs_intro_relay_build_relay_header")
     (param $out i32) (param $cmd i32) (param $stream i32) (param $body_len i32) (result i32)
     (i32.store8 (local.get $out) (local.get $cmd))
-    (call $m16put_u16be (i32.add (local.get $out) (i32.const 1)) (local.get $stream))
+    (call $store_u16_be (i32.add (local.get $out) (i32.const 1)) (local.get $stream))
     (i32.store (i32.add (local.get $out) (i32.const 3)) (i32.const 0))
-    (call $m16put_u16be (i32.add (local.get $out) (i32.const 9)) (local.get $body_len))
+    (call $store_u16_be (i32.add (local.get $out) (i32.const 9)) (local.get $body_len))
     (i32.const 11))
 
   (func (export "tor_hs_intro_relay_record_ptr") (param $intro_circ_id i32) (result i32)
