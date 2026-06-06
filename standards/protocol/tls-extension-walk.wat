@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32)
     i32.const 300039)
 
@@ -68,4 +66,3 @@
       (local.set $pos (local.get $next_offset))
       br $scan)
     (i32.const 3))
-)

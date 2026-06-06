@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; Status values: 0 ok, 1 input_short, 3 invalid.
   ;; Derived DB: magic ERDB0001, format 2, schema 1, flags 0.
   ;; FileIndex strings are u64-len-prefixed UTF-8 fields in the Rust storage.
@@ -313,5 +311,3 @@
   ;; Literal copies for Rust storage headers.
   (data (i32.const 60243) "ERDB0001")
   (data (i32.const 60251) "ERLG")
-
-)

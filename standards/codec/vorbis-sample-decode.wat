@@ -1,4 +1,3 @@
-(module
   (memory (export "memory") 576)
   (global $VORBIS_OK i32 (i32.const 0))
   (global $VORBIS_ERR_BOUNDS i32 (i32.const -1))
@@ -2687,5 +2686,3 @@
   (func (export "vorbis_todo_inverse_mdct") (result i32)
     global.get $VORBIS_ERR_TODO_DECODE
   )
-
-)

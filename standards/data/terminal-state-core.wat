@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 
   (func (export "proto_standard_id") (result i32)
@@ -611,5 +608,3 @@
     i32.add
     i64.extend_i32_u
     i64.or)
-
-)

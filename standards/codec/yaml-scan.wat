@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
   ;; Line kinds: 0 blank, 1 comment, 2 mapping, 3 sequence, 4 scalar, 5 doc_start, 6 doc_end.
@@ -422,5 +419,3 @@
       (local.get $comment_count)
       (local.get $p))
     (i32.const 0))
-
-)

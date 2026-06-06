@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; $tor_hs_pow_v1.wasm
   (type $t_18_0 (func (param i32)))
   (type $t_18_1 (func (param i32 i32)))

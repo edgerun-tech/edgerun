@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (global $last_r_len (mut i32) (i32.const 0))
   (global $last_s_len (mut i32) (i32.const 0))
@@ -274,4 +271,3 @@
         (local.set $p (i32.add (local.get $p) (i32.const 1)))))
     (call $m56copy (local.get $s) (local.get $p) (local.get $s_len))
     (call $pack (i32.const 0) (local.get $written)))
-)

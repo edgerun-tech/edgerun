@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 
   (global $q0 (mut i64) (i64.const 0))
   (global $q1 (mut i64) (i64.const 0))
@@ -152,4 +150,3 @@
     (i64.store (i32.add (local.get $out) (i32.const 48)) (local.get $reward_lo))
     (i64.store (i32.add (local.get $out) (i32.const 56)) (local.get $reward_hi))
     (i32.const 0))
-)

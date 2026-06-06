@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; AES-128-CTR mode — self-contained AES-128 key expansion + block encrypt + CTR XOR.
   ;; Exports: aes128_ctr_xor(out, in, len, key[16], counter[16]) -> 0
   (data (i32.const 0) "\63\7c\77\7b\f2\6b\6f\c5\30\01\67\2b\fe\d7\ab\76")  ;; S-box 0-15
@@ -315,4 +313,3 @@
       br $loop
     end
     end)
-  )

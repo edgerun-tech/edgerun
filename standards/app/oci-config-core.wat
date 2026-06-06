@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_alnum" (func $is_alnum (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300100)
@@ -189,4 +186,3 @@
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $scan)))
     i32.const 1)
-)

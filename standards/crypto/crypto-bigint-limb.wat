@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (global $last_carry (mut i32) (i32.const 0))
 
@@ -441,4 +438,3 @@
     i32.const 0
     local.get $limbs
     call $pack)
-)

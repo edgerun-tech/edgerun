@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Color utilities — hex/ARGB color parsing, formatting, lerp, alpha compositing.
   ;;
   ;; Exports:
@@ -152,5 +150,3 @@
     local.get $b i32.const 0xf i32.and local.get $out i32.const 8 i32.add i32.store8
     local.get $out i32.const 9 i32.add
   )
-
-)

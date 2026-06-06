@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
   ;; Status values: 0 ok, 2 output_short, 3 invalid.
   ;; Packed return: low u32 status, high u32 bytes written.
@@ -206,5 +203,3 @@
       (then (return (local.get $packed))))
     (local.set $written (i32.wrap_i64 (i64.shr_u (local.get $packed) (i64.const 32))))
     (call $m123put (local.get $out_ptr) (local.get $out_cap) (local.get $written) (i32.const 58)))
-
-)

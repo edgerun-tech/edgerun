@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 
   ;; SI-suffixed number formatting (K/M/B) and comma-delimited format.
   ;;
@@ -214,4 +212,3 @@
     end
     local.get $val
   )
-)

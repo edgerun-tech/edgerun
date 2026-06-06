@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; EdgeRun/Tor directory-authority core.
   ;; This module models the local DA from tor-spec/00-os-mapping.md while
   ;; retaining Tor directory semantics: descriptor acceptance, flags, consensus
@@ -276,4 +274,3 @@
     (if (i32.eqz (i32.and (i32.load offset=4 (local.get $p)) (global.get $FLAG_VALID))) (then (return (global.get $ERR_REJECT))))
     (i32.store (local.get $out_next_hop) (i32.load offset=32 (local.get $p)))
     (global.get $m7OK))
-)

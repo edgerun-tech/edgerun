@@ -1,7 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun-core" "is_hex" (func $is_hex (param i32) (result i32)))
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
   ;; Scalar kinds: 1 quoted string, 2 literal string, 3 bool, 4 int, 5 float, 6 array, 7 bare string.
@@ -315,5 +311,3 @@
         (call $m185write4 (local.get $out_ptr) (i32.const 2) (local.get $start) (local.get $end) (local.get $next))
         (return (i32.const 0))))
     (return (i32.const 3)))
-
-)

@@ -1,4 +1,3 @@
-(module
   ;; ===================================================================
   ;; EdgeRun WASM Interpreter — ported to WAT
   ;;
@@ -22,18 +21,8 @@
   ;;   dbg
   ;; ===================================================================
 
-  (import "edgerun-core" "memory" (memory 1))
 
   ;; ── Shared constants (from edgerun-core) ─────────────────────────────
-  (import "edgerun-core" "OFF_TYPES_BUF" (global $OFF_TYPES_BUF i32))
-  (import "edgerun-core" "OFF_CODE_BUF" (global $OFF_CODE_BUF i32))
-  (import "edgerun-core" "OFF_FUNCTIONS_BUF" (global $OFF_FUNCTIONS_BUF i32))
-  (import "edgerun-core" "OFF_DECODED_OPS" (global $OFF_DECODED_OPS i32))
-  (import "edgerun-core" "OFF_DECODED_COUNT" (global $OFF_DECODED_COUNT i32))
-  (import "edgerun-core" "DEC_SZ" (global $DEC_SZ i32))
-  (import "edgerun-core" "SZ_TYPE" (global $SZ_TYPE i32))
-  (import "edgerun-core" "SZ_FUNC" (global $SZ_FUNC i32))
-  (import "edgerun-core" "SZ_CODE" (global $SZ_CODE i32))
 
   ;; ── Memory offsets ──────────────────────────────────────────────────
   (global $OFF_ERR         i32 (i32.const 0))
@@ -189,4 +178,3 @@
   (global $ERR_MISS_EXP i32 (i32.const 19))
   (global $ERR_BAD_ARGUMENT i32 (i32.const 20))
   (global $ERR_RECUR    i32 (i32.const 31))
-

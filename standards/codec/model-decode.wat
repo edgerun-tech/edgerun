@@ -1,4 +1,3 @@
-(module
   (memory (export "memory") 72)
 
   ;; ── BSS memory layout ──
@@ -1162,4 +1161,3 @@
   (func $max2 (param $a i32) (param $b i32) (result i32)
     local.get $a local.get $b i32.gt_s if local.get $a return end local.get $b
   )
-)

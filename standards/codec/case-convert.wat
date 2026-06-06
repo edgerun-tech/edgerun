@@ -1,7 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "to_lower" (func $to_lower (param i32) (result i32)))
-  (import "edgerun-core" "to_upper" (func $to_upper (param i32) (result i32)))
 
   ;; ASCII string case conversion.
   ;;
@@ -82,4 +78,3 @@
     end
     local.get $o
   )
-)

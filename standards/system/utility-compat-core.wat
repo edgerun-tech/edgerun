@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Utility compatibility semantics plundered from crates/utility.
 
   (func (export "utility_compat_abi_version") (result i32) i32.const 1)

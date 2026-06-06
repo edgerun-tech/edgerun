@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; HTML/XML tag stripping — removes <...> tags from text.
   ;;
   ;; Exports:
@@ -128,5 +126,3 @@
     end
     local.get $o
   )
-
-)

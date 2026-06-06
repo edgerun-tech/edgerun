@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (data (i32.const 32768) "android.permission.")
   (data (i32.const 32832) "uses-permission")

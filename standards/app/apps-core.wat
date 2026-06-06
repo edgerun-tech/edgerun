@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; OAuth app service semantics plundered from edgerun-oauth.
   ;; Result codes are local to this executable standard:
   ;; 0 ok/false, 1 true or primary error, higher values are ordered failures.
@@ -519,4 +517,3 @@
               (i32.sub (local.get $len) (i32.const 1)))
             (i32.const 5000))
           (i32.const 10000)))))
-)

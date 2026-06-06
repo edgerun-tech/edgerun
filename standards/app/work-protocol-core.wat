@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Work/admission/settlement semantics plundered from edgerun-work.
 
   (func (export "work_wire_abi_version") (result i32) i32.const 1)
@@ -294,4 +292,3 @@
     (if (i32.eqz (i32.and (i32.and (local.get $request_matches) (local.get $admission_matches)) (i32.and (i32.and (local.get $worker_target_matches) (local.get $worker_role_matches)) (local.get $relay_matches)))) (then (return (i32.const 2))))
     (if (i64.gt_u (local.get $claim) (local.get $admitted_budget)) (then (return (i32.const 3))))
     i32.const 0)
-)

@@ -1,4 +1,3 @@
-(module
   ;; ISAAC CSPRNG — Bob Jenkins' cryptographically-secure PRNG.
   ;; State buffer layout (2064 bytes):
   ;;   Offset 0:     mem[256]   (1024 bytes)
@@ -12,7 +11,6 @@
   ;;   isaac_seed(state_ptr, seed_ptr, seed_word_count) -> 0
   ;;   isaac_next(state_ptr) -> i32 (0-255)
   ;;   isaac_peek(state_ptr) -> i32 (0-255)
-  (import "edgerun-core" "memory" (memory 1))
   (func (export "proto_standard_id") (result i32) i32.const 300535)
 
   (func $mix (param $a i32) (param $b i32) (param $c i32) (param $d i32)
@@ -316,4 +314,3 @@
     i32.load
     i32.const 0xff i32.and
   )
-)

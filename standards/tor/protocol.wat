@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Tor protocol slice ported from the pre-erobj x86_64 ASM snapshot at
   ;; 1b243c8d6a843585bc54b4366f814cf5f56615b1.
   ;;
@@ -698,4 +696,3 @@
     (drop (local.get $out_fwd_iv16))
     (drop (local.get $out_bwd_iv16))
     (global.get $m25ERR_UNSUPPORTED))
-)

@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Captures the useful portable semantics from edgerun-js-sys:
   ;; ECMAScript global families, Temporal option/unit spellings, and futures glue state.
   (func $m122lower (param $c i32) (result i32)
@@ -171,4 +169,3 @@
   (func (export "js_sys_wait_async_strategy") (param $has_native_wait_async i32) (result i32)
     (if (local.get $has_native_wait_async) (then (return (i32.const 1))))
     (i32.const 2))
-)

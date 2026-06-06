@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; XTEA block cipher — 64-bit block, 128-bit key, 32 Feistel rounds.
   ;; Big-endian I/O, operates in-place on buffer.
   ;; Remaining bytes (< 8) at end are copied through unchanged.
@@ -122,4 +120,3 @@
     end
     i32.const 0
   )
-)

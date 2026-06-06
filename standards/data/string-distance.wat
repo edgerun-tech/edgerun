@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; String distance — Jaro-Winkler similarity.
   ;; Returns fixed-point distance * 1000  (0 = no match, 1000 = exact match).
   ;; Threshold > 900 is considered a match per the RuneLite source.
@@ -148,5 +146,3 @@
     i32.const 1000 i32.div_s
     i32.add
   )
-
-)

@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Captures log facade, valuable structured values, and tracing-opentelemetry layer semantics.
   ;; Level/filter codes: off=0,error=1,warn=2,info=3,debug=4,trace=5.
   (func (export "proto_standard_id") (result i32) (i32.const 300140))
@@ -125,4 +123,3 @@
   (func (export "telemetry_otel_activation_result") (param $state i32) (result i32)
     (if (i32.eq (local.get $state) (i32.const 1)) (then (return (i32.const 2))))
     (local.get $state))
-)

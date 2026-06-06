@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 
   ;; Jagex string escape/unescape.
   ;; Escape: < -> <lt>, > -> <gt>, \n -> <br>
@@ -101,4 +99,3 @@
     end
     local.get $o
   )
-)

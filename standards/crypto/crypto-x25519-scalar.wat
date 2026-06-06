@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; X25519 scalar multiplication (radix-2^25.5, 10 limbs).
   ;; Ported from edgerun_crypto_curve25519.inc — self-contained.
   (func (export "proto_standard_id") (result i32) i32.const 300080)
@@ -651,4 +649,3 @@
       local.get $i i32.const 1 i32.add local.tee $i br_if $loop
     end
     end)
-  )

@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Node UI surface and authority-flow semantics plundered from crates/node.
 
   (func (export "node_surfaces_abi_version") (result i32) i32.const 1)
@@ -106,4 +104,3 @@
     (if (i32.eqz (local.get $payload_hash_matches)) (then (return (i32.const 3))))
     (if (i32.eqz (local.get $projection_matches_package)) (then (return (i32.const 4))))
     i32.const 0)
-)

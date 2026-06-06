@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
   ;; Status values: 0 ok, 2 output_short, 3 invalid, 5 incomplete.
   ;; Packed result: low 32 bits status, high 32 bits output byte count.
@@ -1036,4 +1033,3 @@
     local.get $cap
     i32.const 1
     call $decode)
-)

@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300103)
@@ -389,4 +386,3 @@
   (data (i32.const 1200) "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday,  GMT")
   (data (i32.const 1280) "MonTueWedThuFriSatSun")
   (data (i32.const 1304) "JanFebMarAprMayJunJulAugSepOctNovDec")
-)

@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; DNS A-record resolver — self-contained, uses abstract socket for UDP.
   (func (export "proto_standard_id") (result i32) i32.const 300506)
 
@@ -237,4 +235,3 @@
     i64.const 32
     i64.shl
     i64.or)
-)

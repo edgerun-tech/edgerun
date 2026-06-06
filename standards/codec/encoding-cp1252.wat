@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 
   ;; CP1252 (Windows-1252) decode table.
   ;; Bytes 0x80-0x9F map to Unicode characters via a lookup table.
@@ -92,4 +90,3 @@
     end
     local.get $out_pos
   )
-)

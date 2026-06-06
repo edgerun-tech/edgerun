@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (global $m63h0 (mut i64) (i64.const 0))
   (global $m63h1 (mut i64) (i64.const 0))
@@ -997,4 +994,3 @@
     local.get $out_ptr
     i32.const 48
     call $m63hash)
-)

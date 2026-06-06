@@ -1,4 +1,3 @@
-(module
   ;; ═════════════════════════════════════════════════════════════════════
   ;; EdgeRun WASM → ARM32 (ARMv7-A) JIT Compiler
   ;;
@@ -7,19 +6,8 @@
   ;; ARM32 instructions are fixed 4 bytes, little-endian.
   ;; ═════════════════════════════════════════════════════════════════════
 
-  (import "edgerun-core" "memory" (memory 1))
 
   ;; ── Shared constants (from edgerun-core) ─────────────────────────────
-  (import "edgerun-core" "OFF_TYPES_BUF" (global $OFF_TYPES_BUF i32))
-  (import "edgerun-core" "OFF_CODE_BUF" (global $OFF_CODE_BUF i32))
-  (import "edgerun-core" "OFF_FUNCTIONS_BUF" (global $OFF_FUNCTIONS_BUF i32))
-  (import "edgerun-core" "OFF_DECODED_OPS" (global $OFF_DECODED_OPS i32))
-  (import "edgerun-core" "OFF_DECODED_COUNT" (global $OFF_DECODED_COUNT i32))
-  (import "edgerun-core" "DEC_SZ" (global $DEC_SZ i32))
-  (import "edgerun-core" "SZ_TYPE" (global $SZ_TYPE i32))
-  (import "edgerun-core" "SZ_CODE" (global $SZ_CODE i32))
-  (import "edgerun-core" "SZ_FUNC" (global $SZ_FUNC i32))
-  (import "edgerun-core" "LINUX_SYS_ARM32_EXIT" (global $LINUX_SYS_ARM32_EXIT i32))
 
   ;; JIT code cache: 1MB starting at 0x100000
   (global $JIT_CACHE      i32 (i32.const 0x100000))

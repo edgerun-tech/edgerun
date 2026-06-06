@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Device type model semantics captured from edgerun-devices.
   ;;
   ;; Generic result codes use 0 for ok and nonzero for the first rejection.
@@ -734,4 +732,3 @@
         end
       end
     end)
-)

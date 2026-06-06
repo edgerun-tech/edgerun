@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Chrome DevTools Protocol (CDP) message builder — JSON-RPC over WebSocket.
   ;; Uses mutable globals $g_out/$g_o shared across helper functions.
   (global $g_out (mut i32) (i32.const 0))
@@ -419,4 +417,3 @@
     global.get $g_o i32.const 1 i32.add global.set $g_o
     i32.const 125 global.get $g_out global.get $g_o i32.add i32.store8
     global.get $g_o i32.const 1 i32.add global.set $g_o)
-)

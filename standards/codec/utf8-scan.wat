@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
   ;; Status values: 0 ok, 2 output_short, 3 invalid, 5 incomplete.
   ;; utf8_scan out record: valid_up_to, error_len, suffix_len, expected_len.
@@ -651,4 +648,3 @@
     i32.const 0
     call $write_scan
     i32.const 0)
-)

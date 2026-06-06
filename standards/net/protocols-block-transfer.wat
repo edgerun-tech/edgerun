@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32)
     i32.const 300116)
 
@@ -214,4 +212,3 @@
     (local.set $expected (i32.mul (local.get $m151blocks) (local.get $m151block_size)))
     (if (i32.ne (local.get $actual_len) (local.get $expected)) (then (return (i32.const 3))))
     i32.const 0)
-)

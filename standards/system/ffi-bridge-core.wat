@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Captures the portable meaning from edgerun-wasm-bindgen and its macro-support:
   ;; ABI primitive packing, descriptor wrappers, closure ownership, attribute parsing,
   ;; AST import/export classification, and custom-section encoding rules.
@@ -273,4 +271,3 @@
 
   (func (export "wasm_bindgen_enum_encode_len") (param $payload_len i32) (result i32)
     (i32.add (i32.const 1) (local.get $payload_len)))
-)

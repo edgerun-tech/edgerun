@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (type $t_5_0 (func (param i32 i32 i32 i32 i32) (result i32)))
   (type $t_5_1 (func (param i32 i32 i32 i32 i32 i32 i32 i32 i32 i32 i32) (result i32)))
   (type $t_5_2 (func (param i32 i32 i32 i32) (result i32)))

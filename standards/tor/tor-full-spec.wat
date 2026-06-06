@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Local Tor specification coverage index for the WAT port.
   (global $m10STANDARD_ID i32 (i32.const 300208))
   (global $m10ABI_VERSION i32 (i32.const 2))
@@ -69,4 +67,3 @@
       (i32.or
         (i32.and (i32.ge_u (local.get $cmd) (i32.const 1)) (i32.le_u (local.get $cmd) (i32.const 15)))
         (i32.and (i32.ge_u (local.get $cmd) (i32.const 32)) (i32.le_u (local.get $cmd) (i32.const 40))))))
-)

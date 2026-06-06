@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Linux adapter semantics captured from sysfs, USB/PCI/netif, nl80211 Wi-Fi,
   ;; evdev input, and Bluetooth GATT/HCI/Linux L2CAP adapter crates.
   ;;
@@ -1005,4 +1003,3 @@
     else
       i32.const 0
     end)
-)

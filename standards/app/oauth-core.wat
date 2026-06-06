@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; OAuth 2.0 authorization code flow + PKCE — URL building and token body.
   ;; Uses memory for output buffers — caller reads from linear memory.
 
@@ -366,4 +364,3 @@
     local.get $dst
     local.get $len
     call $m137memcpy)
-)

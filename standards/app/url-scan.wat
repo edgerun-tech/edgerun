@@ -1,7 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun-core" "is_scheme_byte" (func $is_scheme_byte (param i32) (result i32)))
 
   (func (export "proto_standard_id") (result i32)
     i32.const 300165)

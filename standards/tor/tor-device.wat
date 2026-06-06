@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; $tor-device.wasm
   (type $t_6_0 (func (param i32 i32 i32 i32 i32 i32)))
   (type $t_6_1 (func (param i32 i32 i32 i32)))

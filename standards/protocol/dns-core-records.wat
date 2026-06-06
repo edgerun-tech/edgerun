@@ -1,8 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_alpha" (func $is_alpha (param i32) (result i32)))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300162)
@@ -306,4 +301,3 @@
         (i32.ne (call $dns_class_status (local.get $rclass) (local.get $rtype)) (i32.const 0)))
       (then (i32.const 3))
       (else (i32.const 0))))
-)

@@ -1,7 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_print" (func $is_print (param i32) (result i32)))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 
   (func (export "proto_standard_id") (result i32)
@@ -507,5 +503,3 @@
     i32.const 0
     local.get $count
     call $pack)
-
-)

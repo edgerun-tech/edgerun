@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (type $t_3_0 (func (param i32 i32 i32) (result i32)))
   (type $t_3_1 (func (param i32 i32 i32 i32) (result i32)))
   (type $t_3_2 (func (param i32 i32) (result i32)))
@@ -1794,4 +1792,3 @@
   (export "tor_cell_body_len" (func 38))
   (export "proto_standard_id" (func 40))
   (data  (i32.const 1048576) "\01\00\00\00\01\00\00\00\01\00\00\00\01\00\00\00\fe\ff\ff\ff\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\01\00\00\00\01\00\00\00\01\00\00\00\00\00\00\00\00\00\00\00\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\fc\ff\ff\ff\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\01\00\00\00\01\00\00\00")
-)

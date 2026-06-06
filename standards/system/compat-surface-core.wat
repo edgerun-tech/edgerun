@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Compact compatibility surfaces captured from local HTTP, reqwest-shaped
   ;; client glue, JSON schema, unicode, JNI, and wasm-bindgen shared crates.
   ;;
@@ -839,4 +837,3 @@
     local.get $api_version
     local.get $requested
     i32.ge_s)
-)

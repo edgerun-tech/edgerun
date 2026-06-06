@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Status values: 0 ok, 1 unsupported, 2 short, 3 invalid.
   ;; Domains: 1 WiFi, 2 BLE.
   ;; Region kinds:
@@ -204,4 +202,3 @@
     (if (call $esp32s3_wifi_raw_80211_len_valid (local.get $len))
       (then (return (local.get $len))))
     i32.const -1)
-)

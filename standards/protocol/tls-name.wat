@@ -1,8 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_alnum" (func $is_alnum (param i32) (result i32)))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300014)
@@ -308,4 +303,3 @@
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $prefix_scan))))
     (call $validate_label (i32.const 4096) (local.get $prefix_len)))
-)

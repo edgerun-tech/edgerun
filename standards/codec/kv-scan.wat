@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 
   (func (export "proto_standard_id") (result i32)
@@ -426,5 +423,3 @@
     i32.sub
     call $m127write2
     i32.const 0)
-
-)

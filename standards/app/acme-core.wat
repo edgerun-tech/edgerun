@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32) i32.const 300132)
 
   (func $m30eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
@@ -73,4 +71,3 @@
   (data (i32.const 48) "pendingreadyprocessinginvalidexpired")
   (data (i32.const 96) "http-01dns-01tls-alpn-01")
   (data (i32.const 128) "letsencryptletsencryptstaging")
-)

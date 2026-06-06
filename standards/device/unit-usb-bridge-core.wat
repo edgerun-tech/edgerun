@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "edgerun_unit_abi_version") (result i32)
     i32.const 2)
 
@@ -108,4 +106,3 @@
 
   (func (export "usb_ppp_ap_main_loop_sleep_secs") (result i32)
     i32.const 5)
-)

@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; Portable scalar model extracted from crates/apps/edgerun-secret-service/src.
   ;; Codes:
   ;; interface: 1 Service, 2 Collection, 3 Item, 4 Session, 5 Introspectable, 6 Properties.
@@ -279,5 +277,3 @@
     (if (i32.eq (local.get $h) (i32.const 6262436)) (then (return (i32.const 5))))
     (if (i32.eq (local.get $h) (i32.const 3542615378)) (then (return (i32.const 6))))
     i32.const 0)
-
-)

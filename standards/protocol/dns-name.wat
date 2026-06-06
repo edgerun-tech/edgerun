@@ -1,8 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_alpha" (func $is_alpha (param i32) (result i32)))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300025)
@@ -154,4 +149,3 @@
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $labels_loop))))
     (call $pack (i32.const 0) (local.get $written)))
-)

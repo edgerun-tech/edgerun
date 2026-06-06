@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Bare-metal platform semantics plundered from edgerun-platform.
 
   (func (export "platform_core_abi_version") (result i32) i32.const 1)
@@ -119,4 +117,3 @@
 
   (func (export "xtensa_usb_clock_bit") (result i32) i32.const 1024)
   (func (export "xtensa_usb_conf0_default") (result i32) i32.const 16896)
-)

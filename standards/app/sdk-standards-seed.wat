@@ -1,7 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
   ;; Status: 0 pass/found/ok, 1 not found, 2 output short or reject,
   ;; 3 invalid input. Packed i64: low u32 status, high u32 bytes_written.
@@ -341,5 +337,3 @@
       (local.get $written)
       (local.get $out_ptr)
       (local.get $out_cap)))
-
-)

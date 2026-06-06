@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32) i32.const 300113)
 
   (func $m46eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
@@ -77,4 +75,3 @@
   (data (i32.const 160) "apply_patchapplypatchbashzshsh<<")
   (data (i32.const 192) "bodyverifyparsednot_apply_patchshell_parse_err")
   (data (i32.const 240) "parse_errorio_errorimplicit_invocationcompute_replacements")
-)

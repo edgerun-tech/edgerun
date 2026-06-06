@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32) i32.const 300114)
 
   (func $m47eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
@@ -113,4 +111,3 @@
   (data (i32.const 224) "rm-f-rfsudo")
   (data (i32.const 256) "bashzshsh")
   (data (i32.const 272) "-c-lc")
-)

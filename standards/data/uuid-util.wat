@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; UUID parse and format.
   ;; Format: 8-4-4-4-12 hex digits (36 characters).
   ;;
@@ -107,5 +105,3 @@
     end
     local.get $o
   )
-
-)

@@ -1,8 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun-core" "is_hex" (func $is_hex (param i32) (result i32)))
 
   (global $in_ptr (mut i32) (i32.const 0))
   (global $in_len (mut i32) (i32.const 0))
@@ -1266,5 +1261,3 @@
     i32.const 0
     global.get $tok_len
     call $pack)
-
-)

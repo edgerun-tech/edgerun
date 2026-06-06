@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; JS5 multi-file archive splitter.
   ;;
   ;; Parses a decompressed JS5 archive payload with its entry table (last byte =
@@ -255,5 +253,3 @@
     local.get $entries local.get $len i32.store offset=4
     i32.const 0
   )
-
-)

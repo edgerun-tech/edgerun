@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; AES-128-GCM AEAD — self-contained AES-128 key expansion + block encrypt +
   ;; GHASH (GF(2^128) software multiplication) + GCM encrypt/decrypt.
   ;; Exports:
@@ -572,4 +570,3 @@
     end
 
     i32.const -1)
-)

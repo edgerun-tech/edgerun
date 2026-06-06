@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; OAuth PKCE (RFC 7636) utility functions.
   ;; Pure computation — caller provides randomness, WAT transforms.
 
@@ -307,4 +305,3 @@
         end
       end
     end)
-)

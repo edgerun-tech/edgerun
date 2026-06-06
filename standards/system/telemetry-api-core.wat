@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_hex" (func $is_hex (param i32) (result i32)))
 ;; Captures edgerun-opentelemetry-upstream API semantics: W3C baggage,
   ;; tracestate/traceparent validation, metric builders, span status/kind, and log severity.
   (func $m145is_hex (param $c i32) (result i32)
@@ -207,4 +204,3 @@
   ;; Composite propagator inject/extract runs in constructor order; zero is no-op.
   (func (export "otel_composite_steps") (param $propagator_count i32) (result i32)
     (local.get $propagator_count))
-)

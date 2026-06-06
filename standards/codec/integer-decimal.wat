@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 
   (global $m118TMP i32 (i32.const 65000))
   (global $m118TMP_END i32 (i32.const 65064))
@@ -289,4 +287,3 @@
     local.get $out
     local.get $cap
     call $copy_tmp)
-)

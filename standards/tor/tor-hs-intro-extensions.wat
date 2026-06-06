@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (type $t_15_0 (func (param i32 i32 i32 i32 i32 i32 i32) (result i32)))
   (type $t_15_1 (func (param i32 i32) (result i32)))
   (type $t_15_2 (func (param i32 i32 i32 i32 i32) (result i32)))
@@ -4488,4 +4486,3 @@
   (export "tor_hs_intro_ext_pow_len" (func 14))
   (export "proto_standard_id" (func 16))
   (data  (i32.const 1048576) "Tor hs intro v1\00\00\00\00\00\00\00\00\00\08\c9\bc\f3g\e6\09j;\a7\ca\84\85\aeg\bb+\f8\94\fer\f3n<\f16\1d_:\f5O\a5\d1\82\e6\ad\7fR\0eQ\1fl>+\8ch\05\9bk\bdA\fb\ab\d9\83\1fy!~\13\19\cd\e0[")
-)

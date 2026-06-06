@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "is_digit" (func $is_digit (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300009)
@@ -824,4 +821,3 @@
     local.get $count
     i32.store
     i32.const 0)
-)

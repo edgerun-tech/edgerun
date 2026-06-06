@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 
   ;; OSRS cache smart-int encoding — prefix-variable integer formats.
   ;;
@@ -156,4 +154,3 @@
     local.get $buf local.get $off i32.add local.get $val i32.const 0x7FFFFFFF i32.and i32.store
     local.get $off i32.const 4 i32.add
   )
-)

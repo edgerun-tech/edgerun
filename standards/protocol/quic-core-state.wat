@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
     (i32.const 300104))
@@ -239,4 +236,3 @@
     (if (i32.eq (local.get $field) (i32.const 4))
       (then (return (i64.const 50000)))) ;; default rttvar micros
     (i64.const 0))
-)

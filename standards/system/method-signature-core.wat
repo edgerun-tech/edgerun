@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (global $parsed_kind (mut i32) (i32.const 0))
 
@@ -548,4 +545,3 @@
     local.get $status
     local.get $next
     call $pack)
-)

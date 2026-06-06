@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Browser-core Rust semantics captured from browser-wire, browser-authoring,
   ;; browser-runtime, browser-host, browser-core-slice, and browser-work mirrors.
   ;;
@@ -708,4 +706,3 @@
       i32.const 65536
       i32.div_u
     end)
-)

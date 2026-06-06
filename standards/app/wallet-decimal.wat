@@ -1,4 +1,3 @@
-(module
   (type $t0 (func (result i32)))
   (type $t1 (func (param i32 i64 i64 i32)))
   (type $t2 (func (param i64 i64 i32 i32) (result i32)))
@@ -9,7 +8,6 @@
   (type $t7 (func (param i64 i64 i32 i64 i64 i32) (result i32)))
   (type $t8 (func (param i64 i64) (result i32)))
   (type $t9 (func (param i64 i64 i32 i32 i32) (result i64)))
-  (import "edgerun-core" "memory" (memory $memory 1))
   (func $proto_standard_id (export "proto_standard_id") (type $t0) (result i32)
     (i32.const 300160))
   (func $f2 (type $t1) (param $p0 i32) (param $p1 i64) (param $p2 i64) (param $p3 i32)

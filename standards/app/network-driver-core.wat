@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Frame-device and RTL8125 NIC semantics plundered from edgerun-network-driver.
 
   (func (export "network_driver_abi_version") (result i32) i32.const 1)
@@ -147,4 +145,3 @@
     ;; 64-bit memory BAR consumes two slots.
     (if (i32.eq (i32.and (local.get $bar) (i32.const 6)) (i32.const 4)) (then (return (i32.const 8))))
     i32.const 4)
-)

@@ -1,6 +1,3 @@
-(module
-  (import "sys" "read" (func $sys_read (param i32 i32 i32) (result i32)))
-  (import "sys" "write" (func $sys_write (param i32 i32 i32) (result i32)))
   (memory 1)
   (data (i32.const 0x2000) "0123456789abcdef")
   (func (export "_start") (result i32)
@@ -39,4 +36,3 @@
     )
     (i32.const 0)
   )
-)

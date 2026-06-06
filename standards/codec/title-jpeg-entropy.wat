@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Baseline JPEG entropy decoder for the retained title.jpg metadata.
   ;;
   ;; Decodes the first MCU block from a JPEG entropy-coded scan using the
@@ -451,4 +449,3 @@
 
     i32.const 0
   )
-)

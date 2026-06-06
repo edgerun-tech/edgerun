@@ -1,4 +1,3 @@
-(module
   (memory (export "memory") 64)
   (data (i32.const 65000) "edgerun:ui-hit:v1")
   (data (i32.const 65100) "M5 12l4 4L19 6")

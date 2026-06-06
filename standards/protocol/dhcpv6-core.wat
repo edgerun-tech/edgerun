@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32)
     i32.const 300111)
 
@@ -74,4 +72,3 @@
     (if (i32.eq (local.get $kind) (i32.const 4)) (then (return (i32.const 1800))))
     (if (i32.eq (local.get $kind) (i32.const 5)) (then (return (i32.const 2700))))
     i32.const 0)
-)

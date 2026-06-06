@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; DJB2 hash — Dan Bernstein's djb2 string hash, modified with initial hash = 0.
   ;; This is the variant used by OSRS cache lookups.
   ;; Exports: djb2_hash(input_ptr, input_len) -> i32 hash
@@ -20,4 +18,3 @@
     end
     local.get $hash
   )
-)

@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; EdgeRun HTTP client portable semantics.
   ;; Codes:
   ;; version: 1=h1 2=h2 3=h3 4=best 5=h2_or_h1
@@ -181,4 +179,3 @@
   (func (export "tls_obfuscated_ticket_age")
     (param $elapsed_ms i32) (param $age_add i32) (result i32)
     (i32.add (local.get $elapsed_ms) (local.get $age_add)))
-)

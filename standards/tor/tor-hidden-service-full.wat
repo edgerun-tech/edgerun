@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Tor onion-service v3 and EdgeRun identity-fabric surface.
   ;; This module owns hidden-service state, onion address shape checks,
   ;; descriptor path construction, intro/rendezvous relay payloads, and
@@ -212,4 +210,3 @@
   (func (export "tor_hs_parse_intro_status") (param $body i32) (param $body_len i32) (result i32)
     (if (i32.lt_u (local.get $body_len) (i32.const 1)) (then (return (global.get $m11ERR_INVALID))))
     (i32.load8_u (local.get $body)))
-)

@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "pack" (func $pack (param i32 i32) (result i64)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300011)
@@ -148,4 +145,3 @@
     (call $prefix_encode
       (local.get $value) (local.get $prefix_bits) (local.get $prefix_high_bits)
       (local.get $out_ptr) (local.get $out_cap)))
-)

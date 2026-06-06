@@ -1,7 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-(import "crypto" "xtea_encrypt" (func $xtea_encrypt (param i32 i32 i32) (result i32)))
-  (import "crypto" "xtea_decrypt" (func $xtea_decrypt (param i32 i32 i32) (result i32)))(func (export "proto_standard_id") (result i32) i32.const 710001)
 
   (global $OK                     i32 (i32.const 0))
   (global $ERR_BOUNDS             i32 (i32.const -1))
@@ -1998,4 +1994,3 @@
     global.get $MEM_SESSION_STATE global.get $SESS_IN_LENGTH_MODE i32.add i32.load
     global.get $MEM_LOGIN_STATE global.get $L_FIRST_PAYLOAD_READY i32.add i32.load
   )
-)

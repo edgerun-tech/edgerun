@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   (func (export "proto_standard_id") (result i32) i32.const 710002)
 
   ;; ── Error codes ──
@@ -2477,4 +2475,3 @@
     local.get $max_out
     call $anim_frame_accumulate_type_group_yaws
   )
-)

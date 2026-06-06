@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Virtio PCI/MMIO and split-queue semantics captured from edgerun-virtio.
   ;;
   ;; Status bits: acknowledge=1 driver=2 driver_ok=4 features_ok=8 failed=128.
@@ -640,4 +638,3 @@
     else
       local.get $found
     end)
-)

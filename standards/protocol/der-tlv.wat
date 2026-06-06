@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32)
     i32.const 300005)
 
@@ -216,4 +214,3 @@
           (i64.shl (i64.extend_i32_u (local.get $tag)) (i64.const 32)))
         (i64.shl (i64.extend_i32_u (local.get $consumed)) (i64.const 16)))
       (i64.const 0)))
-)

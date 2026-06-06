@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32)
     i32.const 300112)
 
@@ -213,4 +211,3 @@
   (data (i32.const 1152) "quicksilverrealtimetranscription")
   (data (i32.const 1200) "response.output_item.doneresponse.output_text.deltaresponse.custom_tool_call_input.deltaresponse.reasoning_summary_text.deltaresponse.reasoning_text.deltaresponse.createdresponse.failedresponse.incompleteresponse.completedresponse.output_item.addedresponse.reasoning_summary_part.added")
   (data (i32.const 1500) "context_length_exceededinsufficient_quotausage_not_includedinvalid_promptcyber_policyserver_is_overloadedslow_downrate_limit_exceeded")
-)

@@ -1,4 +1,3 @@
-(module
   (memory (export "memory") 33)
   (global (export "js5_cache_request_state") i32 (i32.const 0))
   (global (export "js5_cache_socket_fd") i32 (i32.const 136))
@@ -584,4 +583,3 @@
     (i32.store (i32.const 148) (global.get $ERR_TODO))
     (global.get $ERR_TODO)
   )
-)

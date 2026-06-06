@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; Internet checksum — RFC 1071 one's complement 16-bit checksum.
   ;; Exports: inet_checksum(data_ptr, data_len) -> i32 (16-bit checksum)
   (func (export "proto_standard_id") (result i32) i32.const 300522)
@@ -27,4 +25,3 @@
     i32.const 0xffff i32.and
     i32.const 0xffff i32.xor
   )
-)

@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Filesystem walking and identity semantics captured from local walkdir,
   ;; same-file, and tempfile compatibility crates.
   ;;
@@ -324,4 +322,3 @@
     else
       i32.const 1
     end)
-)

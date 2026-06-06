@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Standard 300097: portable Linux machine inventory classifiers extracted from
   ;; crates/node/edgerun-machine-report. Host code gathers facts; this module
   ;; deterministically parses labels and applies deployment-mode policy.
@@ -754,4 +752,3 @@
       local.set $out
     end
     local.get $out)
-)

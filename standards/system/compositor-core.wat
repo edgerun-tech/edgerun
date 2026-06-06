@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 (func (export "proto_standard_id") (result i32) i32.const 300130)
 
   (func $m51eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
@@ -149,4 +147,3 @@
     (i64.add (local.get $seq) (i64.const 1)))
 
   (data (i32.const 16) "wl_compositorwl_shmwl_seatxdg_wm_basewl_outputzwp_linux_dmabuf_v1wl_subcompositorwp_viewporterxdg_activation_v1wp_linux_drm_syncobjzwlr_screencopyzwp_text_input_manager_v3zwlr_layer_shell_v1")
-)

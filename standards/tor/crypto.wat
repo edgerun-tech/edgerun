@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Tor crypto WAT slice from pre-erobj commit 1b243c8d6a843585bc54b4366f814cf5f56615b1.
   ;; Memory is exported so callers can place inputs/contexts directly.
   ;; Public layout constants.
@@ -417,4 +415,3 @@
 
   (func $er_tor_aes_ctr (export "er_tor_aes_ctr") (param $out i32) (param $in i32) (param $len i32) (param $key i32) (param $iv i32) (result i32)
     (call $er_tor_aes128_ctr (local.get $out) (local.get $in) (local.get $len) (local.get $key) (local.get $iv)))
-)

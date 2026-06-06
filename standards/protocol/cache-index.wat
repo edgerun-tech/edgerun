@@ -1,4 +1,3 @@
-(module
   (memory (export "memory") 33)
   (global (export "cache_index_data_ptr") i32 (i32.const 0))
   (global (export "cache_index_data_len") i32 (i32.const 8))
@@ -400,4 +399,3 @@
     )
     (unreachable)
   )
-)

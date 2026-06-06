@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
 ;; Validator semantics plundered from edgerun-core.
   ;; Result code 0 is accept unless a function says otherwise.
 
@@ -361,4 +359,3 @@
     (if (i32.and (i32.ge_u (local.get $kind) (i32.const 1)) (i32.le_u (local.get $kind) (i32.const 13)))
       (then (return (local.get $kind))))
     i32.const 0)
-)

@@ -1,6 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "to_lower" (func $to_lower (param i32) (result i32)))
 
 ;; Wildcard/glob pattern matching — case-insensitive.
   ;; Supports '*' (match any sequence) and '?' (match single char).
@@ -70,5 +67,3 @@
     end
     i32.const 0
   )
-
-)

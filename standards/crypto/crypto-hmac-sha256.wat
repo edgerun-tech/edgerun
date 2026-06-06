@@ -1,5 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
   ;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
   (func (export "proto_standard_id") (result i32) i32.const 300085)
 
@@ -439,4 +437,3 @@
       br $loop
     end
     end)
-  )

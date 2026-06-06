@@ -1,4 +1,3 @@
-(module
   (memory (export "memory") 2)
   (global (export "sine_table") i32 (i32.const 0))
   (global (export "noise_table") i32 (i32.const 65536))
@@ -8207,4 +8206,3 @@
   (func (export "sfx_tables_get_noise") (param $i i32) (result i32)
     (i32.load16_s (i32.add (i32.const 65536) (i32.shl (local.get $i) (i32.const 1))))
   )
-)

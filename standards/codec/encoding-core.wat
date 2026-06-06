@@ -1,4 +1,4 @@
-(func $ec_has (param $len i32) (param $offset i32) (param $need i32) (result i32)
+(func $bounds_check (param $len i32) (param $offset i32) (param $need i32) (result i32)
     (if (result i32)
       (i32.lt_u (local.get $len) (local.get $need))
       (then (i32.const 0))
@@ -9,7 +9,7 @@
 
   (func (export "read_u16_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
     (if (result i64)
-      (call $ec_has (local.get $len) (local.get $offset) (i32.const 2))
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 2))
       (then
         (call $pack
           (i32.const 0)
@@ -25,7 +25,7 @@
 
   (func (export "read_u32_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
     (if (result i64)
-      (call $ec_has (local.get $len) (local.get $offset) (i32.const 4))
+      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 4))
       (then
         (call $pack
           (i32.const 0)

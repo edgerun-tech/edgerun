@@ -1,11 +1,3 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  (import "edgerun-core" "memcpy" (func $memcpy (param i32 i32 i32)))
-  (import "socket-core" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))
-  (import "socket-core" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))
-  (import "socket-core" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))
-  (import "socket-core" "sock_close" (func $sock_close (param i32) (result i32)))
-  (import "encoding-base64" "base64_standard_encode" (func $base64_encode (param i32 i32 i32 i32) (result i64)))
 ;; WebSocket client — HTTP Upgrade handshake + masked frame send/recv.
   ;; Uses abstract socket for transport.
   (func (export "proto_standard_id") (result i32) i32.const 300507)
@@ -619,4 +611,3 @@
     local.get $fd i32.const 8 i32.const 0 i32.const 0 call $ws_send
     drop
     local.get $fd call $sock_close)
-)
