@@ -1,31 +1,12 @@
+  (import "edgerun" "to_lower" (func $m115lower (param i32) (result i32)))
+  (import "http" "is_space" (func $is_space (param i32) (result i32)))
+
+  ;; Shared HTTP primitives from http-core.wat: $is_space
+  ;; NOTE: this file uses an extended $m115is_tchar that includes { (123) and } (125).
+  ;; The standard $is_tchar from http-core.wat omits those — keep the extended version here.
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300003)
-
-  (func $m115is_space (param $b i32) (result i32)
-    local.get $b
-    i32.const 32
-    i32.eq
-    local.get $b
-    i32.const 9
-    i32.eq
-    i32.or)
-
-  (func $m115lower (param $b i32) (result i32)
-    local.get $b
-    i32.const 65
-    i32.ge_u
-    local.get $b
-    i32.const 90
-    i32.le_u
-    i32.and
-    if (result i32)
-      local.get $b
-      i32.const 32
-      i32.add
-    else
-      local.get $b
-    end)
 
   (func $m115is_tchar (param $b i32) (result i32)
     local.get $b
@@ -827,7 +808,7 @@
           local.get $i
           i32.add
           i32.load8_u
-          call $m115is_space
+          call $is_space
           if
             local.get $i
             i32.const 1
@@ -873,7 +854,7 @@
           i32.const 1
           i32.sub
           i32.load8_u
-          call $m115is_space
+          call $is_space
           if
             local.get $end
             i32.const 1

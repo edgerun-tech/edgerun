@@ -1,171 +1,13 @@
+  (import "edgerun" "to_lower" (func $m111lower (param i32) (result i32)))
+  (import "http" "is_tchar" (func $is_tchar (param i32) (result i32)))
+  (import "http" "is_space" (func $is_space (param i32) (result i32)))
+  (import "http" "is_header_value_byte" (func $is_header_value_byte (param i32) (result i32)))
+  (import "http" "ascii_eq_ci" (func $ascii_eq_ci (param i32 i32 i32 i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300009)
 
   (data (i32.const 65500) "18446744073709551615")
-
-  (func $m111lower (param $b i32) (result i32)
-    local.get $b
-    i32.const 65
-    i32.ge_u
-    local.get $b
-    i32.const 90
-    i32.le_u
-    i32.and
-    if (result i32)
-      local.get $b
-      i32.const 32
-      i32.add
-    else
-      local.get $b
-    end)
-
-  (func $m111is_space (param $b i32) (result i32)
-    local.get $b
-    i32.const 32
-    i32.eq
-    local.get $b
-    i32.const 9
-    i32.eq
-    i32.or)
-
-  (func $m111is_tchar (param $b i32) (result i32)
-    local.get $b
-    i32.const 65
-    i32.ge_u
-    local.get $b
-    i32.const 90
-    i32.le_u
-    i32.and
-    local.get $b
-    i32.const 97
-    i32.ge_u
-    local.get $b
-    i32.const 122
-    i32.le_u
-    i32.and
-    i32.or
-    local.get $b
-    i32.const 48
-    i32.ge_u
-    local.get $b
-    i32.const 57
-    i32.le_u
-    i32.and
-    i32.or
-    local.get $b
-    i32.const 33
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 35
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 36
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 37
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 38
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 39
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 42
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 43
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 45
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 46
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 94
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 95
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 96
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 124
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 126
-    i32.eq
-    i32.or)
-
-  (func $m111is_header_value_byte (param $b i32) (result i32)
-    local.get $b
-    i32.const 9
-    i32.eq
-    local.get $b
-    i32.const 32
-    i32.ge_u
-    local.get $b
-    i32.const 126
-    i32.le_u
-    i32.and
-    i32.or)
-
-  (func $m111ascii_eq_ci (param $aptr i32) (param $alen i32) (param $bptr i32) (param $blen i32) (result i32)
-    (local $i i32)
-    local.get $alen
-    local.get $blen
-    i32.ne
-    if
-      i32.const 0
-      return
-    end
-    loop $scan
-      local.get $i
-      local.get $alen
-      i32.ge_u
-      if
-        i32.const 1
-        return
-      end
-      local.get $aptr
-      local.get $i
-      i32.add
-      i32.load8_u
-      call $m111lower
-      local.get $bptr
-      local.get $i
-      i32.add
-      i32.load8_u
-      call $m111lower
-      i32.ne
-      if
-        i32.const 0
-        return
-      end
-      local.get $i
-      i32.const 1
-      i32.add
-      local.set $i
-      br $scan
-    end
-    i32.const 1)
 
   (func $m111parse_u64_decimal (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $start i32)
@@ -183,7 +25,7 @@
         local.get $start
         i32.add
         i32.load8_u
-        call $m111is_space
+        call $is_space
         if
           local.get $start
           i32.const 1
@@ -206,7 +48,7 @@
         i32.sub
         i32.add
         i32.load8_u
-        call $m111is_space
+        call $is_space
         if
           local.get $end
           i32.const 1
@@ -359,7 +201,7 @@
         local.get $i
         i32.add
         i32.load8_u
-        call $m111is_tchar
+        call $is_tchar
         i32.eqz
         if
           i32.const 3
@@ -391,7 +233,7 @@
           local.get $i
           i32.add
           i32.load8_u
-          call $m111is_space
+          call $is_space
           if
             local.get $i
             i32.const 1
@@ -417,7 +259,7 @@
           i32.ne
           if
             local.get $b
-            call $m111is_header_value_byte
+            call $is_header_value_byte
             i32.eqz
             if
               i32.const 3
@@ -444,7 +286,7 @@
           i32.sub
           i32.add
           i32.load8_u
-          call $m111is_space
+          call $is_space
           if
             local.get $end
             i32.const 1
@@ -462,7 +304,7 @@
       i32.sub
       local.get $tptr
       local.get $tlen
-      call $m111ascii_eq_ci
+      call $ascii_eq_ci
       if
         i32.const 0
         return
@@ -534,7 +376,7 @@
     local.get $len
     local.get $lit
     local.get $lit_len
-    call $m111ascii_eq_ci)
+    call $ascii_eq_ci)
 
   (data (i32.const 65440) "content-length")
   (data (i32.const 65456) "transfer-encoding")
@@ -611,7 +453,7 @@
           local.get $i
           i32.add
           i32.load8_u
-          call $m111is_tchar
+          call $is_tchar
           i32.eqz
           if
             i32.const 3
@@ -644,7 +486,7 @@
           local.get $value_start
           i32.add
           i32.load8_u
-          call $m111is_space
+          call $is_space
           if
             local.get $value_start
             i32.const 1
@@ -667,7 +509,7 @@
           i32.sub
           i32.add
           i32.load8_u
-          call $m111is_space
+          call $is_space
           if
             local.get $value_end
             i32.const 1
@@ -691,7 +533,7 @@
             local.get $i
             i32.add
             i32.load8_u
-            call $m111is_header_value_byte
+            call $is_header_value_byte
             i32.eqz
             if
               i32.const 3

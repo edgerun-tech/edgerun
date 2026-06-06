@@ -1,0 +1,274 @@
+#!/usr/bin/env node
+/**
+ * EdgeRun Build System
+ *
+ * Concatenates source fragments into a single `edgerun.wasm`.
+ *
+ * Usage:
+ *   node tools/build_wat.mjs [--out edgerun.wat]
+ *
+ * Source order is defined by the MANIFEST array below.
+ * Each entry can be:
+ *   - A filename string (fragment, no (module) wrapper expected)
+ *   - An object {file, strip_module, strip_memory, strip_imports}
+ *
+ * Files that end with "-stage.wat" are automatically treated as stage wrappers
+ * and get their (import)s converted to local references when the target is in-module.
+ */
+
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { resolve, dirname, basename } from 'path';
+
+const ROOT = resolve(import.meta.dirname, '..');
+
+// ── Manifest: dependency-order fragment list ──────────────────────
+// Order matters: globals before functions, definitions before references.
+const MANIFEST = [
+  // ── Layer 0: Runtime foundation ──
+  'runtime/memory.wat',           // canonical (memory) + LUT data
+  'runtime/memory-map.wat',       // address space constants
+  'runtime/edgerun-core.wat',     // char helpers, pack, memcpy, status, syscalls
+  'runtime/math-utils.wat',       // min, max, clamp, etc.
+
+  // ── Layer 1: Pipeline transport ──
+  'pipeline/pipe-core.wat',       // pipes, bump allocator
+
+  // ── Layer 2: Pipeline dispatch ──
+  'pipeline/pipeline-core.wat',   // stage_table, pipeline_run, descriptors
+
+  // ── Layer 3: Pipeline stages (alphabetical) ──
+  'pipeline/frame-core.wat',
+  'pipeline/frame-pacer.wat',
+  'pipeline/mux-core.wat',
+  'pipeline/wasm-exec-stage.wat',
+
+  // ── Layer 4: Interpreter / Compiler ──
+  'compiler/interpreter-core.wat', // interpreter engine
+  'compiler/interpreter.wat',      // WAT parser + standalone exports
+  'pipeline/wasm-interpreter.wat', // pipeline wrapper (thin)
+
+  // ── Layer 5: Interpreter fragments ──
+  // interpreter-wat.wat content is already in interpreter.wat (standalone version)
+
+  // ── Layer 6: JIT Compiler (x86-64 backend) ──
+  'compiler/base-x86-64.wat',
+  'compiler/emit-x86-64.wat',
+  'compiler/templates-x86-64.wat',
+  'compiler/simd-x86-64.wat',
+  'compiler/dispatch.wat',
+  // Add combined file for ELF packaging + SIMD templates not in sub-files
+  // Strip jit_compile (defined in dispatch.wat) to avoid conflict
+  {file: 'compiler/compiler-x86_64.wat', strip_all_globals: true, strip_funcs: ['\\$jit_compile']},
+
+  // ── Layer 7: Crypto ──
+  // (TODO: convert crypto/*.wat to fragments)
+  // After crypto fragments are converted, add them here
+
+  // ── Layer 8: Protocol parsers ──
+  // (TODO: convert protocol/*.wat to fragments)
+
+  // ── Layer 9: Codec ──
+  // (TODO: convert codec/*.wat to fragments)
+
+  // ── Layer 10: UI Framework ──
+  // (TODO: convert ui/*.wat to fragments; 00_prelude needs memory+data stripped)
+
+  // ── Layer 11: System ──
+  // (TODO: convert system/*.wat to fragments)
+
+  // ── Layer 12: App ──
+  // (TODO: convert app/*.wat to fragments)
+
+  // ── Layer 13: Device ──
+  // (TODO: convert device/*.wat to fragments)
+
+  // ── Layer 14: Data ──
+  // (TODO: convert data/*.wat to fragments)
+
+  // ── Layer 15: Net ──
+  // (TODO: convert net/*.wat to fragments)
+
+  // ── Layer 16: Tools ──
+  // (TODO: convert tools/*.wat to fragments)
+];
+
+// ── Fragments that import from edgerun-core (will be auto-resolved) ──
+// Map: fragment file → list of imported names that should become local refs
+const IMPORT_MAP = {
+  'pipeline/pipe-core.wat':              ['min_u'],
+  'pipeline/wasm-interpreter.wat':       ['STATUS_OK'],
+  'compiler/interpreter-core.wat':       [],
+};
+
+// ── Local function names that stage imports should resolve to ──
+// Map: import name → local function name (from the defining fragment)
+const IMPORT_RESOLVE = {
+  'min_u':       '$min_u',
+  'STATUS_OK':   '$STATUS_OK',
+};
+
+// ── Globals defined canonically in runtime/ — strip from all other files ──
+// These regex patterns match global definitions that should only appear once.
+const CANONICAL_GLOBALS = [
+  /^\s*\(global\s+\$OK\b.*\n?/gm,
+  /^\s*\(global\s+\$LINUX_SYS_X64_\w+\s.*\n?/gm,
+  /^\s*\(global\s+\$LINUX_SYS_AARCH64_\w+\s.*\n?/gm,
+  /^\s*\(global\s+\$JIT_CACHE\b.*\n?/gm,
+  /^\s*\(global\s+\$JIT_CACHE_SIZE\b.*\n?/gm,
+  /^\s*\(global\s+\$ERR_UNSUP\b.*\n?/gm,
+  /^\s*\(global\s+\$STACK_SIZE\b.*\n?/gm,
+];
+
+// ── Build ────────────────────────────────────────────────────────────
+
+function stripModuleHeader(content) {
+  return content.replace(/^\s*\(module\b[^)]*\)?\s*/m, '');
+}
+
+function stripMemory(content) {
+  return content.replace(/^\s*\(memory\s+\(export\s+"memory"\)\s+\d+\)\s*/m, '');
+}
+
+function stripImport(content, file) {
+  const imports = IMPORT_MAP[file];
+  if (!imports) return content;
+  for (const name of imports) {
+    // Remove import lines matching this import name
+    const regex = new RegExp(
+      `\\s*\\(import\\s+"[^"]*"\\s+"${name}"\\s+\\(func\\s+\\$[^)]+\\)\\)\\s*`,
+      'g'
+    );
+    content = content.replace(regex, '');
+  }
+  return content;
+}
+
+function stripFuncs(content, funcNames) {
+  for (const name of funcNames) {
+    const regex = new RegExp(
+      `\\(func\\s+${name}(?:\\s+\\(export\\s+"[^"]*"\\))?[^)]*\\)`,
+      'g'
+    );
+    // First pass: remove simple single-line function defs
+    let prev;
+    do {
+      prev = content;
+      content = content.replace(regex, '');
+    } while (content !== prev);
+    // Multi-line: strip from (func $name to matching closing paren
+    const startRegex = new RegExp(
+      `\\(func\\s+${name}(?:\\s+\\(export\\s+"[^"]*"\\))?`,
+      'g'
+    );
+    let match;
+    while ((match = startRegex.exec(content)) !== null) {
+      const start = match.index;
+      let depth = 0;
+      let i = start;
+      while (i < content.length) {
+        if (content[i] === '(') depth++;
+        if (content[i] === ')') {
+          depth--;
+          if (depth === 0) break;
+        }
+        i++;
+      }
+      const end = i + 1;
+      content = content.slice(0, start) + content.slice(end);
+      startRegex.lastIndex = start; // re-scan from replacement point
+    }
+  }
+  return content;
+}
+
+function stripCanonicalGlobals(content, filePath) {
+  // Only strip from non-runtime files
+  if (filePath.startsWith('runtime/')) return content;
+  let stripped = 0;
+  for (const pattern of CANONICAL_GLOBALS) {
+    const before = content.length;
+    content = content.replace(pattern, '');
+    stripped += before - content.length;
+  }
+  if (stripped > 0) {
+    console.log(`  ${filePath}: stripped ${stripped} bytes (canonical globals)`);
+  }
+  return content;
+}
+
+function processFile(filePath, opts = {}) {
+  const fullPath = resolve(ROOT, filePath);
+  if (!existsSync(fullPath)) {
+    console.warn(`⚠  WARNING: ${filePath} not found — skipping`);
+    return '';
+  }
+
+  let content = readFileSync(fullPath, 'utf-8');
+  const originalLength = content.length;
+
+  // Strip (module ...) header if this is a standalone module being converted
+  if (opts.strip_module !== false && basename(filePath) !== 'edgerun.wat') {
+    content = stripModuleHeader(content);
+  }
+
+  // Strip (memory ...) if not the canonical source
+  if (opts.strip_memory !== false && filePath !== 'runtime/memory.wat') {
+    content = stripMemory(content);
+  }
+
+  // Strip imports that resolve to local functions
+  content = stripImport(content, filePath);
+
+  // Strip canonical globals (defined in runtime/) from non-runtime files
+  content = stripCanonicalGlobals(content, filePath);
+
+  // Strip ALL global definitions from this file (used when file is redundant with another)
+  if (opts.strip_all_globals) {
+    content = content.replace(/^\s*\(global\s+\$\w+(?:\s+\(export\s+"[^"]*"\))?\s+(?:i32|\(mut\s+i32\))\s+\([^)]*\)\s*\).*$/gm, '');
+  }
+
+  // Strip specific function definitions by name (to resolve conflicts)
+  if (opts.strip_funcs && opts.strip_funcs.length > 0) {
+    content = stripFuncs(content, opts.strip_funcs);
+  }
+
+  const stripped = originalLength - content.length;
+  if (stripped > 0) {
+    console.log(`  ${filePath}: stripped ${stripped} bytes (module/memory/imports)`);
+  }
+
+  // Add file marker comment
+  return `;; ── ${filePath} ──\n${content.trim()}\n\n`;
+}
+
+function build() {
+  const outPath = resolve(ROOT, process.argv.find(a => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
+
+  console.log(`\nEdgeRun Build — ${new Date().toISOString()}`);
+  console.log(`Output: ${outPath}\n`);
+  console.log('Processing fragments:');
+
+  let body = '';
+  let count = 0;
+
+  for (const entry of MANIFEST) {
+    if (typeof entry === 'string') {
+      body += processFile(entry, {});
+      count++;
+    } else if (entry.file) {
+      body += processFile(entry.file, entry);
+      count++;
+    }
+  }
+
+  // Wrap in module if not already
+  const moduleDecl = '(module\n';
+  const moduleClose = '\n)\n';
+
+  const final = moduleDecl + body + moduleClose;
+
+  writeFileSync(outPath, final, 'utf-8');
+  console.log(`\n✓ Written ${count} fragments → ${outPath} (${final.length} bytes)`);
+}
+
+build();

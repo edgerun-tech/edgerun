@@ -1,4 +1,6 @@
 
+  (import "dns" "is_label_byte" (func $is_label_byte (param i32) (result i32)))
+
 (func (export "proto_standard_id") (result i32)
     i32.const 300162)
 
@@ -19,15 +21,6 @@
       (i32.or
         (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 2))) (i32.const 8))
         (i32.load8_u (i32.add (local.get $ptr) (i32.const 3))))))
-
-  (func $m78is_label_byte (param $b i32) (result i32)
-    (i32.or
-      (i32.or
-        (call $is_alpha (local.get $b))
-        (call $is_digit (local.get $b)))
-      (i32.or
-        (i32.eq (local.get $b) (i32.const 45))
-        (i32.eq (local.get $b) (i32.const 95)))))
 
   (func $dns_record_type_status (export "dns_record_type_status") (param $rtype i32) (result i32)
     (if (i32.ne (call $dns_record_type_family (local.get $rtype)) (i32.const 0))
@@ -157,7 +150,7 @@
       (if (i32.lt_u (local.get $i) (local.get $len))
         (then
           (local.set $b (i32.load8_u (i32.add (local.get $in_ptr) (local.get $i))))
-          (if (i32.eqz (call $m78is_label_byte (local.get $b)))
+          (if (i32.eqz (call $is_label_byte (local.get $b)))
             (then (return (i32.const 3))))
           (if (i32.and (i32.eqz (local.get $i)) (i32.eq (local.get $b) (i32.const 45)))
             (then (return (i32.const 3))))

@@ -1,26 +1,7 @@
-  ;; EdgeRun shared runtime core — owns linear memory, exports shared helpers.
-  ;; All other modules import memory + helpers from here.
-
-  (memory (export "memory") 16384)
-
-  ;; Character classification LUT at 0x1000 (256 bytes)
-  ;; bit 0: digit, bit 1: uppercase, bit 2: lowercase, bit 3: tchar,
-  ;; bit 4: hex, bit 5: ws, bit 6: scheme, bit 7: dns-label
-  (data (i32.const 0x1000) "\00\00\00\00\00\00\00\00\00\20\20\00\00\20\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\20\08\00\08\08\08\08\08\00\00\08\48\00\c8\48\00\d9\d9\d9\d9\d9\d9\d9\d9\d9\d9\00\00\00\00\00\00\00\da\da\da\da\da\da\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\ca\00\00\00\08\08\08\dc\dc\dc\dc\dc\dc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\cc\00\08\00\08\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
-
-  ;; Lowercase mapping LUT at 0x2000 (256 bytes)
-  (data (i32.const 0x2000) "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\61\62\63\64\65\66\67\68\69\6a\6b\6c\6d\6e\6f\70\71\72\73\74\75\76\77\78\79\7a\00\00\00\00\00\00\61\62\63\64\65\66\67\68\69\6a\6b\6c\6d\6e\6f\70\71\72\73\74\75\76\77\78\79\7a\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00")
-
-  ;; ── Shared memory layout constants (imported by interpreter + compiler) ──
-  (global $OFF_TYPES_BUF (export "OFF_TYPES_BUF") i32 (i32.const 264))
-  (global $OFF_CODE_BUF (export "OFF_CODE_BUF") i32 (i32.const 21792))
-  (global $OFF_FUNCTIONS_BUF (export "OFF_FUNCTIONS_BUF") i32 (i32.const 17688))
-  (global $OFF_DECODED_OPS (export "OFF_DECODED_OPS") i32 (i32.const 0xA0000))
-  (global $OFF_DECODED_COUNT (export "OFF_DECODED_COUNT") i32 (i32.const 89864))
-  (global $DEC_SZ (export "DEC_SZ") i32 (i32.const 32))
-  (global $SZ_TYPE (export "SZ_TYPE") i32 (i32.const 256))
-  (global $SZ_FUNC (export "SZ_FUNC") i32 (i32.const 16))
-  (global $SZ_CODE (export "SZ_CODE") i32 (i32.const 64))
+   ;; EdgeRun shared runtime helpers — fragment for inclusion in single module.
+   ;; (memory) and LUT data are in runtime/memory.wat — include that first.
+   ;; Memory map constants are in runtime/memory-map.wat — include that second.
+   ;; This file provides char helpers, pack/unpack, memcpy, status codes, syscalls.
 
   ;; ── Character classification helpers ──
 
@@ -181,10 +162,13 @@
   (global $STATUS_OVERFLOW     (export "STATUS_OVERFLOW")     i32 (i32.const 4))
   (global $STATUS_TRUNCATED    (export "STATUS_TRUNCATED")    i32 (i32.const 5))
   (global $STATUS_TOO_LONG     (export "STATUS_TOO_LONG")     i32 (i32.const 6))
-  (global $STATUS_MORE         (export "STATUS_MORE")         i32 (i32.const 7))
-  (global $STATUS_TIMEOUT      (export "STATUS_TIMEOUT")      i32 (i32.const 8))
+   (global $STATUS_MORE         (export "STATUS_MORE")         i32 (i32.const 7))
+   (global $STATUS_TIMEOUT      (export "STATUS_TIMEOUT")      i32 (i32.const 8))
 
-  ;; ── Global epoch — shared tick counter across all modules ──
+   ;; ── $OK alias — used by interpreter core (STATUS_OK = 0) ──
+   (global $OK i32 (i32.const 0))
+
+   ;; ── Global epoch — shared tick counter across all modules ──
   ;; Schedulers increment this before driving pipelines. Stages read it
   ;; for cross-pipeline synchronization and tick-based timeouts.
   (global $epoch (export "epoch") (mut i32) (i32.const 0))

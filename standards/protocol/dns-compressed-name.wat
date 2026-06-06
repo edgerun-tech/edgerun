@@ -1,25 +1,10 @@
+  (import "edgerun" "to_lower" (func $m77lower_ascii (param i32) (result i32)))
+  (import "dns" "is_label_byte" (func $is_label_byte (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300033)
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
-
-  (func $m77is_label_byte (param $b i32) (result i32)
-    (i32.or
-      (i32.or
-        (call $is_alpha (local.get $b))
-        (call $is_digit (local.get $b)))
-      (i32.or
-        (i32.eq (local.get $b) (i32.const 45))
-        (i32.eq (local.get $b) (i32.const 95)))))
-
-  (func $m77lower_ascii (param $b i32) (result i32)
-    (if (result i32)
-      (i32.and
-        (i32.ge_u (local.get $b) (i32.const 65))
-        (i32.le_u (local.get $b) (i32.const 90)))
-      (then (i32.add (local.get $b) (i32.const 32)))
-      (else (local.get $b))))
 
   (func $u32_at (param $ptr i32) (param $index i32) (result i32)
     (i32.load (i32.add (local.get $ptr) (i32.mul (local.get $index) (i32.const 4)))))
@@ -151,7 +136,7 @@
                 (i32.add
                   (local.get $ptr)
                   (i32.add (i32.add (local.get $pos) (i32.const 1)) (local.get $j)))))
-            (if (i32.eqz (call $m77is_label_byte (local.get $b)))
+            (if (i32.eqz (call $is_label_byte (local.get $b)))
               (then (return (i32.const 3))))
             (if
               (i32.and

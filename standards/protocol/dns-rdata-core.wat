@@ -1,4 +1,6 @@
 
+  (import "dns" "is_label_byte" (func $is_label_byte (param i32) (result i32)))
+
 (func (export "proto_standard_id") (result i32)
     i32.const 300035)
 
@@ -6,15 +8,6 @@
     (i32.or
       (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
       (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
-  (func $m81is_label_byte (param $b i32) (result i32)
-    (i32.or
-      (i32.or
-        (call $is_alpha (local.get $b))
-        (call $is_digit (local.get $b)))
-      (i32.or
-        (i32.eq (local.get $b) (i32.const 45))
-        (i32.eq (local.get $b) (i32.const 95)))))
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
   ;; Output record:
@@ -128,7 +121,7 @@
                 (i32.add
                   (local.get $ptr)
                   (i32.add (i32.add (local.get $pos) (i32.const 1)) (local.get $j)))))
-            (if (i32.eqz (call $m81is_label_byte (local.get $b)))
+            (if (i32.eqz (call $is_label_byte (local.get $b)))
               (then (return (i32.const 3))))
             (if
               (i32.and

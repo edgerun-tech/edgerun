@@ -1,3 +1,4 @@
+  (import "edgerun" "to_lower" (func $m183lower_ascii (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300014)
@@ -10,14 +11,6 @@
       (i32.and
         (i32.ge_u (local.get $b) (i32.const 9))
         (i32.le_u (local.get $b) (i32.const 13)))))
-
-  (func $m183lower_ascii (param $b i32) (result i32)
-    (if (result i32)
-      (i32.and
-        (i32.ge_u (local.get $b) (i32.const 65))
-        (i32.le_u (local.get $b) (i32.const 90)))
-      (then (i32.add (local.get $b) (i32.const 32)))
-      (else (local.get $b))))
 
   (func $validate_normalized (param $ptr i32) (param $len i32) (param $allow_wildcard i32) (result i32)
     (local $i i32)

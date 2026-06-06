@@ -1,13 +1,8 @@
+  (import "edgerun" "to_lower" (func $m109lower (param i32) (result i32)))
+  (import "http" "is_tchar" (func $is_tchar (param i32) (result i32)))
+
 (func (export "proto_standard_id") (result i32)
     i32.const 300107)
-
-  (func $m109lower (param $b i32) (result i32)
-    (if (result i32)
-      (i32.and
-        (i32.ge_u (local.get $b) (i32.const 65))
-        (i32.le_u (local.get $b) (i32.const 90)))
-      (then (i32.add (local.get $b) (i32.const 32)))
-      (else (local.get $b))))
 
   (func $byte_lower_at (param $ptr i32) (param $off i32) (result i32)
     (call $m109lower (i32.load8_u (i32.add (local.get $ptr) (local.get $off)))))
@@ -15,35 +10,12 @@
   (func $is_ctl_or_space (param $b i32) (result i32)
     (i32.or (i32.le_u (local.get $b) (i32.const 32)) (i32.eq (local.get $b) (i32.const 127))))
 
-  (func $m109is_tchar (param $b i32) (result i32)
-    (i32.or
-      (i32.or
-        (i32.or
-          (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90)))
-          (i32.and (i32.ge_u (local.get $b) (i32.const 97)) (i32.le_u (local.get $b) (i32.const 122))))
-        (i32.and (i32.ge_u (local.get $b) (i32.const 48)) (i32.le_u (local.get $b) (i32.const 57))))
-      (i32.or
-        (i32.or
-          (i32.or
-            (i32.or (i32.eq (local.get $b) (i32.const 33)) (i32.eq (local.get $b) (i32.const 35)))
-            (i32.or (i32.eq (local.get $b) (i32.const 36)) (i32.eq (local.get $b) (i32.const 37))))
-          (i32.or
-            (i32.or (i32.eq (local.get $b) (i32.const 38)) (i32.eq (local.get $b) (i32.const 39)))
-            (i32.or (i32.eq (local.get $b) (i32.const 42)) (i32.eq (local.get $b) (i32.const 43)))))
-        (i32.or
-          (i32.or
-            (i32.or (i32.eq (local.get $b) (i32.const 45)) (i32.eq (local.get $b) (i32.const 46)))
-            (i32.or (i32.eq (local.get $b) (i32.const 94)) (i32.eq (local.get $b) (i32.const 95))))
-          (i32.or
-            (i32.or (i32.eq (local.get $b) (i32.const 96)) (i32.eq (local.get $b) (i32.const 124)))
-            (i32.eq (local.get $b) (i32.const 126)))))))
-
   (func (export "http_header_name_valid") (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (if (i32.eqz (local.get $len)) (then (return (i32.const 0))))
     (loop $scan
       (if (i32.ge_u (local.get $i) (local.get $len)) (then (return (i32.const 1))))
-      (if (i32.eqz (call $m109is_tchar (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
+      (if (i32.eqz (call $is_tchar (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
         (then (return (i32.const 0))))
       (local.set $i (i32.add (local.get $i) (i32.const 1)))
       br $scan)
@@ -73,7 +45,7 @@
     (block $valid_done
       (loop $valid
         (if (i32.ge_u (local.get $i) (local.get $len)) (then (br $valid_done)))
-        (if (i32.eqz (call $m109is_tchar (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
+        (if (i32.eqz (call $is_tchar (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
           (then (return (i32.const 0))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         br $valid))

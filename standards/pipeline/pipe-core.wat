@@ -1,27 +1,13 @@
-  ;; Pipe Core — byte pipes + bump allocators
-  (import "math" "min_u" (func $min_u (param i32 i32) (result i32)))
+   ;; Pipe Core — byte pipes + bump allocators
+   ;; $min_u is defined in runtime/math-utils.wat (include before this fragment)
 
     ;; Standard ID removed — merged into single module
 
-  ;; ── Pipe struct layout (16 byte header + data[cap]) ──
-  ;; +0:  rd    read cursor from data start
-  ;; +4:  wr    write cursor from data start
-  ;; +8:  cap   total data capacity
-  ;; +12: state/mode 0=open linear, 1=closed, 2=open circular, 3=closed circular
-  ;; +16: data[cap]
-  (global $PIPE_RD     i32 (i32.const 0))
-  (global $PIPE_WR     i32 (i32.const 4))
-  (global $PIPE_CAP    i32 (i32.const 8))
-  (global $PIPE_STATE  i32 (i32.const 12))
-  (global $PIPE_HEADER i32 (i32.const 16))
-  (global $PIPE_MODE_CIRCULAR i32 (i32.const 2))
-  (global $PIPE_MODE_MASK    i32 (i32.const 2))
-  (global $PIPE_CLOSED       i32 (i32.const 1))
+   ;; ── Pipe struct layout — PIPE_* offset globals defined in runtime/memory-map.wat ──
+   ;; Include memory-map.wat before this fragment.
 
-  ;; ── Bump allocator: 0x40000 – 0x80000 ──
-  (global $HEAP_START i32 (i32.const 0x40000))
-  (global $HEAP_END   i32 (i32.const 0x80000))
-  (global $heap_ptr (mut i32) (i32.const 0x40000))
+   ;; ── Bump allocator (HEAP_START/HEAP_END from memory-map.wat) ──
+   (global $heap_ptr (mut i32) (i32.const 0x40000))
 
   (func $pipe_alloc (export "pipe_alloc") (param $size i32) (result i32)
     (local $ptr i32)

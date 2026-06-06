@@ -43,18 +43,7 @@
   (func (export "PIPELINE_MAGIC")   (result i32) i32.const 0x50495045)
   (func (export "PIPELINE_VERSION") (result i32) i32.const 1)
 
-  (global $PD_MAGIC    i32 (i32.const 0))
-  (global $PD_VERSION  i32 (i32.const 4))
-  (global $PD_PIPE_CAP i32 (i32.const 8))
-  (global $PD_COUNT    i32 (i32.const 12))
-  (global $PD_TICK     i32 (i32.const 16))
-  (global $PD_FRAME    i32 (i32.const 20))
-  (global $PD_STAGES   i32 (i32.const 24))
-  (global $PS_TYPE     i32 (i32.const 0))
-  (global $PS_CONFIG   i32 (i32.const 4))
-  (global $PS_CLEN     i32 (i32.const 8))
-  (global $PS_STATE    i32 (i32.const 12))
-  (global $PS_SIZE     i32 (i32.const 16))
+   ;; PD_* and PS_* offset globals are defined in runtime/memory-map.wat — included before this fragment.
 
   ;; pipeline_create(pipe_cap, stage_count) → desc_ptr | -1
   (func (export "pipeline_create") (param $pcap i32) (param $count i32) (result i32)

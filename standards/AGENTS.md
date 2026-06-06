@@ -13,7 +13,7 @@ A **WebAssembly Text (.wat) standards library** for the EdgeRun decentralized ed
 | **runtime/** | 2 | 767 | **Shared core** — memory, char LUTs, `pack` helpers, syscall constants, math utils |
 | **compiler/** | 20 | 31,911 | WASM interpreter + JIT compiler (x86-64, AArch64, ARM32 backends) |
 | **pipeline/** | 9 | 6,788 | **Pipeline framework** — stage dispatch, framing, mux, WASM exec |
-| **protocol/** | 50 | 26,072 | Network protocol parsers/serializers (HTTP/1-3, TLS, DNS, WebSocket, QUIC, DHCP, HPACK, QPACK, DER/ASN.1) |
+| **protocol/** | 52 | 25,592 | Network protocol parsers/serializers (HTTP/1-3, TLS, DNS, WebSocket, QUIC, DHCP, HPACK, QPACK, DER/ASN.1) |
 | **codec/** | 38 | 21,841 | Encoding/decoding (base64/64url/32hex, JSON, TOML, YAML, PEM, zlib/gzip, UTF-8, deflate) |
 | **crypto/** | 19 | 7,658 | Cryptographic primitives (SHA-256/512, AES-* , HMAC, HKDF, X25519, ECDSA, Ed25519, RSA) |
 | **app/** | 44 | 16,788 | Application-level semantics (OAuth, SSH, X.509, ACME, DKIM, wallets, OCI, CDP) |
@@ -59,16 +59,17 @@ Functions return `i64` where low 32 bits = status/error code, high 32 bits = val
 | SHA-256 (crypto vs pipeline) | ✅ Fixed | `pipeline/sha256-stage.wat` now imports from `crypto/crypto-sha256.wat` |
 | HMAC-SHA-256 (crypto vs pipeline) | ✅ Fixed | `pipeline/hmac-sha256-stage.wat` now imports from `crypto/crypto-hmac-sha256.wat` |
 | Inline helper duplication | ✅ Fixed | Created `runtime/math-utils.wat` with canonical `min`/`max`/`sat_sub`/`round_up`/`clamp`/`max0` |
-| Dual Interpreter (compiler/ + pipeline/) | 🔄 Deferred | Both serve different purposes: `compiler/interpreter.wat` is standalone (+WAT lexer, +syscall init), `pipeline/wasm-interpreter.wat` is a fragment for the pipeline module. Need pipeline to import from compiler when linking infrastructure exists. |
+| Dual Interpreter (compiler/ + pipeline/) | ✅ Fixed | Created `compiler/interpreter-core.wat` (shared fragment), deleted 3 stale sub-files, trimmed wrappers to <600 lines each. 99% dedup. |
 | UI Prelude duplication | 🔄 Deferred | `00_prelude.wat` is a source fragment; `ui_framework.wat` is auto-generated output. Fix requires build pipeline change (`build_wat.mjs`). |
 | Base64/Base64url shared core | 🔄 Deferred | Algorithms diverged structurally beyond just alphabet. Requires deeper refactor to extract shared core. |
 | Tor vs Shared Crypto | 🔄 Deferred | Tor is machine-generated from assembly with `$m_3_0` naming. Would need manual re-port. |
 
-### 1. Dual Interpreter (compiler/ + pipeline/)
-- `compiler/interpreter.wat` — 6,163 lines, standalone WASM interpreter with WAT lexer + syscall init
-- `pipeline/wasm-interpreter.wat` — 5,587 lines, pipeline fragment (omits WAT lexer, no syscall init loop)
-
-**Status**: Both serve different roles (standalone module vs pipeline fragment). 95% identical. Merge requires pipeline to `(import)` from compiler once linking infrastructure exists.
+### 1. ~~Dual Interpreter (compiler/ + pipeline/)~~ ✅ Fixed
+- Created `compiler/interpreter-core.wat` (5,609 lines) — shared fragment containing all decode/execute/call/load logic
+- `compiler/interpreter.wat` trimmed 6,163→578 lines (WAT lexer + syscall init wrapper)
+- `pipeline/wasm-interpreter.wat` trimmed 5,587→5 lines (import + core reference)
+- Deleted 3 unreferenced sub-files: `interpreter-decode.wat` (1,025), `interpreter-exec.wat` (3,856), `interpreter-opcodes.wat` (544)
+- **Total savings: ~11,000 lines** (99% dedup — only ~42 lines differ across 11,750 total)
 
 ### 2. ~~compiler-x86 Naming Collision~~ ✅ Fixed
 - `compiler/compiler-x86-64.wat` — DELETED (was 0 bytes)
@@ -161,14 +162,57 @@ Replaced 17 files' worth of duplicate inline utility functions in `app/` with im
 - Several app files call `$is_digit` without definition/import
 - Several app files call `$is_hex` without definition/import
 
+### 10. Protocol Inline Function Refactoring (Session 10 — 2026-06-07) ✅
+Replaced all 8 inline `to_lower` definitions in `protocol/` with imports from `runtime/edgerun-core.wat`.
+
+| File | Inline Def | → Import | Lines Saved |
+|------|-----------|----------|:-----------:|
+| `dns-compressed-name.wat` | `$m77lower_ascii` | `to_lower` | 6 |
+| `dns-name.wat` | `$m80lower_ascii` | `to_lower` | 6 |
+| `tls-core-state.wat` | `$m180ascii_lower` | `to_lower` | 6 |
+| `tls-name.wat` | `$m183lower_ascii` | `to_lower` | 6 |
+| `http1-body.wat` | `$m111lower` | `to_lower` | 14 |
+| `http1-header-block.wat` | `$m113lower` | `to_lower` | 14 |
+| `http1-scan.wat` | `$m115lower` | `to_lower` | 14 |
+| `http-node-state.wat` | `$m109lower` | `to_lower` | 6 |
+| **Total** | 8 inline defs replaced | | **72** |
+
+**Kept inline** (different behavior/signature from shared):
+- `packet-core.wat` — `$memset` param order `(base, len, val)` vs shared `(ptr, val, len)`
+- `http1-body.wat` — `$m111is_space` only checks space/tab (narrower than shared `is_ws`)
+- `http1-header-block.wat` — `$m113is_space` only checks space/tab
+- `http1-lines.wat` — `$m114is_space` only checks space/tab
+- `http1-scan.wat` — `$m115is_space` only checks space/tab
+- `tls-name.wat` — `$m183is_space` checks space + range [9,13] (HTTP whitespace)
+- `http-date.wat` — `$match` is offset-based prefix match, not `string_eq`
+- `tls-name.wat` — `$normalized_match` is case-sensitive full equality (unique)
+- `http1-scan.wat` — `$token_match` is case-insensitive equality (unique)
+- `tls-core-state.wat` — `$m180fnv_lower` is the only FNV-1a in protocol/ (kept as-is)
+
+### 11. HTTP/DNS Family Core Refactoring (Session 11 — 2026-06-07) ✅
+Created protocol family shared core files, refactored 9 files across HTTP and DNS families.
+
+| File | Changes | Lines Saved |
+|------|---------|:-----------:|
+| `protocol/http-core.wat` (new) | Shared `$is_tchar`, `$is_space`, `$is_header_value_byte`, `$ascii_eq_ci` | — |
+| `http1-body.wat` | `$m111is_tchar` → `http-core`, `$m111is_header_value_byte` → `http-core` | 144 |
+| `http1-header-block.wat` | `$m113is_tchar` → `http-core`, `$m113is_header_value_byte` → `http-core` | 144 |
+| `http1-lines.wat` | `$m114is_space` → `http-core`, `$m114is_tchar` → `http-core` | 105 |
+| `http1-scan.wat` | `$m115is_space` → `http-core` (kept `$m115is_tchar` inline, non-standard) | 5 |
+| `http-node-state.wat` | `$m109is_tchar` + 3 helpers → `http-core` | 21 |
+| `protocol/dns-core.wat` (new) | Shared `$is_label_byte` | — |
+| `dns-compressed-name.wat` | `$m77is_label_byte` → `dns-core` | 8 |
+| `dns-core-records.wat` | `$m78is_label_byte` → `dns-core` | 10 |
+| `dns-name.wat` | `$m80is_label_byte` → `dns-core` | 8 |
+| `dns-rdata-core.wat` | `$m81is_label_byte` → `dns-core` | 8 |
+| **Total** | **9 protocol files + 2 new cores** | **453** |
+
+**Notable**: `http1-scan.wat` retains its extended `$m115is_tchar` inline (includes `{` and `}` for non-standard HTTP token matching).
+
 **Sessions remaining** (in priority order):
-1. `net/` module — scan for inline duplicates
-2. `device/` module — scan for inline duplicates
-3. `data/` module — scan for inline duplicates
-4. `system/` module — scan for inline duplicates
-5. `protocol/` module (50 files) — scan for inline duplicates
-6. `compiler/` module — scan for inline duplicates
-7. `ui/` module (92 files) — scan for inline duplicates (low priority; prelude is deferred)
+1. `protocol/` remaining families (QUIC, TLS, WebSocket, HPACK/QPACK, DHCP) — scan for further duplicates
+2. `compiler/` module — scan for inline duplicates
+3. `ui/` module (92 files) — scan for inline duplicates (low priority; prelude is deferred)
 
 ---
 

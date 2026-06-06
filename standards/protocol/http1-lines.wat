@@ -1,113 +1,9 @@
+  (import "http" "is_tchar" (func $is_tchar (param i32) (result i32)))
+  (import "http" "is_space" (func $is_space (param i32) (result i32)))
+  (import "http" "is_header_value_byte" (func $is_header_value_byte (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300008)
-
-  (func $m114is_tchar (param $b i32) (result i32)
-    local.get $b
-    i32.const 65
-    i32.ge_u
-    local.get $b
-    i32.const 90
-    i32.le_u
-    i32.and
-    local.get $b
-    i32.const 97
-    i32.ge_u
-    local.get $b
-    i32.const 122
-    i32.le_u
-    i32.and
-    i32.or
-    local.get $b
-    i32.const 48
-    i32.ge_u
-    local.get $b
-    i32.const 57
-    i32.le_u
-    i32.and
-    i32.or
-    local.get $b
-    i32.const 33
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 35
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 36
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 37
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 38
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 39
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 42
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 43
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 45
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 46
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 94
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 95
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 96
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 124
-    i32.eq
-    i32.or
-    local.get $b
-    i32.const 126
-    i32.eq
-    i32.or)
-
-  (func $m114is_header_value_byte (param $b i32) (result i32)
-    local.get $b
-    i32.const 9
-    i32.eq
-    local.get $b
-    i32.const 32
-    i32.ge_u
-    local.get $b
-    i32.const 126
-    i32.le_u
-    i32.and
-    i32.or)
-
-  (func $m114is_space (param $b i32) (result i32)
-    local.get $b
-    i32.const 32
-    i32.eq
-    local.get $b
-    i32.const 9
-    i32.eq
-    i32.or)
 
   (func $m114find_crlf (param $ptr i32) (param $len i32) (param $start i32) (result i32)
     (local $i i32)
@@ -279,7 +175,7 @@
         local.set $method_end
       else
         local.get $b
-        call $m114is_tchar
+        call $is_tchar
         i32.eqz
         if
           i32.const 3
@@ -651,7 +547,7 @@
         local.set $colon
       else
         local.get $b
-        call $m114is_tchar
+        call $is_tchar
         i32.eqz
         if
           i32.const 3
@@ -684,7 +580,7 @@
         local.get $value_start
         i32.add
         i32.load8_u
-        call $m114is_space
+        call $is_space
         if
           local.get $value_start
           i32.const 1
@@ -707,7 +603,7 @@
         i32.sub
         i32.add
         i32.load8_u
-        call $m114is_space
+        call $is_space
         if
           local.get $value_end
           i32.const 1
@@ -765,7 +661,7 @@
       local.get $i
       i32.add
       i32.load8_u
-      call $m114is_header_value_byte
+      call $is_header_value_byte
       i32.eqz
       if
         i32.const 3
