@@ -1,7 +1,14 @@
-(module
-  (import "edgerun-core" "memory" (memory 1))
-  ;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
-  (func (export "proto_standard_id") (result i32) i32.const 300085)
+  ;; ═══════════════════════════════════════════════════════════════════════════
+  ;; HMAC-SHA256 Pipeline Stage — slot 17
+  ;; Stage type: batch (state=0)
+  ;; Input:  message bytes via input pipe
+  ;; Output: 32-byte HMAC-SHA256 tag via output pipe
+  ;; Config: [key_len: i32][key_bytes: key_len]
+  ;; ──
+  ;; Stripped from build/wasm/hash/crypto-hmac-sha256.wat (standalone
+  ;;   reference kept intact).  Self-contained (inline SHA-256 core).
+  ;;   Memory: 16384-16895 work buffers, 16896+ key+msg scratch.
+  ;; ═══════════════════════════════════════════════════════════════════════════
 
   ;; Memory layout:
   ;; 16384-16639: W array (64 × 4 bytes)
@@ -284,7 +291,7 @@
     end)
 
   ;; ── hmac_sha256(key, klen, msg, mlen, out, ocap) -> i32 ──
-  (func (export "hmac_sha256")
+(func $hmac_sha256 (export "hmac_sha256")
     (param $key i32) (param $klen i32)
     (param $msg i32) (param $mlen i32)
     (param $out i32) (param $ocap i32)
@@ -378,8 +385,7 @@
     end
     end
 
-    ;; Copy inner hash from blk to buf+64
-    local.get $buf i32.const 64 i32.add local.get $blk i32.const 32 call $m59memcpy
+    ;; inner hash is already at buf+64 (32 bytes) from step 2
     ;; SHA256 of (buf, 64+32 = 96)
     local.get $buf i32.const 96 call $sha256_process
 
@@ -439,4 +445,27 @@
       br $loop
     end
     end)
-  )
+
+  ;; ── Pipeline stage: HMAC-SHA256 (batch, zero-copy input) ──
+  ;; Config layout: [klen: i32][key: klen]
+  (func (export "process_hmac_sha256")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $len_slot i32) (local $in_ptr i32) (local $read i32)
+    (local $klen i32)
+    (if (i32.lt_u (local.get $clen) (i32.const 4))
+      (then (return (i32.const -1))))
+    (local.set $klen (i32.load (local.get $cfg)))
+    (if (i32.lt_u (local.get $clen) (i32.add (i32.const 4) (local.get $klen)))
+      (then (return (i32.const -1))))
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (local.set $in_ptr (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
+    (drop (call $hmac_sha256
+      (i32.add (local.get $cfg) (i32.const 4)) (local.get $klen)
+      (local.get $in_ptr) (local.get $read)
+      (local.get $scratch) (local.get $scap)))
+    (call $pipe_advance (local.get $input) (local.get $read))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 32)))
+    i32.const 32)

@@ -5,6 +5,27 @@ for browser-node compatibility.
 
 **Source**: `~/edgerun-c/kernel/x86_64/` — original ASM/C reference
 
+## Core Policy
+
+**No new code.** All work is editing/refactoring of existing code only. New
+functionality must be achieved by recombining existing fragments into pipelines,
+not by writing new modules.
+
+**Self-hosted tooling only.** No external dependencies, build systems, or
+third-party code generators. Only `wat2wasm`, the local test runner, and the
+pipeline runtime are permitted.
+
+**Pipeline decomposition.** All processing logic must be split into pipeline
+stages (see Stage Registry). Standalone functions or monolithic blocks must be
+refactored into composable stage modules.
+
+**Remove duplicates.** Any functionally equivalent code must be deduplicated
+into a single shared module. Duplicate LUTs, dispatch chains, state machinery,
+and I/O wrappers must be eliminated.
+
+**Goal: performance + correctness through reduction.** Fewer lines, fewer
+modules, fewer moving parts. Meaning is preserved; verbosity is not.
+
 ## WAT Ports (standards/ports/)
 
 WAT projects are standalone — build with `wat2wasm`, test via the interpreter.
@@ -385,3 +406,9 @@ intermediate pipe between them. Data flows zero-copy from framer → pipe buffer
 - No third-party dependencies — use only wat2wasm.
 - Run tests before claiming correctness.
 - Keep changes scoped to one concept.
+- Never write new modules. Combine existing stage fragments into pipelines.
+- Always check for duplicate logic before touching any module. If equivalents
+  exist, consolidate — never copy.
+- Refactor monolithic blocks into discrete pipeline stages registered in the
+  64-slot dispatch table.
+- Removing lines while preserving meaning is always the right direction.

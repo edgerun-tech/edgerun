@@ -72,6 +72,8 @@ cat >> "$OUT" "$BASE/build/wasm/protocol/ws/ws-stage.wat"
 echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/pipeline/wasm-interpreter.wat"
 echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/pipeline/wat-parse-stage.wat"
+echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/pipeline/wasm-exec-stage.wat"
 echo "" >> "$OUT"
 # 14. sha256-stage — SHA-256 hash pipeline stage (slot 16)

@@ -2,6 +2,22 @@
 
 The policy layer turns standards into executable, hash-addressed programs.
 
+## Development Constraints
+
+All implementation work in this repository follows these rules:
+
+- **No new code.** Only edit/refactor existing code. New functionality comes
+  from recombining existing fragments into pipelines.
+- **Self-hosted tooling only.** No external dependencies or third-party code
+  generators. Only `wat2wasm`, the local test runner, and the pipeline runtime
+  are permitted.
+- **Pipeline decomposition.** All processing logic must be split into composable
+  pipeline stages registered in the 64-slot dispatch table.
+- **Remove duplicates.** Functionally equivalent code must be deduplicated into
+  a single shared module.
+- **Goal: performance + correctness through reduction.** Fewer lines, fewer
+  modules, fewer moving parts. Meaning is preserved; verbosity is not.
+
 The intended path is:
 
 ```text

@@ -20,6 +20,7 @@
   (func (export "STAGE_WS_ENCODE")    (result i32) i32.const 11)
   (func (export "STAGE_WS_DECODE")    (result i32) i32.const 12)
   (func (export "STAGE_EXEC")         (result i32) i32.const 13)
+  (func (export "STAGE_WAT_PARSE")    (result i32) i32.const 14)
   (func (export "STAGE_FRAME_PACER")  (result i32) i32.const 15)
   (func (export "STAGE_SHA256")       (result i32) i32.const 16)
   (func (export "STAGE_HMAC_SHA256")  (result i32) i32.const 17)
