@@ -19,8 +19,8 @@
   (func (export "STAGE_WS_FRAME")     (result i32) i32.const 10)
   (func (export "STAGE_WS_ENCODE")    (result i32) i32.const 11)
   (func (export "STAGE_WS_DECODE")    (result i32) i32.const 12)
-  (func (export "STAGE_WASM_EXEC")    (result i32) i32.const 13)
-  (func (export "STAGE_WAT_PARSE")    (result i32) i32.const 14)
+  (func (export "STAGE_EXEC")         (result i32) i32.const 13)
+  (func (export "STAGE_FRAME_PACER")  (result i32) i32.const 15)
 
   ;; ── Stage function type ──
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) -> result
@@ -46,7 +46,8 @@
   (global $PD_PIPE_CAP i32 (i32.const 8))
   (global $PD_COUNT    i32 (i32.const 12))
   (global $PD_TICK     i32 (i32.const 16))
-  (global $PD_STAGES   i32 (i32.const 20))
+  (global $PD_FRAME    i32 (i32.const 20))
+  (global $PD_STAGES   i32 (i32.const 24))
   (global $PS_TYPE     i32 (i32.const 0))
   (global $PS_CONFIG   i32 (i32.const 4))
   (global $PS_CLEN     i32 (i32.const 8))
@@ -66,6 +67,7 @@
     (i32.store offset=8 (local.get $desc) (local.get $pcap))
     (i32.store offset=12 (local.get $desc) (local.get $count))
     (i32.store offset=16 (local.get $desc) (i32.const 0))
+    (i32.store offset=20 (local.get $desc) (i32.const 0))
     local.get $desc)
 
   ;; pipeline_set_stage(desc, index, stage_type, config, config_len)
@@ -99,12 +101,19 @@
   (func (export "pipeline_get_tick") (param $desc i32) (result i32)
     (i32.load offset=16 (local.get $desc)))
 
+  (func (export "pipeline_set_frame_size") (param $desc i32) (param $frame i32)
+    (i32.store offset=20 (local.get $desc) (local.get $frame)))
+
+  (func (export "pipeline_get_frame_size") (param $desc i32) (result i32)
+    (i32.load offset=20 (local.get $desc)))
+
   ;; pipeline_run(desc, input_pipe, output_pipe, scratch, scap) → OK | MORE | error
   ;; Fuses consecutive batch stages (state_ptr==0) by reusing a single intermediate pipe.
+  ;; When frame_size > 0, intermediate pipes use aligned capacity for zero-copy SIMD.
   (func $pipeline_run (export "pipeline_run")
     (param $desc i32) (param $input i32) (param $output i32)
     (param $scratch i32) (param $scap i32) (result i32)
-    (local $count i32) (local $pcap i32)
+    (local $count i32) (local $pcap i32) (local $frame i32)
     (local $i i32) (local $stype i32)
     (local $out i32) (local $prev i32) (local $result i32)
     (local $stages i32) (local $slot i32)
@@ -115,6 +124,7 @@
     (local.set $count (i32.load offset=12 (local.get $desc)))
     (local.set $last_i (i32.sub (local.get $count) (i32.const 1)))
     (local.set $pcap (i32.load offset=8 (local.get $desc)))
+    (local.set $frame (i32.load offset=20 (local.get $desc)))
     (local.set $stages (i32.add (local.get $desc) (global.get $PD_STAGES)))
     (local.set $prev (local.get $input))
 
@@ -150,9 +160,15 @@
                 ;; The stage reads from prev (draining it, auto-reset) then writes to out.
                 (local.set $out (local.get $prev)))
               (else
-                (local.set $out (call $pipe_create (local.get $pcap)))
-                (if (i32.eq (local.get $out) (i32.const -1))
-                  (then (local.set $result (i32.const -1)) (br $done)))
+                (if (local.get $frame)
+                  (then
+                    (local.set $out (call $pipe_create_aligned (local.get $pcap) (local.get $frame)))
+                    (if (i32.eq (local.get $out) (i32.const -1))
+                      (then (local.set $result (i32.const -1)) (br $done))))
+                  (else
+                    (local.set $out (call $pipe_create (local.get $pcap)))
+                    (if (i32.eq (local.get $out) (i32.const -1))
+                      (then (local.set $result (i32.const -1)) (br $done)))))
                 (if (i32.eqz (local.get $state))
                   (then
                     (local.set $reusable (local.get $out))

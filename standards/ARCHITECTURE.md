@@ -179,40 +179,47 @@ table (`pipeline-core`) and registered via `stage-registry`.
 ### Module Dependency DAG
 
 ```
-edgerun-core (system/runtime/)
-  ├─ pipe-core        — byte pipes + bump allocators
-  │    ├─ frame-core  — framed I/O (8-byte headers)
-  │    ├─ mux-core    — static/dynamic mux + demux stages
-  │    ├─ pipeline-core — pipeline_run + 64-slot dispatch table
-  │    └─ socket-core — abstract socket I/O stage
-  ├─ encoding-text    — hex/base64 encode/decode stages
-  ├─ ws-stage         — WebSocket frame transform stages
-  ├─ wasm-interpreter — pipeline-local copy of the WASM interpreter
-  │    └─ wasm-exec-stage — process_wasm_exec stage_fn wrapper
-  └─ stage-registry   — wires all stages into dispatch table slots
+edgerun-core ─── shared memory, status codes, epoch, pack(), LUTs
+  └─ pipe-core ─── byte pipes + bump allocators (heap 0x40000-0x80000)
+       ├─ frame-core     ─── framed I/O (8-byte header [stream_id][payload_len])
+       ├─ pipeline-core  ─── 64-slot dispatch table + pipeline_run + tick + stage registry wiring
+       ├─ encoding-core  ─── binary I/O, varint, crc32/adler32
+       ├─ socket-core    ─── abstract socket + process_transport stage
+       ├─ mux-core       ─── static/dynamic mux + demux + process_* stages
+       ├─ frame-pacer    ─── tick-driven frame accumulation stage
+       ├─ ws-stage       ─── ws_encode + ws_decode pure transform stages
+       └─ hash/          ─── SHA-1, SHA-256, HMAC, etc.
+  ├─ encoding-text  ─── hex/base64 encode/decode + process_* stages (incl. SIMD)
+  ├─ deflate-inflate─── imports crc32/adler32 from encoding-core
+  └─ ws-accept      ─── imports sha1 from crypto-sha1
+
+All fragments are concatenated by build.sh into a single pipeline.wasm.
 ```
 
 ### Stage Registry (64-slot dispatch table)
 
-| Slot | Name | Module | Type | Description |
-|------|------|--------|------|-------------|
-| 0 | passthrough | pipeline-core | batch | Pipe drain input → output |
-| 1 | hex_encode | encoding-text | batch | Hex lowercase encode |
-| 2 | hex_decode | encoding-text | batch | Hex strict decode |
-| 3 | b64_encode | encoding-text | batch | Base64URL no-pad encode |
-| 4 | b64_decode | encoding-text | batch | Base64URL no-pad decode |
-| 5 | transport | socket-core | streaming | Socket I/O: send+recv with timeout |
-| 6 | mux_static | mux-core | batch | Round-robin drain, epoch batching |
-| 7 | demux_static | mux-core | batch | Frame read → route by stream_id |
-| 8 | mux_dynamic | mux-core | batch | Linked-list mux |
-| 9 | demux_dynamic | mux-core | batch | Hash-table demux |
-| 10 | ws_frame | ws-stage | streaming | Bidirectional WS framing |
-| 11 | **wasm_exec** | **wasm-exec-stage** | batch | **Load + execute WASM binary** |
-| 12–63 | (empty) | — | — | Available |
+| Slot | Name | Module | Type | State | Description |
+|------|------|--------|------|-------|-------------|
+| 0 | passthrough | pipeline-core | batch | — | Pipe drain input → output |
+| 1 | hex_encode | encoding-text | batch | — | Hex lowercase encode |
+| 2 | hex_decode | encoding-text | batch | — | Hex strict decode |
+| 3 | b64_encode | encoding-text | batch | — | Base64URL no-pad encode |
+| 4 | b64_decode | encoding-text | batch | — | Base64URL no-pad decode |
+| 5 | transport | socket-core | streaming | 16B | Socket I/O: send+recv with timeout |
+| 6 | mux_static | mux-core | batch | 12B | Round-robin drain, epoch batching |
+| 7 | demux_static | mux-core | batch | — | Frame read → route by stream_id |
+| 8 | mux_dynamic | mux-core | batch | — | Linked-list mux, delegates |
+| 9 | demux_dynamic | mux-core | batch | — | Hash-table demux, delegates |
+| 10 | ws_frame | ws-stage | streaming | 148B | Bidirectional WS framing (socket) |
+| 11 | ws_encode | ws-stage | batch | — | Payload → WS frame (pure transform) |
+| 12 | ws_decode | ws-stage | streaming | 148B | WS frame → payload (pure transform) |
+| 13 | exec | wasm-exec-stage | batch | — | WASM load + call (WAT auto-detect limited — slot 14 planned) |
+| 15 | frame_pacer | frame-pacer | streaming | 80B | Tick-driven frame accumulation |
+| 14, 16–63 | (empty) | — | — | — | Available for new stages |
 
-### wasm_exec Stage
+### exec Stage (slot 13)
 
-Slot 11 in the dispatch table. Config format (variable length):
+Config format (variable length):
 
 ```
 +0:  func_idx  i32  (function index to call; -1 = function 0)
@@ -221,31 +228,31 @@ Slot 11 in the dispatch table. Config format (variable length):
 ```
 
 **Flow:**
-1. Read WASM binary from input pipe into scratch buffer
-2. Call `interpreter.load(scratch, len)` to parse + decode all sections
-3. Call `interpreter.call(func_idx, args_ptr, arg_count)`
+1. Read WASM binary (or WAT source) from input pipe into scratch buffer
+2. Auto-detect: if first 4 bytes are `\0asm`, call `load()` for WASM binary; otherwise call `load_wat()` for WAT text
+3. Call `call(func_idx, args_ptr, arg_count)`
 4. Read first result via `get_result_value(0)`, write 4 bytes to output pipe
 
-**Example pipeline (hex → wasm_exec):**
-```
-hex_decode → wasm_exec → transport
-```
-Feed hex-encoded WASM over the wire, decode to binary, execute, send result back.
+**Note:** WAT auto-detect (`load_wat`) is currently a stub returning `ERR_PARSE=7`.
+Full WAT parsing is planned as a standalone SIMD pipeline stage at slot 14.
 
-**Linking:** The runtime instantiates `interpreter.wasm` under module name
-`"wasm-interpreter"`. The stage imports `load`, `call`, `get_result_value`,
-and `get_result_count` from it. Both share linear memory via `edgerun-core`.
+**Example pipeline (hex → exec):**
+```
+hex_decode → exec → transport
+```
 
 ### Building
+
+All fragments are concatenated by build.sh; individual modules cannot be
+compiled standalone (they assume merged memory + table + exports):
 
 ```bash
 # Full pipeline build (from build/wasm/pipeline/)
 ./build.sh
-
-# Or individual modules:
-wasm-tools wat2wasm wasm-exec-stage.wat -o wasm-exec-stage.wasm
-wasm-tools wat2wasm stage-registry.wat -o stage-registry.wasm
 ```
+
+No `stage-registry.wat` exists — stage registry wiring is embedded in
+`pipeline-core.wat` via `elem` initializations and `STAGE_*` exports.
 
 ### Testing
 

@@ -1,7 +1,7 @@
   ;; EdgeRun shared runtime core — owns linear memory, exports shared helpers.
   ;; All other modules import memory + helpers from here.
 
-  (memory (export "memory") 256)
+  (memory (export "memory") 16384)
 
   ;; Character classification LUT at 0x1000 (256 bytes)
   ;; bit 0: digit, bit 1: uppercase, bit 2: lowercase, bit 3: tchar,

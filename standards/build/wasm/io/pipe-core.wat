@@ -44,6 +44,20 @@
     (i32.store offset=12 (local.get $p) (i32.const 0))
     local.get $p)
 
+  ;; pipe_create_aligned(cap, align) — capacity rounded up to align multiple
+  (func $pipe_create_aligned (export "pipe_create_aligned") (param $cap i32) (param $align i32) (result i32)
+    (local $aligned i32)
+    (if (i32.eqz (local.get $cap)) (then (return (i32.const -1))))
+    (if (i32.le_u (local.get $align) (i32.const 1))
+      (then (return (call $pipe_create (local.get $cap)))))
+    (local.set $aligned
+      (i32.mul
+        (i32.div_u
+          (i32.add (local.get $cap) (i32.sub (local.get $align) (i32.const 1)))
+          (local.get $align))
+        (local.get $align)))
+    (call $pipe_create (local.get $aligned)))
+
   (func (export "pipe_set_mode") (param $p i32) (param $mode i32)
     (i32.store offset=12 (local.get $p)
       (i32.or (i32.load offset=12 (local.get $p)) (local.get $mode))))
@@ -160,7 +174,7 @@
   ;; For circular pipes: only returns the segment from rd to end-of-buffer;
   ;;   caller must handle wrap-around or use pipe_read for full copy.
   ;; Writes available byte count to [len_ptr].
-  (func (export "pipe_read_ptr") (param $p i32) (param $len_ptr i32) (result i32)
+  (func $pipe_read_ptr (export "pipe_read_ptr") (param $p i32) (param $len_ptr i32) (result i32)
     (local $avail i32)
     (local.set $avail (call $pipe_fill (local.get $p)))
     (if (i32.eqz (local.get $avail))
@@ -179,7 +193,7 @@
              (i32.load offset=0 (local.get $p))))
 
   ;; Advance read cursor by n bytes after zero-copy read.
-  (func (export "pipe_advance") (param $p i32) (param $n i32)
+  (func $pipe_advance (export "pipe_advance") (param $p i32) (param $n i32)
     (local $rd i32) (local $cap i32)
     (if (i32.eqz (local.get $n)) (then (return)))
     (local.set $rd (i32.load offset=0 (local.get $p)))

@@ -625,6 +625,17 @@
     )
     ;; Store import count
     (i32.store (global.get $OFF_IMPORT_COUNT) (local.get $count))
+    ;; Initialize syscall map: sysno[i] = i for each import
+    (local.set $i (i32.const 0))
+    (loop $sysinit
+      (if (i32.lt_u (local.get $i) (local.get $count))
+        (then
+          (i32.store (i32.add (i32.const 0x90000) (i32.shl (local.get $i) (i32.const 2))) (local.get $i))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $sysinit)
+        )
+      )
+    )
     (return (global.get $OK))
   )
 

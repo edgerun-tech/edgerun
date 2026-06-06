@@ -21,7 +21,8 @@ Build: `wat2wasm compiler-x86_64.wat -o compiler-x86_64.wasm`
 ### build/wasm/ — Pipeline Infrastructure
 
 Composable WAT modules for in-memory data processing — no host I/O, all data
-flows through shared linear memory pipes. 32 tests passing across 2 test files.
+flows through shared linear memory pipes. 73 tests passing across 4 test files
+(3 WAT auto-detect failures expected — parser reimplementation planned for slot 14).
 
 ---
 
@@ -31,16 +32,16 @@ flows through shared linear memory pipes. 32 tests passing across 2 test files.
 
 ```
 edgerun-core ─── shared memory, status codes, epoch, pack(), LUTs
-  └─ pipe-core ─── byte pipes + bump allocators
+  └─ pipe-core ─── byte pipes + bump allocators (heap 0x40000-0x80000)
        ├─ frame-core     ─── framed I/O (8-byte header [stream_id][payload_len])
-       ├─ pipeline-core  ─── 64-slot dispatch table + pipeline_run + tick
+       ├─ pipeline-core  ─── 64-slot dispatch table + pipeline_run + tick + stage registry wiring
        ├─ encoding-core  ─── binary I/O, varint, crc32/adler32
        ├─ socket-core    ─── abstract socket + process_transport stage
        ├─ mux-core       ─── static/dynamic mux + demux + process_* stages
+       ├─ frame-pacer    ─── tick-driven frame accumulation stage
        ├─ ws-stage       ─── ws_encode + ws_decode pure transform stages
        └─ hash/          ─── SHA-1, SHA-256, HMAC, etc.
-  ├─ encoding-text  ─── hex/base64 encode/decode + process_* stages
-  ├─ stage-registry ─── wires modules into dispatch table (12 of 64 slots)
+  ├─ encoding-text  ─── hex/base64 encode/decode + process_* stages (incl. SIMD)
   ├─ deflate-inflate─── imports crc32/adler32 from encoding-core
   └─ ws-accept      ─── imports sha1 from crypto-sha1
 ```
@@ -149,10 +150,11 @@ pipeline_run or scheduler). Stage-private fields start at `state[4]`.
 
 | Zone | Address Range | Owner | Purpose |
 |------|-------------|-------|---------|
+| Zone | Address Range | Owner | Purpose |
+|------|-------------|-------|---------|
 | LUTs | `0x01000–0x02FFF` | edgerun-core | Char classification, lowercase maps |
 | HDR scratch | `0x3FFF0–0x3FFFF` | frame-core, mux-core | Frame header I/O (16 bytes) |
-| Pipe heap | `0x40000–0x6FFFF` | pipe-core | User pipes, socket structs, configs |
-| Pipeline scratch | `0x70000–0x7FFFF` | pipeline-core | Intermediate pipes (ephemeral per run) |
+| Pipe heap | `0x40000–0x80000` | pipe-core | User pipes, socket structs, configs, intermediate pipes |
 | Stage heap | `0x80000–0x8FFFF` | stages | Persistent state blocks, decode buffers |
 | Decoded ops | `0xA0000+` | wasm-interp | WASM bytecode decode buffer |
 
@@ -173,7 +175,9 @@ pipeline_run or scheduler). Stage-private fields start at `state[4]`.
 | 10 | ws_frame | ws-stage | streaming | 148B | Bidirectional WS framing (socket) |
 | 11 | ws_encode | ws-stage | batch | — | Payload → WS frame (pure transform) |
 | 12 | ws_decode | ws-stage | streaming | 148B | WS frame → payload (pure transform) |
-| 13–63 | (empty) | — | — | — | Available for new stages |
+| 13 | exec | wasm-exec-stage | batch | — | WASM load + call (WAT auto-detect limited — slot 14 planned) |
+| 15 | frame_pacer | frame-pacer | streaming | 80B | Tick-driven frame accumulation |
+| 14, 16–63 | (empty) | — | — | — | Available for new stages |
 
 ### State Block Layouts
 
@@ -235,6 +239,126 @@ function driveSession(session) {
   r = pipeline_run(session.down_desc, netOutput, appInput, scratch, scap);
 }
 ```
+
+### Frame-Paced SIMD Pipeline
+
+SIMD acceleration is **width-agnostic** — the same mechanism works for v128
+(SSE), v256 (AVX2), and v512 (AVX-512). Frame size is just a number.
+
+#### Pipeline-level Frame
+
+A **frame** is the minimum transfer unit between stages. The pipeline descriptor
+carries a `frame_size` field (`desc+20`):
+
+```
++0:  magic      i32
++4:  version    i32
++8:  pipe_cap   i32
++12: stage_count i32
++16: tick       i32
++20: frame_size i32   ← (0 = byte-granular, backward compatible)
++24: stages[]
+```
+
+When `frame_size > 0`:
+- Intermediate pipes created by `pipeline_run` use `pipe_create_aligned(cap,
+  frame)` — capacity rounded up to a frame multiple, so `pipe_read_ptr` returns
+  frame-aligned pointers.
+- Pipes transfer whole frames: reads/writes naturally advance by frame_size,
+  keeping cursors aligned.
+- Stages can consume data directly from pipe buffers via `pipe_read_ptr` —
+  zero-copy, no scratch memcpy for input.
+
+#### Frame Pacer (streaming stage)
+
+A generic `frame_pacer` stage (slot 15) accumulates bytes into frames and paces
+them by the pipeline tick. It slots into any pipeline where framing is desired.
+
+```
+Pipeline:  [source → frame_pacer(16, timeout=5) → hex_encode_simd → ...]
+```
+
+**Config** (4 bytes): `timeout_ticks i32` — flush partial frame after N idle ticks (0 = never)
+
+**State** (80 bytes):
+```
++0:  tick          i32 (RO, written by pipeline_run)
++4:  frame_size    i32 (from cfg[0] — stride)
++8:  buf_len       i32 (bytes buffered so far)
++12: last_flush    i32 (tick when last frame was emitted)
++16: buf[64]       internal buffer (supports up to 64-byte frames)
+```
+
+**Tick-driven algorithm:**
+```
+frame_pacer(input, output, cfg, state, tick):
+  1. Accumulate: pipe_read input → buf[buf_len] until full
+  2. If buf_len >= frame_size:
+       pipe_write(buf, frame_size) → output
+       shift remaining bytes to buf[0..)
+       last_flush = tick
+       if input still has data: return MORE (yield for next tick)
+       return OK
+  3. If buf_len > 0 and tick - last_flush >= timeout_ticks:
+       pipe_write(buf, buf_len) → output  (partial frame flush)
+       buf_len = 0; last_flush = tick
+       return OK
+  4. If buf_len > 0: return MORE (wait for more data)
+  5. return OK (nothing pending)
+```
+
+The framer is **streaming** — it yields `MORE` on partial frames. The
+session scheduler drives ticks, so accumulation happens naturally across
+`pipeline_run` calls. Timeout prevents starvation when data stops arriving.
+
+#### Stage Zero-Copy Input
+
+Batch stages between framers consume frame-aligned data. They use
+`pipe_read_ptr` instead of `pipe_read` for the input half:
+
+```wat
+;; Before: copy-based
+(local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
+(local.set $result (call $hex_encode_simd
+  (local.get $scratch) (local.get $read) ...))
+
+;; After: zero-copy input via pipe_read_ptr
+(local.set $in_ptr (call $pipe_read_ptr (local.get $input) (local.get $len_ptr)))
+(local.set $read (i32.load (local.get $len_ptr)))
+(if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
+(local.set $result (call $hex_encode_simd
+  (local.get $in_ptr) (local.get $read)
+  (local.get $scratch) (local.get $scap)))       ;; output still via scratch
+(call $pipe_advance (local.get $input) (local.get $read))
+```
+
+Scratch becomes the **output-only** buffer — simpler partitioning, no need for
+the `max_in` division. Output still goes through `pipe_write` (no direct write
+pointer on pipes yet).
+
+#### Width Independence
+
+| Frame size | WASM SIMD | Use case |
+|-----------|-----------|----------|
+| 0 | none | Backward compatible, all existing stages |
+| 16 | v128 (SSE) | Current WASM max, hex encode/decode |
+| 32 | — | Future WASM v256 |
+| 64 | — | Future WASM v512 |
+
+The framer is config-driven — same `.wat` file, different `frame_size` in
+config. Stage SIMD kernels still use `v128.load` internally; the frame
+determines how the pipe presents data, not how the kernel processes it.
+
+#### Pipeline Wiring
+
+```
+Upstream:   [app → mux → frame_pacer(16) → hex_encode_simd → transport]
+Downstream: [transport → frame_pacer(16) → hex_decode_simd → demux → app]
+```
+
+The framer and SIMD stage are separate. `pipeline_run` creates a frame-aligned
+intermediate pipe between them. Data flows zero-copy from framer → pipe buffer
+→ SIMD stage's `pipe_read_ptr`.
 
 ### Frame Format
 

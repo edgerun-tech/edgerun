@@ -45,8 +45,8 @@ async function main() {
     pipe_restore:   e('pipe_restore'),
   };
 
-  // Wire process_wasm_exec into dispatch table slot 11
-  mod.exports.stage_table.set(11, mod.exports.process_wasm_exec);
+  // Wire process_exec into dispatch table slot 13
+  mod.exports.stage_table.set(13, mod.exports.process_exec);
 
   console.log('\nDispatch table wired.\n');
 
@@ -74,7 +74,7 @@ async function main() {
   // Create pipeline: 1 stage (wasm_exec, config at CONFIG_ADDR, clen=16)
   const SCRATCH = 0x8F100;
   const desc = mod.exports.pipeline_create(PIPE_CAP, 1);
-  mod.exports.pipeline_set_stage(desc, 0, 11, CONFIG_ADDR, 16);
+  mod.exports.pipeline_set_stage(desc, 0, 13, CONFIG_ADDR, 16);
 
   console.log('\nRunning: pipeline_run [wasm_exec] ...');
   const result = mod.exports.pipeline_run(desc, pipeIn, pipeOut, SCRATCH, 8192);

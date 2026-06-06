@@ -2,7 +2,7 @@
   ;; EdgeRun shared runtime core — owns linear memory, exports shared helpers.
   ;; All other modules import memory + helpers from here.
 
-  (memory (export "memory") 256)
+  (memory (export "memory") 16384)
 
   ;; Character classification LUT at 0x1000 (256 bytes)
   ;; bit 0: digit, bit 1: uppercase, bit 2: lowercase, bit 3: tchar,
@@ -3981,6 +3981,20 @@
     (i32.store offset=12 (local.get $p) (i32.const 0))
     local.get $p)
 
+  ;; pipe_create_aligned(cap, align) — capacity rounded up to align multiple
+  (func $pipe_create_aligned (export "pipe_create_aligned") (param $cap i32) (param $align i32) (result i32)
+    (local $aligned i32)
+    (if (i32.eqz (local.get $cap)) (then (return (i32.const -1))))
+    (if (i32.le_u (local.get $align) (i32.const 1))
+      (then (return (call $pipe_create (local.get $cap)))))
+    (local.set $aligned
+      (i32.mul
+        (i32.div_u
+          (i32.add (local.get $cap) (i32.sub (local.get $align) (i32.const 1)))
+          (local.get $align))
+        (local.get $align)))
+    (call $pipe_create (local.get $aligned)))
+
   (func (export "pipe_set_mode") (param $p i32) (param $mode i32)
     (i32.store offset=12 (local.get $p)
       (i32.or (i32.load offset=12 (local.get $p)) (local.get $mode))))
@@ -4097,7 +4111,7 @@
   ;; For circular pipes: only returns the segment from rd to end-of-buffer;
   ;;   caller must handle wrap-around or use pipe_read for full copy.
   ;; Writes available byte count to [len_ptr].
-  (func (export "pipe_read_ptr") (param $p i32) (param $len_ptr i32) (result i32)
+  (func $pipe_read_ptr (export "pipe_read_ptr") (param $p i32) (param $len_ptr i32) (result i32)
     (local $avail i32)
     (local.set $avail (call $pipe_fill (local.get $p)))
     (if (i32.eqz (local.get $avail))
@@ -4116,7 +4130,7 @@
              (i32.load offset=0 (local.get $p))))
 
   ;; Advance read cursor by n bytes after zero-copy read.
-  (func (export "pipe_advance") (param $p i32) (param $n i32)
+  (func $pipe_advance (export "pipe_advance") (param $p i32) (param $n i32)
     (local $rd i32) (local $cap i32)
     (if (i32.eqz (local.get $n)) (then (return)))
     (local.set $rd (i32.load offset=0 (local.get $p)))
@@ -4313,8 +4327,8 @@
   (func (export "STAGE_WS_FRAME")     (result i32) i32.const 10)
   (func (export "STAGE_WS_ENCODE")    (result i32) i32.const 11)
   (func (export "STAGE_WS_DECODE")    (result i32) i32.const 12)
-  (func (export "STAGE_WASM_EXEC")    (result i32) i32.const 13)
-  (func (export "STAGE_WAT_PARSE")    (result i32) i32.const 14)
+  (func (export "STAGE_EXEC")         (result i32) i32.const 13)
+  (func (export "STAGE_FRAME_PACER")  (result i32) i32.const 15)
 
   ;; ── Stage function type ──
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) -> result
@@ -4340,7 +4354,8 @@
   (global $PD_PIPE_CAP i32 (i32.const 8))
   (global $PD_COUNT    i32 (i32.const 12))
   (global $PD_TICK     i32 (i32.const 16))
-  (global $PD_STAGES   i32 (i32.const 20))
+  (global $PD_FRAME    i32 (i32.const 20))
+  (global $PD_STAGES   i32 (i32.const 24))
   (global $PS_TYPE     i32 (i32.const 0))
   (global $PS_CONFIG   i32 (i32.const 4))
   (global $PS_CLEN     i32 (i32.const 8))
@@ -4360,6 +4375,7 @@
     (i32.store offset=8 (local.get $desc) (local.get $pcap))
     (i32.store offset=12 (local.get $desc) (local.get $count))
     (i32.store offset=16 (local.get $desc) (i32.const 0))
+    (i32.store offset=20 (local.get $desc) (i32.const 0))
     local.get $desc)
 
   ;; pipeline_set_stage(desc, index, stage_type, config, config_len)
@@ -4393,12 +4409,19 @@
   (func (export "pipeline_get_tick") (param $desc i32) (result i32)
     (i32.load offset=16 (local.get $desc)))
 
+  (func (export "pipeline_set_frame_size") (param $desc i32) (param $frame i32)
+    (i32.store offset=20 (local.get $desc) (local.get $frame)))
+
+  (func (export "pipeline_get_frame_size") (param $desc i32) (result i32)
+    (i32.load offset=20 (local.get $desc)))
+
   ;; pipeline_run(desc, input_pipe, output_pipe, scratch, scap) → OK | MORE | error
   ;; Fuses consecutive batch stages (state_ptr==0) by reusing a single intermediate pipe.
+  ;; When frame_size > 0, intermediate pipes use aligned capacity for zero-copy SIMD.
   (func $pipeline_run (export "pipeline_run")
     (param $desc i32) (param $input i32) (param $output i32)
     (param $scratch i32) (param $scap i32) (result i32)
-    (local $count i32) (local $pcap i32)
+    (local $count i32) (local $pcap i32) (local $frame i32)
     (local $i i32) (local $stype i32)
     (local $out i32) (local $prev i32) (local $result i32)
     (local $stages i32) (local $slot i32)
@@ -4409,6 +4432,7 @@
     (local.set $count (i32.load offset=12 (local.get $desc)))
     (local.set $last_i (i32.sub (local.get $count) (i32.const 1)))
     (local.set $pcap (i32.load offset=8 (local.get $desc)))
+    (local.set $frame (i32.load offset=20 (local.get $desc)))
     (local.set $stages (i32.add (local.get $desc) (global.get $PD_STAGES)))
     (local.set $prev (local.get $input))
 
@@ -4444,9 +4468,15 @@
                 ;; The stage reads from prev (draining it, auto-reset) then writes to out.
                 (local.set $out (local.get $prev)))
               (else
-                (local.set $out (call $pipe_create (local.get $pcap)))
-                (if (i32.eq (local.get $out) (i32.const -1))
-                  (then (local.set $result (i32.const -1)) (br $done)))
+                (if (local.get $frame)
+                  (then
+                    (local.set $out (call $pipe_create_aligned (local.get $pcap) (local.get $frame)))
+                    (if (i32.eq (local.get $out) (i32.const -1))
+                      (then (local.set $result (i32.const -1)) (br $done))))
+                  (else
+                    (local.set $out (call $pipe_create (local.get $pcap)))
+                    (if (i32.eq (local.get $out) (i32.const -1))
+                      (then (local.set $result (i32.const -1)) (br $done)))))
                 (if (i32.eqz (local.get $state))
                   (then
                     (local.set $reusable (local.get $out))
@@ -4494,6 +4524,88 @@
     (call $pipe_drain (local.get $input) (local.get $output) (local.get $scratch) (local.get $scap)))
 
   (elem (i32.const 0) $stage_passthrough)
+
+  ;; Frame Pacer Stage — tick-driven accumulation to frame_size chunks
+  ;; Slots into any pipeline to provide frame-aligned data to downstream stages.
+  ;;
+  ;; State (80 bytes):
+  ;;   +0:  tick          i32  — pipeline tick (RO, written by pipeline_run)
+  ;;   +4:  frame_size    i32  — stride (from config[0])
+  ;;   +8:  buf_len       i32  — bytes buffered so far
+  ;;   +12: last_flush    i32  — tick when last frame was emitted
+  ;;   +16: buf[64]             — internal buffer
+  ;;
+  ;; Config (4 bytes):
+  ;;   +0: timeout_ticks i32  — flush partial frame after N idle ticks (0=never)
+
+  (func $process_frame_pacer
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $tick i32) (local $frame_size i32) (local $buf_len i32) (local $last_flush i32)
+    (local $timeout i32) (local $avail i32) (local $space i32) (local $read i32)
+    (local $buf i32)
+
+    (local.set $tick (i32.load offset=0 (local.get $state)))
+    (local.set $frame_size (i32.load offset=4 (local.get $state)))
+    (local.set $buf_len (i32.load offset=8 (local.get $state)))
+    (local.set $last_flush (i32.load offset=12 (local.get $state)))
+    (local.set $buf (i32.add (local.get $state) (i32.const 16)))
+    (local.set $timeout (i32.load offset=0 (local.get $cfg)))
+
+    ;; First call: init frame_size from config, yield
+    (if (i32.eqz (local.get $frame_size))
+      (then
+        (local.set $frame_size (i32.load offset=0 (local.get $cfg)))
+        (i32.store offset=4 (local.get $state) (local.get $frame_size))
+        (return (global.get $STATUS_MORE))))
+
+    ;; Accumulate input data into buffer
+    (local.set $avail (call $pipe_available (local.get $input)))
+    (if (i32.gt_u (local.get $avail) (i32.const 0))
+      (then
+        (local.set $space (i32.sub (local.get $frame_size) (local.get $buf_len)))
+        (if (i32.gt_u (local.get $space) (i32.const 0))
+          (then
+            (local.set $read
+              (call $pipe_read (local.get $input)
+                (i32.add (local.get $buf) (local.get $buf_len))
+                (call $min_u (local.get $space) (local.get $avail))))
+            (local.set $buf_len (i32.add (local.get $buf_len) (local.get $read)))
+            (i32.store offset=8 (local.get $state) (local.get $buf_len))))))
+
+    ;; Full frame: write, shift, yield if more input
+    (if (i32.ge_u (local.get $buf_len) (local.get $frame_size))
+      (then
+        (drop (call $pipe_write (local.get $output) (local.get $buf) (local.get $frame_size)))
+        (local.set $buf_len (i32.sub (local.get $buf_len) (local.get $frame_size)))
+        (if (i32.gt_u (local.get $buf_len) (i32.const 0))
+          (then
+            (call $memcpy_off
+              (local.get $buf) (i32.const 0)
+              (local.get $buf) (local.get $frame_size)
+              (local.get $buf_len))))
+        (i32.store offset=8 (local.get $state) (local.get $buf_len))
+        (i32.store offset=12 (local.get $state) (local.get $tick))
+        (if (call $pipe_available (local.get $input))
+          (then (return (global.get $STATUS_MORE))))
+        (return (global.get $STATUS_OK))))
+
+    ;; Partial frame: check timeout
+    (if (i32.gt_u (local.get $buf_len) (i32.const 0))
+      (then
+        (if (i32.and (local.get $timeout)
+              (i32.ge_u
+                (i32.sub (local.get $tick) (local.get $last_flush))
+                (local.get $timeout)))
+          (then
+            (drop (call $pipe_write (local.get $output) (local.get $buf) (local.get $buf_len)))
+            (i32.store offset=8 (local.get $state) (i32.const 0))
+            (i32.store offset=12 (local.get $state) (local.get $tick))
+            (return (global.get $STATUS_OK))))
+        (return (global.get $STATUS_MORE))))
+
+    (global.get $STATUS_OK))
+
 
   ;; Encoding Text — hex + base64url pipeline stages
 
@@ -4715,86 +4827,263 @@
       end
     end)
 
-  ;; base64url functions imported from encoding-base64url as $b64_encode/$b64_decode
+  ;; ── SIMD hex encode: 16 bytes → 32 hex chars ──
+  (func $hex_encode_simd (export "hex_encode_simd")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $i i32) (local $o i32) (local $b i32)
+    (local $v v128) (local $nibbles_hi v128) (local $nibbles_lo v128)
+    (local $gt9 v128) (local $delta v128)
+    (local $chars_hi v128) (local $chars_lo v128)
+    (local $out0 v128) (local $out1 v128)
 
-  ;; ── Pipeline stage: hex encode ──
-  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+    (if (i32.gt_u (i32.shl (local.get $in_len) (i32.const 1)) (local.get $out_cap))
+      (then (return (call $pack (i32.const 2) (i32.const 0)))))
+
+    (block $loop_end
+      (br_if $loop_end (i32.lt_u (local.get $in_len) (i32.const 16)))
+      (loop $loop
+        (br_if $loop_end
+          (i32.ge_u (local.get $i) (i32.sub (local.get $in_len) (i32.const 15))))
+        (local.set $v (v128.load (i32.add (local.get $in_ptr) (local.get $i))))
+        (local.set $nibbles_hi
+          (v128.and
+            (i8x16.shr_u (local.get $v) (i32.const 4))
+            (i8x16.splat (i32.const 15))))
+        (local.set $nibbles_lo
+          (v128.and (local.get $v) (i8x16.splat (i32.const 15))))
+        (local.set $gt9
+          (i8x16.gt_u (local.get $nibbles_hi) (i8x16.splat (i32.const 9))))
+        (local.set $delta
+          (v128.bitselect
+            (i8x16.splat (i32.const 87)) (i8x16.splat (i32.const 48)) (local.get $gt9)))
+        (local.set $chars_hi
+          (i8x16.add (local.get $nibbles_hi) (local.get $delta)))
+        (local.set $gt9
+          (i8x16.gt_u (local.get $nibbles_lo) (i8x16.splat (i32.const 9))))
+        (local.set $delta
+          (v128.bitselect
+            (i8x16.splat (i32.const 87)) (i8x16.splat (i32.const 48)) (local.get $gt9)))
+        (local.set $chars_lo
+          (i8x16.add (local.get $nibbles_lo) (local.get $delta)))
+        (local.set $out0
+          (i8x16.shuffle 0 16 1 17 2 18 3 19 4 20 5 21 6 22 7 23
+            (local.get $chars_hi) (local.get $chars_lo)))
+        (local.set $out1
+          (i8x16.shuffle 8 24 9 25 10 26 11 27 12 28 13 29 14 15 30 31
+            (local.get $chars_hi) (local.get $chars_lo)))
+        (v128.store (i32.add (local.get $out_ptr) (local.get $o)) (local.get $out0))
+        (v128.store (i32.add (local.get $out_ptr) (i32.add (local.get $o) (i32.const 16))) (local.get $out1))
+        (local.set $i (i32.add (local.get $i) (i32.const 16)))
+        (local.set $o (i32.add (local.get $o) (i32.const 32)))
+        (br $loop)))
+
+    (block $tail_end
+      (loop $tail
+        (br_if $tail_end (i32.ge_u (local.get $i) (local.get $in_len)))
+        (local.set $b (i32.load8_u (i32.add (local.get $in_ptr) (local.get $i))))
+        (i32.store8
+          (i32.add (local.get $out_ptr) (local.get $o))
+          (call $hex_char (i32.shr_u (local.get $b) (i32.const 4))))
+        (local.set $o (i32.add (local.get $o) (i32.const 1)))
+        (i32.store8
+          (i32.add (local.get $out_ptr) (local.get $o))
+          (call $hex_char (i32.and (local.get $b) (i32.const 15))))
+        (local.set $o (i32.add (local.get $o) (i32.const 1)))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $tail)))
+    (call $pack (i32.const 0) (local.get $o)))
+
+  ;; ── SIMD hex decode: 32 hex chars → 16 bytes ──
+  (func $hex_decode_simd (export "hex_decode_simd")
+    (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
+    (result i64)
+    (local $i i32) (local $o i32) (local $c i32) (local $hi i32) (local $lo i32)
+    (local $v0 v128) (local $v1 v128)
+    (local $digit0 v128) (local $lower0 v128) (local $upper0 v128)
+    (local $digit1 v128) (local $lower1 v128) (local $upper1 v128)
+    (local $valid0 v128) (local $valid1 v128)
+    (local $val0 v128) (local $val1 v128)
+    (local $evens v128) (local $odds v128) (local $bytes v128)
+
+    (if (i32.and (local.get $in_len) (i32.const 1))
+      (then (return (call $pack (i32.const 3) (i32.const 0)))))
+    (if (i32.gt_u (i32.shr_u (local.get $in_len) (i32.const 1)) (local.get $out_cap))
+      (then (return (call $pack (i32.const 2) (i32.const 0)))))
+
+    (block $loop_end
+      (br_if $loop_end (i32.lt_u (local.get $in_len) (i32.const 32)))
+      (loop $loop
+        (br_if $loop_end
+          (i32.ge_u (local.get $i) (i32.sub (local.get $in_len) (i32.const 31))))
+        (local.set $v0 (v128.load (i32.add (local.get $in_ptr) (local.get $i))))
+        (local.set $v1 (v128.load (i32.add (local.get $in_ptr) (i32.add (local.get $i) (i32.const 16)))))
+
+        (local.set $digit0
+          (v128.and
+            (i8x16.ge_u (local.get $v0) (i8x16.splat (i32.const 48)))
+            (i8x16.le_u (local.get $v0) (i8x16.splat (i32.const 57)))))
+        (local.set $digit1
+          (v128.and
+            (i8x16.ge_u (local.get $v1) (i8x16.splat (i32.const 48)))
+            (i8x16.le_u (local.get $v1) (i8x16.splat (i32.const 57)))))
+
+        (local.set $lower0
+          (v128.and
+            (i8x16.ge_u (local.get $v0) (i8x16.splat (i32.const 97)))
+            (i8x16.le_u (local.get $v0) (i8x16.splat (i32.const 102)))))
+        (local.set $lower1
+          (v128.and
+            (i8x16.ge_u (local.get $v1) (i8x16.splat (i32.const 97)))
+            (i8x16.le_u (local.get $v1) (i8x16.splat (i32.const 102)))))
+
+        (local.set $upper0
+          (v128.and
+            (i8x16.ge_u (local.get $v0) (i8x16.splat (i32.const 65)))
+            (i8x16.le_u (local.get $v0) (i8x16.splat (i32.const 70)))))
+        (local.set $upper1
+          (v128.and
+            (i8x16.ge_u (local.get $v1) (i8x16.splat (i32.const 65)))
+            (i8x16.le_u (local.get $v1) (i8x16.splat (i32.const 70)))))
+
+        (local.set $valid0 (v128.or (v128.or (local.get $digit0) (local.get $lower0)) (local.get $upper0)))
+        (local.set $valid1 (v128.or (v128.or (local.get $digit1) (local.get $lower1)) (local.get $upper1)))
+        (if (i32.eqz (i32.and (i8x16.all_true (local.get $valid0)) (i8x16.all_true (local.get $valid1))))
+          (then (return (call $pack (i32.const 3) (local.get $i)))))
+
+        ;; nibble = digit ? (v-48) : upper ? (v-55) : (v-87)
+        (local.set $val0
+          (v128.bitselect
+            (i8x16.sub (local.get $v0) (i8x16.splat (i32.const 48)))
+            (v128.bitselect
+              (i8x16.sub (local.get $v0) (i8x16.splat (i32.const 55)))
+              (i8x16.sub (local.get $v0) (i8x16.splat (i32.const 87)))
+              (local.get $upper0))
+            (local.get $digit0)))
+        (local.set $val1
+          (v128.bitselect
+            (i8x16.sub (local.get $v1) (i8x16.splat (i32.const 48)))
+            (v128.bitselect
+              (i8x16.sub (local.get $v1) (i8x16.splat (i32.const 55)))
+              (i8x16.sub (local.get $v1) (i8x16.splat (i32.const 87)))
+              (local.get $upper1))
+            (local.get $digit1)))
+
+        ;; Deinterleave: pairs (n0,n1)→byte0, etc.
+        (local.set $evens
+          (i8x16.shuffle 0 2 4 6 8 10 12 14 16 18 20 22 24 26 28 30
+            (local.get $val0) (local.get $val1)))
+        (local.set $odds
+          (i8x16.shuffle 1 3 5 7 9 11 13 15 17 19 21 23 25 27 29 31
+            (local.get $val0) (local.get $val1)))
+        (local.set $bytes
+          (v128.or (i8x16.shl (local.get $evens) (i32.const 4)) (local.get $odds)))
+        (v128.store (i32.add (local.get $out_ptr) (local.get $o)) (local.get $bytes))
+
+        (local.set $i (i32.add (local.get $i) (i32.const 32)))
+        (local.set $o (i32.add (local.get $o) (i32.const 16)))
+        (br $loop)))
+
+    ;; Scalar tail
+    (block $tail_end
+      (loop $tail
+        (br_if $tail_end (i32.ge_u (local.get $i) (local.get $in_len)))
+        (local.set $c (i32.load8_u (i32.add (local.get $in_ptr) (local.get $i))))
+        (local.set $hi (call $m90hex_nibble (local.get $c)))
+        (if (i32.lt_s (local.get $hi) (i32.const 0))
+          (then (return (call $pack (i32.const 3) (local.get $i)))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (local.set $c (i32.load8_u (i32.add (local.get $in_ptr) (local.get $i))))
+        (local.set $lo (call $m90hex_nibble (local.get $c)))
+        (if (i32.lt_s (local.get $lo) (i32.const 0))
+          (then (return (call $pack (i32.const 3) (local.get $i)))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (i32.store8
+          (i32.add (local.get $out_ptr) (local.get $o))
+          (i32.or (i32.shl (local.get $hi) (i32.const 4)) (local.get $lo)))
+        (local.set $o (i32.add (local.get $o) (i32.const 1)))
+        (br $tail)))
+    (call $pack (i32.const 0) (local.get $o)))
+
+  ;; ── Pipeline stage: hex encode (zero-copy input, SIMD accelerated) ──
+  ;; Reads directly from pipe buffer via pipe_read_ptr, writes output to scratch.
   (func (export "process_hex_encode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
-    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
-    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
-    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
-    (local.set $result (call $hex_encode_lower
-      (local.get $scratch) (local.get $read)
-      (i32.add (local.get $scratch) (local.get $max_in))
-      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local $len_slot i32) (local $in_ptr i32) (local $read i32)
+    (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (local.set $in_ptr (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
+    (local.set $result (call $hex_encode_simd
+      (local.get $in_ptr) (local.get $read)
+      (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
-    (drop (call $pipe_write (local.get $output)
-      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    (call $pipe_advance (local.get $input) (local.get $read))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
     local.get $out_len)
 
-  ;; ── Pipeline stage: base64url nopad encode ──
-  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  ;; ── Pipeline stage: base64url nopad encode (zero-copy input) ──
   (func (export "process_b64_encode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
-    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 3)))
-    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
-    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local $len_slot i32) (local $in_ptr i32) (local $read i32)
+    (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (local.set $in_ptr (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
     (local.set $result (call $b64_encode
-      (local.get $scratch) (local.get $read)
-      (i32.add (local.get $scratch) (local.get $max_in))
-      (i32.sub (local.get $scap) (local.get $max_in))))
+      (local.get $in_ptr) (local.get $read)
+      (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
-    (drop (call $pipe_write (local.get $output)
-      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    (call $pipe_advance (local.get $input) (local.get $read))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
     local.get $out_len)
 
-  ;; ── Pipeline stage: base64url nopad decode ──
-  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  ;; ── Pipeline stage: base64url nopad decode (zero-copy input) ──
   (func (export "process_b64_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
-    (local.set $max_in (i32.div_u (local.get $scap) (i32.const 2)))
-    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
-    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
+    (local $len_slot i32) (local $in_ptr i32) (local $read i32)
+    (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (local.set $in_ptr (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
     (local.set $result (call $b64_decode
-      (local.get $scratch) (local.get $read)
-      (i32.add (local.get $scratch) (local.get $max_in))
-      (i32.sub (local.get $scap) (local.get $max_in))))
+      (local.get $in_ptr) (local.get $read)
+      (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
-    (drop (call $pipe_write (local.get $output)
-      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    (call $pipe_advance (local.get $input) (local.get $read))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
     local.get $out_len)
 
-  ;; ── Pipeline stage: hex decode ──
-  ;; (input_pipe, output_pipe, config, clen, scratch, scap) → bytes_written | error
+  ;; ── Pipeline stage: hex decode (zero-copy input, SIMD accelerated) ──
   (func (export "process_hex_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $max_in i32) (local $read i32) (local $result i64) (local $out_len i32) (local $status i32)
-    (local.set $max_in (i32.div_u (i32.mul (local.get $scap) (i32.const 2)) (i32.const 3)))
-    (local.set $read (call $pipe_read (local.get $input) (local.get $scratch) (local.get $max_in)))
-    (if (i32.le_s (local.get $read) (i32.const 0)) (then (return (local.get $read))))
-    (local.set $result (call $hex_decode_strict
-      (local.get $scratch) (local.get $read)
-      (i32.add (local.get $scratch) (local.get $max_in))
-      (i32.sub (local.get $scap) (local.get $max_in))))
+    (local $len_slot i32) (local $in_ptr i32) (local $read i32)
+    (local $result i64) (local $out_len i32) (local $status i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (local.set $in_ptr (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
+    (local.set $result (call $hex_decode_simd
+      (local.get $in_ptr) (local.get $read)
+      (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
-    (drop (call $pipe_write (local.get $output)
-      (i32.add (local.get $scratch) (local.get $max_in)) (local.get $out_len)))
+    (call $pipe_advance (local.get $input) (local.get $read))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
     local.get $out_len)
   ;; Socket Core — transport stage with tick-based timeout
 ;; Abstract socket layer — transport-agnostic byte stream I/O.
@@ -14823,7 +15112,7 @@
   ;; Exported WAT loader: load_wat(wat_ptr, wat_len) -> error_code
   ;; ═════════════════════════════════════════════════════════════════════
 
-  (func (export "load_wat") (param $wat_ptr i32) (param $wat_len i32) (result i32)
+  (func $load_wat (export "load_wat") (param $wat_ptr i32) (param $wat_len i32) (result i32)
     (return (call $wat_parse_module (local.get $wat_ptr) (local.get $wat_len)))
   )
 
@@ -14834,20 +15123,22 @@
   ;;   +4: arg_count i32  (number of i32 arguments)
   ;;   +8: args[]    i32  (inline argument values)
 
-  (func (export "process_wasm_exec")
+  (func (export "process_exec")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $wasm_len i32) (local $err i32) (local $func_idx i32)
+    (local $len i32) (local $err i32) (local $func_idx i32)
     (local $arg_count i32) (local $arg_ptr i32)
     (local $res_count i32) (local $result i64)
 
-    ;; 1. Read WASM binary from input pipe into scratch
-    (local.set $wasm_len (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
-    (if (i32.le_s (local.get $wasm_len) (i32.const 0))
-      (then (return (local.get $wasm_len))))
+    ;; 1. Read input from pipe into scratch
+    (local.set $len (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (if (i32.le_s (local.get $len) (i32.const 0))
+      (then (return (local.get $len))))
 
-    ;; 2. Load WASM binary via interpreter
-    (local.set $err (call $load (local.get $scratch) (local.get $wasm_len)))
+    ;; 2. Auto-detect: WASM binary or WAT text
+    (if (i32.eq (i32.load (local.get $scratch)) (i32.const 0x6D736100))
+      (then (local.set $err (call $load (local.get $scratch) (local.get $len))))
+      (else (local.set $err (call $load_wat (local.get $scratch) (local.get $len)))))
     (if (local.get $err)
       (then (return (i32.sub (i32.const 0) (local.get $err)))))
 

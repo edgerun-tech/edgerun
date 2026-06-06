@@ -26,6 +26,7 @@ EOF
 # 4. pipe-core — byte pipes
 # 5. frame-core — framed I/O
 # 6. pipeline-core — pipeline_run + dispatch table
+# 6a. frame-pacer — tick-driven frame accumulation stage
 # 7. encoding-text — hex/base64 pipeline stages
 # 8. socket-core — transport stage
 # 8a. session-core — session scheduler (depends on pipeline_run)
@@ -54,6 +55,8 @@ echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/io/frame-core.wat"
 echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/io/pipeline-core.wat"
+echo "" >> "$OUT"
+cat >> "$OUT" "$BASE/build/wasm/io/frame-pacer.wat"
 echo "" >> "$OUT"
 cat >> "$OUT" "$BASE/build/wasm/encoding/encoding-text.wat"
 echo "" >> "$OUT"

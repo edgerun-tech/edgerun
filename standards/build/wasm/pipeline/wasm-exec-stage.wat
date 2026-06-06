@@ -5,20 +5,22 @@
   ;;   +4: arg_count i32  (number of i32 arguments)
   ;;   +8: args[]    i32  (inline argument values)
 
-  (func (export "process_wasm_exec")
+  (func (export "process_exec")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $wasm_len i32) (local $err i32) (local $func_idx i32)
+    (local $len i32) (local $err i32) (local $func_idx i32)
     (local $arg_count i32) (local $arg_ptr i32)
     (local $res_count i32) (local $result i64)
 
-    ;; 1. Read WASM binary from input pipe into scratch
-    (local.set $wasm_len (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
-    (if (i32.le_s (local.get $wasm_len) (i32.const 0))
-      (then (return (local.get $wasm_len))))
+    ;; 1. Read input from pipe into scratch
+    (local.set $len (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (if (i32.le_s (local.get $len) (i32.const 0))
+      (then (return (local.get $len))))
 
-    ;; 2. Load WASM binary via interpreter
-    (local.set $err (call $load (local.get $scratch) (local.get $wasm_len)))
+    ;; 2. Auto-detect: WASM binary or WAT text
+    (if (i32.eq (i32.load (local.get $scratch)) (i32.const 0x6D736100))
+      (then (local.set $err (call $load (local.get $scratch) (local.get $len))))
+      (else (local.set $err (call $load_wat (local.get $scratch) (local.get $len)))))
     (if (local.get $err)
       (then (return (i32.sub (i32.const 0) (local.get $err)))))
 
