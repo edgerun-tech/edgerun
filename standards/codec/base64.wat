@@ -372,7 +372,7 @@
       end
     end)
 
-  (func (export "base64_standard_decode")
+  (func $base64_decode (export "base64_standard_decode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $groups i32)
@@ -2596,5 +2596,6 @@
     (local.set $out_len (i32.wrap_i64 (local.get $result)))
     (call $pipe_advance (local.get $input) (local.get $read))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
-    local.get $out_len)
+    (return (local.get $out_len)))
+
 )

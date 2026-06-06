@@ -23,6 +23,16 @@
   (func (export "STAGE_FRAME_PACER")  (result i32) i32.const 15)
   (func (export "STAGE_SHA256")       (result i32) i32.const 16)
   (func (export "STAGE_HMAC_SHA256")  (result i32) i32.const 17)
+  (func (export "STAGE_SHA1")         (result i32) i32.const 18)
+  (func (export "STAGE_SHA512")       (result i32) i32.const 19)
+  (func (export "STAGE_SHA384")       (result i32) i32.const 20)
+  (func (export "STAGE_AES128_GCM_ENCRYPT") (result i32) i32.const 21)
+  (func (export "STAGE_AES128_GCM_DECRYPT") (result i32) i32.const 22)
+  (func (export "STAGE_AES128_CTR_XOR")    (result i32) i32.const 23)
+  (func (export "STAGE_DJB2_HASH")         (result i32) i32.const 24)
+  (func (export "STAGE_INET_CHECKSUM")     (result i32) i32.const 25)
+  (func (export "STAGE_CRC32_BZIP")        (result i32) i32.const 26)
+  (func (export "STAGE_DASHBOARD")         (result i32) i32.const 14)
 
   ;; ── Stage function type ──
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) -> result

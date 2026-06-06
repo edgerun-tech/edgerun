@@ -236,7 +236,7 @@
     end)
 
   ;; ── aes128_ctr_xor(out, in, len, key[16], counter[16]) -> status ──
-  (func (export "aes128_ctr_xor")
+  (func $aes128_ctr_xor (export "aes128_ctr_xor")
     (param $out i32) (param $in i32) (param $len i32)
     (param $key i32) (param $ctr i32)
     (result i32)

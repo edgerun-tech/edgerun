@@ -418,7 +418,7 @@
   ;; AES-128-GCM encrypt
   ;; ══════════════════════════════════════════════════════════════
 
-  (func (export "aes128_gcm_encrypt")
+  (func $aes128_gcm_encrypt (export "aes128_gcm_encrypt")
     (param $out i32) (param $in i32) (param $len i32)
     (param $aad i32) (param $aad_len i32)
     (param $key i32) (param $iv i32) (param $tag i32)
@@ -472,7 +472,7 @@
   ;; AES-128-GCM decrypt
   ;; ══════════════════════════════════════════════════════════════
 
-  (func (export "aes128_gcm_decrypt")
+  (func $aes128_gcm_decrypt (export "aes128_gcm_decrypt")
     (param $out i32) (param $in i32) (param $len i32)
     (param $aad i32) (param $aad_len i32)
     (param $key i32) (param $iv i32) (param $tag i32)

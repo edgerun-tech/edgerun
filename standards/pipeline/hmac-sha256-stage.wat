@@ -7,7 +7,7 @@
 
   ;; Pipeline stage: HMAC-SHA256 (batch, zero-copy input)
   ;; Config layout: [klen: i32][key: klen]
-  (func (export "process_hmac_sha256")
+  (func $process_hmac_sha256 (export "process_hmac_sha256")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $len_slot i32) (local $in_ptr i32) (local $read i32)

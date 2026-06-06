@@ -1,7 +1,7 @@
   ;; DJB2 hash — Dan Bernstein's djb2 string hash, modified with initial hash = 0.
   ;; This is the variant used by OSRS cache lookups.
   ;; Exports: djb2_hash(input_ptr, input_len) -> i32 hash
-  (func (export "djb2_hash") (param $ptr i32) (param $len i32) (result i32)
+  (func $djb2_hash (export "djb2_hash") (param $ptr i32) (param $len i32) (result i32)
     (local $hash i32) (local $i i32) (local $b i32)
     i32.const 0 local.set $hash
     i32.const 0 local.set $i

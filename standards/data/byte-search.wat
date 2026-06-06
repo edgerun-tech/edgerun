@@ -1,10 +1,4 @@
 
-  (func $load (param $ptr i32) (param $i i32) (result i32)
-    local.get $ptr
-    local.get $i
-    i32.add
-    i32.load8_u)
-
   (func $matches3 (param $b i32) (param $n1 i32) (param $n2 i32) (param $n3 i32) (result i32)
     local.get $b
     local.get $n1
@@ -30,7 +24,7 @@
         br_if $done
         local.get $ptr
         local.get $i
-        call $load
+        call $load8_u
         local.get $needle
         i32.eq
         if
@@ -59,7 +53,7 @@
         local.set $i
         local.get $ptr
         local.get $i
-        call $load
+        call $load8_u
         local.get $needle
         i32.eq
         if
@@ -83,7 +77,7 @@
         br_if $done
         local.get $ptr
         local.get $i
-        call $load
+        call $load8_u
         local.set $b
         local.get $b
         local.get $n1
@@ -120,7 +114,7 @@
         local.set $i
         local.get $ptr
         local.get $i
-        call $load
+        call $load8_u
         local.set $b
         local.get $b
         local.get $n1
@@ -149,7 +143,7 @@
         br_if $done
         local.get $ptr
         local.get $i
-        call $load
+        call $load8_u
         local.get $n1
         local.get $n2
         local.get $n3
@@ -181,7 +175,7 @@
         local.set $i
         local.get $ptr
         local.get $i
-        call $load
+        call $load8_u
         local.get $n1
         local.get $n2
         local.get $n3

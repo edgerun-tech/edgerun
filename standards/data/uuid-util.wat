@@ -4,40 +4,14 @@
   ;; Exports:
   ;;   uuid_parse(in_ptr, out_ptr) -> i32  (16 bytes, 0 on success, -1 on error)
   ;;   uuid_format(in_ptr, out_ptr) -> i32  (36 chars written, -1 on error)
-  (func $m192hex_digit (param $c i32) (result i32)
-    (local $d i32)
-    local.get $c i32.const 48 i32.sub
-    local.tee $d
-    i32.const 10 i32.lt_u if (result i32)
-      local.get $d
-    else
-      local.get $d i32.const 32 i32.or i32.const 87 i32.sub
-      local.tee $d
-      i32.const 0 i32.ge_s local.get $d i32.const 6 i32.lt_s i32.and if (result i32)
-        local.get $d i32.const 10 i32.add
-      else
-        i32.const -1
-      end
-    end
-  )
-
-  (func $m192hex_digit_char (param $d i32) (param $out i32)
-    local.get $d i32.const 10 i32.lt_s
-    if
-      local.get $out local.get $d i32.const 48 i32.add i32.store8
-    else
-      local.get $out local.get $d i32.const 87 i32.add i32.store8
-    end
-  )
-
   (func $parse_hex_byte (param $ptr i32) (param $off i32) (result i32)
     (local $h i32) (local $l i32)
-    local.get $ptr local.get $off i32.add i32.load8_u call $m192hex_digit
+    local.get $ptr local.get $off i32.add i32.load8_u call $parse_hex_digit
     local.tee $h
     i32.const 0 i32.lt_s if
       i32.const -1 return
     end
-    local.get $ptr local.get $off i32.const 1 i32.add i32.add i32.load8_u call $m192hex_digit
+    local.get $ptr local.get $off i32.const 1 i32.add     i32.add i32.load8_u call $parse_hex_digit
     local.tee $l
     i32.const 0 i32.lt_s if
       i32.const -1 return
@@ -94,8 +68,8 @@
         local.get $o i32.const 1 i32.add local.set $o
       end
       local.get $in local.get $i i32.add i32.load8_u local.set $b
-      local.get $b i32.const 4 i32.shr_u local.get $out local.get $o i32.add call $m192hex_digit_char
-      local.get $b i32.const 0xf i32.and local.get $out local.get $o i32.const 1 i32.add i32.add call $m192hex_digit_char
+      local.get $b i32.const 4 i32.shr_u local.get $out local.get $o i32.add call $hex_digit
+      local.get $b i32.const 0xf i32.and local.get $out local.get $o i32.const 1 i32.add i32.add call $hex_digit
       local.get $o i32.const 2 i32.add local.set $o
       local.get $i i32.const 1 i32.add local.set $i
       br $loop

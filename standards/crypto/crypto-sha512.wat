@@ -976,7 +976,7 @@
     local.get $out_len
     call $pack)
 
-  (func (export "sha512") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i64)
+  (func $sha512 (export "sha512") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i64)
     call $sha512_init
     local.get $ptr
     local.get $len
@@ -984,7 +984,7 @@
     i32.const 64
     call $m63hash)
 
-  (func (export "sha384") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i64)
+  (func $sha384 (export "sha384") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i64)
     call $sha384_init
     local.get $ptr
     local.get $len

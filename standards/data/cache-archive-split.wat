@@ -37,21 +37,6 @@
     i32.or
   )
 
-  (func $memcpy (param $dst i32) (param $src i32) (param $n i32)
-    (local $i i32)
-    i32.const 0 local.set $i
-    block $done
-    loop $loop
-      local.get $i local.get $n i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add
-      local.get $src local.get $i i32.add i32.load8_u
-      i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end
-  )
-
   (func (export "cache_archive_split_payload")
     (param $payload i32) (param $len i32) (param $file_count i32)
     (param $entries i32) (param $arena i32) (param $arena_len i32)

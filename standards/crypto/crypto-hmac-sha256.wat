@@ -122,7 +122,7 @@
       local.get $e i32.const 6 call $ror
       local.get $e i32.const 11 call $ror i32.xor
       local.get $e i32.const 25 call $ror i32.xor
-      local.get $e i32.add
+      i32.add
       local.get $e local.get $f i32.and
       local.get $e i32.const -1 i32.xor local.get $g i32.and
       i32.xor

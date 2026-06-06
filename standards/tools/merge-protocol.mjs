@@ -317,8 +317,13 @@ const FAMILIES = [
       '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
       '(import "edgerun" "is_alnum" (func $is_alnum (param i32) (result i32)))',
       '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
+      '(import "edgerun" "is_scheme_byte" (func $is_scheme_byte (param i32) (result i32)))',
     ],
-    sourceFixes: [],
+    sourceFixes: [
+      // codelyzer-source-scan.wat ends with a standalone ) that acts as module-close
+      // in edgerun-full.wat but would prematurely close the module when merged
+      { file: 'app/codelyzer-source-scan.wat', find: '\n)', replace: '' },
+    ],
   },
   {
     name: 'app-core', outfile: 'app/core.wat', internal: [],
@@ -402,24 +407,64 @@ function stripStrayPreamble(content) {
   return content.replace(/^(?!\s*\(|\s*;;)[^\n]*\n?/, '');
 }
 
-/** Count excess closing parens at end of fragment (for parent-module close) */
+/** Count open/close parens excluding those inside string literals */
+function countParensOutsideStrings(content) {
+  let open = 0, close = 0, inStr = false;
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (ch === '"' && (i === 0 || content[i-1] !== '\\')) inStr = !inStr;
+    if (!inStr) {
+      if (ch === '(') open++;
+      if (ch === ')') close++;
+    }
+  }
+  return { open, close };
+}
+
+/** Strip trailing closers and module-level close parens from fragments */
 function stripTrailingClosers(content) {
-  let open = 0, close = 0;
-  for (const ch of content) {
-    if (ch === '(') open++;
-    if (ch === ')') close++;
+  // Count parens (string-aware); if open < close, file has excess closers
+  const { open, close } = countParensOutsideStrings(content);
+
+  if (open < close) {
+    // Strip excess `)` from end of file (module-level closes)
+    const excess = close - open;
+    let removed = 0;
+    let i = content.length - 1;
+    while (removed < excess && i >= 0) {
+      if (content[i] === ')') { removed++; i--; }
+      else if (/\s/.test(content[i])) { i--; }
+      else break;
+    }
+    return content.slice(0, i + 1);
   }
-  if (open >= close) return content;
-  // Excess closing parens — remove from end
-  const excess = close - open;
-  let removed = 0;
-  let i = content.length - 1;
-  while (removed < excess && i >= 0) {
-    if (content[i] === ')') { removed++; i--; }
-    else if (/\s/.test(content[i])) { i--; }
-    else break;
+
+  if (open === close) {
+    // Check for a standalone `)` on the last non-empty line that brings depth below 0
+    const lines = content.split('\n');
+    let lastLineIdx = lines.length - 1;
+    while (lastLineIdx >= 0 && lines[lastLineIdx].trim() === '') lastLineIdx--;
+    if (lastLineIdx >= 0 && lines[lastLineIdx].trim() === ')') {
+      let depth = 0;
+      let inStr = false;
+      for (let i = 0; i <= lastLineIdx; i++) {
+        for (let j = 0; j < lines[i].length; j++) {
+          const ch = lines[i][j];
+          if (ch === '"' && (j === 0 || lines[i][j-1] !== '\\')) inStr = !inStr;
+          if (!inStr) {
+            if (ch === '(') depth++;
+            if (ch === ')') depth--;
+          }
+        }
+      }
+      if (depth < 0) {
+        lines.splice(lastLineIdx, 1);
+        return lines.join('\n');
+      }
+    }
   }
-  return content.slice(0, i + 1);
+
+  return content;
 }
 
 /** Extract renames needed when internal imports use different local names */
@@ -497,6 +542,20 @@ function parseImport(line) {
   const m = line.trim().match(/\(import\s+"([^"]+)"\s+"([^"]+)"\s+\((?:func|global)\s+(\$\w+)/);
   if (!m) return null;
   return { mod: m[1], name: m[2], localName: m[3], key: `${m[1]}:${m[2]}` };
+}
+
+/** Count net paren change in a line, excluding parens in string literals */
+function countParensExcludingStrings(line) {
+  let net = 0, inStr = false;
+  for (let j = 0; j < line.length; j++) {
+    const ch = line[j];
+    if (ch === '"' && (j === 0 || line[j-1] !== '\\')) inStr = !inStr;
+    if (!inStr) {
+      if (ch === '(') net++;
+      if (ch === ')') net--;
+    }
+  }
+  return net;
 }
 
 // ── Main ─────────────────────────────────────────────────────────────
@@ -586,10 +645,7 @@ function merge() {
         const trimmed = line.trim();
         if (inDataDepth > 0) {
           dataParts.push(line);
-          for (const ch of trimmed) {
-            if (ch === '(') inDataDepth++;
-            if (ch === ')') inDataDepth--;
-          }
+          inDataDepth += countParensExcludingStrings(trimmed);
         } else if (!trimmed || trimmed.startsWith(';')) {
           bodyParts.push(line);
         } else if (isImportLine(trimmed)) {
@@ -602,12 +658,7 @@ function merge() {
         } else if (isMemoryLine(trimmed)) {
           // Stripped
         } else if (isDataLine(trimmed)) {
-          let parenNet = 0;
-          for (const ch of trimmed) {
-            if (ch === '(') parenNet++;
-            if (ch === ')') parenNet--;
-          }
-          inDataDepth += parenNet;
+          inDataDepth += countParensExcludingStrings(trimmed);
           dataParts.push(line);
         } else if (isGlobalDefLine(trimmed)) {
           const name = parseGlobalName(trimmed);

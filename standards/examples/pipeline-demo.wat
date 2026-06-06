@@ -189,9 +189,9 @@
 
     ;; Write test data to each stream
     ;; Each frame: [stream_id:4][len:4][payload]
-    (call $frame_write (local.get $s0) (i32.const 0) (global.get $DATA) (i32.const 8))
-    (call $frame_write (local.get $s1) (i32.const 1) (global.get $DATA) (i32.const 8))
-    (call $frame_write (local.get $s2) (i32.const 2) (global.get $DATA) (i32.const 8))
+    (drop (call $frame_write (local.get $s0) (i32.const 0) (global.get $DATA) (i32.const 8)))
+    (drop (call $frame_write (local.get $s1) (i32.const 1) (global.get $DATA) (i32.const 8)))
+    (drop (call $frame_write (local.get $s2) (i32.const 2) (global.get $DATA) (i32.const 8)))
 
     ;; Build mux config: [output_pipe, count, pipe_0, pipe_1, pipe_2]
     (i32.store offset=0 (global.get $MUX_CFG) (local.get $out))
@@ -224,9 +224,9 @@
     (local.set $s2 (call $pipe_create (i32.const 256)))
 
     ;; Write framed data to input
-    (call $frame_write (local.get $in) (i32.const 0) (i32.const 0x20A0320) (i32.const 12))
-    (call $frame_write (local.get $in) (i32.const 1) (i32.const 0x20A0340) (i32.const 12))
-    (call $frame_write (local.get $in) (i32.const 2) (i32.const 0x20A0360) (i32.const 12))
+    (drop (call $frame_write (local.get $in) (i32.const 0) (i32.const 0x20A0320) (i32.const 12)))
+    (drop (call $frame_write (local.get $in) (i32.const 1) (i32.const 0x20A0340) (i32.const 12)))
+    (drop (call $frame_write (local.get $in) (i32.const 2) (i32.const 0x20A0360) (i32.const 12)))
 
     ;; Build demux config: [input_pipe, count, pipe_0, pipe_1, pipe_2]
     (i32.store offset=0 (global.get $MUX_CFG) (local.get $in))
@@ -276,8 +276,8 @@
     (local.set $s1 (call $pipe_create (i32.const 256)))
 
     ;; Write data to stream pipes
-    (call $frame_write (local.get $s0) (i32.const 0) (global.get $DATA) (i32.const 8))
-    (call $frame_write (local.get $s1) (i32.const 1) (global.get $DATA) (i32.const 8))
+    (drop (call $frame_write (local.get $s0) (i32.const 0) (global.get $DATA) (i32.const 8)))
+    (drop (call $frame_write (local.get $s1) (i32.const 1) (global.get $DATA) (i32.const 8)))
 
     ;; Build mux config: [output=intermediate, count=2, pipe_0, pipe_1]
     ;; The mux writes framed data to the intermediate pipe.
@@ -350,7 +350,7 @@
     (local.set $output (call $pipe_create (i32.const 256)))
 
     ;; Write partial frame (12 bytes, frame_size=32 → not enough yet)
-    (call $pipe_write (local.get $input) (global.get $DATA) (i32.const 12))
+    (drop (call $pipe_write (local.get $input) (global.get $DATA) (i32.const 12)))
 
     ;; Create single-stage pipeline with frame pacer
     (local.set $desc (call $pl_create (i32.const 256) (i32.const 1)))
@@ -364,7 +364,7 @@
         (global.get $SCR) (global.get $SCR_CAP)))
 
     ;; Add more data to complete a frame
-    (call $pipe_write (local.get $input) (global.get $DATA) (i32.const 20))
+    (drop (call $pipe_write (local.get $input) (global.get $DATA) (i32.const 20)))
 
     ;; Second run: should emit 32-byte frame (12+20=32) → OK
     (local.set $result
@@ -384,7 +384,7 @@
     (local.set $pipe (call $pipe_create (i32.const 512)))
 
     ;; Write frame: stream_id=42, payload="Hello"
-    (call $frame_write (local.get $pipe) (i32.const 42) (global.get $DATA) (i32.const 5))
+    (drop (call $frame_write (local.get $pipe) (i32.const 42) (global.get $DATA) (i32.const 5)))
 
     ;; Read frame back
     (local.set $result (call $frame_read (local.get $pipe) (global.get $SCR) (global.get $SCR_CAP)))
@@ -396,9 +396,10 @@
     (local.set $len (i32.load (global.get $SCR)))
 
     ;; Return stream_id (should be 42) on success, -1 on error
-    (if (i32.eq (local.get $status) (global.get $OK))
-      (then (return (local.get $stream_id)))
-      (else (return (i32.sub (i32.const 0) (local.get $status)))))
+    (if (result i32)
+      (i32.eq (local.get $status) (global.get $OK))
+      (then (local.get $stream_id))
+      (else (i32.sub (i32.const 0) (local.get $status))))
   )
 
   ;; ── Message queue demo ──
@@ -409,7 +410,7 @@
     (local.set $pipe (call $pipe_create (i32.const 256)))
 
     ;; Write message
-    (call $msg_write (local.get $pipe) (global.get $DATA) (i32.const 8))
+    (drop (call $msg_write (local.get $pipe) (global.get $DATA) (i32.const 8)))
 
     ;; Read message back
     (local.set $len (call $msg_read (local.get $pipe) (global.get $SCR) (global.get $SCR_CAP)))

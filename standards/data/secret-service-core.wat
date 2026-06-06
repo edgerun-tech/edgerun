@@ -43,11 +43,6 @@
         (br $scan)))
     i32.const 1)
 
-  (func $starts_with (param $ptr i32) (param $len i32) (param $prefix i32) (param $prefix_len i32) (result i32)
-    (if (i32.lt_u (local.get $len) (local.get $prefix_len))
-      (then (return (i32.const 0))))
-    (call $m163mem_eq (local.get $ptr) (local.get $prefix) (local.get $prefix_len)))
-
   (func $is_component_byte (param $c i32) (result i32)
     (if
       (i32.and

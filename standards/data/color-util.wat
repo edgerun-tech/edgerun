@@ -10,23 +10,6 @@
   ;;   constrain_byte(val) -> i32
   ;;   rgb_to_hex(r, g, b, out_ptr) -> out_ptr + 7 ("#RRGGBB\0")
   ;;   argb_to_hex(a, r, g, b, out_ptr) -> out_ptr + 9 ("#AARRGGBB\0")
-  (func $m49hex_digit (param $c i32) (result i32)
-    (local $d i32)
-    local.get $c i32.const 48 i32.sub
-    local.tee $d
-    i32.const 10 i32.lt_u if (result i32)
-      local.get $d
-    else
-      local.get $d i32.const 32 i32.or i32.const 87 i32.sub
-      local.tee $d
-      i32.const 0 i32.ge_s local.get $d i32.const 6 i32.lt_s i32.and if (result i32)
-        local.get $d i32.const 10 i32.add
-      else
-        i32.const -1
-      end
-    end
-  )
-
   (func $hex_parse (param $ptr i32) (param $len i32) (param $skip_prefix i32) (result i32)
     (local $i i32) (local $val i32) (local $d i32)
     local.get $skip_prefix if
@@ -52,7 +35,7 @@
       local.get $i local.get $len i32.ge_u if
         local.get $val return
       end
-      local.get $ptr local.get $i i32.add i32.load8_u call $m49hex_digit
+      local.get $ptr local.get $i i32.add       i32.load8_u call $parse_hex_digit
       local.tee $d
       i32.const 0 i32.lt_s if
         i32.const -1 return
@@ -111,35 +94,26 @@
     local.get $b call $constrain_byte i32.or
   )
 
-  (func $m49hex_digit_char (param $d i32) (param $out i32)
-    local.get $d i32.const 10 i32.lt_s
-    if
-      local.get $out local.get $d i32.const 48 i32.add i32.store8
-    else
-      local.get $out local.get $d i32.const 87 i32.add i32.store8
-    end
-  )
-
   (func (export "rgb_to_hex") (param $r i32) (param $g i32) (param $b i32) (param $out i32) (result i32)
     local.get $out i32.const 35 i32.store8  ;; '#'
-    local.get $r i32.const 4 i32.shr_u local.get $out i32.const 1 i32.add call $m49hex_digit_char
-    local.get $r i32.const 0xf i32.and local.get $out i32.const 2 i32.add call $m49hex_digit_char
-    local.get $g i32.const 4 i32.shr_u local.get $out i32.const 3 i32.add call $m49hex_digit_char
-    local.get $g i32.const 0xf i32.and local.get $out i32.const 4 i32.add call $m49hex_digit_char
-    local.get $b i32.const 4 i32.shr_u local.get $out i32.const 5 i32.add call $m49hex_digit_char
+    local.get $r i32.const 4 i32.shr_u local.get $out i32.const 1 i32.add call $hex_digit
+    local.get $r i32.const 0xf i32.and local.get $out i32.const 2 i32.add call $hex_digit
+    local.get $g i32.const 4 i32.shr_u local.get $out i32.const 3 i32.add call $hex_digit
+    local.get $g i32.const 0xf i32.and local.get $out i32.const 4 i32.add call $hex_digit
+    local.get $b i32.const 4 i32.shr_u local.get $out i32.const 5 i32.add call $hex_digit
     local.get $b i32.const 0xf i32.and local.get $out i32.const 6 i32.add i32.store8
     local.get $out i32.const 7 i32.add
   )
 
   (func (export "argb_to_hex") (param $a i32) (param $r i32) (param $g i32) (param $b i32) (param $out i32) (result i32)
     local.get $out i32.const 35 i32.store8  ;; '#'
-    local.get $a i32.const 4 i32.shr_u local.get $out i32.const 1 i32.add call $m49hex_digit_char
-    local.get $a i32.const 0xf i32.and local.get $out i32.const 2 i32.add call $m49hex_digit_char
-    local.get $r i32.const 4 i32.shr_u local.get $out i32.const 3 i32.add call $m49hex_digit_char
-    local.get $r i32.const 0xf i32.and local.get $out i32.const 4 i32.add call $m49hex_digit_char
-    local.get $g i32.const 4 i32.shr_u local.get $out i32.const 5 i32.add call $m49hex_digit_char
-    local.get $g i32.const 0xf i32.and local.get $out i32.const 6 i32.add call $m49hex_digit_char
-    local.get $b i32.const 4 i32.shr_u local.get $out i32.const 7 i32.add call $m49hex_digit_char
+    local.get $a i32.const 4 i32.shr_u local.get $out i32.const 1 i32.add call $hex_digit
+    local.get $a i32.const 0xf i32.and local.get $out i32.const 2 i32.add call $hex_digit
+    local.get $r i32.const 4 i32.shr_u local.get $out i32.const 3 i32.add call $hex_digit
+    local.get $r i32.const 0xf i32.and local.get $out i32.const 4 i32.add call $hex_digit
+    local.get $g i32.const 4 i32.shr_u local.get $out i32.const 5 i32.add call $hex_digit
+    local.get $g i32.const 0xf i32.and local.get $out i32.const 6 i32.add call $hex_digit
+    local.get $b i32.const 4 i32.shr_u local.get $out i32.const 7 i32.add call $hex_digit
     local.get $b i32.const 0xf i32.and local.get $out i32.const 8 i32.add i32.store8
     local.get $out i32.const 9 i32.add
   )

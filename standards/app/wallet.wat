@@ -817,7 +817,7 @@
             (local.get $l4))
           (i64.const 32))))
     (i32.const 0))
-  (func $f4 (type $t13) (param $p0 i64) (param $p1 i64) (param $p2 i32) (param $p3 i32) (param $p4 i32) (result i32)
+  (func $df4 (type $t13) (param $p0 i64) (param $p1 i64) (param $p2 i32) (param $p3 i32) (param $p4 i32) (result i32)
     (local $l5 i32) (local $l6 i32)
     (if $I0
       (i32.gt_u
@@ -1101,7 +1101,7 @@
       (local.get $l7))
     (i32.const 0))
   (func $wallet_decimal_normalize (export "wallet_decimal_normalize") (type $t13) (param $p0 i64) (param $p1 i64) (param $p2 i32) (param $p3 i32) (param $p4 i32) (result i32)
-    (call $f4
+    (call $df4
       (local.get $p0)
       (local.get $p1)
       (local.get $p2)
@@ -1117,7 +1117,7 @@
           (local.get $p2)
           (local.get $p5))))
     (local.set $l8
-      (call $f4
+      (call $df4
         (local.get $p0)
         (local.get $p1)
         (local.get $p2)
@@ -1137,7 +1137,7 @@
           (local.get $p6)
           (i32.const 8))))
     (local.set $l8
-      (call $f4
+      (call $df4
         (local.get $p3)
         (local.get $p4)
         (local.get $p5)
@@ -1200,7 +1200,7 @@
           (local.get $p2)
           (local.get $p5))))
     (local.set $l8
-      (call $f4
+      (call $df4
         (local.get $p0)
         (local.get $p1)
         (local.get $p2)
@@ -1220,7 +1220,7 @@
           (local.get $p6)
           (i32.const 8))))
     (local.set $l8
-      (call $f4
+      (call $df4
         (local.get $p3)
         (local.get $p4)
         (local.get $p5)
@@ -1281,7 +1281,7 @@
           (local.get $p2)
           (local.get $p5))))
     (local.set $l7
-      (call $f4
+      (call $df4
         (local.get $p0)
         (local.get $p1)
         (local.get $p2)
@@ -1299,7 +1299,7 @@
       (i64.load
         (i32.const 64008)))
     (local.set $l7
-      (call $f4
+      (call $df4
         (local.get $p3)
         (local.get $p4)
         (local.get $p5)

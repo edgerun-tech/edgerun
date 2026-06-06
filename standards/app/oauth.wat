@@ -7,6 +7,8 @@
   (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
   (import "host" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))
   (import "host" "sock_close" (func $sock_close (param i32) (result i32)))
+  (import "host" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))
+  (import "host" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))
   (memory (export "memory") 1)
 ;; OAuth 2.0 authorization code flow + PKCE — URL building and token body.
   ;; Uses memory for output buffers — caller reads from linear memory.

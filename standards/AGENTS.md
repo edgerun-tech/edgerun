@@ -11,16 +11,16 @@ A **WebAssembly Text (.wat) standards library** for the EdgeRun decentralized ed
 | Module | Files | Lines | Role |
 |--------|------:|------:|------|
 | **runtime/** | 2 | 767 | **Shared core** — memory, char LUTs, `pack` helpers, syscall constants, math utils |
-| **compiler/** | 20 | 31,911 | WASM interpreter + JIT compiler (x86-64, AArch64, ARM32 backends) |
+| **compiler/** | 17 | 25,779 | WASM interpreter + JIT compiler (x86-64, AArch64, ARM32 backends) |
 | **pipeline/** | 9 | 6,788 | **Pipeline framework** — stage dispatch, framing, mux, WASM exec |
-| **protocol/** | 55 | 25,219 | Network protocol parsers/serializers (HTTP/1-3, TLS, DNS, WebSocket, QUIC, DHCP, HPACK, QPACK, DER/ASN.1) |
-| **codec/** | 38 | 21,841 | Encoding/decoding (base64/64url/32hex, JSON, TOML, YAML, PEM, zlib/gzip, UTF-8, deflate) |
+| **protocol/** | 13 | 25,190 | Network protocol parsers/serializers (HTTP/1-3, TLS, DNS, WebSocket, QUIC, DHCP, HPACK, QPACK, DER/ASN.1) — merged from 55 fragments |
+| **codec/** | 9 | 22,352 | Encoding/decoding (base64/64url/32hex, JSON, TOML, YAML, PEM, zlib/gzip, UTF-8, deflate) — merged from 38 fragments |
 | **crypto/** | 19 | 7,658 | Cryptographic primitives (SHA-256/512, AES-* , HMAC, HKDF, X25519, ECDSA, Ed25519, RSA) |
-| **app/** | 44 | 16,788 | Application-level semantics (OAuth, SSH, X.509, ACME, DKIM, wallets, OCI, CDP) |
+| **app/** | 12 | 17,037 | Application-level semantics (OAuth, SSH, X.509, ACME, DKIM, wallets, OCI, CDP) — merged from 44 fragments |
 | **tor/** | 1 | 190,050 | **Tor protocol** — fully consolidated single module (hand-written + 16 machine-generated subsections). **DELETED** — depends on host imports not in repo, impractical standalone. |
 | **ui/** | 92 | 56,678 | **UI framework** — component gallery, SVG icon pipeline, font system, rendering, layout, 50+ components |
 | **system/** | 23 | 6,712 | System utilities — bump allocator, async state, event loop, FFI bridge, logging, compositor |
-| **data/** | 15 | 6,205 | Data utilities — byte search, glob, HTML strip, UUID, string distance, terminal control |
+| **data/** | 15 | 5,354 | Data utilities — byte search, glob, HTML strip, UUID, string distance, terminal control |
 | **device/** | 14 | 4,449 | Device abstractions — BLE, Bluetooth, TPM, virtio, unikernel, ESP32-S3 |
 | **net/** | 7 | 1,610 | Networking — sockets, sessions, Bluetooth frame codec, mail protocol, block transfer |
 | **tools/** | 1 | 38 | Hex encoder utility |
@@ -308,9 +308,11 @@ Merged all 16 machine-generated Tor WAT fragments (~187K lines) into `tor/tor.wa
 - Deleted 16 individual files
 - **Deleted entire tor.wat** — depends on 6 host imports not in repo, impractical standalone (Session end — 2026-06-07)
 
-**Sessions remaining** (in priority order):
-1. `compiler/` module — scan for inline duplicates (32K lines across 20 files)
-2. `data/` module — scan for inline duplicates (6K lines)
+**Sessions completed** (current):
+1. ~~`compiler/` module — scan for inline duplicates~~ ✅ Done — no runtime-utility duplication found; critical bug documented (481+ mangled aarch64 call names)
+2. ~~`data/` module — scan for 4 inline duplicates~~ ✅ Fixed — 4 data/ files refactored to use runtime scope: `$load8_u`, `$memcpy`, `$string_eq`, `$starts_with`
+3. ~~`$emit_aarch64_baarch64_*` naming bug~~ ✅ Fixed — 488 mangled call names corrected (481 in `compiler-aarch64.wat`, 7 in `simd-aarch64.wat`). Renamed `$emit_aarch64_baarch64_<rest>` → `$emit_aarch64_<rest>` to match definitions in `emit-aarch64.wat`.
+4. ~~`compiler/interpreter-wat.wat` consolidation~~ ✅ Fixed — 9 functions (`$wat_emit_byte`, `$wat_emit_leb_u32`, `$wat_emit_leb_i32`, `$wat_kw_match_rest`, `$wat_parse_body`, `$wat_parse_type_decl`, `$wat_parse_func_decl`, `$wat_parse_module`, `$load_wat`) appended to `interpreter.wat`; `interpreter-wat.wat` deleted.
 
 ---
 

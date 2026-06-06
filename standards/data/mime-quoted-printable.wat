@@ -1,19 +1,5 @@
 
 
-  (func $m133hex_upper (param $n i32) (result i32)
-    local.get $n
-    i32.const 10
-    i32.lt_u
-    if (result i32)
-      local.get $n
-      i32.const 48
-      i32.add
-    else
-      local.get $n
-      i32.const 55
-      i32.add
-    end)
-
   (func $is_pass_byte (param $b i32) (result i32)
     local.get $b
     i32.const 33
@@ -191,7 +177,7 @@
               local.get $b
               i32.const 4
               i32.shr_u
-              call $m133hex_upper
+              call $hex_char_upper
               i32.store8
               local.get $out_ptr
               local.get $j
@@ -201,7 +187,7 @@
               local.get $b
               i32.const 15
               i32.and
-              call $m133hex_upper
+              call $hex_char_upper
               i32.store8
               local.get $j
               i32.const 3

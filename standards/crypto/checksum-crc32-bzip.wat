@@ -27,7 +27,7 @@
     local.get $crc local.get $byte call $bzip_crc32_byte
   )
 
-  (func (export "bzip_crc32") (param $ptr i32) (param $len i32) (result i32)
+  (func $bzip_crc32 (export "bzip_crc32") (param $ptr i32) (param $len i32) (result i32)
     (local $crc i32) (local $i i32)
     i32.const 0 local.set $crc
     i32.const 0 local.set $i
