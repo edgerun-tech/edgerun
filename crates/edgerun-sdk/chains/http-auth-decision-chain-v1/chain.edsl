@@ -1,4 +1,0 @@
-chain http-auth-decision-chain-v1
-segment http-auth-preflight-public-edge-v1
-segment auth-decision-private-node-v1
-link 0.0 -> 1.0

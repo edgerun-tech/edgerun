@@ -1,9 +1,0 @@
-segment http-auth-preflight-public-edge-v1
-composition http-auth-preflight-rfc9110
-node-role public-edge
-capability http-auth-preflight
-input header public
-input expected_name public
-outputs 1
-components 0 2
-steps 0 14

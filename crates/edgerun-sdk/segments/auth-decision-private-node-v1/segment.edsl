@@ -1,9 +1,0 @@
-segment auth-decision-private-node-v1
-composition auth-decision-private-v1
-node-role private-policy-node
-capability auth-decision
-input linked_status linked
-input expected_status private
-outputs 1
-components 0 1
-steps 0 4
