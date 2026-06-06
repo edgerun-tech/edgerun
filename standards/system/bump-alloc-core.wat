@@ -1,50 +1,10 @@
+  (import "math" "min_u" (func $m37min (param i32 i32) (result i32)))
+  (import "math" "max" (func $max (param i32 i32) (result i32)))
+  (import "math" "sat_sub" (func $sat_sub (param i32 i32) (result i32)))
+  (import "math" "round_up" (func $round_up (param i32 i32) (result i32)))
+
 (func (export "proto_standard_id") (result i32)
     i32.const 300155)
-
-  (func $m37min (param $a i32) (param $b i32) (result i32)
-    local.get $a
-    local.get $b
-    i32.lt_u
-    if (result i32)
-      local.get $a
-    else
-      local.get $b
-    end)
-
-  (func $max (param $a i32) (param $b i32) (result i32)
-    local.get $a
-    local.get $b
-    i32.gt_u
-    if (result i32)
-      local.get $a
-    else
-      local.get $b
-    end)
-
-  (func $sat_sub (param $a i32) (param $b i32) (result i32)
-    local.get $a
-    local.get $b
-    i32.gt_u
-    if (result i32)
-      local.get $a
-      local.get $b
-      i32.sub
-    else
-      i32.const 0
-    end)
-
-  (func $round_up (param $n i32) (param $align i32) (result i32)
-    local.get $n
-    local.get $align
-    i32.const 1
-    i32.sub
-    i32.add
-    local.get $align
-    i32.const 1
-    i32.sub
-    i32.const -1
-    i32.xor
-    i32.and)
 
   (func $next_power2 (param $n i32) (result i32)
     (local $p i32)

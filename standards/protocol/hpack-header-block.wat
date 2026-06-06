@@ -1,12 +1,7 @@
+  (import "math" "prefix_mask" (func $m102prefix_mask (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300038)
-
-  (func $m102prefix_mask (param $prefix_bits i32) (result i32)
-    (if (result i32)
-      (i32.eq (local.get $prefix_bits) (i32.const 8))
-      (then (i32.const 255))
-      (else (i32.sub (i32.shl (i32.const 1) (local.get $prefix_bits)) (i32.const 1)))))
 
   ;; Prefix output record, little-endian:
   ;; 0:u32 flags_high_bits, 4:u32 consumed, 8:u64 value.

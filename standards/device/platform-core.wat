@@ -31,7 +31,7 @@
     (i64.sub (local.get $now) (local.get $start)))
 
   (func (export "align_up") (param $value i32) (param $align i32) (result i32)
-    (i32.and (i32.add (local.get $value) (i32.sub (local.get $align) (i32.const 1))) (i32.xor (i32.sub (local.get $align) (i32.const 1)) (i32.const -1))))
+    (call $align_up_internal (local.get $value) (local.get $align)))
 
   (func (export "allocator_heap_min_start") (param $is_xtensa i32) (result i32)
     (if (local.get $is_xtensa) (then (return (i32.const 0))))

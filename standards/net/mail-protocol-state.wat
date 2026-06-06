@@ -1,3 +1,4 @@
+  (import "edgerun" "to_upper" (func $m131upper (param i32) (result i32)))
 
   (func $pack (param $a i32) (param $b i32) (param $c i32) (param $d i32) (result i32)
     local.get $a)
@@ -42,11 +43,6 @@
 
   (func $m131is_space (param $b i32) (result i32)
     (i32.or (i32.eq (local.get $b) (i32.const 32)) (i32.eq (local.get $b) (i32.const 9))))
-
-  (func $m131upper (param $b i32) (result i32)
-    (if (i32.and (i32.ge_u (local.get $b) (i32.const 97)) (i32.le_u (local.get $b) (i32.const 122)))
-      (then (return (i32.sub (local.get $b) (i32.const 32)))))
-    local.get $b)
 
   (func $hash_token (param $ptr i32) (param $off i32) (param $len i32) (result i32)
     (local $i i32)

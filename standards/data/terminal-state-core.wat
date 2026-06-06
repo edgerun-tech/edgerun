@@ -1,5 +1,7 @@
 
 
+  (import "math" "clamp" (func $clamp (param i32 i32 i32) (result i32)))
+
   (func (export "proto_standard_id") (result i32)
     i32.const 300098)
 
@@ -330,24 +332,6 @@
     end
     i32.const 0)
 
-  (func $clamp (param $value i32) (param $min i32) (param $max i32) (result i32)
-    local.get $value
-    local.get $min
-    i32.lt_u
-    if
-      local.get $min
-      return
-    end
-    local.get $value
-    local.get $max
-    i32.gt_u
-    if
-      local.get $max
-      return
-    end
-    local.get $value)
-
-  ;; Pack cursor as row in high 32 bits, col in low 32 bits.
   (func (export "terminal_cursor_set")
     (param $cols i32) (param $rows i32)
     (param $left i32) (param $right i32) (param $top i32) (param $bottom i32)

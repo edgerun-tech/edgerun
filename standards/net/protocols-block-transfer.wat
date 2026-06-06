@@ -1,3 +1,5 @@
+  (import "edgerun" "to_upper" (func $m151upper (param i32) (result i32)))
+
 (func (export "proto_standard_id") (result i32)
     i32.const 300116)
 
@@ -26,11 +28,6 @@
         (i32.or
           (i32.shl (call $m151b (local.get $ptr) (i32.const 2)) (i32.const 16))
           (i32.shl (call $m151b (local.get $ptr) (i32.const 3)) (i32.const 24))))))
-
-  (func $m151upper (param $c i32) (result i32)
-    (if (i32.and (i32.ge_u (local.get $c) (i32.const 97)) (i32.le_u (local.get $c) (i32.const 122)))
-      (then (return (i32.sub (local.get $c) (i32.const 32)))))
-    local.get $c)
 
   (func $eq_ci_byte (param $ptr i32) (param $off i32) (param $c i32) (result i32)
     (i32.eq (call $m151upper (call $m151b (local.get $ptr) (local.get $off))) (local.get $c)))

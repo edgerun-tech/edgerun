@@ -1,3 +1,4 @@
+  (import "edgerun" "STATUS_OK" (global $OK i32))
   (memory (export "memory") 33)
   (global (export "cache_index_data_ptr") i32 (i32.const 0))
   (global (export "cache_index_data_len") i32 (i32.const 8))
@@ -12,7 +13,6 @@
   (global (export "cache_index_total_files") i32 (i32.const 2097204))
   (global (export "cache_index_max_files") i32 (i32.const 2097208))
   (global (export "cache_index_error") i32 (i32.const 2097212))
-  (global $OK i32 (i32.const 0))
   (global $ERR_BOUNDS i32 (i32.const -1))
   (global $ERR_PROTOCOL i32 (i32.const -2))
   (global $ERR_CAPACITY i32 (i32.const -3))

@@ -1,3 +1,4 @@
+  (import "edgerun" "STATUS_OK" (global $OK i32))
   (memory (export "memory") 33)
   (global (export "js5_cache_request_state") i32 (i32.const 0))
   (global (export "js5_cache_socket_fd") i32 (i32.const 136))
@@ -55,7 +56,6 @@
   (global $REQ_SIZE i32 (i32.const 136))
   (global $REQ_SIZE_QWORDS i32 (i32.const 17))
 
-  (global $OK i32 (i32.const 0))
   (global $ERR_BUSY i32 (i32.const -1))
   (global $ERR_NOSOCK i32 (i32.const -2))
   (global $ERR_BOUNDS i32 (i32.const -3))

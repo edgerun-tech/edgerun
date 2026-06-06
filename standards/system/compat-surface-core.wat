@@ -1,3 +1,6 @@
+  (import "edgerun" "is_alpha" (func $ascii_alpha (param i32) (result i32)))
+  (import "edgerun" "is_digit" (func $ascii_digit (param i32) (result i32)))
+
 ;; Compact compatibility surfaces captured from local HTTP, reqwest-shaped
   ;; client glue, JSON schema, unicode, JNI, and wasm-bindgen shared crates.
   ;;
@@ -21,22 +24,7 @@
     i32.le_s
     i32.and)
 
-  (func $ascii_alpha (param $b i32) (result i32)
-    local.get $b
-    i32.const 65
-    i32.const 90
-    call $between
-    local.get $b
-    i32.const 97
-    i32.const 122
-    call $between
-    i32.or)
 
-  (func $ascii_digit (param $b i32) (result i32)
-    local.get $b
-    i32.const 48
-    i32.const 57
-    call $between)
 
   (export "http_header_name_byte_valid" (func $http_header_name_byte_valid))
   (func $http_header_name_byte_valid (param $b i32) (result i32)

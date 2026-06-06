@@ -1,5 +1,4 @@
-
-  (global $OK                     i32 (i32.const 0))
+  (import "edgerun" "STATUS_OK" (global $OK i32))
   (global $ERR_BOUNDS             i32 (i32.const -1))
   (global $ERR_BAD_LENGTH         i32 (i32.const -2))
   (global $ERR_QUEUE_FULL         i32 (i32.const -3))

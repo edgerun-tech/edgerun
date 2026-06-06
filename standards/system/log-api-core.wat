@@ -1,27 +1,11 @@
+  (import "edgerun" "to_lower" (func $m186lower (param i32) (result i32)))
+  (import "edgerun" "fnv1a_lower" (func $m186fnv1a_lower (param i32 i32) (result i32)))
+
 ;; Captures remaining tracing/tracing-core/tracing-log/tracing-attributes semantics.
   ;; Level codes: off=0, error=1, warn=2, info=3, debug=4, trace=5.
   ;; Interest codes: never=0, sometimes=1, always=2.
 
-  (func $m186lower (param $c i32) (result i32)
-    (if (result i32)
-      (i32.and (i32.ge_u (local.get $c) (i32.const 65)) (i32.le_u (local.get $c) (i32.const 90)))
-      (then (i32.add (local.get $c) (i32.const 32)))
-      (else (local.get $c))))
 
-  (func $m186fnv1a_lower (param $ptr i32) (param $len i32) (result i32)
-    (local $end i32) (local $h i32)
-    (local.set $end (i32.add (local.get $ptr) (local.get $len)))
-    (local.set $h (i32.const 0x811c9dc5))
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $ptr) (local.get $end)))
-        (local.set $h
-          (i32.mul
-            (i32.xor (local.get $h) (call $m186lower (i32.load8_u (local.get $ptr))))
-            (i32.const 0x01000193)))
-        (local.set $ptr (i32.add (local.get $ptr) (i32.const 1)))
-        (br $loop)))
-    (local.get $h))
 
   (func (export "proto_standard_id") (result i32) (i32.const 300136))
 

@@ -1,16 +1,6 @@
-(func (export "proto_standard_id") (result i32) i32.const 300133)
+  (import "edgerun" "string_eq" (func $m160eq (param i32 i32 i32 i32) (result i32)))
 
-  (func $m160eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
-    (local $i i32)
-    (if (i32.ne (local.get $len) (local.get $lit_len)) (then (return (i32.const 0))))
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (if (i32.ne (i32.load8_u (i32.add (local.get $ptr) (local.get $i))) (i32.load8_u (i32.add (local.get $lit) (local.get $i))))
-          (then (return (i32.const 0))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))
-    i32.const 1)
+(func (export "proto_standard_id") (result i32) i32.const 300133)
 
   (func $contains (param $ptr i32) (param $len i32) (param $byte i32) (result i32)
     (local $i i32)

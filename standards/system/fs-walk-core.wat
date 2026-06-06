@@ -1,3 +1,5 @@
+(import "math" "max" (func $max (param i32 i32) (result i32)))
+
 ;; Filesystem walking and identity semantics captured from local walkdir,
   ;; same-file, and tempfile compatibility crates.
   ;;
@@ -11,14 +13,9 @@
     i32.ne)
 
   (func $max1 (param $n i32) (result i32)
-    local.get $n
     i32.const 1
-    i32.lt_s
-    if (result i32)
-      i32.const 1
-    else
-      local.get $n
-    end)
+    local.get $n
+    call $max)
 
   (export "walk_default_flags" (func $walk_default_flags))
   (func $walk_default_flags (result i32)

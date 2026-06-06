@@ -1,40 +1,9 @@
+  (import "edgerun" "is_upper" (func $is_upper_ascii (param i32) (result i32)))
+  (import "edgerun" "is_alnum" (func $is_ascii_alnum (param i32) (result i32)))
+  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
 
 (func (export "proto_standard_id") (result i32)
     i32.const 300154)
-
-  (func $is_upper_ascii (param $b i32) (result i32)
-    local.get $b
-    i32.const 65
-    i32.ge_u
-    local.get $b
-    i32.const 90
-    i32.le_u
-    i32.and)
-
-  (func $is_ascii_alnum (param $b i32) (result i32)
-    local.get $b
-    i32.const 48
-    i32.ge_u
-    local.get $b
-    i32.const 57
-    i32.le_u
-    i32.and
-    local.get $b
-    i32.const 65
-    i32.ge_u
-    local.get $b
-    i32.const 90
-    i32.le_u
-    i32.and
-    i32.or
-    local.get $b
-    i32.const 97
-    i32.ge_u
-    local.get $b
-    i32.const 122
-    i32.le_u
-    i32.and
-    i32.or)
 
   (func $forbidden_namespace_byte (param $b i32) (result i32)
     local.get $b

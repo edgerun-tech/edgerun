@@ -1,3 +1,5 @@
+(import "math" "clamp" (func $clamp (param i32 i32 i32) (result i32)))
+
 ;; Color utilities — hex/ARGB color parsing, formatting, lerp, alpha compositing.
   ;;
   ;; Exports:
@@ -80,14 +82,7 @@
   )
 
   (func $constrain_byte (export "constrain_byte") (param $val i32) (result i32)
-    local.get $val i32.const 0 i32.lt_s if
-      i32.const 0 return
-    end
-    local.get $val i32.const 255 i32.gt_s if
-      i32.const 255 return
-    end
-    local.get $val
-  )
+    (call $clamp (local.get $val) (i32.const 0) (i32.const 255)))
 
   (func (export "color_with_alpha") (param $color i32) (param $alpha i32) (result i32)
     local.get $alpha call $constrain_byte
