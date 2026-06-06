@@ -135,6 +135,331 @@ const FAMILIES = [
     sourceFixes: [],
     dedupGlobals: ['$ERR_BOUNDS'],
   },
+  // ════════════════════════════════════════════════════════════════
+  // CODEC families (38 files → 9 files)
+  // ════════════════════════════════════════════════════════════════
+  {
+    name: 'codec-base64', outfile: 'codec/base64.wat', internal: [],
+    files: [
+      'codec/encoding-base64.wat', 'codec/encoding-base64url.wat',
+      'codec/encoding-base32hex.wat', 'codec/encoding-core.wat',
+      'codec/encoding-text.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
+    ],
+    sourceFixes: [
+      // Standardize local names for load8_u
+      { file: '*', find: '(import "edgerun" "load8_u"', replace: ';; stripped (load8_u not needed)' },
+    ],
+    // encoding-text.wat references $b64_encode/$b64_decode from encoding-base64url — internal to family
+  },
+  {
+    name: 'codec-json', outfile: 'codec/json.wat', internal: [],
+    files: [
+      'codec/json-value-core.wat', 'codec/json-emit.wat',
+      'codec/json-scalar.wat', 'codec/json-tape.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'codec-compress', outfile: 'codec/compress.wat', internal: [],
+    files: [
+      'codec/deflate-inflate.wat', 'codec/deflate-stored.wat',
+      'codec/gzip-member.wat', 'codec/zlib-wrapper.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'codec-text', outfile: 'codec/text.wat', internal: [],
+    files: [
+      'codec/utf8-scan.wat', 'codec/cesu8-mutf8.wat',
+      'codec/encoding-cp1252.wat', 'codec/case-convert.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
+      '(import "edgerun" "is_cont" (func $is_cont (param i32) (result i32)))',
+      '(import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))',
+      '(import "edgerun" "to_upper" (func $to_upper (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'codec-serialize', outfile: 'codec/serialize.wat', internal: [],
+    files: [
+      'codec/toml-scan.wat', 'codec/yaml-scan.wat', 'codec/kv-scan.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'codec-binary', outfile: 'codec/binary.wat', internal: [],
+    files: [
+      'codec/hex-compat.wat', 'codec/endian-fixed.wat',
+      'codec/integer-decimal.wat', 'codec/number-format-suffix.wat',
+      'codec/length-field.wat', 'codec/length-frame.wat',
+      'codec/generic-tlv.wat', 'codec/host-port.wat',
+      'codec/encoding-smart-int.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'codec-string-url', outfile: 'codec/string-url.wat', internal: [],
+    files: [
+      'codec/percent-url-form.wat', 'codec/string-escape.wat',
+      'codec/c-string.wat', 'codec/pem-rfc7468.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))',
+      '(import "edgerun" "to_upper" (func $to_upper (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'codec-media', outfile: 'codec/media.wat', internal: [],
+    files: [
+      'codec/sixel-decode.wat', 'codec/title-jpeg-entropy.wat',
+      'codec/vorbis-sample-decode.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'codec-model', outfile: 'codec/model.wat', internal: [],
+    files: [
+      'codec/definition-decode.wat', 'codec/model-decode.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "math" "min" (func $min (param i32 i32) (result i32)))',
+      '(import "math" "max" (func $max (param i32 i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  // ════════════════════════════════════════════════════════════════
+  // APP families (44 files → 11 files)
+  // ════════════════════════════════════════════════════════════════
+  {
+    name: 'app-oauth', outfile: 'app/oauth.wat', internal: [],
+    files: [
+      'app/oauth-core.wat', 'app/oauth-flow.wat',
+      'app/oauth-pkce.wat', 'app/apps-core.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "strlen" (func $strlen (param i32) (result i32)))',
+      '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-oci', outfile: 'app/oci.wat', internal: [],
+    files: [
+      'app/oci-config-core.wat', 'app/oci-elf64.wat',
+      'app/oci-reference.wat', 'app/oci-runtime-state.wat',
+      'app/oci-tar-header.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
+      '(import "edgerun" "string_eq" (func $string_eq (param i32 i32 i32 i32) (result i32)))',
+      '(import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))',
+      '(import "edgerun" "fnv1a_lower" (func $fnv1a_lower (param i32 i32) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-codex', outfile: 'app/codex.wat', internal: [],
+    files: [
+      'app/codex-agent-core.wat', 'app/codex-app-protocol-core.wat',
+      'app/codex-patch-core.wat', 'app/codex-shell-command-core.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "string_eq" (func $string_eq (param i32 i32 i32 i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-wallet', outfile: 'app/wallet.wat', internal: [],
+    files: [
+      'app/wallet-decimal.wat', 'app/wallet-exec-core.wat',
+      'app/wallet-order-status.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-security', outfile: 'app/security.wat', internal: [],
+    files: [
+      'app/x509-certificate-core.wat', 'app/x509-name-core.wat',
+      'app/acme-core.wat', 'app/ssh-authorized-key.wat',
+      'app/dkim-body.wat', 'app/authority-storage-core.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
+      '(import "edgerun" "string_eq" (func $string_eq (param i32 i32 i32 i32) (result i32)))',
+      '(import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "is_upper" (func $is_upper (param i32) (result i32)))',
+      '(import "edgerun" "is_lower" (func $is_lower (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-identity', outfile: 'app/identity.wat', internal: [],
+    files: [
+      'app/identity-hardware-core.wat', 'app/sdk-app-identity.wat',
+      'app/sdk-standards-seed.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "string_eq" (func $string_eq (param i32 i32 i32 i32) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-net', outfile: 'app/net.wat', internal: [],
+    files: [
+      'app/mesh-core.wat', 'app/network-driver-core.wat',
+      'app/node-surfaces-core.wat', 'app/protocol-suite-core.wat',
+      'app/work-protocol-core.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-platform', outfile: 'app/platform.wat', internal: [],
+    files: [
+      'app/apk-api-scan.wat', 'app/browser-core.wat',
+      'app/cdp-core.wat', 'app/codelyzer-source-scan.wat',
+      'app/pocketbase-route-model.wat', 'app/url-scan.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "load8_u" (func $load8_u (param i32 i32) (result i32)))',
+      '(import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+      '(import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))',
+      '(import "edgerun" "is_alnum" (func $is_alnum (param i32) (result i32)))',
+      '(import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-core', outfile: 'app/core.wat', internal: [],
+    files: [
+      'app/capability-core.wat', 'app/core-validator-core.wat',
+      'app/marketplace-policy.wat', 'app/exchange-provider-status.wat',
+      'app/time-rfc3339.wat', 'app/rfc2822-date.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))',
+      '(import "edgerun" "fnv1a_lower" (func $fnv1a_lower (param i32 i32) (result i32)))',
+      '(import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-ui', outfile: 'app/ui.wat', internal: [],
+    files: [
+      'app/ui-core-semantics.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+      '(import "edgerun" "string_eq" (func $string_eq (param i32 i32 i32 i32) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
+  {
+    name: 'app-wayland', outfile: 'app/wayland.wat', internal: [],
+    files: [
+      'app/wayland-wire-core.wat',
+    ],
+    missingImports: [
+      '(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))',
+      '(import "edgerun" "lo" (func $lo (param i64) (result i32)))',
+      '(import "edgerun" "hi" (func $hi (param i64) (result i32)))',
+    ],
+    sourceFixes: [],
+  },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────

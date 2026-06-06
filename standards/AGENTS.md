@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A **WebAssembly Text (.wat) standards library** for the EdgeRun decentralized edge computing platform. ~337 files, ~378K lines of WAT across 15 modules. All hand-written WAT (except `tor/` which is machine-generated from assembly, now fully consolidated). No external tooling — pure WAT, zero dependencies.
+A **WebAssembly Text (.wat) standards library** for the EdgeRun decentralized edge computing platform. ~336 files, ~188K lines of WAT across 15 modules. All hand-written WAT. No external tooling — pure WAT, zero dependencies.
 
 ---
 
@@ -17,7 +17,7 @@ A **WebAssembly Text (.wat) standards library** for the EdgeRun decentralized ed
 | **codec/** | 38 | 21,841 | Encoding/decoding (base64/64url/32hex, JSON, TOML, YAML, PEM, zlib/gzip, UTF-8, deflate) |
 | **crypto/** | 19 | 7,658 | Cryptographic primitives (SHA-256/512, AES-* , HMAC, HKDF, X25519, ECDSA, Ed25519, RSA) |
 | **app/** | 44 | 16,788 | Application-level semantics (OAuth, SSH, X.509, ACME, DKIM, wallets, OCI, CDP) |
-| **tor/** | 1 | 190,050 | **Tor protocol** — fully consolidated single module (hand-written + 16 machine-generated subsections) |
+| **tor/** | 1 | 190,050 | **Tor protocol** — fully consolidated single module (hand-written + 16 machine-generated subsections). **DELETED** — depends on host imports not in repo, impractical standalone. |
 | **ui/** | 92 | 56,678 | **UI framework** — component gallery, SVG icon pipeline, font system, rendering, layout, 50+ components |
 | **system/** | 23 | 6,712 | System utilities — bump allocator, async state, event loop, FFI bridge, logging, compositor |
 | **data/** | 15 | 6,205 | Data utilities — byte search, glob, HTML strip, UUID, string distance, terminal control |
@@ -306,6 +306,7 @@ Merged all 16 machine-generated Tor WAT fragments (~187K lines) into `tor/tor.wa
 - Increased memory from 17→33 pages (1,114,112→2,162,688 bytes)
 - `wasm-tools parse` + `wasm-tools validate` pass
 - Deleted 16 individual files
+- **Deleted entire tor.wat** — depends on 6 host imports not in repo, impractical standalone (Session end — 2026-06-07)
 
 **Sessions remaining** (in priority order):
 1. `compiler/` module — scan for inline duplicates (32K lines across 20 files)
