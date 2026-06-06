@@ -52,8 +52,11 @@ decodes the serialized cells for `CREATE2`, `CREATED2`, `RELAY_EXTEND2`,
 `RELAY_EXTENDED2`, `RELAY_BEGIN`, `RELAY_DATA`, and `RELAY_END`. `RELAY_EXTEND2`
 uses the real 119-byte EXTEND2 body emitted by `tor-library.wat`. Circuit
 receipts bind to decoded cell hashes from 304-byte canonical records emitted
-by `tests/local-tor-cell-record-v0.wat`, app id, source event hash, and the
-relay body hash without
+by `tests/local-tor-cell-record-v0.wat`, then each per-hop circuit receipt id is
+the SHA-256 of a 184-byte canonical record emitted by
+`tests/local-tor-circuit-receipt-v0.wat`. These records bind app id, source
+event hash, relay identity, phase id, amount, cell hash, handshake transcript,
+and relay body hash without
 opening raw sockets, performing DNS lookup, exposing a listen port, or carrying
 plaintext payload bytes.
 

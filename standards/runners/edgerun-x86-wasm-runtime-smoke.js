@@ -27,6 +27,7 @@ const {
 const {
   assertTorDeliveryProof,
   buildTorDeliveryProofRecord,
+  buildCircuitReceiptRecord,
   buildTorCellRecord,
   assertTorCells,
   buildLocalTorCircuit,
@@ -3400,6 +3401,7 @@ try {
 	    assert(result.tor.cells.every((cell) => /^[0-9a-f]{64}$/.test(cell.relayBodyHash)), `${test.name} Tor cells must bind relay body hashes`);
 	    assert(result.tor.cells.every((cell) => !Object.hasOwn(cell, "plaintextPayload")), `${test.name} Tor cells must not carry plaintext payload`);
 	    assert(result.tor.receipts.every((receipt) => result.tor.cells.some((cell) => cell.cellHash === receipt.cellHash)), `${test.name} Tor receipts must bind cell hashes`);
+	    assert(result.tor.receipts.every((receipt) => receipt.canonicalRecordBytes === 184), `${test.name} Tor receipts must carry WAT-canonical record lengths`);
 	    assert.match(result.tor.deliveryProof.proofHash, /^[0-9a-f]{64}$/, `${test.name} Tor delivery proof hash missing`);
 	    assert.match(result.tor.deliveryProof.receipt, /^[0-9a-f]{64}$/, `${test.name} Tor delivery proof receipt missing`);
 	    assert.strictEqual(result.tor.deliveryProof.canonicalRecordBytes, 728, `${test.name} Tor delivery proof record length mismatch`);
@@ -3427,6 +3429,19 @@ try {
 	      buildTorCellRecord(result.tor.cells[5]).length,
 	      result.tor.cells[5].canonicalRecordBytes,
 	      `${test.name} RELAY_DATA cell must be WAT-canonicalized`,
+	    );
+	    assert.strictEqual(
+	      buildCircuitReceiptRecord({
+	        appId: result.app.appId,
+	        sourceEventHash: result.relay.accepted[0].sourceEventHash,
+	        identity: result.tor.receipts[0].identity,
+	        phase: result.tor.receipts[0].kind,
+	        amount: result.tor.receipts[0].amount,
+	        cellHash: result.tor.receipts[0].cellHash,
+	        handshakeTranscriptHash: result.tor.receipts[0].handshakeTranscriptHash,
+	      }).length,
+	      result.tor.receipts[0].canonicalRecordBytes,
+	      `${test.name} Tor receipt must be WAT-canonicalized`,
 	    );
 	    assert.doesNotThrow(
 	      () =>
@@ -3473,6 +3488,21 @@ try {
 	          },
 	        }),
 	      `${test.name} tampered Tor cell unexpectedly matched delivery proof`,
+	    );
+	    assert.throws(
+	      () =>
+	        assertTorDeliveryProof({
+	          app: result.app,
+	          commit: result.commit,
+	          relay: result.relay,
+	          tor: {
+	            ...result.tor,
+	            receipts: result.tor.receipts.map((receipt, index) =>
+	              index === 0 ? { ...receipt, id: "0".repeat(64) } : receipt,
+	            ),
+	          },
+	        }),
+	      `${test.name} tampered Tor receipt unexpectedly matched delivery proof`,
 	    );
 	    assert.throws(
 	      () =>

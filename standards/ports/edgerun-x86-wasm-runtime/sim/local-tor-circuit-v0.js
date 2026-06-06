@@ -12,6 +12,7 @@ const port = path.resolve(__dirname, "..");
 const root = path.resolve(port, "../../..");
 const torCellCodecWat = path.join(root, "standards/build/wasm/app-primitives/tor-cell-codec/tor-cell-codec.wat");
 const torLibraryWat = path.join(root, "standards/build/wasm/app-primitives/tor-wat/tor-library.wat");
+const localTorCircuitReceiptWat = path.join(port, "tests/local-tor-circuit-receipt-v0.wat");
 const localTorCellRecordWat = path.join(port, "tests/local-tor-cell-record-v0.wat");
 const localTorDeliveryProofWat = path.join(port, "tests/local-tor-delivery-proof-v0.wat");
 
@@ -81,18 +82,47 @@ function asciiIdentityBytes(value, label) {
   return Buffer.from(value, "ascii");
 }
 
-function circuitReceipt({ appId, sourceEventHash, identity, phase, amount, cellHash }) {
-  return sha256([
-    "edgerun.tor-circuit.receipt.v0",
-    appId,
-    sourceEventHash,
-    identity,
-    phase,
-    ":",
-    amount,
-    ":",
-    cellHash,
+const circuitReceiptPhaseIds = {
+  guard_accepted: 1,
+  middle_transit: 2,
+  rendezvous_established: 3,
+  hidden_service_delivered: 4,
+};
+
+function identityHashBytes(identity) {
+  return crypto.createHash("sha256").update(`edgerun.tor-circuit.identity.v0:${identity}`).digest();
+}
+
+function buildCircuitReceiptRecord({ appId, sourceEventHash, identity, phase, amount, cellHash, handshakeTranscriptHash }) {
+  const phaseId = circuitReceiptPhaseIds[phase];
+  assert(phaseId, `unknown Tor circuit receipt phase ${phase}`);
+  const outPtr = 4096;
+  const hashesPtr = 8192;
+  const recordLen = 184;
+  const hashes = Buffer.concat([
+    hexBytes(appId, "receipt app id"),
+    hexBytes(sourceEventHash, "receipt source event hash"),
+    identityHashBytes(identity),
+    hexBytes(cellHash, "receipt cell hash"),
+    hexBytes(handshakeTranscriptHash, "receipt handshake transcript hash"),
   ]);
+  const memory = runTrustedWatExportMemory({
+    watPath: localTorCircuitReceiptWat,
+    exportName: "er_local_tor_circuit_receipt_write",
+    args: [outPtr, hashesPtr, phaseId, amount],
+    expected: recordLen,
+    memoryWrites: [{ offset: hashesPtr, bytes: [...hashes] }],
+  });
+  const record = memory.subarray(outPtr, outPtr + recordLen);
+  assert.strictEqual(record.readUInt32LE(0), 0x45525452, "local Tor circuit receipt magic mismatch");
+  assert.strictEqual(record.readUInt32LE(4), 0, "local Tor circuit receipt version mismatch");
+  assert.strictEqual(record.readUInt32LE(8), phaseId, "local Tor circuit receipt phase id mismatch");
+  assert.strictEqual(record.readUInt32LE(12), amount, "local Tor circuit receipt amount mismatch");
+  return record;
+}
+
+function circuitReceipt(input) {
+  return sha256Buffer(buildCircuitReceiptRecord(input));
 }
 
 function proofCellHash(cells, sequence) {
@@ -665,21 +695,29 @@ function buildLocalTorCircuit({
     { kind: "rendezvous_established", identity: identities.rendezvous, amount: 0, cell: cells[4] },
     { kind: "hidden_service_delivered", identity: service.serviceIdentity, amount: route.payloadBytes, cell: cells[5] },
   ];
-  const receipts = phases.map((phase) => ({
-    kind: phase.kind,
-    identity: phase.identity,
-    id: circuitReceipt({
+  const receipts = phases.map((phase) => {
+    const receiptInput = {
       appId: app.appId,
       sourceEventHash: route.sourceEventHash,
       identity: phase.identity,
       phase: phase.kind,
       amount: phase.amount,
       cellHash: phase.cell.cellHash,
-    }),
-    sourceEventHash: route.sourceEventHash,
-    cellHash: phase.cell.cellHash,
-    handshakeTranscriptHash: cells[0].handshakeTranscriptHash,
-  }));
+      handshakeTranscriptHash: cells[0].handshakeTranscriptHash,
+    };
+    const canonicalRecord = buildCircuitReceiptRecord(receiptInput);
+    return {
+      kind: phase.kind,
+      phaseId: circuitReceiptPhaseIds[phase.kind],
+      identity: phase.identity,
+      id: sha256Buffer(canonicalRecord),
+      canonicalRecordBytes: canonicalRecord.length,
+      amount: phase.amount,
+      sourceEventHash: route.sourceEventHash,
+      cellHash: phase.cell.cellHash,
+      handshakeTranscriptHash: cells[0].handshakeTranscriptHash,
+    };
+  });
   const deliveryProof = buildTorDeliveryProof({
     app,
     commit,
@@ -733,6 +771,7 @@ module.exports = {
   assertTorDeliveryProof,
   buildTorDeliveryProof,
   buildTorDeliveryProofRecord,
+  buildCircuitReceiptRecord,
   buildTorCellRecord,
   buildLocalTorCircuit,
   buildTorCells,
