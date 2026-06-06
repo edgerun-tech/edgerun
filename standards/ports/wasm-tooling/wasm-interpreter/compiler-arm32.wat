@@ -2568,6 +2568,27 @@
   (func $template_i64x2_replace_lane (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
   (func $template_f32x4_replace_lane (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
   (func $template_f64x2_replace_lane (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  ;; ── New canonical op stubs (0xA6+) ────────────────────────────────
+  (func $template_v128_load8_splat (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_v128_load16_splat (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_v128_load32_splat (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_v128_load64_splat (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i8x16_swizzle (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_v128_not (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_v128_bitselect (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i8x16_ge_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i16x8_ge_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i32x4_ge_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i8x16_min_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i8x16_max_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i8x16_avgr_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i16x8_min_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i16x8_max_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_i16x8_avgr_u (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_f32x4_min (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_f32x4_max (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_f64x2_min (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
+  (func $template_f64x2_max (param $dec_ptr i32) (global.set $JIT_ERROR (i32.const -4)))
 
   (func $jit_compile (export "jit_compile") (param $func_idx i32) (result i32)
     (local $dec_ptr i32) (local $opcode i32) (local $imm0 i32)
@@ -2903,9 +2924,7 @@
                 ;; i32x4.replace_lane (0x37)
                 (if (i32.eq (local.get $imm0) (i32.const 0x37))
                   (then (call $template_i32x4_replace_lane (local.get $dec_ptr)) (br $fd_done)))
-                ;; i64x2.replace_lane (0x39)? No, 0x39 is i64x2.splat
-                ;; i64x2.replace_lane is at 0x39 wait no: 
-                ;; Actually: 0x39 = i64x2.splat, there is no i64x2.replace_lane in the spec
+                ;; i64x2.replace_lane (0xAB) — canonical ID, not in old encoding
                 ;; f32x4.replace_lane (0x3C)
                 (if (i32.eq (local.get $imm0) (i32.const 0x3C))
                   (then (call $template_f32x4_replace_lane (local.get $dec_ptr)) (br $fd_done)))
@@ -3086,24 +3105,6 @@
                 ;; i8x16.ge_s (0x49)
                 (if (i32.eq (local.get $imm0) (i32.const 0x49))
                   (then (call $template_i8x16_ge_s (local.get $dec_ptr)) (br $fd_done)))
-                ;; i8x16.ge_u (0x48)? No, 0x48 is i8x16.ne
-                ;; Wait: i8x16.ge_s = 0x49, i8x16.ge_u = ... I need to check the spec
-                ;; From WASM SIMD spec:
-                ;; i8x16.ge_s: 0x49  (wait I already used 0x49?)
-                ;; Let me re-use the correct opcodes...
-                ;; Actually looking at the WASM SIMD spec more carefully:
-                ;; i8x16.ge_s = 0x49
-                ;; i8x16.ge_u = probably doesn't exist (only signed ge for i8)
-                ;; Actually all integer comparisons exist in both signed and unsigned variants:
-                ;; i8x16.eq = 0x47, i8x16.ne = 0x48
-                ;; i8x16.lt_s = 0x4B, i8x16.lt_u = 0x4A
-                ;; i8x16.gt_s = 0x4D, i8x16.gt_u = 0x4C
-                ;; i8x16.le_s = 0x4F, i8x16.le_u = 0x4E
-                ;; i8x16.ge_s = 0x49, i8x16.ge_u = ???
-                ;; Hmm, I think ge_u exists too but I'm not sure about the opcode.
-                ;; Let me skip ge_u for now and handle it when adding to templates.
-                (if (i32.eq (local.get $imm0) (i32.const 0x49))
-                  (then (call $template_i8x16_ge_s (local.get $dec_ptr)) (br $fd_done)))
                 ;; i16x8.ge_s (0x5A)
                 (if (i32.eq (local.get $imm0) (i32.const 0x5A))
                   (then (call $template_i16x8_ge_s (local.get $dec_ptr)) (br $fd_done)))
@@ -3125,9 +3126,70 @@
                 ;; i8x16.xor (0x45)
                 (if (i32.eq (local.get $imm0) (i32.const 0x45))
                   (then (call $template_i8x16_xor (local.get $dec_ptr)) (br $fd_done)))
-                ;; i8x16.shl (0x4B wait no, 4B is lt_s)
-                ;; Actually shifts are at different opcodes:
-                ;; i8x16.shl = 0x4B... no, let me skip shifts for now
+                ;; ── New canonical ops (0xA6+, not in old encoding) ──
+                ;; v128.load8_splat (0xA6)
+                (if (i32.eq (local.get $imm0) (i32.const 0xA6))
+                  (then (call $template_v128_load8_splat (local.get $dec_ptr)) (br $fd_done)))
+                ;; v128.load16_splat (0xA7)
+                (if (i32.eq (local.get $imm0) (i32.const 0xA7))
+                  (then (call $template_v128_load16_splat (local.get $dec_ptr)) (br $fd_done)))
+                ;; v128.load32_splat (0xA8)
+                (if (i32.eq (local.get $imm0) (i32.const 0xA8))
+                  (then (call $template_v128_load32_splat (local.get $dec_ptr)) (br $fd_done)))
+                ;; v128.load64_splat (0xA9)
+                (if (i32.eq (local.get $imm0) (i32.const 0xA9))
+                  (then (call $template_v128_load64_splat (local.get $dec_ptr)) (br $fd_done)))
+                ;; i8x16.swizzle (0xAA)
+                (if (i32.eq (local.get $imm0) (i32.const 0xAA))
+                  (then (call $template_i8x16_swizzle (local.get $dec_ptr)) (br $fd_done)))
+                ;; i64x2.replace_lane (0xAB)
+                (if (i32.eq (local.get $imm0) (i32.const 0xAB))
+                  (then (call $template_i64x2_replace_lane (local.get $dec_ptr)) (br $fd_done)))
+                ;; v128.not (0xAC)
+                (if (i32.eq (local.get $imm0) (i32.const 0xAC))
+                  (then (call $template_v128_not (local.get $dec_ptr)) (br $fd_done)))
+                ;; v128.bitselect (0xAD)
+                (if (i32.eq (local.get $imm0) (i32.const 0xAD))
+                  (then (call $template_v128_bitselect (local.get $dec_ptr)) (br $fd_done)))
+                ;; i8x16.ge_u (0xAE)
+                (if (i32.eq (local.get $imm0) (i32.const 0xAE))
+                  (then (call $template_i8x16_ge_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i16x8.ge_u (0xAF)
+                (if (i32.eq (local.get $imm0) (i32.const 0xAF))
+                  (then (call $template_i16x8_ge_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i32x4.ge_u (0xB0)
+                (if (i32.eq (local.get $imm0) (i32.const 0xB0))
+                  (then (call $template_i32x4_ge_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i8x16.min_u (0xB8)
+                (if (i32.eq (local.get $imm0) (i32.const 0xB8))
+                  (then (call $template_i8x16_min_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i8x16.max_u (0xBA)
+                (if (i32.eq (local.get $imm0) (i32.const 0xBA))
+                  (then (call $template_i8x16_max_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i8x16.avgr_u (0xBB)
+                (if (i32.eq (local.get $imm0) (i32.const 0xBB))
+                  (then (call $template_i8x16_avgr_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i16x8.min_u (0xBC)
+                (if (i32.eq (local.get $imm0) (i32.const 0xBC))
+                  (then (call $template_i16x8_min_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i16x8.max_u (0xBE)
+                (if (i32.eq (local.get $imm0) (i32.const 0xBE))
+                  (then (call $template_i16x8_max_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; i16x8.avgr_u (0xBF)
+                (if (i32.eq (local.get $imm0) (i32.const 0xBF))
+                  (then (call $template_i16x8_avgr_u (local.get $dec_ptr)) (br $fd_done)))
+                ;; f32x4.min (0xE1)
+                (if (i32.eq (local.get $imm0) (i32.const 0xE1))
+                  (then (call $template_f32x4_min (local.get $dec_ptr)) (br $fd_done)))
+                ;; f32x4.max (0xE2)
+                (if (i32.eq (local.get $imm0) (i32.const 0xE2))
+                  (then (call $template_f32x4_max (local.get $dec_ptr)) (br $fd_done)))
+                ;; f64x2.min (0xE3)
+                (if (i32.eq (local.get $imm0) (i32.const 0xE3))
+                  (then (call $template_f64x2_min (local.get $dec_ptr)) (br $fd_done)))
+                ;; f64x2.max (0xE4)
+                (if (i32.eq (local.get $imm0) (i32.const 0xE4))
+                  (then (call $template_f64x2_max (local.get $dec_ptr)) (br $fd_done)))
                 ;; Unknown 0xFD sub-opcode
                 (global.set $JIT_ERROR (i32.const -4))
               )

@@ -159,6 +159,12 @@
   (global $STATUS_TRUNCATED    (export "STATUS_TRUNCATED")    i32 (i32.const 5))
   (global $STATUS_TOO_LONG     (export "STATUS_TOO_LONG")     i32 (i32.const 6))
   (global $STATUS_MORE         (export "STATUS_MORE")         i32 (i32.const 7))
+  (global $STATUS_TIMEOUT      (export "STATUS_TIMEOUT")      i32 (i32.const 8))
+
+  ;; ── Global epoch — shared tick counter across all modules ──
+  ;; Schedulers increment this before driving pipelines. Stages read it
+  ;; for cross-pipeline synchronization and tick-based timeouts.
+  (global $epoch (export "epoch") (mut i32) (i32.const 0))
 
   ;; ── Bounds check ──
   ;; Returns 1 if offset + need <= len, 0 otherwise.

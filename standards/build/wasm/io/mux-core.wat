@@ -297,12 +297,27 @@
 
   ;; process_mux_static — reads from stream pipes in config, frame-writes to output
   ;; Config: [count][pipe_0][pipe_1]...
+  ;; State layout (12 bytes):
+  ;;   +0: tick          i32 (RO, written by pipeline_run)
+  ;;   +4: epoch_len     i32 (0 = no batching, drain every call)
+  ;;   +8: last_flush_tick i32 (last tick when drain occurred)
   (func (export "process_mux_static")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $count i32) (local $i i32) (local $pipe i32)
     (local $avail i32) (local $r i32) (local $total i32)
+    (local $tick i32) (local $epoch_len i32) (local $last_flush i32)
     (local.set $count (i32.load (local.get $cfg)))
+
+    ;; Epoch batching: if state != 0, check if it's time to drain
+    (if (local.get $state)
+      (then
+        (local.set $tick (i32.load (local.get $state)))
+        (local.set $epoch_len (i32.load offset=4 (local.get $state)))
+        (local.set $last_flush (i32.load offset=8 (local.get $state)))
+        (if (i32.lt_u (i32.sub (local.get $tick) (local.get $last_flush)) (local.get $epoch_len))
+          (then (return (i32.const 0))))))
+
     (block $done
       (loop $streams
         (br_if $done (i32.ge_u (local.get $i) (local.get $count)))
@@ -321,14 +336,28 @@
             (local.set $total (i32.add (local.get $total) (i32.const 1)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $streams)))
+
+    ;; Update last_flush_tick after drain (only if state != 0)
+    (if (local.get $state)
+      (then (i32.store offset=8 (local.get $state) (i32.load (local.get $state)))))
     local.get $total)
+
+  ;; Helper: configure epoch batching on a mux_static state block
+  ;; State must be non-zero and point to a 12-byte block
+  (func (export "mux_static_set_epoch")
+    (param $state i32) (param $epoch_len i32) (result i32)
+    (if (i32.eqz (local.get $state))
+      (then (return (i32.const -1))))
+    (i32.store offset=4 (local.get $state) (local.get $epoch_len))
+    (i32.store offset=8 (local.get $state) (i32.const 0))
+    (i32.const 0))
 
   ;; process_demux_static — reads framed from input, routes to stream pipes in config
   ;; Config: [count][pipe_0][pipe_1]...
   ;; Drains all available frames in one call
   (func (export "process_demux_static")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $count i32) (local $avail i32) (local $result i64)
     (local $status i32) (local $stream_id i32) (local $pipe i32)
     (local $total i32)
@@ -360,7 +389,7 @@
   ;; Config: [mux_handle:i32]
   (func (export "process_mux_dynamic")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $mux i32)
     (local.set $mux (i32.load (local.get $cfg)))
     (call $mux_dynamic_run (local.get $mux) (local.get $scratch) (local.get $scap)))
@@ -369,7 +398,7 @@
   ;; Config: [demux_handle:i32]
   (func (export "process_demux_dynamic")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
-    (param $scratch i32) (param $scap i32) (result i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $demux i32)
     (local.set $demux (i32.load (local.get $cfg)))
     (call $demux_dynamic_run (local.get $demux) (local.get $scratch) (local.get $scap)))

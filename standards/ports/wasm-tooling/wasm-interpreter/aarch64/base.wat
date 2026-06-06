@@ -64,6 +64,7 @@
   ;; V0-V31 are the 128-bit SIMD/FP registers (aliased as Q0-Q31)
   (global $REG_V0  i32 (i32.const 0))
   (global $REG_V1  i32 (i32.const 1))
+  (global $REG_V2  i32 (i32.const 2))
 
   ;; Peephole optimization flag
   (global $RESULT_IN_X0      (mut i32) (i32.const 0))

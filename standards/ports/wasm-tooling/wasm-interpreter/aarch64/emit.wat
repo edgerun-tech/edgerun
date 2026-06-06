@@ -2041,6 +2041,92 @@
                            (local.get $Rd) (local.get $Rn) (local.get $Rm))
   )
 
+  ;; CMGE (unsigned) Vd.8H, Vn.8H, Vm.8H: CMHS, U=1, opcode=00111, size=01
+  (func $emit_neon_cmge_8h_u (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 1) (i32.const 0x07)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGE (unsigned) Vd.4S, Vn.4S, Vm.4S: CMHS, size=10
+  (func $emit_neon_cmge_4s_u (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 1) (i32.const 0x07)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGT (unsigned) Vd.8H, Vn.8H, Vm.8H: CMHI, U=1, size=01, opcode=00110
+  (func $emit_neon_cmgt_8h_u (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 1) (i32.const 0x06)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGT (unsigned) Vd.4S, Vn.4S, Vm.4S: CMHI, size=10
+  (func $emit_neon_cmgt_4s_u (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 1) (i32.const 0x06)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGE (signed) Vd.8H, Vn.8H, Vm.8H: U=0, size=01, opcode=00111
+  (func $emit_neon_cmge_8h_s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0x07)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; CMGE (signed) Vd.4S, Vn.4S, Vm.4S: U=0, size=10, opcode=00111
+  (func $emit_neon_cmge_4s_s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 0) (i32.const 0x07)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; ── MUL helpers (signed/unsigned, integer) ──────────────────────
+  ;; MUL Vd.8H, Vn.8H, Vm.8H: U=0, opcode=10011, size=01
+  (func $emit_neon_mul_8h (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0x13)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; MUL Vd.4S, Vn.4S, Vm.4S: size=10
+  (func $emit_neon_mul_4s (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 2) (i32.const 0) (i32.const 0x13)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
+  ;; ── NEG helpers (2-register misc) ───────────────────────────────
+  ;; NEG Vd.16B, Vn.16B: 0x0E207800 | (Q<<30) | (size<<22) | (Rn<<5) | Rd
+  ;; size=00 for 16B (byte), size=01 for 8H (halfword), size=10 for 4S, size=11 for 2D
+  (func $emit_neon_neg (param $size i32) (param $Rd i32) (param $Rn i32)
+    (call $emit_instr
+      (i32.or (i32.const 0x4E207800)
+              (i32.or (i32.shl (local.get $size) (i32.const 22))
+                      (i32.or (i32.shl (local.get $Rn) (i32.const 5))
+                              (local.get $Rd)))))
+  )
+
+  ;; ── UMIN / UMAX / URHADD helpers (unsigned) ─────────────────────
+  ;; UMIN Vd.16B, Vn.16B, Vm.16B: U=1, opcode=01101, size=00
+  (func $emit_neon_umin_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x0D)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; UMIN Vd.8H, Vn.8H, Vm.8H: size=01
+  (func $emit_neon_umin_8h (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 1) (i32.const 0x0D)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; UMAX Vd.16B, Vn.16B, Vm.16B: U=1, opcode=01100, size=00
+  (func $emit_neon_umax_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x0C)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; UMAX Vd.8H, Vn.8H, Vm.8H: size=01
+  (func $emit_neon_umax_8h (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 1) (i32.const 0x0C)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; URHADD Vd.16B, Vn.16B, Vm.16B: (a+b+1)>>1, U=1, opcode=00011, size=00
+  (func $emit_neon_urhadd_16b (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 0x03)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+  ;; URHADD Vd.8H, Vn.8H, Vm.8H: size=01
+  (func $emit_neon_urhadd_8h (param $Rd i32) (param $Rn i32) (param $Rm i32)
+    (call $emit_neon_3same (i32.const 1) (i32.const 1) (i32.const 1) (i32.const 0x03)
+                           (local.get $Rd) (local.get $Rn) (local.get $Rm))
+  )
+
   ;; ── Pop two, operate, push (pattern for binary ops) ──────────────
 
   ;; Push X0 only if RESULT_IN_X0 is 0 (peephole)

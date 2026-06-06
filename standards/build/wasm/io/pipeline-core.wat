@@ -23,6 +23,7 @@
   (func (export "STAGE_DEMUX_STATIC") (result i32) i32.const 7)
   (func (export "STAGE_MUX_DYNAMIC") (result i32) i32.const 8)
   (func (export "STAGE_DEMUX_DYNAMIC") (result i32) i32.const 9)
+  (func (export "STAGE_WASM_EXEC")     (result i32) i32.const 11)
 
   ;; ── Stage function type ──
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) -> result
@@ -33,7 +34,8 @@
   ;; +4:  version    i32
   ;; +8:  pipe_cap   i32  — intermediate pipe capacity
   ;; +12: stage_count i32
-  ;; +16: stages[] — each:
+  ;; +16: tick       i32  — incremented per pipeline_run call
+  ;; +20: stages[] — each:
   ;;   +0:  stage_type i32
   ;;   +4:  config     i32
   ;;   +8:  config_len i32
@@ -46,7 +48,8 @@
   (global $PD_VERSION  i32 (i32.const 4))
   (global $PD_PIPE_CAP i32 (i32.const 8))
   (global $PD_COUNT    i32 (i32.const 12))
-  (global $PD_STAGES   i32 (i32.const 16))
+  (global $PD_TICK     i32 (i32.const 16))
+  (global $PD_STAGES   i32 (i32.const 20))
   (global $PS_TYPE     i32 (i32.const 0))
   (global $PS_CONFIG   i32 (i32.const 4))
   (global $PS_CLEN     i32 (i32.const 8))
@@ -65,6 +68,7 @@
     (i32.store offset=4 (local.get $desc) (i32.const 1))
     (i32.store offset=8 (local.get $desc) (local.get $pcap))
     (i32.store offset=12 (local.get $desc) (local.get $count))
+    (i32.store offset=16 (local.get $desc) (i32.const 0))
     local.get $desc)
 
   ;; pipeline_set_stage(desc, index, stage_type, config, config_len)
@@ -95,6 +99,9 @@
         (i32.mul (local.get $idx) (global.get $PS_SIZE))))
     (i32.load (i32.add (local.get $desc) (local.get $slot))))
 
+  (func (export "pipeline_get_tick") (param $desc i32) (result i32)
+    (i32.load offset=16 (local.get $desc)))
+
   ;; pipeline_run(desc, input_pipe, output_pipe, scratch, scap) → OK | MORE | error
   (func (export "pipeline_run")
     (param $desc i32) (param $input i32) (param $output i32)
@@ -110,6 +117,10 @@
     (local.set $stages (i32.add (local.get $desc) (global.get $PD_STAGES)))
     (local.set $prev (local.get $input))
 
+    ;; Increment tick for this run
+    (i32.store offset=16 (local.get $desc)
+      (i32.add (i32.load offset=16 (local.get $desc)) (i32.const 1)))
+
     (block $done
       (loop $loop
         (br_if $done (i32.ge_u (local.get $i) (local.get $count)))
@@ -119,6 +130,10 @@
         (local.set $cfg (i32.load offset=4 (i32.add (local.get $stages) (local.get $slot))))
         (local.set $clen (i32.load offset=8 (i32.add (local.get $stages) (local.get $slot))))
         (local.set $state (i32.load offset=12 (i32.add (local.get $stages) (local.get $slot))))
+
+        ;; Write current tick to state[0] if stage has state
+        (if (local.get $state)
+          (then (i32.store (local.get $state) (i32.load offset=16 (local.get $desc)))))
 
         ;; Last stage → output pipe, others → intermediate pipe
         (if (i32.eq (local.get $i) (i32.sub (local.get $count) (i32.const 1)))

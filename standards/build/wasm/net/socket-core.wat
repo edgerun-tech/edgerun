@@ -1,6 +1,7 @@
 (module
   (import "edgerun-core" "memory" (memory 1))
   (import "edgerun-core" "STATUS_MORE" (global $MORE i32))
+  (import "edgerun-core" "STATUS_TIMEOUT" (global $TIMEOUT i32))
   (import "pipe-core" "pipe_alloc" (func $pipe_alloc (param i32) (result i32)))
   (import "pipe-core" "pipe_create" (func $pipe_create (param i32) (result i32)))
   (import "pipe-core" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
@@ -453,25 +454,38 @@
   ;; ── Pipeline stage: transport ──
   ;; Reads from input pipe, sends via socket, reads response, writes to output pipe.
   ;; Config: pointer to a 4-byte i32 socket handle.
-  ;; State: 4-byte i32 phase flag (0=idle, 1=awaiting recv)
+  ;; State layout (16 bytes):
+  ;;   +0:  tick         i32 (RO, written by pipeline_run)
+  ;;   +4:  phase        i32 (0=idle, 1=awaiting recv)
+  ;;   +8:  start_tick   i32 (tick when phase=1 was entered)
+  ;;   +12: timeout_ticks i32 (max ticks to wait before returning TIMEOUT, 0=infinite)
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) → OK | MORE | error
   (func (export "process_transport")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $sock i32) (local $n i32) (local $phase i32) (local $sent i32)
+    (local $elapsed i32)
     (if (i32.lt_u (local.get $clen) (i32.const 4))
       (then (return (i32.const -1))))
     (local.set $sock (i32.load (local.get $cfg)))
-    (local.set $phase (i32.load (local.get $state)))
+    (local.set $phase (i32.load offset=4 (local.get $state)))
 
-    ;; Phase 1 (awaiting response): try recv again
+    ;; Phase 1 (awaiting response): check timeout, then try recv again
     (if (i32.eq (local.get $phase) (i32.const 1))
       (then
+        ;; Compute elapsed ticks since entering phase 1
+        (local.set $elapsed
+          (i32.sub (i32.load (local.get $state)) (i32.load offset=8 (local.get $state))))
+        ;; If timeout_ticks > 0 and elapsed >= timeout_ticks, return TIMEOUT
+        (if (i32.load offset=12 (local.get $state))
+          (then
+            (if (i32.ge_u (local.get $elapsed) (i32.load offset=12 (local.get $state)))
+              (then (return (global.get $TIMEOUT))))))
         (local.set $n (call $pipe_read (i32.load offset=4 (local.get $sock)) (local.get $scratch) (local.get $scap)))
         (if (i32.gt_s (local.get $n) (i32.const 0))
           (then
             (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $n)))
-            (i32.store (local.get $state) (i32.const 0))
+            (i32.store offset=4 (local.get $state) (i32.const 0))
             (return (local.get $n))))
         (return (global.get $MORE))))
 
@@ -494,7 +508,8 @@
         ;; No response yet — if we sent something, mark awaiting and return MORE
         (if (i32.gt_s (local.get $sent) (i32.const 0))
           (then
-            (i32.store (local.get $state) (i32.const 1))
+            (i32.store offset=4 (local.get $state) (i32.const 1))
+            (i32.store offset=8 (local.get $state) (i32.load (local.get $state)))
             (return (global.get $MORE))))
         (return (i32.const 0))))
     local.get $n)
