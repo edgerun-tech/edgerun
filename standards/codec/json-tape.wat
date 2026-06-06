@@ -5,11 +5,6 @@
   (global $tok_cap (mut i32) (i32.const 0))
   (global $tok_len (mut i32) (i32.const 0))
 
-
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300007)
-
-
   (func $lo (param $packed i64) (result i32)
     local.get $packed
     i32.wrap_i64)
@@ -67,7 +62,6 @@
 
   (func $m125is_hex (param $c i32) (result i32)
     (call $is_hex (local.get $c)))
-
 
   (func $m125is_digit_1_9 (param $c i32) (result i32)
     local.get $c

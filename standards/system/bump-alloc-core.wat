@@ -3,10 +3,7 @@
   (import "math" "sat_sub" (func $sat_sub (param i32 i32) (result i32)))
   (import "math" "round_up" (func $round_up (param i32 i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300155)
-
-  (func $next_power2 (param $n i32) (result i32)
+(func $next_power2 (param $n i32) (result i32)
     (local $p i32)
     i32.const 1
     local.set $p

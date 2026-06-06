@@ -1,9 +1,6 @@
   (import "edgerun" "to_lower" (func $m183lower_ascii (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300014)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
 
   (func $m183is_space (param $b i32) (result i32)
     (i32.or

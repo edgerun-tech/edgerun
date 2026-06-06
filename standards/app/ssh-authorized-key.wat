@@ -1,8 +1,5 @@
 
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300045)
-
   (func $m169is_space (param $b i32) (result i32)
     local.get $b
     i32.const 32
@@ -32,7 +29,6 @@
 
   (import "edgerun" "is_upper" (func $m169is_upper (param i32) (result i32)))
   (import "edgerun" "is_lower" (func $m169is_lower (param i32) (result i32)))
-
 
   (func $is_b64_data (param $b i32) (result i32)
     local.get $b

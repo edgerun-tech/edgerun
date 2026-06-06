@@ -11,8 +11,6 @@
   ;;   isaac_seed(state_ptr, seed_ptr, seed_word_count) -> 0
   ;;   isaac_next(state_ptr) -> i32 (0-255)
   ;;   isaac_peek(state_ptr) -> i32 (0-255)
-  (func (export "proto_standard_id") (result i32) i32.const 300535)
-
   (func $mix (param $a i32) (param $b i32) (param $c i32) (param $d i32)
              (param $e i32) (param $f i32) (param $g i32) (param $h i32)
              (result i32 i32 i32 i32 i32 i32 i32 i32)

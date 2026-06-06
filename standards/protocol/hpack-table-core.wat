@@ -1,21 +1,11 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300044)
+  (import "hpack-qpack" "table_entry_size" (func $table_entry_size (param $name_len i32) (param $value_len i32) (result i64)))
 
-  ;; HPACK dynamic table entry size is name_len + value_len + 32.
+  (func $hpack_table_entry_size (export "hpack_table_entry_size") (param $name_len i32) (param $value_len i32) (result i64)
+    (call $table_entry_size (local.get $name_len) (local.get $value_len)))
+
+;; HPACK dynamic table entry size is name_len + value_len + 32.
   ;; Returns packed low32=status, high32=size.
-  (func $hpack_table_entry_size (export "hpack_table_entry_size")
-    (param $name_len i32) (param $value_len i32)
-    (result i64)
-    (local $sum i32)
-    (local.set $sum (i32.add (local.get $name_len) (local.get $value_len)))
-    (if (i32.lt_u (local.get $sum) (local.get $name_len))
-      (then (return (call $pack (i32.const 4) (i32.const 0)))))
-    (local.set $sum (i32.add (local.get $sum) (i32.const 32)))
-    (if (i32.lt_u (local.get $sum) (i32.const 32))
-      (then (return (call $pack (i32.const 4) (i32.const 0)))))
-    (call $pack (i32.const 0) (local.get $sum)))
-
   ;; Insert-plan output record, little-endian:
   ;; 0:u32 new_entry_size
   ;; 4:u32 retained_size

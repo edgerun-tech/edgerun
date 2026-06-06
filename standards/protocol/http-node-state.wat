@@ -1,10 +1,7 @@
   (import "edgerun" "to_lower" (func $m109lower (param i32) (result i32)))
   (import "http" "is_tchar" (func $is_tchar (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300107)
-
-  (func $byte_lower_at (param $ptr i32) (param $off i32) (result i32)
+(func $byte_lower_at (param $ptr i32) (param $off i32) (result i32)
     (call $m109lower (i32.load8_u (i32.add (local.get $ptr) (local.get $off)))))
 
   (func $is_ctl_or_space (param $b i32) (result i32)

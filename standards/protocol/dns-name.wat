@@ -1,10 +1,7 @@
   (import "edgerun" "to_lower" (func $m80lower_ascii (param i32) (result i32)))
   (import "dns" "is_label_byte" (func $is_label_byte (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300025)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
 
   ;; Output record, little-endian:
   ;; 0:u32 consumed wire bytes

@@ -46,8 +46,6 @@
         (br $loop)))
     (local.get $nonzero))
 
-  (func (export "proto_standard_id") (result i32) (i32.const 300141))
-
   (func (export "otel_baggage_key_valid") (param $ptr i32) (param $len i32) (result i32)
     (local $end i32) (local $c i32)
     (if (i32.eqz (local.get $len)) (then (return (i32.const 0))))

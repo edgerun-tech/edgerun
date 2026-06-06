@@ -2,9 +2,6 @@
   (global $m118TMP i32 (i32.const 65000))
   (global $m118TMP_END i32 (i32.const 65064))
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300073)
-
   ;; Decimal integer formatting.
   ;; Return value is bytes written on success, or -2 when out_cap is too small.
   ;; integer_format_u128 receives little-endian split limbs: value_lo, value_hi.

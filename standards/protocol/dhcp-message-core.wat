@@ -1,46 +1,10 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300163)
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
+  (import "binary" "read_u32_be" (func $read_u32_be (param $ptr i32) (result i32)))
 
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid,
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid,
   ;; 4 invalid_cookie, 5 invalid_option_length.
   ;; Packed i64 return: low u32 status, high u32 value or next_offset.
-
-  (func $m74read_u16_be (param $ptr i32) (result i32)
-    local.get $ptr
-    i32.load8_u
-    i32.const 8
-    i32.shl
-    local.get $ptr
-    i32.const 1
-    i32.add
-    i32.load8_u
-    i32.or)
-
-  (func $m74read_u32_be (param $ptr i32) (result i32)
-    local.get $ptr
-    i32.load8_u
-    i32.const 24
-    i32.shl
-    local.get $ptr
-    i32.const 1
-    i32.add
-    i32.load8_u
-    i32.const 16
-    i32.shl
-    i32.or
-    local.get $ptr
-    i32.const 2
-    i32.add
-    i32.load8_u
-    i32.const 8
-    i32.shl
-    i32.or
-    local.get $ptr
-    i32.const 3
-    i32.add
-    i32.load8_u
-    i32.or)
 
   (func (export "dhcp_magic_cookie") (result i32)
     i32.const 0x63825363)
@@ -422,7 +386,7 @@
       local.get $ptr
       i32.const 236
       i32.add
-      call $m74read_u32_be
+      call $read_u32_be
       i32.const 0x63825363
       i32.eq
       if (result i32) i32.const 0 else i32.const 4 end
@@ -461,7 +425,7 @@
     local.get $ptr
     local.get $offset
     i32.add
-    call $m74read_u32_be
+    call $read_u32_be
     call $pack)
 
   ;; Decode fixed DHCPv4/BOOTP header plus magic cookie. Writes little-endian u32:
@@ -499,7 +463,7 @@
     local.get $ptr
     i32.const 236
     i32.add
-    call $m74read_u32_be
+    call $read_u32_be
     i32.const 0x63825363
     i32.ne
     if
@@ -519,7 +483,7 @@
     local.get $ptr
     i32.const 10
     i32.add
-    call $m74read_u16_be
+    call $read_u16_be
     local.set $flags
 
     local.get $out
@@ -557,7 +521,7 @@
     local.get $ptr
     i32.const 4
     i32.add
-    call $m74read_u32_be
+    call $read_u32_be
     i32.store
     local.get $out
     i32.const 24
@@ -565,7 +529,7 @@
     local.get $ptr
     i32.const 8
     i32.add
-    call $m74read_u16_be
+    call $read_u16_be
     i32.store
     local.get $out
     i32.const 28
@@ -587,7 +551,7 @@
     local.get $ptr
     i32.const 12
     i32.add
-    call $m74read_u32_be
+    call $read_u32_be
     i32.store
     local.get $out
     i32.const 40
@@ -595,7 +559,7 @@
     local.get $ptr
     i32.const 16
     i32.add
-    call $m74read_u32_be
+    call $read_u32_be
     i32.store
     local.get $out
     i32.const 44
@@ -603,7 +567,7 @@
     local.get $ptr
     i32.const 20
     i32.add
-    call $m74read_u32_be
+    call $read_u32_be
     i32.store
     local.get $out
     i32.const 48
@@ -611,7 +575,7 @@
     local.get $ptr
     i32.const 24
     i32.add
-    call $m74read_u32_be
+    call $read_u32_be
     i32.store
     local.get $out
     i32.const 52

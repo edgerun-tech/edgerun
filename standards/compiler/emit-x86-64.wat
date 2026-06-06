@@ -1397,6 +1397,13 @@
     (i32.store (global.get $JS_MAX_STACK) (i32.const 0))
   )
 
+  ;; Emit UD2 (undefined instruction) — 0F 0B
+  ;; Used by unreachable and unsupported opcode templates.
+  (func $emit_ud2
+    (call $emit_x86_byte (i32.const 0x0F))
+    (call $emit_x86_byte (i32.const 0x0B))
+  )
+
   ;; Get word at decoded_op_ptr + offset
   (func $get_x86_decoded_imm (param $dec_ptr i32) (param $offset i32) (result i32)
     (i32.load (i32.add (local.get $dec_ptr) (local.get $offset)))

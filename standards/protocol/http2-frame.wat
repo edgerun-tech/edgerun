@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300010)
-
-  ;; Known HTTP/2 frame types return their type byte. Unknown extension frames
+;; Known HTTP/2 frame types return their type byte. Unknown extension frames
   ;; return 255, matching the local Rust FrameType::Extension classifier.
   (func $http2_frame_type_classify (export "http2_frame_type_classify") (param $frame_type i32) (result i32)
     (if (result i32)

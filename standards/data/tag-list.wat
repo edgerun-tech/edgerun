@@ -1,9 +1,5 @@
 
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300051)
-
-
   (func $m173is_wsp (param $b i32) (result i32)
     local.get $b
     i32.const 32
@@ -12,8 +8,6 @@
     i32.const 9
     i32.eq
     i32.or)
-
-
 
   (func $is_tag_byte (param $b i32) (result i32)
     local.get $b

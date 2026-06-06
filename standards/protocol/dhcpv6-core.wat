@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300111)
-
-  (func (export "dhcpv6_message_type") (param $id i32) (result i32)
+(func (export "dhcpv6_message_type") (param $id i32) (result i32)
     (if (i32.and (i32.ge_u (local.get $id) (i32.const 1)) (i32.le_u (local.get $id) (i32.const 13)))
       (then (return (local.get $id))))
     i32.const 0)

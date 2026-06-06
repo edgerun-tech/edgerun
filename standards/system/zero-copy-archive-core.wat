@@ -1,6 +1,4 @@
-(func (export "proto_standard_id") (result i32) i32.const 300150)
-
-  (func $is_power_of_two (param $value i64) (result i32)
+(func $is_power_of_two (param $value i64) (result i32)
     (i32.and
       (i64.gt_u (local.get $value) (i64.const 0))
       (i64.eqz (i64.and (local.get $value) (i64.sub (local.get $value) (i64.const 1))))))

@@ -1,12 +1,6 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300039)
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
 
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
-  (func $m181read_u16 (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
   ;; Walk a TLS ExtensionList body: repeated type:u16, len:u16, payload bytes.
   ;;
   ;; Output record:
@@ -42,8 +36,8 @@
       (if (i32.lt_u (local.get $remaining) (i32.const 4))
         (then (return (i32.const 5))))
 
-      (local.set $ext_type (call $m181read_u16 (i32.add (local.get $ptr) (local.get $pos))))
-      (local.set $data_len (call $m181read_u16 (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
+      (local.set $ext_type (call $read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
+      (local.set $data_len (call $read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
       (local.set $data_offset (i32.add (local.get $pos) (i32.const 4)))
       (if (i32.gt_u (local.get $data_len) (i32.sub (local.get $len) (local.get $data_offset)))
         (then (return (i32.const 5))))

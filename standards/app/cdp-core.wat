@@ -3,9 +3,6 @@
   (global $g_out (mut i32) (i32.const 0))
   (global $g_o (mut i32) (i32.const 0))
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300503)
-
   ;; cdp_build_navigate(ptr, cap, url_ptr, url_len) -> status:i32, written:i32 packed as i64
   ;; Uses id=1 always. Builds: {"id":1,"method":"Page.navigate","params":{"url":"URL"}}
   (func (export "cdp_build_navigate") (param $out i32) (param $ocap i32) (param $url i32) (param $ulen i32) (result i64)

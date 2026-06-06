@@ -1,8 +1,6 @@
   ;; X25519 scalar multiplication (radix-2^25.5, 10 limbs).
   ;; Ported from edgerun_crypto_curve25519.inc — self-contained.
   (import "edgerun" "memcpy" (func $m64memcpy (param i32 i32 i32)))
-  (func (export "proto_standard_id") (result i32) i32.const 300080)
-
   ;; Scratch: 8192 = product (19×i64), 8448+ = temp fe (80 bytes each)
   ;; A=8448 AA=8528 B=8608 BB=8688 E=8768 C=8848 D=8928 DA=9008
   ;; CB=9088 T0=9168 T1=9248 X1=9328 X2=9408 Z2=9488 X3=9568 Z3=9648

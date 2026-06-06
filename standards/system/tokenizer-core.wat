@@ -2,8 +2,6 @@
 (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
 
 ;; Captures proc-macro2 token model and fallback lexer semantics.
-  (func (export "proto_standard_id") (result i32) (i32.const 300138))
-
   (func (export "pm2_delimiter_open_code") (param $c i32) (result i32)
     (if (i32.eq (local.get $c) (i32.const 40)) (then (return (i32.const 1))))
     (if (i32.eq (local.get $c) (i32.const 123)) (then (return (i32.const 2))))

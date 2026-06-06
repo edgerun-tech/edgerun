@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300071)
-
-  (func $is_sixel (param $c i32) (result i32)
+(func $is_sixel (param $c i32) (result i32)
     local.get $c
     i32.const 63
     i32.ge_u

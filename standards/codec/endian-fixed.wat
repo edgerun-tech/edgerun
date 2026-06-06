@@ -1,14 +1,10 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300063)
-
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
   ;; Read out record: u32 value_lo, u32 value_hi. Signed reads are sign-extended.
   ;; Endian values: 0 little-endian, 1 big-endian. Width values: 2, 3, 4, 8.
   ;; endian_read(ptr,len,offset,width,endian,signed,out) -> status
   ;; endian_write(value_lo,value_hi,width,endian,out_ptr,out_cap) -> packed i64
   ;; Packed i64 return: low u32 status, high u32 bytes_written.
-
 
   (func $valid_width (param $width i32) (result i32)
     local.get $width

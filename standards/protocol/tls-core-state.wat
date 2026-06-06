@@ -1,9 +1,6 @@
   (import "edgerun" "to_lower" (func $m180ascii_lower (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300110)
-
-  (func $m180fnv_lower (param $ptr i32) (param $len i32) (result i32)
+(func $m180fnv_lower (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $h i32)
     (local.set $h (i32.const 0x811c9dc5))

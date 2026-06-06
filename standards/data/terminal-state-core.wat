@@ -2,10 +2,6 @@
 
   (import "math" "clamp" (func $clamp (param i32 i32 i32) (result i32)))
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300098)
-
-
   ;; Mirrors terminal.rs Perform classification:
   ;; printable: 0x20..0x7e plus 0x80.., execute/control: C0 plus DEL.
   (func (export "terminal_classify_byte") (param $byte i32) (result i32)

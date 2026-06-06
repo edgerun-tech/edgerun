@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300100)
-
-  (import "edgerun" "to_lower" (func $m140ascii_lower (param i32) (result i32)))
+(import "edgerun" "to_lower" (func $m140ascii_lower (param i32) (result i32)))
   (import "edgerun" "fnv1a_lower" (func $m140fnv_lower (param i32 i32) (result i32)))
 
   (func (export "oci_config_hash_lower") (param $ptr i32) (param $len i32) (result i32)

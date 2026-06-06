@@ -5,10 +5,7 @@
   ;; NOTE: this file uses an extended $m115is_tchar that includes { (123) and } (125).
   ;; The standard $is_tchar from http-core.wat omits those — keep the extended version here.
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300003)
-
-  (func $m115is_tchar (param $b i32) (result i32)
+(func $m115is_tchar (param $b i32) (result i32)
     local.get $b
     i32.const 65
     i32.ge_u
@@ -313,6 +310,80 @@
   (func (export "http_validate_header_value") (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $b i32)
+    loop $scan
+      local.get $i
+      local.get $len
+      i32.ge_u
+      if
+        i32.const 0
+        return
+      end
+      local.get $ptr
+      local.get $i
+      i32.add
+      i32.load8_u
+      local.set $b
+      local.get $b
+      i32.const 9
+      i32.eq
+      local.get $b
+      i32.const 32
+      i32.ge_u
+      i32.or
+      i32.eqz
+      if
+        i32.const 3
+        return
+      end
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i
+      br $scan
+    end
+    i32.const 0)
+
+  (func (export "http_validate_header_value_simd") (param $ptr i32) (param $len i32) (result i32)
+    (local $i i32)
+    (local $v v128)
+    (local $valid v128)
+    (local $b i32)
+    block $scalar
+      loop $simd
+        local.get $i
+        i32.const 16
+        i32.add
+        local.get $len
+        i32.gt_u
+        br_if $scalar
+        local.get $ptr
+        local.get $i
+        i32.add
+        v128.load
+        local.tee $v
+        i32.const 32
+        i8x16.splat
+        i8x16.ge_u
+        local.get $v
+        i32.const 9
+        i8x16.splat
+        i8x16.eq
+        v128.or
+        local.set $valid
+        local.get $valid
+        i8x16.all_true
+        i32.eqz
+        if
+          i32.const 3
+          return
+        end
+        local.get $i
+        i32.const 16
+        i32.add
+        local.set $i
+        br $simd
+      end
+    end
     loop $scan
       local.get $i
       local.get $len
@@ -1410,7 +1481,3 @@
     local.get $len
     call $pack)
 
-  (func (export "http_method_classify_simd") (param $ptr i32) (param $len i32) (result i32)
-    local.get $ptr
-    local.get $len
-    call 18)

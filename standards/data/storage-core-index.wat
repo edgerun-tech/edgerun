@@ -7,10 +7,6 @@
   (data (i32.const 60000)
     "events.bin\00stream_heads.bin\00replay_cache.bin\00peers.bin\00snapshots.bin\00delegations.bin\00revocations.bin\00credentials.bin\00object_presence.bin\00controller_changes.bin\00fetch_queue.bin\00pending\00done\00failed\00discovered\00status_changed\00unreachable\00")
 
-
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300106)
-
   (func $load8 (param $ptr i32) (param $off i32) (result i32)
     (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
 

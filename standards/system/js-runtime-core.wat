@@ -1,9 +1,7 @@
   (import "edgerun" "string_eq" (func $m135eq (param i32 i32 i32 i32) (result i32)))
   (import "edgerun" "starts_with" (func $m135starts (param i32 i32 i32 i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32) i32.const 300115)
-
-  (func $m135ends (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
+(func $m135ends (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
     (if (i32.lt_u (local.get $len) (local.get $lit_len)) (then (return (i32.const 0))))
     (call $m135eq
       (i32.add (local.get $ptr) (i32.sub (local.get $len) (local.get $lit_len)))

@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300801)
-
-  ;; Status: 0 ok, 1 unsupported length, 2 output short, 3 invalid DER.
+;; Status: 0 ok, 1 unsupported length, 2 output short, 3 invalid DER.
   ;; Return bits: low16=status, next16=header_len, high32=value_len.
   (func $m69header_decode (param $ptr i32) (param $len i32) (result i64)
     (local $first i32)

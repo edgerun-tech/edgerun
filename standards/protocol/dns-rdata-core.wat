@@ -1,15 +1,8 @@
 
   (import "dns" "is_label_byte" (func $is_label_byte (param i32) (result i32)))
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300035)
-
-  (func $m81read_u16_be (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
   ;; Output record:
   ;; 0:u32 consumed_wire_bytes_at_start
   ;; 4:u32 label_count
@@ -190,7 +183,7 @@
         (then
           (i32.store
             (i32.add (local.get $out_ptr) (i32.mul (local.get $i) (i32.const 4)))
-            (call $m81read_u16_be
+            (call $read_u16_be
               (i32.add
                 (local.get $ptr)
                 (i32.add (local.get $rdata_start) (i32.mul (local.get $i) (i32.const 2))))))
@@ -266,7 +259,7 @@
         (i32.const 2048)))
     (if (i32.ne (local.get $status) (i32.const 0))
       (then (return (local.get $status))))
-    (i32.store (local.get $out_ptr) (call $m81read_u16_be (i32.add (local.get $ptr) (local.get $rdata_start))))
+    (i32.store (local.get $out_ptr) (call $read_u16_be (i32.add (local.get $ptr) (local.get $rdata_start))))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 4)) (i32.load (local.get $name_out)))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 8)) (i32.load (i32.add (local.get $name_out) (i32.const 4))))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 12)) (i32.load (i32.add (local.get $name_out) (i32.const 12))))

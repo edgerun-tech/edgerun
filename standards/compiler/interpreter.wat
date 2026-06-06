@@ -576,3 +576,4 @@
     (i32.store (global.get $OFF_SCRATCH0) (local.get $vt))
     (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
     (return (global.get $OK))
+  )

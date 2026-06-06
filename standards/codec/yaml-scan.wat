@@ -5,13 +5,8 @@
   ;; Scalar kinds: 0 empty, 1 null, 2 bool, 3 int, 4 float, 5 quoted, 6 inline_sequence,
   ;; 7 inline_mapping, 8 bare_string.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300042)
-
   (func $m202is_ws (param $c i32) (result i32)
     (i32.or (i32.eq (local.get $c) (i32.const 32)) (i32.eq (local.get $c) (i32.const 9))))
-
-
 
   (func $m202skip_ws (param $ptr i32) (param $len i32) (param $p i32) (result i32)
     (loop $again

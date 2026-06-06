@@ -1,26 +1,11 @@
 
   (import "dns" "is_label_byte" (func $is_label_byte (param i32) (result i32)))
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
+  (import "binary" "read_u32_be" (func $read_u32_be (param $ptr i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300162)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
   ;; DNSSEC result values mirror dnssec.rs: 0 Valid, 1 Expired, 2 NoSignature,
   ;; 3 NoKey, 4 BadSignature, 5 ChainBroken, 6 Insecure.
-
-  (func $m78read_u16_be (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
-  (func $m78read_u32_be (param $ptr i32) (result i32)
-    (i32.or
-      (i32.or
-        (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 24))
-        (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 1))) (i32.const 16)))
-      (i32.or
-        (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 2))) (i32.const 8))
-        (i32.load8_u (i32.add (local.get $ptr) (i32.const 3))))))
 
   (func $dns_record_type_status (export "dns_record_type_status") (param $rtype i32) (result i32)
     (if (i32.ne (call $dns_record_type_family (local.get $rtype)) (i32.const 0))
@@ -270,10 +255,10 @@
       (then (return (i32.const 2))))
     (if (i32.gt_u (i32.add (local.get $rr_start) (i32.const 10)) (local.get $msg_len))
       (then (return (i32.const 1))))
-    (local.set $rtype (call $m78read_u16_be (i32.add (local.get $in_ptr) (local.get $rr_start))))
-    (local.set $rclass (call $m78read_u16_be (i32.add (local.get $in_ptr) (i32.add (local.get $rr_start) (i32.const 2)))))
-    (local.set $ttl (call $m78read_u32_be (i32.add (local.get $in_ptr) (i32.add (local.get $rr_start) (i32.const 4)))))
-    (local.set $rdlength (call $m78read_u16_be (i32.add (local.get $in_ptr) (i32.add (local.get $rr_start) (i32.const 8)))))
+    (local.set $rtype (call $read_u16_be (i32.add (local.get $in_ptr) (local.get $rr_start))))
+    (local.set $rclass (call $read_u16_be (i32.add (local.get $in_ptr) (i32.add (local.get $rr_start) (i32.const 2)))))
+    (local.set $ttl (call $read_u32_be (i32.add (local.get $in_ptr) (i32.add (local.get $rr_start) (i32.const 4)))))
+    (local.set $rdlength (call $read_u16_be (i32.add (local.get $in_ptr) (i32.add (local.get $rr_start) (i32.const 8)))))
     (local.set $rdata_start (i32.add (local.get $rr_start) (i32.const 10)))
     (local.set $rr_end (i32.add (local.get $rdata_start) (local.get $rdlength)))
     (if (i32.lt_u (local.get $rr_end) (local.get $rdata_start))

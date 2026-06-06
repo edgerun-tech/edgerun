@@ -4,7 +4,7 @@
   (func (export "min") (param $a i32) (param $b i32) (result i32)
     local.get $a local.get $b i32.lt_s if (result i32) local.get $a else local.get $b end)
 
-  (func (export "min_u") (param $a i32) (param $b i32) (result i32)
+  (func $min_u (export "min_u") (param $a i32) (param $b i32) (result i32)
     local.get $a local.get $b i32.lt_u if (result i32) local.get $a else local.get $b end)
 
   (func (export "max") (param $a i32) (param $b i32) (result i32)
@@ -31,10 +31,10 @@
   (func (export "max0") (param $n i32) (result i32)
     local.get $n i32.const 0 i32.gt_s if (result i32) local.get $n else i32.const 0 end)
 
-  (func (export "min_f32") (param $a f32) (param $b f32) (result f32)
+  (func $min_f32 (export "min_f32") (param $a f32) (param $b f32) (result f32)
     local.get $a local.get $b f32.lt if (result f32) local.get $a else local.get $b end)
 
-  (func (export "max_f32") (param $a f32) (param $b f32) (result f32)
+  (func $max_f32 (export "max_f32") (param $a f32) (param $b f32) (result f32)
     local.get $a local.get $b f32.gt if (result f32) local.get $a else local.get $b end)
 
   (func (export "clamp_f32") (param $v f32) (param $lo f32) (param $hi f32) (result f32)

@@ -11,9 +11,6 @@
   ;; Architecture ids for syscall-number classification:
   ;;   1 linux x86_64, 2 linux aarch64.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300093)
-
   (import "edgerun" "load8_u" (func $m143b (param i32 i32) (result i32)))
   (import "edgerun" "string_eq" (func $m143eq_lit (param i32 i32 i32 i32) (result i32)))
 

@@ -1,6 +1,4 @@
 ;; Captures tinyvec/smallvec/slab/sharded-slab collection state semantics.
-  (func (export "proto_standard_id") (result i32) (i32.const 300139))
-
   ;; Vec kind: 1 inline, 2 heap/spilled.
   (func $coll_inline_or_heap (export "coll_inline_or_heap") (param $len i32) (param $inline_cap i32) (result i32)
     (select (i32.const 1) (i32.const 2) (i32.le_u (local.get $len) (local.get $inline_cap))))

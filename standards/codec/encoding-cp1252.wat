@@ -40,8 +40,6 @@
     "\7e\01"  ;; 0x9E  ž U+017E
     "\78\01"  ;; 0x9F  Ÿ U+0178
   )
-  (func (export "proto_standard_id") (result i32) i32.const 300524)
-
   (func $cp1252_decode_byte (export "cp1252_decode_byte") (param $byte i32) (result i32)
     (local $cp i32)
     local.get $byte i32.const 128 i32.ge_u

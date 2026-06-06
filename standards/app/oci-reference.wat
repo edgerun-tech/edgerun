@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300090)
-
-  ;; Status values: 0 ok, 1 invalid, 2 too large.
+;; Status values: 0 ok, 1 invalid, 2 too large.
   ;; oci_reference_scan writes nine little-endian u32 slots:
   ;; registry_start,registry_len,repo_start,repo_len,tag_start,tag_len,digest_start,digest_len,kind.
   ;; kind: 1 tag, 2 digest, 3 both. Missing spans are written as zero length.

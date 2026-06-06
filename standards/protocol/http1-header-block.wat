@@ -4,10 +4,7 @@
   (import "http" "is_header_value_byte" (func $is_header_value_byte (param i32) (result i32)))
   (import "http" "ascii_eq_ci" (func $ascii_eq_ci (param i32 i32 i32 i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300101)
-
-  (data (i32.const 65380) "18446744073709551615")
+(data (i32.const 65380) "18446744073709551615")
   (data (i32.const 65408) "content-length")
   (data (i32.const 65424) "transfer-encoding")
   (data (i32.const 65448) "chunked")

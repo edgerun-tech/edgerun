@@ -1,9 +1,6 @@
 ;; OAuth 2.0 authorization code flow + PKCE — URL building and token body.
   ;; Uses memory for output buffers — caller reads from linear memory.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300502)
-
   ;; Data tables for URL construction
   (data (i32.const 512) "https://account.jagex.com/oauth2/auth?response_type=code&client_id=")
   (data (i32.const 608) "com_jagex_auth_desktop_launcher")

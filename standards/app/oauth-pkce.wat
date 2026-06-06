@@ -1,9 +1,6 @@
 ;; OAuth PKCE (RFC 7636) utility functions.
   ;; Pure computation — caller provides randomness, WAT transforms.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300501)
-
   ;; unreserved chars for verifier: A-Z a-z 0-9 - . _ ~
   (data (i32.const 256) "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 

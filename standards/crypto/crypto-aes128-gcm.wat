@@ -26,8 +26,6 @@
   (data (i32.const 256) "\01\02\04\08\10\20\40\80\1b\36")
 
   ;; ── Exports ──
-  (func (export "proto_standard_id") (result i32) i32.const 300087)
-
   ;; ── Memory layout ──
   ;; 0-255:    S-box
   ;; 256-265:  Rcon

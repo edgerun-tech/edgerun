@@ -1,17 +1,8 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300026)
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
+  (import "binary" "write_u16_be" (func $write_u16_be (param $ptr i32) (param $v i32)))
 
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid.
-
-  (func $m79read_u16_be (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
-  (func $write_u16_be (param $ptr i32) (param $v i32)
-    (i32.store8 (local.get $ptr) (i32.shr_u (local.get $v) (i32.const 8)))
-    (i32.store8 (i32.add (local.get $ptr) (i32.const 1)) (local.get $v)))
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid.
 
   (func $valid_counts (param $qd i32) (param $an i32) (param $ns i32) (param $ar i32) (result i32)
     (i32.and
@@ -53,12 +44,12 @@
     (local $ar i32)
     (if (i32.lt_u (local.get $in_len) (i32.const 12))
       (then (return (i32.const 1))))
-    (local.set $id (call $m79read_u16_be (local.get $in_ptr)))
-    (local.set $flags (call $m79read_u16_be (i32.add (local.get $in_ptr) (i32.const 2))))
-    (local.set $qd (call $m79read_u16_be (i32.add (local.get $in_ptr) (i32.const 4))))
-    (local.set $an (call $m79read_u16_be (i32.add (local.get $in_ptr) (i32.const 6))))
-    (local.set $ns (call $m79read_u16_be (i32.add (local.get $in_ptr) (i32.const 8))))
-    (local.set $ar (call $m79read_u16_be (i32.add (local.get $in_ptr) (i32.const 10))))
+    (local.set $id (call $read_u16_be (local.get $in_ptr)))
+    (local.set $flags (call $read_u16_be (i32.add (local.get $in_ptr) (i32.const 2))))
+    (local.set $qd (call $read_u16_be (i32.add (local.get $in_ptr) (i32.const 4))))
+    (local.set $an (call $read_u16_be (i32.add (local.get $in_ptr) (i32.const 6))))
+    (local.set $ns (call $read_u16_be (i32.add (local.get $in_ptr) (i32.const 8))))
+    (local.set $ar (call $read_u16_be (i32.add (local.get $in_ptr) (i32.const 10))))
     (if (i32.eqz (call $valid_counts (local.get $qd) (local.get $an) (local.get $ns) (local.get $ar)))
       (then (return (i32.const 3))))
     (i32.store (local.get $out_ptr) (local.get $id))

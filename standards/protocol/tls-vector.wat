@@ -1,19 +1,7 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300013)
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
+  (import "binary" "read_u24_be" (func $read_u24_be (param $ptr i32) (result i32)))
 
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
-  (func $m184read_u16 (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
-  (func $m184read_u24 (param $ptr i32) (result i32)
-    (i32.or
-      (i32.or
-        (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 16))
-        (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 1))) (i32.const 8)))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 2)))))
-
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
   (func $store_span3 (param $out_ptr i32) (param $data_offset i32) (param $data_len i32) (param $next_offset i32)
     (i32.store (local.get $out_ptr) (local.get $data_offset))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 4)) (local.get $data_len))
@@ -39,7 +27,7 @@
     (local $data_len i32)
     (if (i32.lt_u (local.get $len) (i32.const 2))
       (then (return (i32.const 1))))
-    (local.set $data_len (call $m184read_u16 (local.get $ptr)))
+    (local.set $data_len (call $read_u16_be (local.get $ptr)))
     (if (i32.gt_u (local.get $data_len) (i32.sub (local.get $len) (i32.const 2)))
       (then (return (i32.const 5))))
     (call $store_span3
@@ -54,7 +42,7 @@
     (local $data_len i32)
     (if (i32.lt_u (local.get $len) (i32.const 3))
       (then (return (i32.const 1))))
-    (local.set $data_len (call $m184read_u24 (local.get $ptr)))
+    (local.set $data_len (call $read_u24_be (local.get $ptr)))
     (if (i32.gt_u (local.get $data_len) (i32.sub (local.get $len) (i32.const 3)))
       (then (return (i32.const 5))))
     (call $store_span3
@@ -75,8 +63,8 @@
       (then (return (i32.const 3))))
     (if (i32.lt_u (i32.sub (local.get $len) (local.get $start)) (i32.const 4))
       (then (return (i32.const 1))))
-    (local.set $ext_type (call $m184read_u16 (i32.add (local.get $ptr) (local.get $start))))
-    (local.set $data_len (call $m184read_u16 (i32.add (i32.add (local.get $ptr) (local.get $start)) (i32.const 2))))
+    (local.set $ext_type (call $read_u16_be (i32.add (local.get $ptr) (local.get $start))))
+    (local.set $data_len (call $read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $start)) (i32.const 2))))
     (local.set $data_offset (i32.add (local.get $start) (i32.const 4)))
     (if (i32.gt_u (local.get $data_len) (i32.sub (local.get $len) (local.get $data_offset)))
       (then (return (i32.const 5))))
@@ -98,7 +86,7 @@
     (local $next_offset i32)
     (if (i32.lt_u (local.get $len) (i32.const 2))
       (then (return (i32.const 1))))
-    (local.set $list_len (call $m184read_u16 (local.get $ptr)))
+    (local.set $list_len (call $read_u16_be (local.get $ptr)))
     (if (i32.ne (i32.add (local.get $list_len) (i32.const 2)) (local.get $len))
       (then (return (i32.const 5))))
     (if (i32.eqz (local.get $list_len))

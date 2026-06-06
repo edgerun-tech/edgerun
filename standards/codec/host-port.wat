@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300060)
-
-  (func $m101write_record
+(func $m101write_record
     (param $out i32)
     (param $host_off i32)
     (param $host_len i32)

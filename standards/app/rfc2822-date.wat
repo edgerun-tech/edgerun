@@ -1,10 +1,6 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300054)
-
   ;; Status values: 0 ok, 2 output_short, 4 overflow.
   ;; Return bits: low32=status, high32=written.
-
 
   (func $m157put2 (param $ptr i32) (param $value i32)
     (i32.store8 (local.get $ptr) (i32.add (i32.div_u (local.get $value) (i32.const 10)) (i32.const 48)))

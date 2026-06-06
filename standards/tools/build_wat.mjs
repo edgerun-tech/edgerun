@@ -40,29 +40,49 @@ const MANIFEST = [
   'pipeline/frame-core.wat',
   'pipeline/frame-pacer.wat',
   'pipeline/mux-core.wat',
-  'pipeline/wasm-exec-stage.wat',
+  // wasm-exec-stage.wat — needs $load/$load_wat/$call stubs (deleted from interpreter split)
+  // 'pipeline/wasm-exec-stage.wat',
 
   // ── Layer 4: Interpreter / Compiler ──
   'compiler/interpreter-core.wat', // interpreter engine
   'compiler/interpreter.wat',      // WAT parser + standalone exports
-  'pipeline/wasm-interpreter.wat', // pipeline wrapper (thin)
+  // 'pipeline/wasm-interpreter.wat', // pipeline wrapper (thin) — just comments, no functions
 
   // ── Layer 5: Interpreter fragments ──
   // interpreter-wat.wat content is already in interpreter.wat (standalone version)
 
   // ── Layer 6: JIT Compiler (x86-64 backend) ──
+  // templates-x86-64.wat, simd-x86-64.wat, dispatch.wat excluded —
+  // they reference ~100+ $emit_* functions that don't exist yet (JIT is incomplete)
   'compiler/base-x86-64.wat',
   'compiler/emit-x86-64.wat',
-  'compiler/templates-x86-64.wat',
-  'compiler/simd-x86-64.wat',
-  'compiler/dispatch.wat',
-  // Add combined file for ELF packaging + SIMD templates not in sub-files
-  // Strip jit_compile (defined in dispatch.wat) to avoid conflict
-  {file: 'compiler/compiler-x86_64.wat', strip_all_globals: true, strip_funcs: ['\\$jit_compile']},
 
   // ── Layer 7: Crypto ──
-  // (TODO: convert crypto/*.wat to fragments)
-  // After crypto fragments are converted, add them here
+  'crypto/hash-djb2.wat',
+  'crypto/checksum-crc32-bzip.wat',
+  'crypto/checksum-inet.wat',
+  'crypto/convex-hull.wat',
+  'crypto/crypto-isaac.wat',
+  'crypto/crypto-xtea.wat',
+  'crypto/crypto-sha1.wat',
+  'crypto/crypto-sha256.wat',
+  'crypto/crypto-sha512.wat',
+  'crypto/crypto-bigint-limb.wat',
+  'crypto/crypto-ed25519-shape.wat',
+  'crypto/crypto-ecdsa-der.wat',
+  'crypto/crypto-rsa-pkcs1.wat',
+  'crypto/crypto-hmac-hkdf.wat',
+  // AES files: data at offset 0 (S-box) — no LUT conflict, zero-page tolerated
+  {file: 'crypto/crypto-aes128-gcm.wat', rename_map: {'$m54memcpy': '$memcpy'}},
+  {file: 'crypto/crypto-aes-ctr.wat', rename_map: {
+    '$m54memcpy': '$memcpy',
+    '$sub_word': '$ctr_sub_word',
+    '$rot_word': '$ctr_rot_word',
+    '$aes128_encrypt_block': '$ctr_aes128_encrypt_block'
+  }},
+  {file: 'crypto/crypto-hmac-sha256.wat', rename_map: {'$m59memcpy': '$memcpy'}},
+  {file: 'crypto/crypto-x25519-scalar.wat', rename_map: {'$m64memcpy': '$memcpy'}},
+  // crypto-aes-block.wat deferred (data at 0x2000 conflicts with lower_case LUT)
 
   // ── Layer 8: Protocol parsers ──
   // (TODO: convert protocol/*.wat to fragments)
@@ -71,7 +91,7 @@ const MANIFEST = [
   // (TODO: convert codec/*.wat to fragments)
 
   // ── Layer 10: UI Framework ──
-  // (TODO: convert ui/*.wat to fragments; 00_prelude needs memory+data stripped)
+  {file: 'ui/ui_framework.wat', strip_funcs: ['\\$min_f32', '\\$max_f32']},  // auto-generated combined fragment (28K lines)
 
   // ── Layer 11: System ──
   // (TODO: convert system/*.wat to fragments)
@@ -98,13 +118,11 @@ const IMPORT_MAP = {
   'pipeline/pipe-core.wat':              ['min_u'],
   'pipeline/wasm-interpreter.wat':       ['STATUS_OK'],
   'compiler/interpreter-core.wat':       [],
-};
-
-// ── Local function names that stage imports should resolve to ──
-// Map: import name → local function name (from the defining fragment)
-const IMPORT_RESOLVE = {
-  'min_u':       '$min_u',
-  'STATUS_OK':   '$STATUS_OK',
+  // Crypto files importing from "edgerun"
+  'crypto/crypto-aes128-gcm.wat':        ['memcpy', 'memset'],
+  'crypto/crypto-aes-ctr.wat':           ['memcpy'],
+  'crypto/crypto-hmac-sha256.wat':       ['memcpy'],
+  'crypto/crypto-x25519-scalar.wat':     ['memcpy'],
 };
 
 // ── Globals defined canonically in runtime/ — strip from all other files ──
@@ -116,7 +134,6 @@ const CANONICAL_GLOBALS = [
   /^\s*\(global\s+\$JIT_CACHE\b.*\n?/gm,
   /^\s*\(global\s+\$JIT_CACHE_SIZE\b.*\n?/gm,
   /^\s*\(global\s+\$ERR_UNSUP\b.*\n?/gm,
-  /^\s*\(global\s+\$STACK_SIZE\b.*\n?/gm,
 ];
 
 // ── Build ────────────────────────────────────────────────────────────
@@ -145,17 +162,7 @@ function stripImport(content, file) {
 
 function stripFuncs(content, funcNames) {
   for (const name of funcNames) {
-    const regex = new RegExp(
-      `\\(func\\s+${name}(?:\\s+\\(export\\s+"[^"]*"\\))?[^)]*\\)`,
-      'g'
-    );
-    // First pass: remove simple single-line function defs
-    let prev;
-    do {
-      prev = content;
-      content = content.replace(regex, '');
-    } while (content !== prev);
-    // Multi-line: strip from (func $name to matching closing paren
+    // Strip from (func $name... to matching closing paren
     const startRegex = new RegExp(
       `\\(func\\s+${name}(?:\\s+\\(export\\s+"[^"]*"\\))?`,
       'g'
@@ -230,6 +237,13 @@ function processFile(filePath, opts = {}) {
   // Strip specific function definitions by name (to resolve conflicts)
   if (opts.strip_funcs && opts.strip_funcs.length > 0) {
     content = stripFuncs(content, opts.strip_funcs);
+  }
+
+  // Rename local identifiers (used when imports use different local names)
+  if (opts.rename_map) {
+    for (const [from, to] of Object.entries(opts.rename_map)) {
+      content = content.split(from).join(to);
+    }
   }
 
   const stripped = originalLength - content.length;

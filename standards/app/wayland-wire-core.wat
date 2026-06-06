@@ -1,7 +1,4 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300108)
-
   ;; Status values:
   ;; 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 incomplete,
   ;; 5 too_large, 6 unaligned.

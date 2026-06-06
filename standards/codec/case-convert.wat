@@ -6,14 +6,10 @@
   ;;     (SNAKE_CASE -> "Title Case", first letter of each '_'-separated word capitalized)
   ;;   to_upper_ascii(in_ptr, in_len, out_ptr) -> out_len
   ;;   to_lower_ascii(in_ptr, in_len, out_ptr) -> out_len
-  (func (export "proto_standard_id") (result i32) i32.const 300530)
-
   (func $m39is_upper (param $c i32) (result i32)
     local.get $c i32.const 65 i32.ge_u
     local.get $c i32.const 90 i32.le_u i32.and
   )
-
-
 
   (func (export "to_lower_ascii") (param $in i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32)

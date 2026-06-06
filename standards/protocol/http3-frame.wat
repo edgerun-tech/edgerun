@@ -1,8 +1,7 @@
+  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
+  (import "quic" "quic_varint_decode_at" (func $quic_varint_decode_at (param i32 i32 i32 i32) (result i64)))
 
-(func (export "proto_standard_id") (result i32)
-    (i32.const 300012))
-
-  ;; Classifications:
+;; Classifications:
   ;; 0 DATA, 1 HEADERS, 2 SETTINGS, 3 CANCEL_PUSH, 4 PUSH_PROMISE,
   ;; 5 MAX_PUSH_ID, 6 GOAWAY, 7 STREAMS_BLOCKED, 8 reserved/greasing, 9 unknown.
   (func $http3_frame_type_classify (export "http3_frame_type_classify") (param $frame_type i64) (result i32)
@@ -28,43 +27,6 @@
         (i64.eq (i64.rem_u (local.get $frame_type) (i64.const 31)) (i64.const 6)))
       (then (return (i32.const 8))))
     (i32.const 9))
-
-  (func $quic_varint_decode_at
-    (param $in_ptr i32) (param $in_len i32) (param $offset i32) (param $out_ptr i32)
-    (result i64)
-    (local $first i32)
-    (local $need i32)
-    (local $i i32)
-    (local $value i64)
-    (if (i32.ge_u (local.get $offset) (local.get $in_len))
-      (then (return (call $pack (i32.const 1) (i32.const 0)))))
-    (local.set $first (i32.load8_u (i32.add (local.get $in_ptr) (local.get $offset))))
-    (local.set $need
-      (i32.shl
-        (i32.const 1)
-        (i32.shr_u (local.get $first) (i32.const 6))))
-    (if
-      (i32.or
-        (i32.gt_u (local.get $need) (local.get $in_len))
-        (i32.gt_u (local.get $offset) (i32.sub (local.get $in_len) (local.get $need))))
-      (then (return (call $pack (i32.const 5) (i32.const 0)))))
-    (local.set $value (i64.extend_i32_u (i32.and (local.get $first) (i32.const 63))))
-    (local.set $i (i32.const 1))
-    (loop $again
-      (if (i32.lt_u (local.get $i) (local.get $need))
-        (then
-          (local.set $value
-            (i64.or
-              (i64.shl (local.get $value) (i64.const 8))
-              (i64.extend_i32_u
-                (i32.load8_u
-                  (i32.add
-                    (i32.add (local.get $in_ptr) (local.get $offset))
-                    (local.get $i))))))
-          (local.set $i (i32.add (local.get $i) (i32.const 1)))
-          (br $again))))
-    (i64.store (local.get $out_ptr) (local.get $value))
-    (call $pack (i32.const 0) (local.get $need)))
 
   (func $quic_varint_encode
     (param $value i64) (param $out_ptr i32) (param $out_cap i32)

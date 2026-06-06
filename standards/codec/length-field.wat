@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300058)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
   ;; Packed i64 return: low u32 status, high u32 next_offset or bytes_written.
 
   (func $m128read_u16_le (param $ptr i32) (result i32)

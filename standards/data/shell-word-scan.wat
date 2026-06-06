@@ -1,9 +1,5 @@
 
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300070)
-
-
   (func $m164is_wsp (param $b i32) (result i32)
     local.get $b
     i32.const 32

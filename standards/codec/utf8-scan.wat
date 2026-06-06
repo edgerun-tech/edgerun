@@ -5,10 +5,6 @@
   ;; utf8_scan out record: valid_up_to, error_len, suffix_len, expected_len.
   ;; error_len is 0 for incomplete suffixes.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300068)
-
-
   (func $write_scan (param $out i32) (param $valid i32) (param $err_len i32) (param $suffix i32) (param $expected i32)
     local.get $out
     local.get $valid

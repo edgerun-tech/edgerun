@@ -1,9 +1,6 @@
   (import "math" "prefix_mask" (func $m110prefix_mask (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300011)
-
-  ;; Decode output record, little-endian:
+;; Decode output record, little-endian:
   ;; 0:u32 flags_high_bits
   ;; 4:u32 consumed
   ;; 8:u64 value

@@ -3,11 +3,6 @@
   (data (i32.const 60000) "9223372036854775807")
   (data (i32.const 60032) "18446744073709551615")
 
-
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300041)
-
-
   (func $token_addr (param $token_ptr i32) (param $idx i32) (result i32)
     local.get $token_ptr
     local.get $idx
@@ -36,7 +31,6 @@
     i32.const 12
     i32.add
     i32.load)
-
 
   (func $limit_digit (param $limit i32) (param $idx i32) (result i32)
     local.get $limit

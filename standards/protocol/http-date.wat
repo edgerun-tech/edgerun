@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300103)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
   ;; Parse output record, little-endian u32 fields:
   ;; 0 unix_secs_lo, 4 unix_secs_hi, 8 year, 12 month, 16 day, 20 hour,
   ;; 24 minute, 28 second, 32 weekday (Mon=1..Sun=7), 36 format_kind

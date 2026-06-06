@@ -3,10 +3,6 @@
   ;; Status values: 0 ok, 2 output_short, 3 invalid.
   ;; Packed return: low u32 status, high u32 bytes written.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300043)
-
-
   (func $m123put (param $out_ptr i32) (param $out_cap i32) (param $written i32) (param $c i32) (result i64)
     (if (i32.ge_u (local.get $written) (local.get $out_cap))
       (then (return (call $pack (i32.const 2) (local.get $written)))))

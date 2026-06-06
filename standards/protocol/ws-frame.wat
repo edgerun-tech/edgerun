@@ -1,5 +1,20 @@
 ;; Standard ID removed — merged into single module
 
+  ;; Valid opcodes: 0 (continuation), 1 (text), 2 (binary),
+  ;; 8 (close), 9 (ping), 10 (pong).
+  (func $is_valid_opcode (param $opcode i32) (result i32)
+    (i32.or
+      (i32.or
+        (i32.or
+          (i32.eq (local.get $opcode) (i32.const 0))
+          (i32.eq (local.get $opcode) (i32.const 1)))
+        (i32.eq (local.get $opcode) (i32.const 2)))
+      (i32.or
+        (i32.or
+          (i32.eq (local.get $opcode) (i32.const 8))
+          (i32.eq (local.get $opcode) (i32.const 9)))
+        (i32.eq (local.get $opcode) (i32.const 10)))))
+
   (func (export "ws_decode_prefix") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $b0 i32)
     (local $b1 i32)
@@ -29,28 +44,7 @@
     i32.and
     local.set $code
     local.get $opcode
-    i32.const 0
-    i32.eq
-    local.get $opcode
-    i32.const 1
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 2
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 8
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 9
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 10
-    i32.eq
-    i32.or
+    call $is_valid_opcode
     i32.eqz
     if
       i32.const 3
@@ -694,28 +688,7 @@
   (func $ws_write_hdr (export "ws_write_frame_header") (param $opcode i32) (param $flags i32) (param $low i32) (param $high i32) (param $mask_present i32) (param $mask i32) (param $out i32) (param $cap i32) (result i64)
     (local $written i32)
     local.get $opcode
-    i32.const 0
-    i32.eq
-    local.get $opcode
-    i32.const 1
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 2
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 8
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 9
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 10
-    i32.eq
-    i32.or
+    call $is_valid_opcode
     i32.eqz
     if
       i32.const 3
@@ -1069,28 +1042,7 @@
   (func $ws_write_srv_hdr (export "ws_write_server_frame_header") (param $opcode i32) (param $low i32) (param $high i32) (param $out i32) (param $cap i32) (result i64)
     (local $written i32)
     local.get $opcode
-    i32.const 0
-    i32.eq
-    local.get $opcode
-    i32.const 1
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 2
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 8
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 9
-    i32.eq
-    i32.or
-    local.get $opcode
-    i32.const 10
-    i32.eq
-    i32.or
+    call $is_valid_opcode
     i32.eqz
     if
       i32.const 3

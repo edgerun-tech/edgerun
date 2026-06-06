@@ -4,8 +4,6 @@
   ;;
   ;; Exports:
   ;;   jaro_winkler(a_ptr, a_len, b_ptr, b_len) -> i32  (distance * 1000)
-  (func (export "proto_standard_id") (result i32) i32.const 300533)
-
   (func (export "jaro_winkler") (param $a i32) (param $al i32) (param $b i32) (param $bl i32) (result i32)
     (local $i i32) (local $j i32) (local $k i32)
     (local $match_window i32) (local $match_count i32) (local $transpose i32)

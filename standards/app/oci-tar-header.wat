@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300802)
-
-  ;; Status: 0 ok, 1 unsupported kind, 2 short, 3 invalid checksum/path/octal, 4 zero block.
+;; Status: 0 ok, 1 unsupported kind, 2 short, 3 invalid checksum/path/octal, 4 zero block.
   ;; Header output is eleven little-endian u32 slots:
   ;; kind,size_lo,size_hi,mode,uid,gid,mtime_lo,mtime_hi,path_len,link_len,whiteout_kind.
   ;; kind: regular=0, hardlink=1, symlink=2, char=3, block=4, dir=5, fifo=6, pax=7,

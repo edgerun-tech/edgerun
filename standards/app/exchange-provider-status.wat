@@ -1,7 +1,4 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300095)
-
   (import "edgerun" "to_lower" (func $m93ascii_lower (param i32) (result i32)))
   (import "edgerun" "fnv1a_lower" (func $m93fnv_lower (param i32 i32) (result i32)))
 

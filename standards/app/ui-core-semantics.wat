@@ -1,6 +1,4 @@
 
-  (func (export "proto_standard_id") (result i32) i32.const 300156)
-
   (import "edgerun" "string_eq" (func $m188eq (param i32 i32 i32 i32) (result i32)))
 
   (func (export "ui_scene_render_layer_code") (param $ptr i32) (param $len i32) (result i32)

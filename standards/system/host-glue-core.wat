@@ -6,8 +6,6 @@
   (func $m122is (param $h i32) (param $want i32) (result i32)
     (i32.eq (local.get $h) (local.get $want)))
 
-  (func (export "proto_standard_id") (result i32) (i32.const 300134))
-
   ;; Global kind codes:
   ;; 1 object, 2 function, 3 array, 4 promise, 5 map, 6 set, 7 weakmap, 8 weakset,
   ;; 9 reflect, 10 json, 11 math, 12 symbol, 13 bigint, 14 date, 15 regexp,

@@ -1,12 +1,7 @@
 
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300088)
-
   ;; Status: 0 ok, 2 output/input short, 3 invalid.
   ;; Packed i64 emit result: low u32 status, high u32 bytes_written.
-
-
 
   (func $m161copy (param $src i32) (param $len i32) (param $dst i32)
     (local $i i32)

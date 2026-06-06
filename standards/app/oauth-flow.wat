@@ -1,6 +1,4 @@
-(func (export "proto_standard_id") (result i32) i32.const 300504)
-
-  (data (i32.const 256) "0123456789ABCDEF")
+(data (i32.const 256) "0123456789ABCDEF")
 
   ;; ================================================================
   ;; oauth_extract_code(http_ptr, http_len, out_ptr, out_cap) -> i64

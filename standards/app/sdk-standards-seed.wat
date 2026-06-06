@@ -10,16 +10,10 @@
   (data (i32.const 32932) "tftp-rfc1350-ack-length-0001")
   (data (i32.const 32968) "tftp-rfc1350-data-length-0001")
 
-
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300092)
-
-
   (func $m162is_lower (param $c i32) (result i32)
     (i32.and
       (i32.ge_u (local.get $c) (i32.const 97))
       (i32.le_u (local.get $c) (i32.const 122))))
-
 
   (func $is_id_char (param $c i32) (result i32)
     (i32.or

@@ -1,5 +1,3 @@
-  (func (export "proto_standard_id") (result i32) i32.const 710002)
-
   ;; ── Error codes ──
   (global $DEF_OK       i32 (i32.const 0))
   (global $DEF_ERR_BOUNDS   i32 (i32.const 1))

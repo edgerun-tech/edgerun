@@ -4,9 +4,6 @@
   ;;
   ;; Exports:
   ;;   glob_match(pattern_ptr, pattern_len, str_ptr, str_len) -> i32 (1 = match, 0 = no match)
-  (func (export "proto_standard_id") (result i32) i32.const 300527)
-
-
   (func (export "glob_match") (param $p i32) (param $pl i32) (param $s i32) (param $sl i32) (result i32)
     (local $pi i32) (local $si i32)
     (local $back_p i32) (local $back_s i32) (local $cp i32) (local $cs i32)

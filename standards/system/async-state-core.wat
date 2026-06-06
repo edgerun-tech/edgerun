@@ -1,6 +1,4 @@
-(func (export "proto_standard_id") (result i32) i32.const 300151)
-
-  ;; Poll code: 0 pending, 1 ready value/ok/some, 2 ready none/end, 3 ready err.
+;; Poll code: 0 pending, 1 ready value/ok/some, 2 ready none/end, 3 ready err.
   ;; Return code: 0 pending, 1 left/value ready, 2 right ready, 3 end, 4 left err, 5 right err.
   (func (export "futures_select_poll") (param $left i32) (param $right i32) (result i32)
     (if (i32.eq (local.get $left) (i32.const 1)) (then (return (i32.const 1))))

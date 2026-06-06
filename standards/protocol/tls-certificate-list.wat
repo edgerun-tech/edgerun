@@ -1,19 +1,7 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300024)
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
+  (import "binary" "read_u24_be" (func $read_u24_be (param $ptr i32) (result i32)))
 
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
-  (func $m178read_u16 (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
-  (func $m178read_u24 (param $ptr i32) (result i32)
-    (i32.or
-      (i32.or
-        (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 16))
-        (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 1))) (i32.const 8)))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 2)))))
-
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
   ;; Scan a TLS 1.3 Certificate handshake body.
   ;; Output record: context_offset:u32, context_len:u32, list_offset:u32, list_len:u32, next_offset:u32.
   (func (export "tls_certificate_list_scan") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
@@ -28,7 +16,7 @@
     (if (i32.lt_u (i32.sub (local.get $len) (i32.add (i32.const 1) (local.get $context_len))) (i32.const 3))
       (then (return (i32.const 1))))
     (local.set $list_offset (i32.add (i32.const 4) (local.get $context_len)))
-    (local.set $list_len (call $m178read_u24 (i32.add (i32.add (local.get $ptr) (i32.const 1)) (local.get $context_len))))
+    (local.set $list_len (call $read_u24_be (i32.add (i32.add (local.get $ptr) (i32.const 1)) (local.get $context_len))))
     (if (i32.gt_u (local.get $list_len) (i32.sub (local.get $len) (local.get $list_offset)))
       (then (return (i32.const 5))))
     (if (i32.ne (i32.add (local.get $list_offset) (local.get $list_len)) (local.get $len))
@@ -55,7 +43,7 @@
     (if (i32.lt_u (i32.sub (local.get $len) (local.get $start)) (i32.const 5))
       (then (return (i32.const 1))))
     (local.set $pos (local.get $start))
-    (local.set $cert_len (call $m178read_u24 (i32.add (local.get $ptr) (local.get $pos))))
+    (local.set $cert_len (call $read_u24_be (i32.add (local.get $ptr) (local.get $pos))))
     (local.set $pos (i32.add (local.get $pos) (i32.const 3)))
     (if (i32.eqz (local.get $cert_len))
       (then (return (i32.const 3))))
@@ -64,7 +52,7 @@
     (local.set $ext_offset (i32.add (local.get $pos) (local.get $cert_len)))
     (if (i32.lt_u (i32.sub (local.get $len) (local.get $ext_offset)) (i32.const 2))
       (then (return (i32.const 5))))
-    (local.set $ext_len (call $m178read_u16 (i32.add (local.get $ptr) (local.get $ext_offset))))
+    (local.set $ext_len (call $read_u16_be (i32.add (local.get $ptr) (local.get $ext_offset))))
     (local.set $ext_offset (i32.add (local.get $ext_offset) (i32.const 2)))
     (if (i32.gt_u (local.get $ext_len) (i32.sub (local.get $len) (local.get $ext_offset)))
       (then (return (i32.const 5))))

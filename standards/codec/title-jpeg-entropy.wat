@@ -40,8 +40,6 @@
   (data (i32.const 48) "\3a\3b\34\2d\26\1f\27\2e")
   (data (i32.const 56) "\35\3c\3d\36\2f\37\3e\3f")
 
-  (func (export "proto_standard_id") (result i32) i32.const 300536)
-
   ;; Read byte from entropy stream, handling 0xFF-stuffing.
   ;; state_ptr → byte (0-255) or -1 on failure.
   (func $entropy_read_byte (param $s i32) (result i32)

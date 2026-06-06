@@ -5,8 +5,6 @@
   ;; pool action: 1=reuse 2=drop 3=create 4=evict_oldest
   ;; result: 0=pending 1=ok 2=err 3=retry 4=redirect 5=close
 
-  (func (export "proto_standard_id") (result i32) (i32.const 300135))
-
   (func (export "http_client_default_connect_timeout_secs") (result i32) (i32.const 10))
   (func (export "http_client_default_read_timeout_secs") (result i32) (i32.const 30))
   (func (export "http_client_default_redirect_limit") (result i32) (i32.const 10))

@@ -1,21 +1,7 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300034)
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
+  (import "binary" "read_u32_be" (func $read_u32_be (param $ptr i32) (result i32)))
 
-  (func $m83read_u16_be (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
-  (func $m83read_u32_be (param $ptr i32) (result i32)
-    (i32.or
-      (i32.or
-        (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 24))
-        (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 1))) (i32.const 16)))
-      (i32.or
-        (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.const 2))) (i32.const 8))
-        (i32.load8_u (i32.add (local.get $ptr) (i32.const 3))))))
-
-  ;; Status values: 0 ok, 1 input_short, 3 invalid, 6 too_long.
+;; Status values: 0 ok, 1 input_short, 3 invalid, 6 too_long.
   (func $name_len (param $ptr i32) (param $msg_len i32) (param $start i32) (result i64)
     (local $pos i32)
     (local $len i32)
@@ -98,8 +84,8 @@
       (then (return (i32.const 1))))
     (i32.store (local.get $out_ptr) (local.get $start))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 4)) (local.get $name_wire_len))
-    (i32.store (i32.add (local.get $out_ptr) (i32.const 8)) (call $m83read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
-    (i32.store (i32.add (local.get $out_ptr) (i32.const 12)) (call $m83read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
+    (i32.store (i32.add (local.get $out_ptr) (i32.const 8)) (call $read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
+    (i32.store (i32.add (local.get $out_ptr) (i32.const 12)) (call $read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 16)) (i32.add (local.get $pos) (i32.const 4)))
     (i32.const 0))
 
@@ -123,8 +109,8 @@
     (local.set $pos (i32.add (local.get $start) (local.get $name_wire_len)))
     (if (i32.gt_u (i32.add (local.get $pos) (i32.const 10)) (local.get $msg_len))
       (then (return (i32.const 1))))
-    (local.set $typ (call $m83read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
-    (local.set $rdlen (call $m83read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 8))))
+    (local.set $typ (call $read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
+    (local.set $rdlen (call $read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 8))))
     (local.set $rdata (i32.add (local.get $pos) (i32.const 10)))
     (local.set $next (i32.add (local.get $rdata) (local.get $rdlen)))
     (if (i32.gt_u (local.get $next) (local.get $msg_len))
@@ -132,8 +118,8 @@
     (i32.store (local.get $out_ptr) (local.get $start))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 4)) (local.get $name_wire_len))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 8)) (local.get $typ))
-    (i32.store (i32.add (local.get $out_ptr) (i32.const 12)) (call $m83read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
-    (i32.store (i32.add (local.get $out_ptr) (i32.const 16)) (call $m83read_u32_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 4))))
+    (i32.store (i32.add (local.get $out_ptr) (i32.const 12)) (call $read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
+    (i32.store (i32.add (local.get $out_ptr) (i32.const 16)) (call $read_u32_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 4))))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 20)) (local.get $rdlen))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 24)) (local.get $rdata))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 28)) (local.get $next))
@@ -155,10 +141,10 @@
       (then
         (i32.store (i32.add (local.get $out_ptr) (i32.const 44)) (local.get $msg_len))
         (return (i32.const 1))))
-    (local.set $qd (call $m83read_u16_be (i32.add (local.get $ptr) (i32.const 4))))
-    (local.set $an (call $m83read_u16_be (i32.add (local.get $ptr) (i32.const 6))))
-    (local.set $ns (call $m83read_u16_be (i32.add (local.get $ptr) (i32.const 8))))
-    (local.set $ar (call $m83read_u16_be (i32.add (local.get $ptr) (i32.const 10))))
+    (local.set $qd (call $read_u16_be (i32.add (local.get $ptr) (i32.const 4))))
+    (local.set $an (call $read_u16_be (i32.add (local.get $ptr) (i32.const 6))))
+    (local.set $ns (call $read_u16_be (i32.add (local.get $ptr) (i32.const 8))))
+    (local.set $ar (call $read_u16_be (i32.add (local.get $ptr) (i32.const 10))))
     (if (i32.or
           (i32.gt_u (local.get $qd) (i32.const 16))
           (i32.or

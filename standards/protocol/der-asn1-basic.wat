@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300022)
-
-  (func $m68is_supported_tag (param $tag i32) (result i32)
+(func $m68is_supported_tag (param $tag i32) (result i32)
     (if (i32.and (i32.ge_u (local.get $tag) (i32.const 64)) (i32.le_u (local.get $tag) (i32.const 126)))
       (then (return (i32.const 1))))
     (if (i32.and (i32.ge_u (local.get $tag) (i32.const 128)) (i32.le_u (local.get $tag) (i32.const 190)))

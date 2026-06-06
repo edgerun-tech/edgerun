@@ -1,12 +1,6 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300023)
+  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
 
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
-  (func $m179read_u16 (param $ptr i32) (result i32)
-    (i32.or
-      (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
-      (i32.load8_u (i32.add (local.get $ptr) (i32.const 1)))))
-
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
   ;; Output record:
   ;; legacy_version:u32, random_offset:u32, random_len:u32,
   ;; session_offset:u32, session_len:u32,
@@ -23,7 +17,7 @@
     (local $ext_len i32)
     (if (i32.lt_u (local.get $len) (i32.const 34))
       (then (return (i32.const 1))))
-    (local.set $legacy_version (call $m179read_u16 (local.get $ptr)))
+    (local.set $legacy_version (call $read_u16_be (local.get $ptr)))
     (local.set $pos (i32.const 34))
 
     (if (i32.ge_u (local.get $pos) (local.get $len))
@@ -38,7 +32,7 @@
 
     (if (i32.lt_u (i32.sub (local.get $len) (local.get $pos)) (i32.const 2))
       (then (return (i32.const 1))))
-    (local.set $cipher_len (call $m179read_u16 (i32.add (local.get $ptr) (local.get $pos))))
+    (local.set $cipher_len (call $read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
     (local.set $pos (i32.add (local.get $pos) (i32.const 2)))
     (local.set $cipher_offset (local.get $pos))
     (if (i32.or (i32.eqz (local.get $cipher_len)) (i32.ne (i32.and (local.get $cipher_len) (i32.const 1)) (i32.const 0)))
@@ -76,7 +70,7 @@
 
     (if (i32.lt_u (i32.sub (local.get $len) (local.get $pos)) (i32.const 2))
       (then (return (i32.const 1))))
-    (local.set $ext_len (call $m179read_u16 (i32.add (local.get $ptr) (local.get $pos))))
+    (local.set $ext_len (call $read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
     (local.set $pos (i32.add (local.get $pos) (i32.const 2)))
     (if (i32.gt_u (local.get $ext_len) (i32.sub (local.get $len) (local.get $pos)))
       (then (return (i32.const 5))))
@@ -97,8 +91,8 @@
         (then (return (i32.const 3))))
       (if (i32.lt_u (i32.sub (local.get $len) (local.get $pos)) (i32.const 4))
         (then (return (i32.const 5))))
-      (local.set $typ (call $m179read_u16 (i32.add (local.get $ptr) (local.get $pos))))
-      (local.set $data_len (call $m179read_u16 (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
+      (local.set $typ (call $read_u16_be (i32.add (local.get $ptr) (local.get $pos))))
+      (local.set $data_len (call $read_u16_be (i32.add (i32.add (local.get $ptr) (local.get $pos)) (i32.const 2))))
       (local.set $pos (i32.add (local.get $pos) (i32.const 4)))
       (if (i32.gt_u (local.get $data_len) (i32.sub (local.get $len) (local.get $pos)))
         (then (return (i32.const 5))))
@@ -121,13 +115,13 @@
     (local $name_len i32)
     (if (i32.lt_u (local.get $len) (i32.const 5))
       (then (return (i32.const 1))))
-    (local.set $list_len (call $m179read_u16 (local.get $ptr)))
+    (local.set $list_len (call $read_u16_be (local.get $ptr)))
     (if (i32.ne (i32.add (local.get $list_len) (i32.const 2)) (local.get $len))
       (then (return (i32.const 5))))
     (local.set $name_type (i32.load8_u (i32.add (local.get $ptr) (i32.const 2))))
     (if (i32.ne (local.get $name_type) (i32.const 0))
       (then (return (i32.const 3))))
-    (local.set $name_len (call $m179read_u16 (i32.add (local.get $ptr) (i32.const 3))))
+    (local.set $name_len (call $read_u16_be (i32.add (local.get $ptr) (i32.const 3))))
     (if (i32.eqz (local.get $name_len))
       (then (return (i32.const 3))))
     (if (i32.ne (i32.add (local.get $name_len) (i32.const 5)) (local.get $len))
@@ -145,7 +139,7 @@
     (local $proto_len i32)
     (if (i32.lt_u (local.get $len) (i32.const 2))
       (then (return (i32.const 1))))
-    (local.set $list_len (call $m179read_u16 (local.get $ptr)))
+    (local.set $list_len (call $read_u16_be (local.get $ptr)))
     (if (i32.ne (i32.add (local.get $list_len) (i32.const 2)) (local.get $len))
       (then (return (i32.const 5))))
     (if (i32.eqz (local.get $list_len))

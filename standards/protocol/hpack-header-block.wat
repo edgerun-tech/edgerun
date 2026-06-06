@@ -1,9 +1,10 @@
   (import "math" "prefix_mask" (func $m102prefix_mask (param i32) (result i32)))
+  (import "hpack-qpack" "clear_record" (func $m102clear_record (param $out_ptr i32)))
+  (import "hpack-qpack" "write_prefix_record" (func $m102write_prefix_record (param $out_ptr i32) (param $kind i32) (param $offset i32) (param $prefix_ptr i32)))
+  (import "hpack-qpack" "copy_name_meta" (func $m102copy_name_meta (param $out_ptr i32) (param $base_offset i32) (param $meta_ptr i32)))
+  (import "hpack-qpack" "copy_value_meta" (func $m102copy_value_meta (param $out_ptr i32) (param $base_offset i32) (param $meta_ptr i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300038)
-
-  ;; Prefix output record, little-endian:
+;; Prefix output record, little-endian:
   ;; 0:u32 flags_high_bits, 4:u32 consumed, 8:u64 value.
   (func $m102hpack_prefix_decode
     (param $in_ptr i32) (param $in_len i32) (param $prefix_bits i32) (param $out_ptr i32)
@@ -105,50 +106,6 @@
   ;; 36:u32 value_payload_offset
   ;; 40:u32 value_payload_len
   ;; 44:u32 value_huffman
-  (func $m102clear_record (param $out_ptr i32)
-    (i64.store (local.get $out_ptr) (i64.const 0))
-    (i64.store (i32.add (local.get $out_ptr) (i32.const 8)) (i64.const 0))
-    (i64.store (i32.add (local.get $out_ptr) (i32.const 16)) (i64.const 0))
-    (i64.store (i32.add (local.get $out_ptr) (i32.const 24)) (i64.const 0))
-    (i64.store (i32.add (local.get $out_ptr) (i32.const 32)) (i64.const 0))
-    (i64.store (i32.add (local.get $out_ptr) (i32.const 40)) (i64.const 0)))
-
-  (func $m102write_prefix_record
-    (param $out_ptr i32) (param $kind i32) (param $offset i32) (param $prefix_ptr i32)
-    (i32.store (local.get $out_ptr) (local.get $kind))
-    (i32.store (i32.add (local.get $out_ptr) (i32.const 4)) (local.get $offset))
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 8))
-      (i32.load (i32.add (local.get $prefix_ptr) (i32.const 4))))
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 12))
-      (i32.load (local.get $prefix_ptr)))
-    (i64.store
-      (i32.add (local.get $out_ptr) (i32.const 16))
-      (i64.load (i32.add (local.get $prefix_ptr) (i32.const 8)))))
-
-  (func $m102copy_name_meta (param $out_ptr i32) (param $base_offset i32) (param $meta_ptr i32)
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 24))
-      (i32.add (local.get $base_offset) (i32.load (i32.add (local.get $meta_ptr) (i32.const 12)))))
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 28))
-      (i32.load (i32.add (local.get $meta_ptr) (i32.const 16))))
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 32))
-      (i32.load (i32.add (local.get $meta_ptr) (i32.const 4)))))
-
-  (func $m102copy_value_meta (param $out_ptr i32) (param $base_offset i32) (param $meta_ptr i32)
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 36))
-      (i32.add (local.get $base_offset) (i32.load (i32.add (local.get $meta_ptr) (i32.const 12)))))
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 40))
-      (i32.load (i32.add (local.get $meta_ptr) (i32.const 16))))
-    (i32.store
-      (i32.add (local.get $out_ptr) (i32.const 44))
-      (i32.load (i32.add (local.get $meta_ptr) (i32.const 4)))))
-
   (func $decode_literal
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32)
     (param $kind i32) (param $prefix_bits i32)

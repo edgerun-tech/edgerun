@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300081)
-
-  (func $m57copy (param $src i32) (param $dst i32) (param $len i32)
+(func $m57copy (param $src i32) (param $dst i32) (param $len i32)
     (local $i i32)
     loop $loop
       local.get $i

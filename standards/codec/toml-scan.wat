@@ -4,12 +4,8 @@
   ;; Scalar kinds: 1 quoted string, 2 literal string, 3 bool, 4 int, 5 float, 6 array, 7 bare string.
   ;; Line kinds: 0 blank, 1 comment, 2 key/value, 3 table, 4 array table.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300017)
-
   (func $m185is_ws (param $c i32) (result i32)
     (i32.or (i32.eq (local.get $c) (i32.const 32)) (i32.eq (local.get $c) (i32.const 9))))
-
 
   (func $m185is_hex (param $c i32) (result i32)
     (call $is_hex (local.get $c)))

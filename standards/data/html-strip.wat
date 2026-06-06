@@ -4,8 +4,6 @@
   ;;   strip_tags(in_ptr, in_len, out_ptr) -> out_len
   ;;   strip_formatting_tags(in_ptr, in_len, out_ptr) -> out_len
   ;;     (preserves <lt>, <gt>, <br>)
-  (func (export "proto_standard_id") (result i32) i32.const 300529)
-
   (func (export "strip_tags") (param $in i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32) (local $o i32) (local $c i32) (local $in_tag i32)
     i32.const 0 local.set $i

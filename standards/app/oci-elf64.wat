@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300084)
-
-  ;; Status values: 0 ok, 1 unsupported, 2 short, 3 invalid.
+;; Status values: 0 ok, 1 unsupported, 2 short, 3 invalid.
   ;; Header out record, 32 bytes:
   ;;   u32 type, u32 machine, u64 entry, u64 phoff, u32 phentsize, u32 phnum.
   ;; Program header out record, 48 bytes:

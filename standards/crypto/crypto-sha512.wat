@@ -8,9 +8,6 @@
   (global $h6 (mut i64) (i64.const 0))
   (global $h7 (mut i64) (i64.const 0))
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300074)
-
   (func $sigma0 (param $x i64) (result i64)
     local.get $x
     i64.const 1

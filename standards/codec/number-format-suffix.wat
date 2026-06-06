@@ -5,8 +5,6 @@
   ;;   format_suffix(val, out_ptr) -> out_len  (e.g. 1234567 -> "1.23M")
   ;;   format_number(val, out_ptr) -> out_len  (e.g. 1234567 -> "1,234,567")
   ;;   parse_suffix(in_ptr, in_len) -> i64     (e.g. "1.23M" -> 1230000)
-  (func (export "proto_standard_id") (result i32) i32.const 300528)
-
   (func $format_number (export "format_number") (param $val i32) (param $out i32) (result i32)
     (local $i i32) (local $o i32) (local $buf i32) (local $neg i32) (local $d i32) (local $n i32)
     local.get $val i32.const 0 i32.lt_s

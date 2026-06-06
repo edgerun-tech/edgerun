@@ -1,12 +1,8 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300053)
-
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
   ;; Parse record, little-endian u32/i32 fields:
   ;; 0 year, 4 month, 8 day, 12 hour, 16 minute, 20 second,
   ;; 24 nanos, 28 signed offset_minutes, 32 unix_seconds_lo, 36 unix_seconds_hi.
-
 
   (func $m177digit (param $ptr i32) (param $end i32) (result i32)
     (local $b i32)

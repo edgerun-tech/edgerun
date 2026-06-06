@@ -2,10 +2,6 @@
   ;; Status values: 0 ok, 2 output_short.
   ;; Packed return: low u32 status, high u32 bytes written.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300047)
-
-
   (import "edgerun" "load8_u" (func $m76byte (param i32 i32) (result i32)))
 
   (func $m76put (param $out_ptr i32) (param $out_cap i32) (param $written i32) (param $c i32) (result i64)

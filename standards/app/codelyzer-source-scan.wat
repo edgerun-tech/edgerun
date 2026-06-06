@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300089)
-
-  ;; Status: 0 ok, 2 no function, 3 unsupported/invalid.
+;; Status: 0 ok, 2 no function, 3 unsupported/invalid.
   ;; Languages: 1 rust, 2 ts/js, 3 c, 4 py, 5 go, 6 java, 0 unknown.
   ;; First function out record, 24 bytes:
   ;;   u32 name_start, u32 name_len, u32 start_byte, u32 end_byte, u32 is_static, u32 lang.

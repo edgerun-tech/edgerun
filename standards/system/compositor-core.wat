@@ -1,8 +1,6 @@
   (import "edgerun" "string_eq" (func $m51eq (param i32 i32 i32 i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32) i32.const 300130)
-
-  (func (export "compositor_global_code") (param $ptr i32) (param $len i32) (result i32)
+(func (export "compositor_global_code") (param $ptr i32) (param $len i32) (result i32)
     (if (call $m51eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 13)) (then (return (i32.const 1))))
     (if (call $m51eq (local.get $ptr) (local.get $len) (i32.const 29) (i32.const 6)) (then (return (i32.const 2))))
     (if (call $m51eq (local.get $ptr) (local.get $len) (i32.const 35) (i32.const 7)) (then (return (i32.const 3))))

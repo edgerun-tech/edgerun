@@ -10,8 +10,6 @@
   ;;   constrain_byte(val) -> i32
   ;;   rgb_to_hex(r, g, b, out_ptr) -> out_ptr + 7 ("#RRGGBB\0")
   ;;   argb_to_hex(a, r, g, b, out_ptr) -> out_ptr + 9 ("#AARRGGBB\0")
-  (func (export "proto_standard_id") (result i32) i32.const 300526)
-
   (func $m49hex_digit (param $c i32) (result i32)
     (local $d i32)
     local.get $c i32.const 48 i32.sub

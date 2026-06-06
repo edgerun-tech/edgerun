@@ -55,6 +55,7 @@
 ;; ── Region: JIT Code Cache (1 MB) ───────────────────────────────────
 (global $JIT_CACHE_BASE (export "JIT_CACHE_BASE") i32 (i32.const 0x100000))
 (global $JIT_CACHE_SIZE (export "JIT_CACHE_SIZE") i32 (i32.const 0x100000))
+(global $JIT_CACHE      (export "JIT_CACHE")      i32 (i32.const 0x100000))
 
 ;; ── Region: Guest WASM Heap (2 MB) ──────────────────────────────────
 (global $GUEST_HEAP_BASE (export "GUEST_HEAP_BASE") i32 (i32.const 0x200000))
@@ -119,3 +120,16 @@
 (global $CACHE_LINE    (export "CACHE_LINE")    i32 (i32.const 64))
 (global $SIMD_ALIGN    (export "SIMD_ALIGN")    i32 (i32.const 16))
 (global $VEC256_ALIGN  (export "VEC256_ALIGN")  i32 (i32.const 32))
+
+;; ── Interpreter globals (compatibility with legacy $OFF_* names) ─────
+;; These are referenced by compiler/interpreter-core.wat and
+;; compiler/compiler-x86_64.wat fragments.
+(global $OFF_TYPES_BUF       i32 (i32.const 0x00104))
+(global $SZ_TYPE              i32 (i32.const 140))
+(global $OFF_FUNCTIONS_BUF   i32 (i32.const 0x04510))
+(global $SZ_FUNC              i32 (i32.const 16))
+(global $OFF_CODE_BUF        i32 (i32.const 0x05518))
+(global $SZ_CODE              i32 (i32.const 64))
+(global $OFF_DECODED_COUNT   i32 (i32.const 0x8C000))
+(global $OFF_DECODED_OPS     i32 (i32.const 0xA0000))
+(global $DEC_SZ               i32 (i32.const 32))

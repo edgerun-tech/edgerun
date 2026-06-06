@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300064)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid_data.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid_data.
   ;; Packed write return: low32=status, high32=written.
 
   (func $read_le32 (param $ptr i32) (result i32)

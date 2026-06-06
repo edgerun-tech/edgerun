@@ -1,9 +1,6 @@
 
 (global $last_carry (mut i32) (i32.const 0))
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300078)
-
   (func (export "carry") (result i32)
     global.get $last_carry)
 

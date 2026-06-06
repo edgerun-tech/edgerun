@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300076)
-
-  (func $block_size (param $alg i32) (result i32)
+(func $block_size (param $alg i32) (result i32)
     local.get $alg
     i32.const 256
     i32.eq

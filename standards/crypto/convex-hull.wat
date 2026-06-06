@@ -6,8 +6,6 @@
   ;;   convex_hull(points_ptr, num_points, out_indices_ptr) -> i32
   ;;     Returns number of hull points (indices written to out).
   ;;     Returns 0 if < 3 points, -1 on error.
-  (func (export "proto_standard_id") (result i32) i32.const 300534)
-
   (func $x (param $base i32) (param $idx i32) (result i32)
     local.get $base local.get $idx i32.const 3 i32.shl i32.add i32.load
   )

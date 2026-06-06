@@ -1,7 +1,5 @@
   ;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
   (import "edgerun" "memcpy" (func $m59memcpy (param i32 i32 i32)))
-  (func (export "proto_standard_id") (result i32) i32.const 300085)
-
   ;; Memory layout:
   ;; 16384-16639: W array (64 × 4 bytes)
   ;; 16640-16671: hash state H (8 × 4 bytes)
@@ -288,13 +286,14 @@
     (param $msg i32) (param $mlen i32)
     (param $out i32) (param $ocap i32)
     (result i32)
-    (local $buf i32) (local $H i32) (local $i i32) (local $b i32)
+    (local $buf i32) (local $H i32) (local $i i32) (local $b i32) (local $blk i32)
 
     local.get $ocap i32.const 32 i32.lt_u
     if i32.const 2 return end
 
     i32.const 16896 local.set $buf  ;; scratch buffer for key + message
     i32.const 16640 local.set $H
+    i32.const 16992 local.set $blk  ;; inner hash save (after buf+64+32)
 
     ;; ── 1. Pad key to 64 bytes in buf ──
     local.get $klen i32.const 64 i32.le_u

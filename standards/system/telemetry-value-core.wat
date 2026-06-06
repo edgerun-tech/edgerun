@@ -1,7 +1,5 @@
 ;; Captures log facade, valuable structured values, and tracing-opentelemetry layer semantics.
   ;; Level/filter codes: off=0,error=1,warn=2,info=3,debug=4,trace=5.
-  (func (export "proto_standard_id") (result i32) (i32.const 300140))
-
   (func $telemetry_log_level_enabled (export "telemetry_log_level_enabled") (param $level i32) (param $filter i32) (result i32)
     (i32.and
       (i32.and (i32.gt_s (local.get $level) (i32.const 0)) (i32.gt_s (local.get $filter) (i32.const 0)))

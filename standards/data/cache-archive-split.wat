@@ -24,8 +24,6 @@
   ;;     arena_len           ;; arena length in bytes
   ;;   ) → status (0=OK, <0=error)
 
-  (func (export "proto_standard_id") (result i32) i32.const 300537)
-
   (func $read_be32 (param $p i32) (result i32)
     local.get $p i32.load8_u
     i32.const 24 i32.shl

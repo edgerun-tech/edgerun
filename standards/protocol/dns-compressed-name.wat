@@ -1,10 +1,7 @@
   (import "edgerun" "to_lower" (func $m77lower_ascii (param i32) (result i32)))
   (import "dns" "is_label_byte" (func $is_label_byte (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300033)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
 
   (func $u32_at (param $ptr i32) (param $index i32) (result i32)
     (i32.load (i32.add (local.get $ptr) (i32.mul (local.get $index) (i32.const 4)))))

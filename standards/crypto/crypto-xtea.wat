@@ -7,8 +7,6 @@
   ;;   xtea_decrypt(data_ptr, data_len, key_ptr) -> 0
   ;;
   ;; key_ptr points to 16 bytes of key material (4 × 32-bit big-endian words).
-  (func (export "proto_standard_id") (result i32) i32.const 300520)
-
   (func $m65load_be32 (param $p i32) (result i32)
     local.get $p i32.load8_u i32.const 24 i32.shl
     local.get $p i32.const 1 i32.add i32.load8_u i32.const 16 i32.shl i32.or

@@ -1,7 +1,5 @@
 ;; WebSocket client — HTTP Upgrade handshake + masked frame send/recv.
   ;; Uses abstract socket for transport.
-  (func (export "proto_standard_id") (result i32) i32.const 300507)
-
   ;; Memory layout (safe zone 0x30000+, after LUTs at 0x1000-0x2FFF):
   ;; 0x30500  request buffer (1024B)
   ;; 0x30900  response buffer (1024B)

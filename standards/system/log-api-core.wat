@@ -5,10 +5,6 @@
   ;; Level codes: off=0, error=1, warn=2, info=3, debug=4, trace=5.
   ;; Interest codes: never=0, sometimes=1, always=2.
 
-
-
-  (func (export "proto_standard_id") (result i32) (i32.const 300136))
-
   (func (export "tracing_level_code") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
     (local.set $h (call $m186fnv1a_lower (local.get $ptr) (local.get $len)))

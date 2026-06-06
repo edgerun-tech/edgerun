@@ -3,8 +3,6 @@
   ;; reflected IEEE/GZip CRC-32 (polynomial 0xedb88320).
   ;; Exports: bzip_crc32(data_ptr, data_len) -> i32
   ;;          bzip_crc32_update(crc, byte) -> i32  (one-byte update)
-  (func (export "proto_standard_id") (result i32) i32.const 300525)
-
   (func $bzip_crc32_byte (param $crc i32) (param $byte i32) (result i32)
     (local $i i32)
     local.get $crc local.get $byte i32.const 24 i32.shl i32.xor local.set $crc

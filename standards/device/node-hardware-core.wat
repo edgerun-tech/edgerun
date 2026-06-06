@@ -1,8 +1,6 @@
   (import "edgerun" "to_lower" (func $m134ascii_lower (param i32) (result i32)))
   (import "edgerun" "fnv1a_lower" (func $m134fnv_lower (param i32 i32) (result i32)))
 
-  (func (export "proto_standard_id") (result i32) i32.const 300105)
-
   (func (export "node_hw_hash_lower") (param $ptr i32) (param $len i32) (result i32)
     (call $m134fnv_lower (local.get $ptr) (local.get $len)))
 

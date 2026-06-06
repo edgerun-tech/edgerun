@@ -3,9 +3,6 @@
   (func $pack (param $a i32) (param $b i32) (param $c i32) (param $d i32) (result i32)
     local.get $a)
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300099)
-
   ;; Status values:
   ;;   0 ok, 1 missing CRLF, 2 bare LF, 3 bare CR, 4 empty line
   (func (export "mail_crlf_validate") (param $ptr i32) (param $len i32) (result i32)

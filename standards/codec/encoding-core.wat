@@ -294,7 +294,7 @@
   (func (export "adler32") (param $ptr i32) (param $len i32) (result i32)
     (call $adler32_update (i32.const 1) (local.get $ptr) (local.get $len)))
 
-  (func (export "crc32_simd") (param $ptr i32) (param $len i32) (result i32)
+  (func (export "crc32_unrolled") (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $j i32)
     (local $k i32)
@@ -361,10 +361,10 @@
               (br $loop))))))
     (i32.xor (local.get $crc) (i32.const -1)))
 
-  (func (export "adler32_simd") (param $ptr i32) (param $len i32) (result i32)
-    (call $adler32_update_simd (i32.const 1) (local.get $ptr) (local.get $len)))
+  (func (export "adler32_vec") (param $ptr i32) (param $len i32) (result i32)
+    (call $adler32_update_vec (i32.const 1) (local.get $ptr) (local.get $len)))
 
-  (func $adler32_update_simd (export "adler32_update_simd")
+  (func $adler32_update_vec (export "adler32_update_vec")
     (param $initial i32) (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $a i32)

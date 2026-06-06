@@ -1,8 +1,4 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300049)
-
-
   (func $m38write_record
     (param $out i32) (param $str_off i32) (param $str_len i32) (param $consumed i32)
     local.get $out

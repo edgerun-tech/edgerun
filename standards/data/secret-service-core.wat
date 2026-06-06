@@ -12,10 +12,6 @@
   (data (i32.const 4128) "/org/freedesktop/secrets/collections/")
   (data (i32.const 4176) "/org/freedesktop/secrets/session/")
 
-
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300109)
-
   (func $fnv (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $h i32)

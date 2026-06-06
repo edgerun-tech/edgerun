@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300112)
-
-  (import "edgerun" "string_eq" (func $m45eq (param i32 i32 i32 i32) (result i32)))
+(import "edgerun" "string_eq" (func $m45eq (param i32 i32 i32 i32) (result i32)))
 
   (func $m45starts (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
     (local $i i32)

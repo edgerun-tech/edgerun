@@ -60,9 +60,6 @@
   (data (i32.const 36480) "auth")
   (data (i32.const 36544) "login")
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300091)
-
   ;; Status: 0 ok, 2 no finding, 3 unsupported/invalid.
   ;; Finding record, 20 bytes:
   ;;   u32 kind, u32 start_byte, u32 end_byte, u32 flags, u32 status.

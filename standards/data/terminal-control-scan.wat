@@ -1,9 +1,5 @@
 
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300166)
-
-
   (func $m175emit
     (param $out i32) (param $cap i32) (param $count i32)
     (param $kind i32) (param $start i32) (param $len i32)
@@ -74,7 +70,6 @@
     i32.const 127
     i32.eq
     i32.or)
-
 
   (func (export "terminal_control_scan")
     (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32)

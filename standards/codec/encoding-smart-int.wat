@@ -8,8 +8,6 @@
   ;;
   ;; All decode functions take (buf, off, result_out) and return new offset.
   ;; Scratch byte at memory[0..4] for intermediate storage in compat function.
-  (func (export "proto_standard_id") (result i32) i32.const 300523)
-
   (func (export "read_short_smart") (param $buf i32) (param $off i32) (param $out i32) (result i32)
     (local $peek i32)
     local.get $buf local.get $off i32.add i32.load8_u local.tee $peek

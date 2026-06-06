@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300102)
-
-  (func $m112hex_value (param $b i32) (result i32)
+(func $m112hex_value (param $b i32) (result i32)
     local.get $b
     i32.const 48
     i32.ge_u

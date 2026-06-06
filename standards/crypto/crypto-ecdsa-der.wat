@@ -2,9 +2,6 @@
 (global $last_r_len (mut i32) (i32.const 0))
   (global $last_s_len (mut i32) (i32.const 0))
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300082)
-
   (func (export "ecdsa_der_last_r_len") (result i32)
     global.get $last_r_len)
 

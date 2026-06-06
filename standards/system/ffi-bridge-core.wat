@@ -3,8 +3,6 @@
 ;; Captures the portable meaning from edgerun-wasm-bindgen and its macro-support:
   ;; ABI primitive packing, descriptor wrappers, closure ownership, attribute parsing,
   ;; AST import/export classification, and custom-section encoding rules.
-  (func (export "proto_standard_id") (result i32) i32.const 300153)
-
   (func $m195fnv1a_lower (param $ptr i32) (param $len i32) (result i32)
     (local $end i32) (local $h i32)
     (local.set $end (i32.add (local.get $ptr) (local.get $len)))

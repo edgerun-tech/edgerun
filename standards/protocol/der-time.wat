@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300029)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
   ;; Record:
   ;; 0 kind: 1 UTCTime, 2 GeneralizedTime
   ;; 4 year, 8 month, 12 day, 16 hour, 20 minute, 24 second

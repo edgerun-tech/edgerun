@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300055)
-
-  (func (export "ipv4_to_u32")
+(func (export "ipv4_to_u32")
     (param $ptr i32) (param $len i32) (param $offset i32)
     (result i64)
     (local $start i32)

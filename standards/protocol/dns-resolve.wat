@@ -1,6 +1,4 @@
 ;; DNS A-record resolver — self-contained, uses abstract socket for UDP.
-  (func (export "proto_standard_id") (result i32) i32.const 300506)
-
   ;; dns_resolve_a(host_ptr, host_len,
   ;;               dns_host_ptr, dns_host_len, dns_port,
   ;;               out_ip_ptr, out_ip_cap) -> i64

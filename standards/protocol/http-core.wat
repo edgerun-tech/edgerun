@@ -13,7 +13,7 @@
 
   ;; RFC 7230 tchar: ALPHA / DIGIT / "!" / "#" / "$" / "%" / "&" / "'" /
   ;; "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
-  (func (export "is_tchar") (param $b i32) (result i32)
+  (func $is_tchar (export "is_tchar") (param $b i32) (result i32)
     (i32.or
       (i32.or
         (i32.or
@@ -38,11 +38,11 @@
 
   ;; HTTP whitespace: space (0x20) or horizontal tab (0x09).
   ;; Narrower than general is_ws (which also accepts CR, LF, etc.).
-  (func (export "is_space") (param $b i32) (result i32)
+  (func $is_space (export "is_space") (param $b i32) (result i32)
     (i32.or (i32.eq (local.get $b) (i32.const 32)) (i32.eq (local.get $b) (i32.const 9))))
 
   ;; Valid header field value byte: tab (0x09) or visible ASCII [32,126].
-  (func (export "is_header_value_byte") (param $b i32) (result i32)
+  (func $is_header_value_byte (export "is_header_value_byte") (param $b i32) (result i32)
     (i32.or
       (i32.eq (local.get $b) (i32.const 9))
       (i32.and (i32.ge_u (local.get $b) (i32.const 32)) (i32.le_u (local.get $b) (i32.const 126)))))
@@ -51,7 +51,7 @@
 
   ;; Compare two ASCII byte sequences case-insensitively.
   ;; Returns 1 if equal, 0 otherwise.
-  (func (export "ascii_eq_ci") (param $aptr i32) (param $alen i32) (param $bptr i32) (param $blen i32) (result i32)
+  (func $ascii_eq_ci (export "ascii_eq_ci") (param $aptr i32) (param $alen i32) (param $bptr i32) (param $blen i32) (result i32)
     (local $i i32)
     (if (i32.ne (local.get $alen) (local.get $blen)) (then (return (i32.const 0))))
     (loop $scan

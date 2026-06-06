@@ -1,7 +1,4 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300096)
-
   (func $m148hash (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $h i32)

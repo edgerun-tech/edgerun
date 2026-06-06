@@ -1,9 +1,5 @@
 
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300015)
-
-
   (func $m146is_upper (param $b i32) (result i32)
     local.get $b
     i32.const 65
@@ -12,7 +8,6 @@
     i32.const 90
     i32.le_u
     i32.and)
-
 
   (func $is_label_separator (param $b i32) (result i32)
     local.get $b

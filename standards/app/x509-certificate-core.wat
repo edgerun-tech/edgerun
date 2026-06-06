@@ -1,7 +1,4 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300028)
-
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
 
   (func $m200is_supported_tag (param $m200tag i32) (result i32)

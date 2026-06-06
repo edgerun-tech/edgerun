@@ -2,10 +2,7 @@
   (import "edgerun" "is_alnum" (func $is_ascii_alnum (param i32) (result i32)))
   (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300154)
-
-  (func $forbidden_namespace_byte (param $b i32) (result i32)
+(func $forbidden_namespace_byte (param $b i32) (result i32)
     local.get $b
     i32.const 32
     i32.eq

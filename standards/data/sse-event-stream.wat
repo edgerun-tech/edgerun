@@ -1,9 +1,5 @@
 
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300072)
-
-
   (func $store_record
     (param $base i32) (param $idx i32)
     (param $event_ptr i32) (param $event_len i32)

@@ -1,8 +1,6 @@
   (import "edgerun" "string_eq" (func $m150eq (param i32 i32 i32 i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32) i32.const 300167)
-
-  (func (export "core_value_kind_code") (param $ptr i32) (param $len i32) (result i32)
+(func (export "core_value_kind_code") (param $ptr i32) (param $len i32) (result i32)
     (if (call $m150eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 4)) (then (return (i32.const 1))))
     (if (call $m150eq (local.get $ptr) (local.get $len) (i32.const 20) (i32.const 4)) (then (return (i32.const 2))))
     (if (call $m150eq (local.get $ptr) (local.get $len) (i32.const 24) (i32.const 3)) (then (return (i32.const 3))))

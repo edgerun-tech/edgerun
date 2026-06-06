@@ -9,7 +9,7 @@
   (memory (export "memory") 1)
 
   ;; Valid DNS label byte: ALPHA, DIGIT, '-' (0x2D), or '_' (0x5F).
-  (func (export "is_label_byte") (param $b i32) (result i32)
+  (func $is_label_byte (export "is_label_byte") (param $b i32) (result i32)
     (i32.or
       (i32.or
         (call $is_alpha (local.get $b))

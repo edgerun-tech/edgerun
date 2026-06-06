@@ -1,8 +1,5 @@
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300065)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid_data, 7 unsupported.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid_data, 7 unsupported.
   ;; Packed i64 return: low u32 status, high u32 bytes_written.
 
   (func $m203read_u32_be (param $ptr i32) (result i32)

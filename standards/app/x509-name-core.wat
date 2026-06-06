@@ -1,7 +1,4 @@
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300030)
-
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
   ;; x509_name_scan out record:
   ;; 0 name_body_ptr, 4 name_body_len, 8 name_header_len, 12 name_total_len,

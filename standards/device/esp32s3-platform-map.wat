@@ -9,9 +9,6 @@
   ;;   4 WiFi OS adapter, 5 BLE version, 6 BLE controller config,
   ;;   7 BLE OS adapter, 8 BLE advertising payload.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300094)
-
   (func (export "esp32s3_wifi_domain_id") (result i32)
     i32.const 1)
 

@@ -4,10 +4,7 @@
   (import "http" "is_header_value_byte" (func $is_header_value_byte (param i32) (result i32)))
   (import "http" "ascii_eq_ci" (func $ascii_eq_ci (param i32 i32 i32 i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300009)
-
-  (data (i32.const 65500) "18446744073709551615")
+(data (i32.const 65500) "18446744073709551615")
 
   (func $m111parse_u64_decimal (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $start i32)

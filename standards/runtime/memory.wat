@@ -3,7 +3,7 @@
 ;; edgerun-core's memory export or rely on concatenation order within
 ;; the top-level (module ...) block.
 
-(memory (export "memory") 16384)
+(memory (export "memory") 2048)
 
 ;; Character classification LUT at LUT_CHAR_CLASS (0x1000, 256 bytes)
 ;; bit 0: digit, bit 1: uppercase, bit 2: lowercase, bit 3: tchar,

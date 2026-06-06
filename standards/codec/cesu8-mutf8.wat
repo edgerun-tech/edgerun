@@ -4,10 +4,6 @@
   ;; Status values: 0 ok, 2 output_short, 3 invalid, 5 incomplete.
   ;; Packed result: low 32 bits status, high 32 bits output byte count.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300069)
-
-
   (func $put1 (param $out i32) (param $cap i32) (param $j i32) (param $b0 i32) (result i32)
     local.get $j
     i32.const 1

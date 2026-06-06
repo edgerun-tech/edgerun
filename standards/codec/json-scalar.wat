@@ -2,10 +2,6 @@
 
   ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
 
-  (func (export "proto_standard_id") (result i32)
-    i32.const 300016)
-
-
   (func $m124is_digit_1_9 (param $c i32) (result i32)
     (i32.and
       (i32.ge_u (local.get $c) (i32.const 49))

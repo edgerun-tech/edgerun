@@ -1,7 +1,4 @@
-(func (export "proto_standard_id") (result i32)
-    i32.const 300021)
-
-  ;; status: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 done.
+;; status: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 done.
   ;; Decode the compact first+second OID root octet used by local const_oid.
   ;; out record: first_arc:u32, second_arc:u32, next_offset:u32.
   (func $der_oid_root_decode (export "der_oid_root_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)

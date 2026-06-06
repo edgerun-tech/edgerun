@@ -2,10 +2,7 @@
   (import "http" "is_space" (func $is_space (param i32) (result i32)))
   (import "http" "is_header_value_byte" (func $is_header_value_byte (param i32) (result i32)))
 
-(func (export "proto_standard_id") (result i32)
-    i32.const 300008)
-
-  (func $m114find_crlf (param $ptr i32) (param $len i32) (param $start i32) (result i32)
+(func $m114find_crlf (param $ptr i32) (param $len i32) (param $start i32) (result i32)
     (local $i i32)
     local.get $start
     local.get $len
