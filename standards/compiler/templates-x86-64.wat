@@ -4,20 +4,20 @@
   ;; ═════════════════════════════════════════════════════════════════════
 
   ;; ── unreachable (0x00): ud2 ────────────────────────────────────────
-  (func $template_unreachable
+  (func $template_x86_unreachable
     (call $emit_ud2)
   )
 
   ;; ── nop (0x01): nothing ────────────────────────────────────────────
-  (func $template_nop)
+  (func $template_x86_nop)
 
   ;; ── drop (0x1A): add rsp, 8 ───────────────────────────────────────
-  (func $template_drop
+  (func $template_x86_drop
     (call $emit_add_rsp_imm (i32.const 8))
   )
 
   ;; ── select (0x1B): pop cond, pop val2, pop val1; push val1 if cond!=0 else val2 ──
-  (func $template_select
+  (func $template_x86_select
     (call $emit_pop_rax)          ;; cond
     (call $emit_test_eax)         ;; set ZF
     (call $emit_pop_reg (i32.const 1))  ;; pop rcx = val2
@@ -27,12 +27,12 @@
   )
 
   ;; ── i32.const (0x41): push imm32 ──────────────────────────────────
-  (func $template_i32_const (param $dec_ptr i32)
+  (func $template_x86_i32_const (param $dec_ptr i32)
     (call $emit_push_imm32 (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
   )
 
   ;; ── i64.const (0x42): push imm64 ──────────────────────────────────
-  (func $template_i64_const (param $dec_ptr i32)
+  (func $template_x86_i64_const (param $dec_ptr i32)
     (local $val i64)
     (local.set $val (i64.load (i32.add (local.get $dec_ptr) (i32.const 4))))
     ;; mov rax, imm64 (REX.W B8 + qword); push rax
@@ -43,7 +43,7 @@
   )
 
   ;; ── local.get (0x20): mov rax, [rdx + index*8]; push rax ──────────
-  (func $template_local_get (param $dec_ptr i32)
+  (func $template_x86_local_get (param $dec_ptr i32)
     (local $idx i32) (local $disp i32)
     (local.set $idx (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
     (if (i32.eqz (local.get $idx))
@@ -62,7 +62,7 @@
   )
 
   ;; ── local.set (0x21): pop rax/reg; store to locals ──────────────────
-  (func $template_local_set (param $dec_ptr i32)
+  (func $template_x86_local_set (param $dec_ptr i32)
     (local $idx i32) (local $disp i32)
     (local.set $idx (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
     (if (global.get $RESULT_IN_EAX)
@@ -102,7 +102,7 @@
   )
 
   ;; ── local.tee (0x22): same as local.set but keep value on stack ───
-  (func $template_local_tee (param $dec_ptr i32)
+  (func $template_x86_local_tee (param $dec_ptr i32)
     (local $idx i32) (local $disp i32)
     (local.set $idx (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
     (if (global.get $RESULT_IN_EAX)
@@ -147,7 +147,7 @@
   )
 
   ;; ── global.get (0x23) ─────────────────────────────────────────────
-  (func $template_global_get (param $dec_ptr i32)
+  (func $template_x86_global_get (param $dec_ptr i32)
     (local $offs i32)
     (local.set $offs (i32.add (i32.mul (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))) (i32.const 32)) (i32.const 8)))
     (call $emit_load_r15_to_rdx (i32.const 24))   ;; JitGlobals.globals_buf
@@ -156,7 +156,7 @@
   )
 
   ;; ── global.set (0x24) ─────────────────────────────────────────────
-  (func $template_global_set (param $dec_ptr i32)
+  (func $template_x86_global_set (param $dec_ptr i32)
     (local $offs i32)
     (local.set $offs (i32.add (i32.mul (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))) (i32.const 32)) (i32.const 8)))
     (call $emit_pop_rax)
@@ -167,7 +167,7 @@
   )
 
   ;; ── table.get (0x25) ─────────────────────────────────────────────
-  (func $template_table_get (param $dec_ptr i32)
+  (func $template_x86_table_get (param $dec_ptr i32)
     (call $emit_pop_reg (i32.const 0))      ;; pop rax = index
     ;; load table_entries → rdx
     (call $emit_load_r15_to_rdx (i32.const 48))  ;; JitGlobals.table_entries
@@ -180,7 +180,7 @@
   )
 
   ;; ── table.set (0x26) ─────────────────────────────────────────────
-  (func $template_table_set (param $dec_ptr i32)
+  (func $template_x86_table_set (param $dec_ptr i32)
     ;; Stack: ... value index
     (call $emit_pop_reg (i32.const 2))      ;; pop rdx = index
     (call $emit_pop_reg (i32.const 0))      ;; pop rax = value
@@ -199,7 +199,7 @@
   ;; ── i32 comparison templates ──────────────────────────────────────
 
   ;; i32.eqz (0x45) — pop rax, test eax,eax, sete al, movzx, push rax
-  (func $template_i32_eqz
+  (func $template_x86_i32_eqz
     (call $emit_pop_rax)
     (call $emit_test_eax)
     (call $emit_setcc (i32.const 0x94))    ;; sete al
@@ -208,7 +208,7 @@
   )
 
   ;; i32.eq (0x46) — pop rcx, pop rax, cmp, sete, push
-  (func $template_i32_eq
+  (func $template_x86_i32_eq
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x94))
@@ -217,7 +217,7 @@
   )
 
   ;; i32.ne (0x47)
-  (func $template_i32_ne
+  (func $template_x86_i32_ne
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x95))    ;; setne
@@ -226,7 +226,7 @@
   )
 
   ;; i32.lt_s (0x48)
-  (func $template_i32_lt_s
+  (func $template_x86_i32_lt_s
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x9C))    ;; setl
@@ -235,7 +235,7 @@
   )
 
   ;; i32.lt_u (0x49)
-  (func $template_i32_lt_u
+  (func $template_x86_i32_lt_u
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x92))    ;; setb
@@ -244,7 +244,7 @@
   )
 
   ;; i32.gt_s (0x4A)
-  (func $template_i32_gt_s
+  (func $template_x86_i32_gt_s
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x9F))    ;; setg
@@ -253,7 +253,7 @@
   )
 
   ;; i32.gt_u (0x4B)
-  (func $template_i32_gt_u
+  (func $template_x86_i32_gt_u
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x97))    ;; seta
@@ -262,7 +262,7 @@
   )
 
   ;; i32.le_s (0x4C)
-  (func $template_i32_le_s
+  (func $template_x86_i32_le_s
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x9E))    ;; setle
@@ -271,7 +271,7 @@
   )
 
   ;; i32.le_u (0x4D)
-  (func $template_i32_le_u
+  (func $template_x86_i32_le_u
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x96))    ;; setbe
@@ -280,7 +280,7 @@
   )
 
   ;; i32.ge_s (0x4E)
-  (func $template_i32_ge_s
+  (func $template_x86_i32_ge_s
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x9D))    ;; setge
@@ -289,7 +289,7 @@
   )
 
   ;; i32.ge_u (0x4F)
-  (func $template_i32_ge_u
+  (func $template_x86_i32_ge_u
     (call $emit_pop2_rcx_rax)
     (call $emit_cmp32)
     (call $emit_setcc (i32.const 0x93))    ;; setae
@@ -299,159 +299,159 @@
 
   ;; ── i32 binary arithmetic templates ───────────────────────────────
 
-  (func $template_i32_add
+  (func $template_x86_i32_add
     (call $emit_pop2_rcx_rax) (call $emit_add32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_sub
+  (func $template_x86_i32_sub
     (call $emit_pop2_rcx_rax) (call $emit_sub32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_mul
+  (func $template_x86_i32_mul
     (call $emit_pop2_rcx_rax) (call $emit_imul32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_div_s
+  (func $template_x86_i32_div_s
     (call $emit_pop2_rcx_rax) (call $emit_cdq) (call $emit_idiv32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_div_u
-    (call $emit_pop2_rcx_rax) (call $emit_xor_edx_edx) (call $emit_div32) (call $emit_maybe_push_rax)
+  (func $template_x86_i32_div_u
+    (call $emit_pop2_rcx_rax) (call $emit_xor_edx_edx) (call $emit_x86_idiv32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_rem_s
+  (func $template_x86_i32_rem_s
     (call $emit_pop2_rcx_rax) (call $emit_cdq) (call $emit_idiv32)
     (call $emit_mov_eax_edx) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_rem_u
-    (call $emit_pop2_rcx_rax) (call $emit_xor_edx_edx) (call $emit_div32)
+  (func $template_x86_i32_rem_u
+    (call $emit_pop2_rcx_rax) (call $emit_xor_edx_edx) (call $emit_x86_idiv32)
     (call $emit_mov_eax_edx) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_and
+  (func $template_x86_i32_and
     (call $emit_pop2_rcx_rax) (call $emit_and32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_or
-    (call $emit_pop2_rcx_rax) (call $emit_or32) (call $emit_maybe_push_rax)
+  (func $template_x86_i32_or
+    (call $emit_pop2_rcx_rax) (call $emit_x86_ror32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_xor
+  (func $template_x86_i32_xor
     (call $emit_pop2_rcx_rax) (call $emit_xor32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_shl
+  (func $template_x86_i32_shl
     (call $emit_pop2_rcx_rax) (call $emit_shl32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_shr_s
+  (func $template_x86_i32_shr_s
     (call $emit_pop2_rcx_rax) (call $emit_sar32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_shr_u
+  (func $template_x86_i32_shr_u
     (call $emit_pop2_rcx_rax) (call $emit_shr32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_rotl
+  (func $template_x86_i32_rotl
     (call $emit_pop2_rcx_rax) (call $emit_rol32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_rotr
+  (func $template_x86_i32_rotr
     (call $emit_pop2_rcx_rax) (call $emit_ror32) (call $emit_maybe_push_rax)
   )
 
   ;; ── i64 binary arithmetic templates ───────────────────────────────
 
-  (func $template_i64_add
+  (func $template_x86_i64_add
     (call $emit_pop2_rcx_rax) (call $emit_add64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_sub
+  (func $template_x86_i64_sub
     (call $emit_pop2_rcx_rax) (call $emit_sub64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_mul
+  (func $template_x86_i64_mul
     (call $emit_pop2_rcx_rax) (call $emit_imul64) (call $emit_maybe_push_rax)
   )
 
   ;; i64.div_s (0x7F) — pop rcx, pop rax, cqo, idiv rcx
-  (func $template_i64_div_s
+  (func $template_x86_i64_div_s
     (call $emit_pop2_rcx_rax) (call $emit_cqo) (call $emit_idiv64) (call $emit_maybe_push_rax)
   )
 
   ;; i64.div_u (0x80)
-  (func $template_i64_div_u
-    (call $emit_pop2_rcx_rax) (call $emit_xor_rdx_rdx) (call $emit_div64) (call $emit_maybe_push_rax)
+  (func $template_x86_i64_div_u
+    (call $emit_pop2_rcx_rax) (call $emit_xor_rdx_rdx) (call $emit_x86_idiv64) (call $emit_maybe_push_rax)
   )
 
   ;; i64.rem_s (0x81)
-  (func $template_i64_rem_s
+  (func $template_x86_i64_rem_s
     (call $emit_pop2_rcx_rax) (call $emit_cqo) (call $emit_idiv64)
     (call $emit_mov_rax_rdx) (call $emit_maybe_push_rax)
   )
 
   ;; i64.rem_u (0x82)
-  (func $template_i64_rem_u
-    (call $emit_pop2_rcx_rax) (call $emit_xor_rdx_rdx) (call $emit_div64)
+  (func $template_x86_i64_rem_u
+    (call $emit_pop2_rcx_rax) (call $emit_xor_rdx_rdx) (call $emit_x86_idiv64)
     (call $emit_mov_rax_rdx) (call $emit_maybe_push_rax)
   )
 
   ;; i64.and (0x83), or (0x84), xor (0x85)
-  (func $template_i64_and
+  (func $template_x86_i64_and
     (call $emit_pop2_rcx_rax) (call $emit_and64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_or
-    (call $emit_pop2_rcx_rax) (call $emit_or64) (call $emit_maybe_push_rax)
+  (func $template_x86_i64_or
+    (call $emit_pop2_rcx_rax) (call $emit_x86_xor64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_xor
+  (func $template_x86_i64_xor
     (call $emit_pop2_rcx_rax) (call $emit_xor64) (call $emit_maybe_push_rax)
   )
 
   ;; i64.shl (0x86), shr_s (0x87), shr_u (0x88), rotl (0x89), rotr (0x8A)
-  (func $template_i64_shl
+  (func $template_x86_i64_shl
     (call $emit_pop2_rcx_rax) (call $emit_shl64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_shr_s
+  (func $template_x86_i64_shr_s
     (call $emit_pop2_rcx_rax) (call $emit_sar64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_shr_u
+  (func $template_x86_i64_shr_u
     (call $emit_pop2_rcx_rax) (call $emit_shr64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_rotl
+  (func $template_x86_i64_rotl
     (call $emit_pop2_rcx_rax) (call $emit_rol64) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_rotr
+  (func $template_x86_i64_rotr
     (call $emit_pop2_rcx_rax) (call $emit_ror64) (call $emit_maybe_push_rax)
   )
 
   ;; ── i64 unary templates ──────────────────────────────────────────
 
   ;; i64.clz (0x79)
-  (func $template_i64_clz
+  (func $template_x86_i64_clz
     (call $emit_pop_rax) (call $emit_lzcnt64) (call $emit_maybe_push_rax)
   )
 
   ;; i64.ctz (0x7A)
-  (func $template_i64_ctz
+  (func $template_x86_i64_ctz
     (call $emit_pop_rax) (call $emit_tzcnt64) (call $emit_maybe_push_rax)
   )
 
   ;; i64.popcnt (0x7B)
-  (func $template_i64_popcnt
+  (func $template_x86_i64_popcnt
     (call $emit_pop_rax) (call $emit_popcnt64) (call $emit_maybe_push_rax)
   )
 
   ;; ── i64 comparison templates ─────────────────────────────────────
 
   ;; i64.eqz (0x50) — test rax, rax; sete; movzx
-  (func $template_i64_eqz
+  (func $template_x86_i64_eqz
     (call $emit_pop_rax)
     (call $emit_rex_w)
     (call $emit_test_eax)   ;; becomes test rax, rax with REX.W
@@ -461,82 +461,82 @@
   )
 
   ;; i64.eq (0x51), ne (0x52), lt_s (0x53), lt_u (0x54)
-  (func $template_i64_eq
+  (func $template_x86_i64_eq
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x94)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_ne
+  (func $template_x86_i64_ne
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x95)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_lt_s
+  (func $template_x86_i64_lt_s
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x9C)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_lt_u
+  (func $template_x86_i64_lt_u
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x92)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
   ;; i64.gt_s (0x55), gt_u (0x56), le_s (0x57), le_u (0x58)
-  (func $template_i64_gt_s
+  (func $template_x86_i64_gt_s
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x9F)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_gt_u
+  (func $template_x86_i64_gt_u
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x97)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_le_s
+  (func $template_x86_i64_le_s
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x9E)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_le_u
+  (func $template_x86_i64_le_u
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x96)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
   ;; i64.ge_s (0x59), ge_u (0x5A)
-  (func $template_i64_ge_s
+  (func $template_x86_i64_ge_s
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x9D)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_ge_u
+  (func $template_x86_i64_ge_u
     (call $emit_pop2_rcx_rax) (call $emit_cmp64)
     (call $emit_setcc (i32.const 0x93)) (call $emit_movzx_eax_al) (call $emit_maybe_push_rax)
   )
 
   ;; ── i32 unary templates ──────────────────────────────────────────
 
-  (func $template_i32_clz
+  (func $template_x86_i32_clz
     (call $emit_pop_rax) (call $emit_lzcnt32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_ctz
+  (func $template_x86_i32_ctz
     (call $emit_pop_rax) (call $emit_tzcnt32) (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_popcnt
+  (func $template_x86_i32_popcnt
     (call $emit_pop_rax) (call $emit_popcnt32) (call $emit_maybe_push_rax)
   )
 
   ;; ── Sign extension templates ──────────────────────────────────────
 
-  (func $template_i32_extend8_s
+  (func $template_x86_i32_extend8_s
     (call $emit_pop_rax)
     (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xBE))
     (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))  ;; movsx eax, al
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_extend16_s
+  (func $template_x86_i32_extend16_s
     (call $emit_pop_rax)
     (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xBF))
     (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))  ;; movsx eax, ax
@@ -544,7 +544,7 @@
   )
 
   ;; i64.extend8_s (0xC2): movsx rax, al (REX.W + 0F BE C0)
-  (func $template_i64_extend8_s
+  (func $template_x86_i64_extend8_s
     (call $emit_pop_rax)
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xBE))
@@ -553,7 +553,7 @@
   )
 
   ;; i64.extend16_s (0xC3): movsx rax, ax (REX.W + 0F BF C0)
-  (func $template_i64_extend16_s
+  (func $template_x86_i64_extend16_s
     (call $emit_pop_rax)
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0x0F)) (call $emit_byte (i32.const 0xBF))
@@ -562,7 +562,7 @@
   )
 
   ;; i64.extend32_s (0xC4): movsxd rax, eax (48 63 C0)
-  (func $template_i64_extend32_s
+  (func $template_x86_i64_extend32_s
     (call $emit_pop_rax)
     (call $emit_movsxd_rax_eax)
     (call $emit_maybe_push_rax)
@@ -570,19 +570,19 @@
 
   ;; ── Conversion templates ─────────────────────────────────────────
 
-  (func $template_i32_wrap_i64
+  (func $template_x86_i32_wrap_i64
     (call $emit_pop_rax)
     (call $emit_mov_eax_eax)  ;; zero-extend
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_extend_i32_s
+  (func $template_x86_i64_extend_i32_s
     (call $emit_pop_rax)
     (call $emit_movsxd_rax_eax)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_extend_i32_u
+  (func $template_x86_i64_extend_i32_u
     (call $emit_pop_rax)
     (call $emit_mov_eax_eax)
     (call $emit_maybe_push_rax)
@@ -591,7 +591,7 @@
   ;; ── Float conversion templates ─────────────────────────────────────
 
   ;; f32.convert_i32_s (0xB2)
-  (func $template_f32_convert_i32_s
+  (func $template_x86_f32_convert_i32_s
     (call $emit_pop_rax)
     (call $emit_cvtsi2ss_xmm0_eax)
     (call $emit_movd_eax_xmm0)
@@ -599,7 +599,7 @@
   )
 
   ;; f32.convert_i64_s (0xB4)
-  (func $template_f32_convert_i64_s
+  (func $template_x86_f32_convert_i64_s
     (call $emit_pop_rax)
     (call $emit_cvtsi2ss_xmm0_rax)
     (call $emit_movd_eax_xmm0)
@@ -607,7 +607,7 @@
   )
 
   ;; f32.convert_i32_u (0xB3) — branch-free unsigned i32→f32
-  (func $template_f32_convert_i32_u
+  (func $template_x86_f32_convert_i32_u
     (call $emit_pop_rax)
     (call $emit_mov_ecx_eax)
     (call $emit_sar_ecx_31)
@@ -626,7 +626,7 @@
   )
 
   ;; f32.convert_i64_u (0xB5) — branch-free unsigned i64→f32
-  (func $template_f32_convert_i64_u
+  (func $template_x86_f32_convert_i64_u
     (call $emit_pop_rax)
     (call $emit_mov_ecx_eax)  ;; rcx = i64 (lower 32 bits)
     (call $emit_sar_rcx_63)
@@ -645,7 +645,7 @@
   )
 
   ;; f64.convert_i32_s (0xB7)
-  (func $template_f64_convert_i32_s
+  (func $template_x86_f64_convert_i32_s
     (call $emit_pop_rax)
     (call $emit_cvtsi2sd_xmm0_eax)
     (call $emit_movq_rax_xmm0)
@@ -653,7 +653,7 @@
   )
 
   ;; f64.convert_i64_s (0xB9)
-  (func $template_f64_convert_i64_s
+  (func $template_x86_f64_convert_i64_s
     (call $emit_pop_rax)
     (call $emit_cvtsi2sd_xmm0_rax)
     (call $emit_movq_rax_xmm0)
@@ -661,7 +661,7 @@
   )
 
   ;; f64.convert_i32_u (0xB8) — branch-free unsigned i32→f64
-  (func $template_f64_convert_i32_u
+  (func $template_x86_f64_convert_i32_u
     (call $emit_pop_rax)
     (call $emit_mov_ecx_eax)
     (call $emit_sar_ecx_31)
@@ -679,7 +679,7 @@
   )
 
   ;; f64.convert_i64_u (0xBA) — branch-free unsigned i64→f64
-  (func $template_f64_convert_i64_u
+  (func $template_x86_f64_convert_i64_u
     (call $emit_pop_rax)
     (call $emit_mov_ecx_eax)
     (call $emit_sar_rcx_63)
@@ -697,7 +697,7 @@
   )
 
   ;; i32.trunc_f32_s (0xA8)
-  (func $template_i32_trunc_f32_s
+  (func $template_x86_i32_trunc_f32_s
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     (call $emit_cvttss2si_eax_xmm0)
@@ -705,7 +705,7 @@
   )
 
   ;; i32.trunc_f64_s (0xAA)
-  (func $template_i32_trunc_f64_s
+  (func $template_x86_i32_trunc_f64_s
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     (call $emit_cvttsd2si_eax_xmm0)
@@ -713,7 +713,7 @@
   )
 
   ;; i32.trunc_f32_u (0xA9) — branch-free with cmovns
-  (func $template_i32_trunc_f32_u
+  (func $template_x86_i32_trunc_f32_u
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     ;; Path A: direct signed truncation, save in edx
@@ -739,7 +739,7 @@
   )
 
   ;; i32.trunc_f64_u (0xAB) — branch-free with cmovns
-  (func $template_i32_trunc_f64_u
+  (func $template_x86_i32_trunc_f64_u
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     ;; Path A
@@ -763,7 +763,7 @@
   )
 
   ;; i64.trunc_f32_s (0xAE)
-  (func $template_i64_trunc_f32_s
+  (func $template_x86_i64_trunc_f32_s
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     (call $emit_cvttss2si_rax_xmm0)
@@ -771,7 +771,7 @@
   )
 
   ;; i64.trunc_f64_s (0xB0)
-  (func $template_i64_trunc_f64_s
+  (func $template_x86_i64_trunc_f64_s
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     (call $emit_cvttsd2si_rax_xmm0)
@@ -779,7 +779,7 @@
   )
 
   ;; i64.trunc_f32_u (0xAF) — branch-free with cmovns
-  (func $template_i64_trunc_f32_u
+  (func $template_x86_i64_trunc_f32_u
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     ;; Path A: direct signed 64-bit truncation, save in rdx
@@ -812,7 +812,7 @@
   )
 
   ;; i64.trunc_f64_u (0xB1) — branch-free with cmovns
-  (func $template_i64_trunc_f64_u
+  (func $template_x86_i64_trunc_f64_u
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     ;; Path A
@@ -843,7 +843,7 @@
   )
 
   ;; f32.demote_f64 (0xB6)
-  (func $template_f32_demote_f64
+  (func $template_x86_f32_demote_f64
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     (call $emit_cvtsd2ss_xmm0_xmm0)
@@ -852,7 +852,7 @@
   )
 
   ;; f64.promote_f32 (0xBB)
-  (func $template_f64_promote_f32
+  (func $template_x86_f64_promote_f32
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     (call $emit_cvtss2sd_xmm0_xmm0)
@@ -866,7 +866,7 @@
   (func $patch_rel8 (param $after_jmp i32)
     (i32.store8
       (i32.sub (local.get $after_jmp) (i32.const 1))
-      (i32.sub (call $get_code_ptr) (local.get $after_jmp))
+      (i32.sub (call $get_x86_code_ptr) (local.get $after_jmp))
     )
   )
 
@@ -890,38 +890,38 @@
   )
 
   ;; i32.trunc_sat_f32_s (0xFC, 0x00)
-  (func $template_i32_trunc_sat_f32_s
+  (func $template_x86_i32_trunc_sat_f32_s
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     ;; NaN check
     (call $emit_ucomiss_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f32 >= 2147483648.0 → INT_MAX
     (call $load_imm32_xmm1 (i32.const 0x4F000000))
     (call $emit_ucomiss)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f32 < -2147483648.0 → INT_MIN
     (call $load_imm32_xmm1 (i32.const 0xCF000000))
     (call $emit_ucomiss)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
     (call $emit_cvttss2si_eax_xmm0)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_xor_eax_eax)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .max (overflow)
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_mov_eax_imm32 (i32.const 0x7FFFFFFF))
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .min (underflow)
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_mov_eax_imm32 (i32.const 0x80000000))
@@ -931,38 +931,38 @@
   )
 
   ;; i32.trunc_sat_f32_u (0xFC, 0x01)
-  (func $template_i32_trunc_sat_f32_u
+  (func $template_x86_i32_trunc_sat_f32_u
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     ;; NaN → 0
     (call $emit_ucomiss_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f32 >= 4294967296.0 → UINT_MAX (0xFFFFFFFF)
     (call $load_imm32_xmm1 (i32.const 0x4F800000))
     (call $emit_ucomiss)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f32 < 0.0 → 0
     (call $load_imm32_xmm1 (i32.const 0x00000000))  ;; 0.0f
     (call $emit_ucomiss)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal: use unsigned truncation
-    (call $template_i32_trunc_f32_u)
+    (call $template_x86_i32_trunc_f32_u)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan: eax = 0
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_xor_eax_eax)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .overflow: eax = -1 (UINT_MAX)
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_mov_eax_imm32 (i32.const 0xFFFFFFFF))
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .underflow: eax = 0
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_xor_eax_eax)
@@ -972,38 +972,38 @@
   )
 
   ;; i32.trunc_sat_f64_s (0xFC, 0x02)
-  (func $template_i32_trunc_sat_f64_s
+  (func $template_x86_i32_trunc_sat_f64_s
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     ;; NaN → 0
     (call $emit_ucomisd_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f64 >= 2147483648.0 → INT_MAX
     (call $load_imm64_xmm1 (i32.const 0x41E00000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f64 < -2147483648.0 → INT_MIN
     (call $load_imm64_xmm1 (i32.const 0xC1E00000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
     (call $emit_cvttsd2si_eax_xmm0)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_xor_eax_eax)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .max
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_mov_eax_imm32 (i32.const 0x7FFFFFFF))
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .min
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_mov_eax_imm32 (i32.const 0x80000000))
@@ -1013,38 +1013,38 @@
   )
 
   ;; i32.trunc_sat_f64_u (0xFC, 0x03)
-  (func $template_i32_trunc_sat_f64_u
+  (func $template_x86_i32_trunc_sat_f64_u
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     ;; NaN → 0
     (call $emit_ucomisd_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f64 >= 4294967296.0 → UINT_MAX
     (call $load_imm64_xmm1 (i32.const 0x41F00000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f64 < 0.0 → 0
     (call $load_imm64_xmm1 (i32.const 0x00000000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
-    (call $template_i32_trunc_f64_u)
+    (call $template_x86_i32_trunc_f64_u)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_xor_eax_eax)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .overflow
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_mov_eax_imm32 (i32.const 0xFFFFFFFF))
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .underflow
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_xor_eax_eax)
@@ -1054,35 +1054,35 @@
   )
 
   ;; i64.trunc_sat_f32_s (0xFC, 0x04)
-  (func $template_i64_trunc_sat_f32_s
+  (func $template_x86_i64_trunc_sat_f32_s
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     ;; NaN → 0
     (call $emit_ucomiss_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f32 >= 9223372036854775808.0 → INT64_MAX
     (call $load_imm32_xmm1 (i32.const 0x5F000000))
     (call $emit_ucomiss)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f32 < -9223372036854775808.0 → INT64_MIN
     (call $load_imm32_xmm1 (i32.const 0xDF000000))
     (call $emit_ucomiss)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
     (call $emit_cvttss2si_rax_xmm0)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan: rax = 0
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0x31))  ;; xor r/m64, r64
     (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))  ;; xor rax, rax
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .max: rax = INT64_MAX
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_rex_w)
@@ -1090,7 +1090,7 @@
     (call $emit_dword (i32.const 0xFFFFFFFF))
     (call $emit_dword (i32.const 0x7FFFFFFF))  ;; mov rax, 0x7FFFFFFFFFFFFFFF
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .min: rax = INT64_MIN
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_rex_w)
@@ -1103,35 +1103,35 @@
   )
 
   ;; i64.trunc_sat_f32_u (0xFC, 0x05)
-  (func $template_i64_trunc_sat_f32_u
+  (func $template_x86_i64_trunc_sat_f32_u
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
     ;; NaN → 0
     (call $emit_ucomiss_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f32 >= 18446744073709551616.0 → UINT64_MAX
     (call $load_imm32_xmm1 (i32.const 0x5F800000))
     (call $emit_ucomiss)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f32 < 0.0 → 0
     (call $load_imm32_xmm1 (i32.const 0x00000000))
     (call $emit_ucomiss)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
-    (call $template_i64_trunc_f32_u)
+    (call $template_x86_i64_trunc_f32_u)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan: rax = 0
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0x31))  ;; xor r/m64, r64
     (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))  ;; xor rax, rax
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .overflow: rax = -1 (UINT64_MAX)
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_rex_w)
@@ -1139,7 +1139,7 @@
     (call $emit_dword (i32.const 0xFFFFFFFF))
     (call $emit_dword (i32.const 0xFFFFFFFF))  ;; mov rax, -1
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .underflow: rax = 0
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_rex_w)
@@ -1151,35 +1151,35 @@
   )
 
   ;; i64.trunc_sat_f64_s (0xFC, 0x06)
-  (func $template_i64_trunc_sat_f64_s
+  (func $template_x86_i64_trunc_sat_f64_s
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     ;; NaN → 0
     (call $emit_ucomisd_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f64 >= 9223372036854775808.0 → INT64_MAX
     (call $load_imm64_xmm1 (i32.const 0x43E00000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f64 < -9223372036854775808.0 → INT64_MIN
     (call $load_imm64_xmm1 (i32.const 0xC3E00000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
     (call $emit_cvttsd2si_rax_xmm0)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0x31))
     (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))  ;; xor rax, rax
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .max
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_rex_w)
@@ -1187,7 +1187,7 @@
     (call $emit_dword (i32.const 0xFFFFFFFF))
     (call $emit_dword (i32.const 0x7FFFFFFF))
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .min
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_rex_w)
@@ -1200,35 +1200,35 @@
   )
 
   ;; i64.trunc_sat_f64_u (0xFC, 0x07)
-  (func $template_i64_trunc_sat_f64_u
+  (func $template_x86_i64_trunc_sat_f64_u
     (local $nan_p i32) (local $ovf_p i32) (local $udf_p i32) (local $done_p i32)
     (call $emit_pop_rax)
     (call $emit_movq_xmm0_rax)
     ;; NaN → 0
     (call $emit_ucomisd_xmm0)
     (call $emit_jp_rel8 (i32.const 0))
-    (local.set $nan_p (call $get_code_ptr))
+    (local.set $nan_p (call $get_x86_code_ptr))
     ;; Overflow: f64 >= 18446744073709551616.0 → UINT64_MAX
     (call $load_imm64_xmm1 (i32.const 0x43F00000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jae_rel8 (i32.const 0))
-    (local.set $ovf_p (call $get_code_ptr))
+    (local.set $ovf_p (call $get_x86_code_ptr))
     ;; Underflow: f64 < 0.0 → 0
     (call $load_imm64_xmm1 (i32.const 0x00000000) (i32.const 0x00000000))
     (call $emit_ucomisd)
     (call $emit_jb_rel8 (i32.const 0))
-    (local.set $udf_p (call $get_code_ptr))
+    (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
-    (call $template_i64_trunc_f64_u)
+    (call $template_x86_i64_trunc_f64_u)
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan
     (call $patch_rel8 (local.get $nan_p))
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0x31))
     (call $emit_modrm (i32.const 3) (i32.const 0) (i32.const 0))
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .overflow
     (call $patch_rel8 (local.get $ovf_p))
     (call $emit_rex_w)
@@ -1236,7 +1236,7 @@
     (call $emit_dword (i32.const 0xFFFFFFFF))
     (call $emit_dword (i32.const 0xFFFFFFFF))
     (call $emit_jmp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; .underflow
     (call $patch_rel8 (local.get $udf_p))
     (call $emit_rex_w)
@@ -1248,36 +1248,36 @@
   )
 
   ;; Reinterpret ops (0xBC-0xBF) — no-ops on the JIT stack (same bits)
-  (func $template_i32_reinterpret_f32)
-  (func $template_i64_reinterpret_f64)
-  (func $template_f32_reinterpret_i32)
-  (func $template_f64_reinterpret_i64)
+  (func $template_x86_i32_reinterpret_f32)
+  (func $template_x86_i64_reinterpret_f64)
+  (func $template_x86_f32_reinterpret_i32)
+  (func $template_x86_f64_reinterpret_i64)
 
   ;; ── Float load/store templates ────────────────────────────────────
 
   ;; f32.load (0x2A)
-  (func $template_f32_load
+  (func $template_x86_f32_load
     (call $emit_pop_reg (i32.const 1))    ;; pop rcx = addr
     (call $emit_mem_load32)
     (call $emit_maybe_push_rax)
   )
 
   ;; f64.load (0x2B)
-  (func $template_f64_load
+  (func $template_x86_f64_load
     (call $emit_pop_reg (i32.const 1))    ;; pop rcx = addr
     (call $emit_mem_load64)
     (call $emit_maybe_push_rax)
   )
 
   ;; f32.store (0x38)
-  (func $template_f32_store
+  (func $template_x86_f32_store
     (call $emit_pop_reg (i32.const 1))    ;; pop rcx = addr
     (call $emit_pop_rax)                   ;; pop rax = value
     (call $emit_mem_store32)
   )
 
   ;; f64.store (0x39)
-  (func $template_f64_store
+  (func $template_x86_f64_store
     (call $emit_pop_reg (i32.const 1))    ;; pop rcx = addr
     (call $emit_pop_rax)                   ;; pop rax = value
     (call $emit_mem_store64)
@@ -1285,138 +1285,138 @@
 
   ;; ── Memory load/store templates ──────────────────────────────────
 
-  (func $template_i32_load
+  (func $template_x86_i32_load
     (call $emit_pop_reg (i32.const 1))    ;; pop rcx
     (call $emit_mem_load32)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i64_load
+  (func $template_x86_i64_load
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load64)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_load8_s
+  (func $template_x86_i32_load8_s
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load8_s)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_load8_u
+  (func $template_x86_i32_load8_u
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load8_u)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_load16_s
+  (func $template_x86_i32_load16_s
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load16_s)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_load16_u
+  (func $template_x86_i32_load16_u
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load16_u)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_i32_store
+  (func $template_x86_i32_store
     (call $emit_pop_reg (i32.const 1))    ;; pop rcx = addr
     (call $emit_pop_rax)                   ;; pop rax = value
     (call $emit_mem_store32)
   )
 
-  (func $template_i64_store
+  (func $template_x86_i64_store
     (call $emit_pop_reg (i32.const 1))
     (call $emit_pop_rax)
     (call $emit_mem_store64)
   )
 
-  (func $template_i32_store8
+  (func $template_x86_i32_store8
     (call $emit_pop_reg (i32.const 1))
     (call $emit_pop_rax)
     (call $emit_mem_store8)
   )
 
-  (func $template_i32_store16
+  (func $template_x86_i32_store16
     (call $emit_pop_reg (i32.const 1))
     (call $emit_pop_rax)
     (call $emit_mem_store16)
   )
 
   ;; i64.load8_s (0x30)
-  (func $template_i64_load8_s
+  (func $template_x86_i64_load8_s
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load8_s_64)
     (call $emit_maybe_push_rax)
   )
 
   ;; i64.load8_u (0x31)
-  (func $template_i64_load8_u
+  (func $template_x86_i64_load8_u
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load8_u)
     (call $emit_maybe_push_rax)
   )
 
   ;; i64.load16_s (0x32)
-  (func $template_i64_load16_s
+  (func $template_x86_i64_load16_s
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load16_s_64)
     (call $emit_maybe_push_rax)
   )
 
   ;; i64.load16_u (0x33)
-  (func $template_i64_load16_u
+  (func $template_x86_i64_load16_u
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load16_u)
     (call $emit_maybe_push_rax)
   )
 
   ;; i64.load32_s (0x34)
-  (func $template_i64_load32_s
+  (func $template_x86_i64_load32_s
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load32_s)
     (call $emit_maybe_push_rax)
   )
 
   ;; i64.load32_u (0x35)
-  (func $template_i64_load32_u
+  (func $template_x86_i64_load32_u
     (call $emit_pop_reg (i32.const 1))
     (call $emit_mem_load32)
     (call $emit_maybe_push_rax)
   )
 
   ;; i64.store8 (0x3C)
-  (func $template_i64_store8
+  (func $template_x86_i64_store8
     (call $emit_pop_reg (i32.const 1))
     (call $emit_pop_rax)
     (call $emit_mem_store8)
   )
 
   ;; i64.store16 (0x3D)
-  (func $template_i64_store16
+  (func $template_x86_i64_store16
     (call $emit_pop_reg (i32.const 1))
     (call $emit_pop_rax)
     (call $emit_mem_store16)
   )
 
   ;; i64.store32 (0x3E)
-  (func $template_i64_store32
+  (func $template_x86_i64_store32
     (call $emit_pop_reg (i32.const 1))
     (call $emit_pop_rax)
     (call $emit_mem_store32)
   )
 
   ;; ── memory.size (0x3F) ──────────────────────────────────────────
-  (func $template_memory_size
+  (func $template_x86_memory_size
     (call $emit_load_r15_to_rdx (i32.const 64))   ;; JitGlobals.memory_pages
     (call $emit_load_rax_rdx_disp (i32.const 0))
     (call $emit_maybe_push_rax)
   )
 
   ;; memory.grow (0x40)
-  (func $template_memory_grow
+  (func $template_x86_memory_grow
     (call $emit_pop_rax)
     ;; push result = memory.grow - not implementable in JIT without host calls
     (call $emit_xor_eax_eax)  ;; return 0 (success, no grow)
@@ -1424,25 +1424,25 @@
   )
 
   ;; ref.null (0xD0): push 0 (null reference)
-  (func $template_ref_null
+  (func $template_x86_ref_null
     (call $emit_xor_eax_eax)
     (call $emit_maybe_push_rax)
   )
 
   ;; ref.is_null (0xD1): pop, test if zero, push i32 result
-  (func $template_ref_is_null
+  (func $template_x86_ref_is_null
     (call $emit_pop_rax)
     (call $emit_test_eax)
     (call $emit_setcc_and_push (i32.const 0x94))  ;; sete
   )
 
   ;; ref.func (0xD2): push function reference (from imm0)
-  (func $template_ref_func (param $dec_ptr i32)
+  (func $template_x86_ref_func (param $dec_ptr i32)
     (call $emit_mov_eax_imm32 (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_unsupported
+  (func $template_x86_unsupported
     ;; just emit ud2 and nop
     (call $emit_ud2)
   )
@@ -1451,7 +1451,7 @@
 
   ;; call (0x10): if func_idx < import_count, emit inline syscall.
   ;; Otherwise emit unsupported (no multi-function JIT yet).
-  (func $template_call (param $dec_ptr i32)
+  (func $template_x86_call (param $dec_ptr i32)
     (local $func_idx i32) (local $import_count i32) (local $type_off i32)
     (local $param_count i32) (local $sysno i32) (local $i i32)
 
@@ -1529,7 +1529,7 @@
       )
       (else
         ;; Local function — not yet supported (would need multi-function JIT)
-        (call $template_unsupported)
+        (call $template_x86_unsupported)
       )
     )
   )
@@ -1537,7 +1537,7 @@
   ;; ── Float arithmetic templates ───────────────────────────────────
 
   ;; f32.add: pop rcx, pop rax, movd xmm1,ecx, movd xmm0,eax, addss, movd, push
-  (func $template_f32_add
+  (func $template_x86_f32_add
     (call $emit_pop2_rcx_rax)
     (call $emit_movd_xmm1_ecx)
     (call $emit_movd_xmm0_eax)
@@ -1546,7 +1546,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f32_sub
+  (func $template_x86_f32_sub
     (call $emit_pop2_rcx_rax)
     (call $emit_movd_xmm1_ecx)
     (call $emit_movd_xmm0_eax)
@@ -1555,7 +1555,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f32_mul
+  (func $template_x86_f32_mul
     (call $emit_pop2_rcx_rax)
     (call $emit_movd_xmm1_ecx)
     (call $emit_movd_xmm0_eax)
@@ -1564,7 +1564,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f32_div
+  (func $template_x86_f32_div
     (call $emit_pop2_rcx_rax)
     (call $emit_movd_xmm1_ecx)
     (call $emit_movd_xmm0_eax)
@@ -1574,7 +1574,7 @@
   )
 
   ;; f32.min (0x96): minss + NaN fixup
-  (func $template_f32_min
+  (func $template_x86_f32_min
     (local $nan_p i32) (local $done_p i32)
     (call $emit_pop2_rcx_rax)
     (call $emit_movd_xmm1_ecx)
@@ -1583,7 +1583,7 @@
     ;; NaN fixup: ucomiss xmm0, xmm0 → JP → canonical NaN
     (call $emit_ucomiss_xmm0)
     (call $emit_jnp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     ;; is NaN: push canonical NaN, pop to xmm0
     (call $emit_push_imm32 (i32.const 0x7FC00000))
     (call $emit_pop_rax)
@@ -1594,7 +1594,7 @@
   )
 
   ;; f32.max (0x97): maxss + NaN fixup
-  (func $template_f32_max
+  (func $template_x86_f32_max
     (local $nan_p i32) (local $done_p i32)
     (call $emit_pop2_rcx_rax)
     (call $emit_movd_xmm1_ecx)
@@ -1602,7 +1602,7 @@
     (call $emit_sse_op (i32.const 0xF3) (i32.const 0x5F))  ;; maxss
     (call $emit_ucomiss_xmm0)
     (call $emit_jnp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     (call $emit_push_imm32 (i32.const 0x7FC00000))
     (call $emit_pop_rax)
     (call $emit_movd_xmm0_eax)
@@ -1612,18 +1612,18 @@
   )
 
   ;; f32.copysign (0x98): result = abs(left) | signbit(right)
-  (func $template_f32_copysign
+  (func $template_x86_f32_copysign
     (call $emit_pop_reg (i32.const 1))  ;; pop rcx = right
     (call $emit_pop_rax)                 ;; pop rax = left
     (call $emit_btr_eax_imm8 (i32.const 31))  ;; clear sign bit of left
     (call $emit_and_ecx_imm32 (i32.const 0x80000000))  ;; isolate sign of right
-    (call $emit_or32)  ;; or eax, ecx
+    (call $emit_x86_ror32)  ;; or eax, ecx
     (call $emit_maybe_push_rax)
   )
 
   ;; ── f64 binary templates ──────────────────────────────────────────
 
-  (func $template_f64_add
+  (func $template_x86_f64_add
     (call $emit_pop2_rcx_rax)
     (call $emit_movq_xmm1_rcx)
     (call $emit_movq_xmm0_rax)
@@ -1632,7 +1632,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f64_sub
+  (func $template_x86_f64_sub
     (call $emit_pop2_rcx_rax)
     (call $emit_movq_xmm1_rcx)
     (call $emit_movq_xmm0_rax)
@@ -1641,7 +1641,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f64_mul
+  (func $template_x86_f64_mul
     (call $emit_pop2_rcx_rax)
     (call $emit_movq_xmm1_rcx)
     (call $emit_movq_xmm0_rax)
@@ -1650,7 +1650,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f64_div
+  (func $template_x86_f64_div
     (call $emit_pop2_rcx_rax)
     (call $emit_movq_xmm1_rcx)
     (call $emit_movq_xmm0_rax)
@@ -1660,7 +1660,7 @@
   )
 
   ;; f64.min (0xA4): minsd + NaN fixup
-  (func $template_f64_min
+  (func $template_x86_f64_min
     (local $nan_p i32) (local $done_p i32)
     (call $emit_pop2_rcx_rax)
     (call $emit_movq_xmm1_rcx)
@@ -1668,7 +1668,7 @@
     (call $emit_sse_op (i32.const 0xF2) (i32.const 0x5D))  ;; minsd
     (call $emit_ucomisd_xmm0)
     (call $emit_jnp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0xB8))
     (call $emit_dword (i32.const 0x00000000))
@@ -1680,7 +1680,7 @@
   )
 
   ;; f64.max (0xA5): maxsd + NaN fixup
-  (func $template_f64_max
+  (func $template_x86_f64_max
     (local $nan_p i32) (local $done_p i32)
     (call $emit_pop2_rcx_rax)
     (call $emit_movq_xmm1_rcx)
@@ -1688,7 +1688,7 @@
     (call $emit_sse_op (i32.const 0xF2) (i32.const 0x5F))  ;; maxsd
     (call $emit_ucomisd_xmm0)
     (call $emit_jnp_rel8 (i32.const 0))
-    (local.set $done_p (call $get_code_ptr))
+    (local.set $done_p (call $get_x86_code_ptr))
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0xB8))
     (call $emit_dword (i32.const 0x00000000))
@@ -1700,7 +1700,7 @@
   )
 
   ;; f64.copysign (0xA6): result = abs(left) | signbit(right)
-  (func $template_f64_copysign
+  (func $template_x86_f64_copysign
     (call $emit_pop_reg (i32.const 1))  ;; pop rcx = right
     (call $emit_pop_rax)                 ;; pop rax = left
     (call $emit_btr_rax_imm8 (i32.const 63))  ;; clear sign of left for magnitude
@@ -1711,44 +1711,44 @@
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0xD1))
     (call $emit_modrm (i32.const 3) (i32.const 3) (i32.const 1))  ;; rcr rcx, 1
-    (call $emit_or64)  ;; or rax, rcx
+    (call $emit_x86_xor64)  ;; or rax, rcx
     (call $emit_maybe_push_rax)
   )
 
   ;; ── f32 comparison templates ──────────────────────────────────────
 
-  (func $template_f32_eq
+  (func $template_x86_f32_eq
     (call $emit_f32_cmp_prologue)
     (call $emit_setnp_save_ah)
     (call $emit_setcc_and_push (i32.const 0x94))   ;; sete
   )
 
-  (func $template_f32_ne
+  (func $template_x86_f32_ne
     (call $emit_f32_cmp_prologue)
     (call $emit_setp_save_ah)
     (call $emit_setcc_or_push (i32.const 0x95))    ;; setne
   )
 
-  (func $template_f32_lt
+  (func $template_x86_f32_lt
     (call $emit_f32_cmp_prologue)
     (call $emit_setnp_save_ah)
     (call $emit_setcc_and_push (i32.const 0x92))   ;; setb
   )
 
-  (func $template_f32_gt
+  (func $template_x86_f32_gt
     (call $emit_f32_cmp_prologue)
     (call $emit_setcc (i32.const 0x97))            ;; seta (NaN-safe: CF=1 → seta=0)
     (call $emit_movzx_eax_al)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f32_le
+  (func $template_x86_f32_le
     (call $emit_f32_cmp_prologue)
     (call $emit_setnp_save_ah)
     (call $emit_setcc_and_push (i32.const 0x96))   ;; setbe
   )
 
-  (func $template_f32_ge
+  (func $template_x86_f32_ge
     (call $emit_f32_cmp_prologue)
     (call $emit_setcc (i32.const 0x93))            ;; setae
     (call $emit_movzx_eax_al)
@@ -1757,38 +1757,38 @@
 
   ;; ── f64 comparison templates ──────────────────────────────────────
 
-  (func $template_f64_eq
+  (func $template_x86_f64_eq
     (call $emit_f64_cmp_prologue)
     (call $emit_setnp_save_ah)
     (call $emit_setcc_and_push (i32.const 0x94))
   )
 
-  (func $template_f64_ne
+  (func $template_x86_f64_ne
     (call $emit_f64_cmp_prologue)
     (call $emit_setp_save_ah)
     (call $emit_setcc_or_push (i32.const 0x95))
   )
 
-  (func $template_f64_lt
+  (func $template_x86_f64_lt
     (call $emit_f64_cmp_prologue)
     (call $emit_setnp_save_ah)
     (call $emit_setcc_and_push (i32.const 0x92))
   )
 
-  (func $template_f64_gt
+  (func $template_x86_f64_gt
     (call $emit_f64_cmp_prologue)
     (call $emit_setcc (i32.const 0x97))
     (call $emit_movzx_eax_al)
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f64_le
+  (func $template_x86_f64_le
     (call $emit_f64_cmp_prologue)
     (call $emit_setnp_save_ah)
     (call $emit_setcc_and_push (i32.const 0x96))
   )
 
-  (func $template_f64_ge
+  (func $template_x86_f64_ge
     (call $emit_f64_cmp_prologue)
     (call $emit_setcc (i32.const 0x93))
     (call $emit_movzx_eax_al)
@@ -1797,57 +1797,57 @@
 
   ;; ── Float unary templates ────────────────────────────────────────
 
-  (func $template_f32_abs
+  (func $template_x86_f32_abs
     ;; and eax, 0x7FFFFFFF  (bits: clear sign bit)
     (call $emit_pop_rax)
     (call $emit_and_eax_imm32 (i32.const 0x7FFFFFFF))
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f32_neg
+  (func $template_x86_f32_neg
     ;; xor eax, 0x80000000  (bits: flip sign bit)
     (call $emit_pop_rax)
     (call $emit_xor_eax_imm32 (i32.const 0x80000000))
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f32_sqrt
+  (func $template_x86_f32_sqrt
     (call $emit_f32_unop_prologue)
     (call $emit_sse_op (i32.const 0xF3) (i32.const 0x51))  ;; sqrtss
     (call $emit_f32_unop_epilogue)
   )
 
-  (func $template_f32_ceil
+  (func $template_x86_f32_ceil
     (call $emit_f32_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0A) (i32.const 2))   ;; roundss, ceil
     (call $emit_f32_unop_epilogue)
   )
 
-  (func $template_f32_floor
+  (func $template_x86_f32_floor
     (call $emit_f32_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0A) (i32.const 1))   ;; roundss, floor
     (call $emit_f32_unop_epilogue)
   )
 
-  (func $template_f32_trunc
+  (func $template_x86_f32_trunc
     (call $emit_f32_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0A) (i32.const 3))   ;; roundss, trunc
     (call $emit_f32_unop_epilogue)
   )
 
-  (func $template_f32_nearest
+  (func $template_x86_f32_nearest
     (call $emit_f32_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0A) (i32.const 0))   ;; roundss, nearest
     (call $emit_f32_unop_epilogue)
   )
 
   ;; ── f32.const (0x43): push 4-byte constant ──────────────────────────
-  (func $template_f32_const (param $dec_ptr i32)
+  (func $template_x86_f32_const (param $dec_ptr i32)
     (call $emit_push_imm32 (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
   )
 
   ;; ── f64.const (0x44): push 8-byte constant ──────────────────────────
-  (func $template_f64_const (param $dec_ptr i32)
+  (func $template_x86_f64_const (param $dec_ptr i32)
     (local $val i64)
     (local.set $val (i64.load (i32.add (local.get $dec_ptr) (i32.const 4))))
     (call $emit_rex_w)
@@ -1856,7 +1856,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f64_abs
+  (func $template_x86_f64_abs
     ;; btr rax, 63: clear the sign bit (5 bytes: 48 0F BA F0 3F)
     ;; ModRM /6 = BTR (bit test and reset)
     (call $emit_pop_rax)
@@ -1868,7 +1868,7 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f64_neg
+  (func $template_x86_f64_neg
     ;; bts rax, 63: flip the sign bit (5 bytes: 48 0F BA F8 3F)
     ;; ModRM /5 = BTS (bit test and set)
     (call $emit_pop_rax)
@@ -1880,31 +1880,31 @@
     (call $emit_maybe_push_rax)
   )
 
-  (func $template_f64_sqrt
+  (func $template_x86_f64_sqrt
     (call $emit_f64_unop_prologue)
     (call $emit_sse_op (i32.const 0xF2) (i32.const 0x51))  ;; sqrtsd
     (call $emit_f64_unop_epilogue)
   )
 
-  (func $template_f64_ceil
+  (func $template_x86_f64_ceil
     (call $emit_f64_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0B) (i32.const 2))   ;; roundsd, ceil
     (call $emit_f64_unop_epilogue)
   )
 
-  (func $template_f64_floor
+  (func $template_x86_f64_floor
     (call $emit_f64_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0B) (i32.const 1))   ;; roundsd, floor
     (call $emit_f64_unop_epilogue)
   )
 
-  (func $template_f64_trunc
+  (func $template_x86_f64_trunc
     (call $emit_f64_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0B) (i32.const 3))   ;; roundsd, trunc
     (call $emit_f64_unop_epilogue)
   )
 
-  (func $template_f64_nearest
+  (func $template_x86_f64_nearest
     (call $emit_f64_unop_prologue)
     (call $emit_sse3a_op (i32.const 0x0B) (i32.const 0))   ;; roundsd, nearest
     (call $emit_f64_unop_epilogue)
