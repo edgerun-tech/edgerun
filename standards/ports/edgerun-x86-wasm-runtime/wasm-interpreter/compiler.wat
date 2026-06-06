@@ -8,19 +8,18 @@
   ;; Uses the same linear memory as the interpreter (imported).
   ;; ═════════════════════════════════════════════════════════════════════
 
-  (import "env" "memory" (memory 1))
+  (import "edgerun-core" "memory" (memory 1))
 
-  ;; ── Constants: interpreter data offsets (same as interpreter.wat) ──
-  (global $OFF_TYPES_BUF  i32 (i32.const 264))
-  (global $OFF_CODE_BUF   i32 (i32.const 21792))
-  (global $OFF_FUNCTIONS_BUF i32 (i32.const 17688))
-  (global $OFF_DECODED_OPS i32 (i32.const 0xA0000))
-  (global $OFF_DECODED_COUNT i32 (i32.const 89864))
-
-  (global $FUNC_TYPE_SIZE i32 (i32.const 256))
-  (global $CODE_SIZE      i32 (i32.const 64))
-  (global $FUNCTION_SIZE  i32 (i32.const 16))
-  (global $DEC_SZ         i32 (i32.const 16))
+  ;; ── Shared constants (from edgerun-core) ─────────────────────────────
+  (import "edgerun-core" "OFF_TYPES_BUF" (global $OFF_TYPES_BUF i32))
+  (import "edgerun-core" "OFF_CODE_BUF" (global $OFF_CODE_BUF i32))
+  (import "edgerun-core" "OFF_FUNCTIONS_BUF" (global $OFF_FUNCTIONS_BUF i32))
+  (import "edgerun-core" "OFF_DECODED_OPS" (global $OFF_DECODED_OPS i32))
+  (import "edgerun-core" "OFF_DECODED_COUNT" (global $OFF_DECODED_COUNT i32))
+  (import "edgerun-core" "DEC_SZ" (global $DEC_SZ i32))
+  (import "edgerun-core" "SZ_TYPE" (global $FUNC_TYPE_SIZE i32))
+  (import "edgerun-core" "SZ_CODE" (global $CODE_SIZE i32))
+  (import "edgerun-core" "SZ_FUNC" (global $FUNCTION_SIZE i32))
 
   ;; JIT code cache: 1MB starting at 0x100000
   (global $JIT_CACHE      i32 (i32.const 0x100000))

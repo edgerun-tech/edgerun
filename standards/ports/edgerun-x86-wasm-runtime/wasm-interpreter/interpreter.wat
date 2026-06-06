@@ -13,15 +13,27 @@
   ;;   0xA0000 - 0xFFFFF: Decoded ops cache (384KB, 32768 * 32 = 1MB)
   ;;   0x100000+        : Guest WASM binary
   ;;
+  ;; Imports memory from edgerun-core (shared linear memory).
   ;; Exports:
   ;;   load(wasm_ptr, wasm_len) -> error_code
   ;;   call(func_idx, args_ptr, args_len) -> error_code
   ;;   get_result_value(idx) -> i64
   ;;   get_result_count() -> i32
-  ;;   memory
+  ;;   dbg
   ;; ===================================================================
 
-  (memory (export "memory") 4)
+  (import "edgerun-core" "memory" (memory 1))
+
+  ;; ── Shared constants (from edgerun-core) ─────────────────────────────
+  (import "edgerun-core" "OFF_TYPES_BUF" (global $OFF_TYPES_BUF i32))
+  (import "edgerun-core" "OFF_CODE_BUF" (global $OFF_CODE_BUF i32))
+  (import "edgerun-core" "OFF_FUNCTIONS_BUF" (global $OFF_FUNCTIONS_BUF i32))
+  (import "edgerun-core" "OFF_DECODED_OPS" (global $OFF_DECODED_OPS i32))
+  (import "edgerun-core" "OFF_DECODED_COUNT" (global $OFF_DECODED_COUNT i32))
+  (import "edgerun-core" "DEC_SZ" (global $DEC_SZ i32))
+  (import "edgerun-core" "SZ_TYPE" (global $SZ_TYPE i32))
+  (import "edgerun-core" "SZ_FUNC" (global $SZ_FUNC i32))
+  (import "edgerun-core" "SZ_CODE" (global $SZ_CODE i32))
 
   ;; ── Memory offsets ──────────────────────────────────────────────────
   (global $OFF_ERR         i32 (i32.const 0))
@@ -35,7 +47,6 @@
 
   ;; Type section
   (global $OFF_TYPE_COUNT i32 (i32.const 256))
-  (global $OFF_TYPES_BUF  i32 (i32.const 264))
 
   ;; Import section
   (global $OFF_IMPORT_COUNT i32 (i32.const 16648))
@@ -43,11 +54,9 @@
 
   ;; Function section
   (global $OFF_FUNCTION_COUNT i32 (i32.const 17680))
-  (global $OFF_FUNCTIONS_BUF  i32 (i32.const 17688))
 
   ;; Code section
   (global $OFF_CODE_COUNT i32 (i32.const 21784))
-  (global $OFF_CODE_BUF   i32 (i32.const 21792))
 
   ;; Export section
   (global $OFF_EXPORT_COUNT i32 (i32.const 38176))
@@ -103,8 +112,6 @@
 
   (global $OFF_FRAME_SAVE i32 (i32.const 0x70000))
   (global $FRAME_SAVE_SZ  i32 (i32.const 65536))
-  (global $OFF_DECODED_COUNT i32 (i32.const 89864))
-  (global $OFF_DECODED_OPS   i32 (i32.const 0xA0000))
   (global $OFF_NAMES_BUF     i32 (i32.const 0x90000))
   (global $OFF_NAMES_PTR    i32 (i32.const 0x8FFF0))
   (global $OFF_GUEST_MEM_BASE i32 (i32.const 0x200000))
@@ -113,9 +120,6 @@
   ;; Label stack for computing matching block/loop/if/else/end during decode
   (global $OFF_LABEL_STACK     i32 (i32.const 0x8F000))
   (global $OFF_LABEL_STACK_PTR i32 (i32.const 0x8EFFC))
-
-  ;; Decoded op format (16 bytes): opcode(1) + flags(1) + pad(2) + imm0(4) + imm1(4) + next_idx(4)
-  (global $DEC_SZ  i32 (i32.const 16))
 
   ;; ── Resource limits ─────────────────────────────────────────────────
   (global $MAX_FUNCTIONS i32 (i32.const 256))
@@ -133,9 +137,6 @@
   (global $DECODED_SZ    i32 (i32.const 32))
 
   ;; ── Struct sizes ────────────────────────────────────────────────────
-  (global $SZ_TYPE   i32 (i32.const 256))
-  (global $SZ_FUNC   i32 (i32.const 16))
-  (global $SZ_CODE   i32 (i32.const 64))
   (global $SZ_EXPORT i32 (i32.const 32))
   (global $SZ_GLOBAL i32 (i32.const 32))
   (global $SZ_IMPORT i32 (i32.const 64))

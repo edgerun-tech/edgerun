@@ -3,7 +3,7 @@
   "base_path": "build/wasm/",
   "generated": "2026-06-06T07:13:37.930669+00:00",
   "modules": {
-    "agent-primitives/codex-agent-core": {
+    "app/codex-agent-core": {
       "abi_version": 0,
       "lines": 262,
       "memory": true,
@@ -11,7 +11,7 @@
       "simd": false,
       "standard_id": null
     },
-    "agent-primitives/node-surfaces-core": {
+    "app/node-surfaces-core": {
       "abi_version": 0,
       "exports": [
         "node_surfaces_abi_version",
@@ -40,7 +40,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/apps-core": {
+    "app/apps-core": {
       "abi_version": 0,
       "exports": [
         "oauth_default_scope_count",
@@ -103,7 +103,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-cell-codec/tor-cell-codec": {
+    "tor/tor-cell-codec": {
       "abi_version": 0,
       "lines": 1800,
       "memory": false,
@@ -111,7 +111,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-cgo-crypto/tor-cgo-crypto": {
+    "tor/tor-cgo-crypto": {
       "abi_version": 0,
       "lines": 6235,
       "memory": false,
@@ -119,7 +119,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-channel-handshake/tor-channel-handshake": {
+    "tor/tor-channel-handshake": {
       "abi_version": 0,
       "lines": 16856,
       "memory": false,
@@ -127,7 +127,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-device/tor-device": {
+    "tor/tor-device": {
       "abi_version": 0,
       "lines": 24934,
       "memory": false,
@@ -135,7 +135,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-directory-authority/tor-directory-authority": {
+    "tor/tor-directory-authority": {
       "abi_version": 2,
       "lines": 282,
       "memory": true,
@@ -143,7 +143,7 @@
       "simd": true,
       "standard_id": 300218
     },
-    "app-primitives/tor-directory-rsa/tor-directory-rsa": {
+    "tor/tor-directory-rsa": {
       "abi_version": 0,
       "lines": 11129,
       "memory": false,
@@ -151,7 +151,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-directory-vote/tor-directory-vote": {
+    "tor/tor-directory-vote": {
       "abi_version": 0,
       "lines": 20471,
       "memory": false,
@@ -159,7 +159,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-full-spec/tor-full-spec": {
+    "tor/tor-full-spec": {
       "abi_version": 2,
       "lines": 75,
       "memory": true,
@@ -167,7 +167,7 @@
       "simd": true,
       "standard_id": 300208
     },
-    "app-primitives/tor-hidden-service-full/tor-hidden-service-full": {
+    "tor/tor-hidden-service-full": {
       "abi_version": 2,
       "lines": 219,
       "memory": true,
@@ -175,7 +175,7 @@
       "simd": true,
       "standard_id": 300207
     },
-    "app-primitives/tor-hs-descriptor-crypto/tor-hs-descriptor-crypto": {
+    "tor/tor-hs-descriptor-crypto": {
       "abi_version": 0,
       "lines": 9024,
       "memory": false,
@@ -183,7 +183,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-hs-identity/tor-hs-identity": {
+    "tor/tor-hs-identity": {
       "abi_version": 0,
       "lines": 2341,
       "memory": false,
@@ -191,7 +191,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-hs-intro-auth/tor-hs-intro-auth": {
+    "tor/tor-hs-intro-auth": {
       "abi_version": 0,
       "lines": 17365,
       "memory": false,
@@ -199,7 +199,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-hs-intro-extensions/tor-hs-intro-extensions": {
+    "tor/tor-hs-intro-extensions": {
       "abi_version": 0,
       "lines": 4494,
       "memory": false,
@@ -207,7 +207,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-hs-intro-relay/tor-hs-intro-relay": {
+    "tor/tor-hs-intro-relay": {
       "abi_version": 2,
       "lines": 223,
       "memory": true,
@@ -215,7 +215,7 @@
       "simd": true,
       "standard_id": 300217
     },
-    "app-primitives/tor-hs-ntor/tor-hs-ntor": {
+    "tor/tor-hs-ntor": {
       "abi_version": 0,
       "lines": 10209,
       "memory": false,
@@ -223,7 +223,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-hs-pow-v1/tor-hs-pow-v1": {
+    "tor/tor-hs-pow-v1": {
       "abi_version": 0,
       "lines": 24347,
       "memory": false,
@@ -231,7 +231,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-identity-seal/tor-identity-seal": {
+    "tor/tor-identity-seal": {
       "abi_version": 0,
       "lines": 10990,
       "memory": false,
@@ -239,7 +239,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-ntor-crypto/tor-ntor-crypto": {
+    "tor/tor-ntor-crypto": {
       "abi_version": 0,
       "lines": 8395,
       "memory": false,
@@ -247,7 +247,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-ntor-v3-crypto/tor-ntor-v3-crypto": {
+    "tor/tor-ntor-v3-crypto": {
       "abi_version": 0,
       "lines": 9602,
       "memory": false,
@@ -255,7 +255,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-relay-crypto/tor-relay-crypto": {
+    "tor/tor-relay-crypto": {
       "abi_version": 0,
       "lines": 9598,
       "memory": false,
@@ -263,7 +263,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-relay-full/tor-relay-full": {
+    "tor/tor-relay-full": {
       "abi_version": 2,
       "lines": 490,
       "memory": true,
@@ -271,7 +271,7 @@
       "simd": true,
       "standard_id": 300205
     },
-    "app-primitives/tor-wat/crypto": {
+    "tor/crypto": {
       "abi_version": 0,
       "lines": 422,
       "memory": true,
@@ -279,7 +279,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-wat/protocol": {
+    "tor/protocol": {
       "abi_version": 0,
       "lines": 704,
       "memory": true,
@@ -287,7 +287,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/tor-wat/tor-library": {
+    "tor/tor-library": {
       "abi_version": 0,
       "lines": 522,
       "memory": true,
@@ -295,7 +295,7 @@
       "simd": false,
       "standard_id": null
     },
-    "app-primitives/wallet-exec-core": {
+    "app/wallet-exec-core": {
       "abi_version": 0,
       "exports": [
         "wallet_exec_abi_version",
@@ -336,7 +336,7 @@
       "simd": false,
       "standard_id": null
     },
-    "authority-primitives/authority-storage-core": {
+    "app/authority-storage-core": {
       "abi_version": 0,
       "lines": 274,
       "memory": true,
@@ -344,7 +344,7 @@
       "simd": false,
       "standard_id": null
     },
-    "capability-primitives/capability-core": {
+    "app/capability-core": {
       "abi_version": 0,
       "exports": [
         "cap_descriptor_version",
@@ -403,7 +403,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/acme-core": {
+    "web/acme-core": {
       "abi_version": 2,
       "lines": 79,
       "memory": true,
@@ -411,7 +411,7 @@
       "simd": false,
       "standard_id": 300132
     },
-    "codec-primitives/apk-api-scan": {
+    "web/apk-api-scan": {
       "abi_version": 2,
       "lines": 591,
       "memory": true,
@@ -419,7 +419,7 @@
       "simd": false,
       "standard_id": 300091
     },
-    "codec-primitives/async-runtime-core": {
+    "system/async-runtime-core": {
       "abi_version": 0,
       "exports": [
         "mpsc_capacity",
@@ -456,7 +456,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/browser-core": {
+    "web/browser-core": {
       "abi_version": 0,
       "exports": [
         "browser_wire_constant",
@@ -495,7 +495,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/bt-stdio-frame-codec": {
+    "net/bt-stdio-frame-codec": {
       "abi_version": 0,
       "lines": 124,
       "memory": true,
@@ -503,7 +503,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/byte-layout-core": {
+    "system/byte-layout-core": {
       "abi_version": 0,
       "exports": [
         "bytecheck_type_needs_source",
@@ -534,7 +534,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/byte-search": {
+    "data/byte-search": {
       "abi_version": 2,
       "lines": 1534,
       "memory": true,
@@ -542,7 +542,7 @@
       "simd": true,
       "standard_id": 300074
     },
-    "codec-primitives/bytes-bump-core": {
+    "system/bytes-bump-core": {
       "abi_version": 2,
       "lines": 572,
       "memory": true,
@@ -550,7 +550,7 @@
       "simd": false,
       "standard_id": 300135
     },
-    "codec-primitives/c-string": {
+    "encoding/c-string": {
       "abi_version": 2,
       "lines": 194,
       "memory": true,
@@ -558,7 +558,7 @@
       "simd": false,
       "standard_id": 300049
     },
-    "codec-primitives/case-convert": {
+    "encoding/case-convert": {
       "abi_version": 2,
       "lines": 100,
       "memory": true,
@@ -566,7 +566,7 @@
       "simd": false,
       "standard_id": 300530
     },
-    "codec-primitives/cdp-core": {
+    "web/cdp-core": {
       "abi_version": 2,
       "lines": 425,
       "memory": true,
@@ -574,7 +574,7 @@
       "simd": false,
       "standard_id": 300503
     },
-    "codec-primitives/cesu8-mutf8": {
+    "encoding/cesu8-mutf8": {
       "abi_version": 2,
       "lines": 1048,
       "memory": true,
@@ -582,7 +582,7 @@
       "simd": false,
       "standard_id": 300069
     },
-    "codec-primitives/checksum-crc32-bzip": {
+    "hash/checksum-crc32-bzip": {
       "abi_version": 2,
       "lines": 51,
       "memory": true,
@@ -590,7 +590,7 @@
       "simd": false,
       "standard_id": 300525
     },
-    "codec-primitives/checksum-inet": {
+    "hash/checksum-inet": {
       "abi_version": 2,
       "lines": 33,
       "memory": true,
@@ -598,7 +598,7 @@
       "simd": false,
       "standard_id": 300522
     },
-    "codec-primitives/codelyzer-source-scan": {
+    "web/codelyzer-source-scan": {
       "abi_version": 2,
       "lines": 568,
       "memory": true,
@@ -606,31 +606,7 @@
       "simd": false,
       "standard_id": 300089
     },
-    "codec-primitives/codex-app-protocol-core": {
-      "abi_version": 2,
-      "lines": 221,
-      "memory": true,
-      "path": "codec-primitives/codex-app-protocol-core.wat",
-      "simd": false,
-      "standard_id": 300112
-    },
-    "codec-primitives/codex-patch-core": {
-      "abi_version": 2,
-      "lines": 83,
-      "memory": true,
-      "path": "codec-primitives/codex-patch-core.wat",
-      "simd": false,
-      "standard_id": 300113
-    },
-    "codec-primitives/codex-shell-command-core": {
-      "abi_version": 2,
-      "lines": 119,
-      "memory": true,
-      "path": "codec-primitives/codex-shell-command-core.wat",
-      "simd": false,
-      "standard_id": 300114
-    },
-    "codec-primitives/collection-core-state": {
+    "system/collection-core-state": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -661,7 +637,7 @@
       "simd": false,
       "standard_id": 300139
     },
-    "codec-primitives/color-util": {
+    "data/color-util": {
       "abi_version": 2,
       "lines": 158,
       "memory": true,
@@ -669,7 +645,7 @@
       "simd": false,
       "standard_id": 300526
     },
-    "codec-primitives/compat-surface-core": {
+    "system/compat-surface-core": {
       "abi_version": 0,
       "exports": [
         "http_header_name_byte_valid",
@@ -713,7 +689,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/compositor-core": {
+    "system/compositor-core": {
       "abi_version": 2,
       "lines": 155,
       "memory": true,
@@ -721,7 +697,7 @@
       "simd": false,
       "standard_id": 300130
     },
-    "codec-primitives/convex-hull": {
+    "hash/convex-hull": {
       "abi_version": 2,
       "lines": 151,
       "memory": true,
@@ -729,7 +705,7 @@
       "simd": false,
       "standard_id": 300534
     },
-    "codec-primitives/crypto-aes-block": {
+    "crypto/crypto-aes-block": {
       "abi_version": 2,
       "lines": 1073,
       "memory": true,
@@ -737,7 +713,7 @@
       "simd": false,
       "standard_id": 300083
     },
-    "codec-primitives/crypto-aes-ctr": {
+    "crypto/crypto-aes-ctr": {
       "abi_version": 2,
       "lines": 324,
       "memory": true,
@@ -745,7 +721,7 @@
       "simd": false,
       "standard_id": 300086
     },
-    "codec-primitives/crypto-bigint-limb": {
+    "crypto/crypto-bigint-limb": {
       "abi_version": 2,
       "lines": 455,
       "memory": true,
@@ -753,7 +729,7 @@
       "simd": false,
       "standard_id": 300078
     },
-    "codec-primitives/crypto-ecdsa-der": {
+    "crypto/crypto-ecdsa-der": {
       "abi_version": 2,
       "lines": 284,
       "memory": true,
@@ -761,7 +737,7 @@
       "simd": false,
       "standard_id": 300082
     },
-    "codec-primitives/crypto-ed25519-shape": {
+    "crypto/crypto-ed25519-shape": {
       "abi_version": 2,
       "lines": 160,
       "memory": true,
@@ -769,7 +745,7 @@
       "simd": false,
       "standard_id": 300081
     },
-    "codec-primitives/crypto-hmac-hkdf": {
+    "hash/crypto-hmac-hkdf": {
       "abi_version": 2,
       "lines": 254,
       "memory": true,
@@ -777,7 +753,7 @@
       "simd": false,
       "standard_id": 300076
     },
-    "codec-primitives/crypto-hmac-sha256": {
+    "hash/crypto-hmac-sha256": {
       "abi_version": 2,
       "lines": 443,
       "memory": true,
@@ -785,7 +761,7 @@
       "simd": false,
       "standard_id": 300085
     },
-    "codec-primitives/crypto-rsa-pkcs1": {
+    "crypto/crypto-rsa-pkcs1": {
       "abi_version": 2,
       "lines": 581,
       "memory": true,
@@ -793,7 +769,7 @@
       "simd": false,
       "standard_id": 300079
     },
-    "codec-primitives/crypto-sha1": {
+    "hash/crypto-sha1": {
       "abi_version": 2,
       "lines": 488,
       "memory": true,
@@ -801,7 +777,7 @@
       "simd": false,
       "standard_id": 300077
     },
-    "codec-primitives/crypto-sha256": {
+    "hash/crypto-sha256": {
       "abi_version": 2,
       "lines": 839,
       "memory": true,
@@ -809,7 +785,7 @@
       "simd": false,
       "standard_id": 300075
     },
-    "codec-primitives/crypto-sha512": {
+    "hash/crypto-sha512": {
       "abi_version": 2,
       "lines": 1012,
       "memory": true,
@@ -817,7 +793,7 @@
       "simd": false,
       "standard_id": 300074
     },
-    "codec-primitives/crypto-x25519-scalar": {
+    "crypto/crypto-x25519-scalar": {
       "abi_version": 2,
       "lines": 657,
       "memory": true,
@@ -825,7 +801,7 @@
       "simd": false,
       "standard_id": 300080
     },
-    "codec-primitives/crypto-xtea": {
+    "crypto/crypto-xtea": {
       "abi_version": 2,
       "lines": 128,
       "memory": true,
@@ -833,7 +809,7 @@
       "simd": false,
       "standard_id": 300520
     },
-    "codec-primitives/deflate-inflate": {
+    "serialization/deflate-inflate": {
       "abi_version": 2,
       "lines": 819,
       "memory": true,
@@ -841,7 +817,7 @@
       "simd": false,
       "standard_id": 300067
     },
-    "codec-primitives/deflate-stored": {
+    "serialization/deflate-stored": {
       "abi_version": 2,
       "lines": 188,
       "memory": true,
@@ -849,7 +825,7 @@
       "simd": false,
       "standard_id": 300066
     },
-    "codec-primitives/der-asn1-basic": {
+    "protocol/der/der-asn1-basic": {
       "abi_version": 2,
       "lines": 213,
       "memory": true,
@@ -857,7 +833,7 @@
       "simd": false,
       "standard_id": 300022
     },
-    "codec-primitives/der-integer": {
+    "protocol/der/der-integer": {
       "abi_version": 2,
       "lines": 227,
       "memory": true,
@@ -865,7 +841,7 @@
       "simd": false,
       "standard_id": 300801
     },
-    "codec-primitives/der-oid": {
+    "protocol/der/der-oid": {
       "abi_version": 2,
       "lines": 139,
       "memory": true,
@@ -873,7 +849,7 @@
       "simd": false,
       "standard_id": 300021
     },
-    "codec-primitives/der-time": {
+    "protocol/der/der-time": {
       "abi_version": 2,
       "lines": 234,
       "memory": true,
@@ -881,7 +857,7 @@
       "simd": false,
       "standard_id": 300029
     },
-    "codec-primitives/der-tlv": {
+    "protocol/der/der-tlv": {
       "abi_version": 2,
       "lines": 224,
       "memory": true,
@@ -889,7 +865,7 @@
       "simd": false,
       "standard_id": 300005
     },
-    "codec-primitives/derive-macro-core": {
+    "system/derive-macro-core": {
       "abi_version": 0,
       "exports": [
         "quote_repetition_tokens",
@@ -916,7 +892,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/dhcp-message-core": {
+    "protocol/dhcp/dhcp-message-core": {
       "abi_version": 2,
       "lines": 775,
       "memory": true,
@@ -924,7 +900,7 @@
       "simd": false,
       "standard_id": 300102
     },
-    "codec-primitives/dhcpv6-core": {
+    "protocol/dhcp/dhcpv6-core": {
       "abi_version": 2,
       "lines": 82,
       "memory": true,
@@ -932,7 +908,7 @@
       "simd": false,
       "standard_id": 300111
     },
-    "codec-primitives/dkim-body": {
+    "auth/dkim-body": {
       "abi_version": 2,
       "lines": 270,
       "memory": true,
@@ -940,7 +916,7 @@
       "simd": false,
       "standard_id": 300047
     },
-    "codec-primitives/dns-compressed-name": {
+    "protocol/dns/dns-compressed-name": {
       "abi_version": 2,
       "lines": 261,
       "memory": true,
@@ -948,7 +924,7 @@
       "simd": false,
       "standard_id": 300033
     },
-    "codec-primitives/dns-core-records": {
+    "protocol/dns/dns-core-records": {
       "abi_version": 2,
       "lines": 328,
       "memory": true,
@@ -956,7 +932,7 @@
       "simd": false,
       "standard_id": 300101
     },
-    "codec-primitives/dns-message-header": {
+    "protocol/dns/dns-message-header": {
       "abi_version": 2,
       "lines": 115,
       "memory": true,
@@ -964,7 +940,7 @@
       "simd": false,
       "standard_id": 300026
     },
-    "codec-primitives/dns-name": {
+    "protocol/dns/dns-name": {
       "abi_version": 2,
       "lines": 176,
       "memory": true,
@@ -972,7 +948,7 @@
       "simd": false,
       "standard_id": 300025
     },
-    "codec-primitives/dns-rdata-core": {
+    "protocol/dns/dns-rdata-core": {
       "abi_version": 2,
       "lines": 358,
       "memory": true,
@@ -980,7 +956,7 @@
       "simd": false,
       "standard_id": 300035
     },
-    "codec-primitives/dns-resolve": {
+    "protocol/dns/dns-resolve": {
       "abi_version": 2,
       "lines": 248,
       "memory": true,
@@ -988,7 +964,7 @@
       "simd": false,
       "standard_id": 300506
     },
-    "codec-primitives/dns-section-walk": {
+    "protocol/dns/dns-section-walk": {
       "abi_version": 2,
       "lines": 248,
       "memory": true,
@@ -996,7 +972,7 @@
       "simd": false,
       "standard_id": 300034
     },
-    "codec-primitives/encoding-base32hex": {
+    "encoding/encoding-base32hex": {
       "abi_version": 2,
       "lines": 336,
       "memory": true,
@@ -1004,7 +980,7 @@
       "simd": false,
       "standard_id": 300052
     },
-    "codec-primitives/encoding-base64": {
+    "encoding/encoding-base64": {
       "abi_version": 2,
       "lines": 743,
       "memory": true,
@@ -1012,7 +988,7 @@
       "simd": false,
       "standard_id": 300046
     },
-    "codec-primitives/encoding-base64url": {
+    "encoding/encoding-base64url": {
       "abi_version": 2,
       "lines": 521,
       "memory": true,
@@ -1020,7 +996,7 @@
       "simd": false,
       "standard_id": 300500
     },
-    "codec-primitives/encoding-core": {
+    "encoding/encoding-core": {
       "abi_version": 2,
       "lines": 619,
       "memory": true,
@@ -1028,7 +1004,7 @@
       "simd": true,
       "standard_id": 300001
     },
-    "codec-primitives/encoding-cp1252": {
+    "encoding/encoding-cp1252": {
       "abi_version": 2,
       "lines": 98,
       "memory": true,
@@ -1036,7 +1012,7 @@
       "simd": false,
       "standard_id": 300524
     },
-    "codec-primitives/encoding-smart-int": {
+    "encoding/encoding-smart-int": {
       "abi_version": 2,
       "lines": 161,
       "memory": true,
@@ -1044,7 +1020,7 @@
       "simd": false,
       "standard_id": 300523
     },
-    "codec-primitives/encoding-text": {
+    "encoding/encoding-text": {
       "abi_version": 2,
       "lines": 899,
       "memory": true,
@@ -1052,7 +1028,7 @@
       "simd": false,
       "standard_id": 300002
     },
-    "codec-primitives/endian-fixed": {
+    "encoding/endian-fixed": {
       "abi_version": 2,
       "lines": 422,
       "memory": true,
@@ -1060,7 +1036,7 @@
       "simd": false,
       "standard_id": 300063
     },
-    "codec-primitives/esp32s3-platform-map": {
+    "device/esp32s3-platform-map": {
       "abi_version": 2,
       "lines": 212,
       "memory": true,
@@ -1068,7 +1044,7 @@
       "simd": false,
       "standard_id": 300094
     },
-    "codec-primitives/exchange-provider-status": {
+    "api/exchange-provider-status": {
       "abi_version": 2,
       "lines": 236,
       "memory": true,
@@ -1076,35 +1052,7 @@
       "simd": false,
       "standard_id": 300095
     },
-    "codec-primitives/fs-walk-core": {
-      "abi_version": 0,
-      "exports": [
-        "walk_default_flags",
-        "walk_default_max_open",
-        "walk_min_depth_clamp",
-        "walk_max_depth_clamp",
-        "walk_max_open_clamp",
-        "walk_depth_visible",
-        "walk_should_descend",
-        "walk_entry_decision",
-        "walk_symlink_kind",
-        "walk_loop_error",
-        "walk_same_file_system_descend",
-        "walk_fd_spill",
-        "walk_filter_skip_descendants",
-        "same_file_unix_equal",
-        "same_file_std_drop_closes",
-        "tempfile_retry_allowed",
-        "tempfile_terminal_status",
-        "tempfile_drop_action"
-      ],
-      "lines": 327,
-      "memory": false,
-      "path": "codec-primitives/fs-walk-core.wat",
-      "simd": false,
-      "standard_id": null
-    },
-    "codec-primitives/futures-util-core-state": {
+    "system/futures-util-core-state": {
       "abi_version": 2,
       "lines": 131,
       "memory": true,
@@ -1112,7 +1060,7 @@
       "simd": false,
       "standard_id": 300134
     },
-    "codec-primitives/generic-tlv": {
+    "serialization/generic-tlv": {
       "abi_version": 2,
       "lines": 355,
       "memory": true,
@@ -1120,7 +1068,7 @@
       "simd": false,
       "standard_id": 300057
     },
-    "codec-primitives/glob-match": {
+    "data/glob-match": {
       "abi_version": 2,
       "lines": 82,
       "memory": true,
@@ -1128,7 +1076,7 @@
       "simd": false,
       "standard_id": 300527
     },
-    "codec-primitives/gzip-member": {
+    "serialization/gzip-member": {
       "abi_version": 2,
       "lines": 194,
       "memory": true,
@@ -1136,7 +1084,7 @@
       "simd": false,
       "standard_id": 300064
     },
-    "codec-primitives/hash-djb2": {
+    "hash/hash-djb2": {
       "abi_version": 2,
       "lines": 26,
       "memory": true,
@@ -1144,7 +1092,7 @@
       "simd": false,
       "standard_id": 300521
     },
-    "codec-primitives/hex-compat": {
+    "encoding/hex-compat": {
       "abi_version": 2,
       "lines": 406,
       "memory": true,
@@ -1152,7 +1100,7 @@
       "simd": false,
       "standard_id": 300062
     },
-    "codec-primitives/host-port": {
+    "serialization/host-port": {
       "abi_version": 2,
       "lines": 197,
       "memory": true,
@@ -1160,7 +1108,7 @@
       "simd": false,
       "standard_id": 300060
     },
-    "codec-primitives/hpack-header-block": {
+    "protocol/hpack/hpack-header-block": {
       "abi_version": 2,
       "lines": 290,
       "memory": true,
@@ -1168,7 +1116,7 @@
       "simd": false,
       "standard_id": 300038
     },
-    "codec-primitives/hpack-huffman": {
+    "protocol/hpack/hpack-huffman": {
       "abi_version": 2,
       "lines": 225,
       "memory": true,
@@ -1176,7 +1124,7 @@
       "simd": true,
       "standard_id": 300018
     },
-    "codec-primitives/hpack-string": {
+    "protocol/hpack/hpack-string": {
       "abi_version": 2,
       "lines": 165,
       "memory": true,
@@ -1184,7 +1132,7 @@
       "simd": false,
       "standard_id": 300019
     },
-    "codec-primitives/hpack-table-core": {
+    "protocol/hpack/hpack-table-core": {
       "abi_version": 2,
       "lines": 125,
       "memory": true,
@@ -1192,7 +1140,7 @@
       "simd": false,
       "standard_id": 300044
     },
-    "codec-primitives/html-strip": {
+    "data/html-strip": {
       "abi_version": 2,
       "lines": 134,
       "memory": true,
@@ -1200,7 +1148,7 @@
       "simd": false,
       "standard_id": 300529
     },
-    "codec-primitives/http-client-core": {
+    "protocol/http/http-client-core": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -1243,7 +1191,7 @@
       "simd": false,
       "standard_id": 300135
     },
-    "codec-primitives/http-date": {
+    "protocol/http/http-date": {
       "abi_version": 2,
       "lines": 400,
       "memory": true,
@@ -1251,7 +1199,7 @@
       "simd": false,
       "standard_id": 300103
     },
-    "codec-primitives/http-node-state": {
+    "protocol/http/http-node-state": {
       "abi_version": 2,
       "lines": 360,
       "memory": true,
@@ -1259,7 +1207,7 @@
       "simd": false,
       "standard_id": 300107
     },
-    "codec-primitives/http-prefix-int": {
+    "protocol/http/http-prefix-int": {
       "abi_version": 2,
       "lines": 159,
       "memory": true,
@@ -1267,7 +1215,7 @@
       "simd": false,
       "standard_id": 300011
     },
-    "codec-primitives/http1-body": {
+    "protocol/http/http1-body": {
       "abi_version": 2,
       "lines": 839,
       "memory": true,
@@ -1275,7 +1223,7 @@
       "simd": false,
       "standard_id": 300009
     },
-    "codec-primitives/http1-chunk-stream": {
+    "protocol/http/http1-chunk-stream": {
       "abi_version": 2,
       "lines": 563,
       "memory": true,
@@ -1283,7 +1231,7 @@
       "simd": false,
       "standard_id": 300102
     },
-    "codec-primitives/http1-header-block": {
+    "protocol/http/http1-header-block": {
       "abi_version": 2,
       "lines": 889,
       "memory": true,
@@ -1291,7 +1239,7 @@
       "simd": false,
       "standard_id": 300101
     },
-    "codec-primitives/http1-lines": {
+    "protocol/http/http1-lines": {
       "abi_version": 2,
       "lines": 796,
       "memory": true,
@@ -1299,7 +1247,7 @@
       "simd": false,
       "standard_id": 300008
     },
-    "codec-primitives/http1-scan": {
+    "protocol/http/http1-scan": {
       "abi_version": 2,
       "lines": 1451,
       "memory": true,
@@ -1307,7 +1255,7 @@
       "simd": true,
       "standard_id": 300003
     },
-    "codec-primitives/http2-frame": {
+    "protocol/http/http2-frame": {
       "abi_version": 2,
       "lines": 119,
       "memory": true,
@@ -1315,7 +1263,7 @@
       "simd": false,
       "standard_id": 300010
     },
-    "codec-primitives/http3-frame": {
+    "protocol/http/http3-frame": {
       "abi_version": 2,
       "lines": 257,
       "memory": true,
@@ -1323,7 +1271,7 @@
       "simd": false,
       "standard_id": 300012
     },
-    "codec-primitives/integer-decimal": {
+    "encoding/integer-decimal": {
       "abi_version": 2,
       "lines": 296,
       "memory": true,
@@ -1331,15 +1279,7 @@
       "simd": false,
       "standard_id": 300073
     },
-    "codec-primitives/ipv4-net": {
-      "abi_version": 2,
-      "lines": 145,
-      "memory": true,
-      "path": "codec-primitives/ipv4-net.wat",
-      "simd": false,
-      "standard_id": 300055
-    },
-    "codec-primitives/jni-runtime-binding": {
+    "system/jni-runtime-binding": {
       "abi_version": 2,
       "lines": 679,
       "memory": true,
@@ -1347,7 +1287,7 @@
       "simd": false,
       "standard_id": 300135
     },
-    "codec-primitives/jni-signature": {
+    "system/jni-signature": {
       "abi_version": 2,
       "lines": 563,
       "memory": true,
@@ -1355,7 +1295,7 @@
       "simd": false,
       "standard_id": 300073
     },
-    "codec-primitives/js-sys-core": {
+    "system/js-sys-core": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -1376,7 +1316,7 @@
       "simd": false,
       "standard_id": 300134
     },
-    "codec-primitives/json-emit": {
+    "format/json/json-emit": {
       "abi_version": 2,
       "lines": 215,
       "memory": true,
@@ -1384,7 +1324,7 @@
       "simd": false,
       "standard_id": 300043
     },
-    "codec-primitives/json-scalar": {
+    "format/json/json-scalar": {
       "abi_version": 2,
       "lines": 332,
       "memory": true,
@@ -1392,7 +1332,7 @@
       "simd": false,
       "standard_id": 300016
     },
-    "codec-primitives/json-tape": {
+    "format/json/json-tape": {
       "abi_version": 2,
       "lines": 1307,
       "memory": true,
@@ -1400,7 +1340,7 @@
       "simd": false,
       "standard_id": 300007
     },
-    "codec-primitives/json-value-core": {
+    "format/json/json-value-core": {
       "abi_version": 2,
       "lines": 910,
       "memory": true,
@@ -1408,7 +1348,7 @@
       "simd": false,
       "standard_id": 300041
     },
-    "codec-primitives/kv-scan": {
+    "format/toml/kv-scan": {
       "abi_version": 2,
       "lines": 439,
       "memory": true,
@@ -1416,7 +1356,7 @@
       "simd": false,
       "standard_id": 300061
     },
-    "codec-primitives/length-field": {
+    "serialization/length-field": {
       "abi_version": 2,
       "lines": 470,
       "memory": true,
@@ -1424,7 +1364,7 @@
       "simd": false,
       "standard_id": 300058
     },
-    "codec-primitives/length-frame": {
+    "serialization/length-frame": {
       "abi_version": 2,
       "lines": 144,
       "memory": true,
@@ -1432,7 +1372,7 @@
       "simd": false,
       "standard_id": 300056
     },
-    "codec-primitives/linux-machine-inventory": {
+    "device/linux-machine-inventory": {
       "abi_version": 2,
       "lines": 762,
       "memory": true,
@@ -1440,7 +1380,7 @@
       "simd": false,
       "standard_id": 300097
     },
-    "codec-primitives/mail-protocol-state": {
+    "net/mail-protocol-state": {
       "abi_version": 2,
       "lines": 458,
       "memory": true,
@@ -1448,7 +1388,7 @@
       "simd": false,
       "standard_id": 300099
     },
-    "codec-primitives/marketplace-policy": {
+    "api/marketplace-policy": {
       "abi_version": 2,
       "lines": 253,
       "memory": true,
@@ -1456,7 +1396,7 @@
       "simd": false,
       "standard_id": 300087
     },
-    "codec-primitives/mime-quoted-printable": {
+    "data/mime-quoted-printable": {
       "abi_version": 2,
       "lines": 274,
       "memory": true,
@@ -1464,7 +1404,7 @@
       "simd": false,
       "standard_id": 300050
     },
-    "codec-primitives/node-hardware-core": {
+    "device/node-hardware-core": {
       "abi_version": 2,
       "lines": 209,
       "memory": true,
@@ -1472,7 +1412,7 @@
       "simd": false,
       "standard_id": 300105
     },
-    "codec-primitives/node-runtime-core": {
+    "system/node-runtime-core": {
       "abi_version": 2,
       "lines": 378,
       "memory": true,
@@ -1480,7 +1420,7 @@
       "simd": false,
       "standard_id": 300115
     },
-    "codec-primitives/number-format-suffix": {
+    "encoding/number-format-suffix": {
       "abi_version": 2,
       "lines": 219,
       "memory": true,
@@ -1488,7 +1428,7 @@
       "simd": false,
       "standard_id": 300528
     },
-    "codec-primitives/oauth-core": {
+    "web/oauth-core": {
       "abi_version": 2,
       "lines": 372,
       "memory": true,
@@ -1496,7 +1436,7 @@
       "simd": false,
       "standard_id": 300502
     },
-    "codec-primitives/oauth-flow": {
+    "web/oauth-flow": {
       "abi_version": 2,
       "lines": 886,
       "memory": true,
@@ -1504,7 +1444,7 @@
       "simd": false,
       "standard_id": 300504
     },
-    "codec-primitives/oauth-pkce": {
+    "web/oauth-pkce": {
       "abi_version": 2,
       "lines": 313,
       "memory": true,
@@ -1512,7 +1452,7 @@
       "simd": false,
       "standard_id": 300501
     },
-    "codec-primitives/oci-config-core": {
+    "oci/oci-config-core": {
       "abi_version": 2,
       "lines": 202,
       "memory": true,
@@ -1520,7 +1460,7 @@
       "simd": false,
       "standard_id": 300100
     },
-    "codec-primitives/oci-elf64": {
+    "oci/oci-elf64": {
       "abi_version": 2,
       "lines": 475,
       "memory": true,
@@ -1528,7 +1468,7 @@
       "simd": false,
       "standard_id": 300084
     },
-    "codec-primitives/oci-reference": {
+    "oci/oci-reference": {
       "abi_version": 2,
       "lines": 278,
       "memory": true,
@@ -1536,7 +1476,7 @@
       "simd": false,
       "standard_id": 300090
     },
-    "codec-primitives/oci-runtime-state": {
+    "oci/oci-runtime-state": {
       "abi_version": 2,
       "lines": 192,
       "memory": true,
@@ -1544,7 +1484,7 @@
       "simd": false,
       "standard_id": 300093
     },
-    "codec-primitives/oci-tar-header": {
+    "oci/oci-tar-header": {
       "abi_version": 2,
       "lines": 275,
       "memory": true,
@@ -1552,7 +1492,7 @@
       "simd": false,
       "standard_id": 300802
     },
-    "codec-primitives/otel-api-core": {
+    "system/otel-api-core": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -1578,7 +1518,7 @@
       "simd": false,
       "standard_id": 300135
     },
-    "codec-primitives/pem-rfc7468": {
+    "format/pem/pem-rfc7468": {
       "abi_version": 2,
       "lines": 783,
       "memory": true,
@@ -1586,7 +1526,7 @@
       "simd": false,
       "standard_id": 300015
     },
-    "codec-primitives/percent-url-form": {
+    "encoding/percent-url-form": {
       "abi_version": 2,
       "lines": 869,
       "memory": true,
@@ -1594,7 +1534,7 @@
       "simd": false,
       "standard_id": 300027
     },
-    "codec-primitives/pocketbase-route-model": {
+    "api/pocketbase-route-model": {
       "abi_version": 2,
       "lines": 1720,
       "memory": true,
@@ -1602,7 +1542,7 @@
       "simd": false,
       "standard_id": 300096
     },
-    "codec-primitives/proc-macro2-core": {
+    "system/proc-macro2-core": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -1633,7 +1573,7 @@
       "simd": false,
       "standard_id": 300138
     },
-    "codec-primitives/protocol-core-validation": {
+    "net/protocol-core-validation": {
       "abi_version": 2,
       "lines": 127,
       "memory": true,
@@ -1641,7 +1581,7 @@
       "simd": false,
       "standard_id": 300116
     },
-    "codec-primitives/protocols-block-transfer": {
+    "net/protocols-block-transfer": {
       "abi_version": 2,
       "lines": 222,
       "memory": true,
@@ -1649,7 +1589,7 @@
       "simd": false,
       "standard_id": 300116
     },
-    "codec-primitives/qpack-decoder-stream": {
+    "protocol/qpack/qpack-decoder-stream": {
       "abi_version": 2,
       "lines": 184,
       "memory": true,
@@ -1657,7 +1597,7 @@
       "simd": false,
       "standard_id": 300036
     },
-    "codec-primitives/qpack-encoder-stream": {
+    "protocol/qpack/qpack-encoder-stream": {
       "abi_version": 2,
       "lines": 316,
       "memory": true,
@@ -1665,7 +1605,7 @@
       "simd": false,
       "standard_id": 300037
     },
-    "codec-primitives/qpack-string": {
+    "protocol/qpack/qpack-string": {
       "abi_version": 2,
       "lines": 176,
       "memory": true,
@@ -1673,7 +1613,7 @@
       "simd": false,
       "standard_id": 300020
     },
-    "codec-primitives/qpack-table-core": {
+    "protocol/qpack/qpack-table-core": {
       "abi_version": 2,
       "lines": 425,
       "memory": true,
@@ -1681,7 +1621,7 @@
       "simd": false,
       "standard_id": 300103
     },
-    "codec-primitives/quic-core-state": {
+    "protocol/quic/quic-core-state": {
       "abi_version": 2,
       "lines": 249,
       "memory": true,
@@ -1689,7 +1629,7 @@
       "simd": false,
       "standard_id": 300104
     },
-    "codec-primitives/rfc2822-date": {
+    "api/rfc2822-date": {
       "abi_version": 2,
       "lines": 167,
       "memory": true,
@@ -1697,7 +1637,7 @@
       "simd": false,
       "standard_id": 300054
     },
-    "codec-primitives/rkyv-core-archive": {
+    "system/rkyv-core-archive": {
       "abi_version": 2,
       "lines": 125,
       "memory": true,
@@ -1705,7 +1645,7 @@
       "simd": false,
       "standard_id": 300134
     },
-    "codec-primitives/runtime-core-state": {
+    "system/runtime-core-state": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -1740,7 +1680,7 @@
       "simd": false,
       "standard_id": 300137
     },
-    "codec-primitives/rust-syn-core": {
+    "system/rust-syn-core": {
       "abi_version": 2,
       "lines": 133,
       "memory": true,
@@ -1748,7 +1688,7 @@
       "simd": false,
       "standard_id": 300133
     },
-    "codec-primitives/sdk-app-identity": {
+    "auth/sdk-app-identity": {
       "abi_version": 2,
       "lines": 175,
       "memory": true,
@@ -1756,7 +1696,7 @@
       "simd": false,
       "standard_id": 300088
     },
-    "codec-primitives/sdk-standards-seed": {
+    "auth/sdk-standards-seed": {
       "abi_version": 2,
       "lines": 353,
       "memory": true,
@@ -1764,7 +1704,7 @@
       "simd": false,
       "standard_id": 300092
     },
-    "codec-primitives/secret-service-core": {
+    "data/secret-service-core": {
       "abi_version": 2,
       "lines": 286,
       "memory": true,
@@ -1772,7 +1712,7 @@
       "simd": false,
       "standard_id": 300109
     },
-    "codec-primitives/shell-word-scan": {
+    "data/shell-word-scan": {
       "abi_version": 2,
       "lines": 441,
       "memory": true,
@@ -1780,7 +1720,7 @@
       "simd": false,
       "standard_id": 300070
     },
-    "codec-primitives/sixel-decode": {
+    "serialization/sixel-decode": {
       "abi_version": 2,
       "lines": 912,
       "memory": true,
@@ -1788,7 +1728,7 @@
       "simd": false,
       "standard_id": 300071
     },
-    "codec-primitives/socket-core": {
+    "net/socket-core": {
       "abi_version": 2,
       "lines": 371,
       "memory": true,
@@ -1796,7 +1736,7 @@
       "simd": false,
       "standard_id": 300505
     },
-    "codec-primitives/spp-frame-codec": {
+    "net/spp-frame-codec": {
       "abi_version": 0,
       "lines": 55,
       "memory": true,
@@ -1804,7 +1744,7 @@
       "simd": false,
       "standard_id": null
     },
-    "codec-primitives/sse-event-stream": {
+    "data/sse-event-stream": {
       "abi_version": 2,
       "lines": 1144,
       "memory": true,
@@ -1812,7 +1752,7 @@
       "simd": false,
       "standard_id": 300072
     },
-    "codec-primitives/ssh-authorized-key": {
+    "auth/ssh-authorized-key": {
       "abi_version": 2,
       "lines": 367,
       "memory": true,
@@ -1820,7 +1760,7 @@
       "simd": false,
       "standard_id": 300045
     },
-    "codec-primitives/storage-core-index": {
+    "data/storage-core-index": {
       "abi_version": 2,
       "lines": 320,
       "memory": true,
@@ -1828,7 +1768,7 @@
       "simd": false,
       "standard_id": 300106
     },
-    "codec-primitives/string-distance": {
+    "data/string-distance": {
       "abi_version": 2,
       "lines": 154,
       "memory": true,
@@ -1836,7 +1776,7 @@
       "simd": false,
       "standard_id": 300533
     },
-    "codec-primitives/string-escape": {
+    "encoding/string-escape": {
       "abi_version": 2,
       "lines": 107,
       "memory": true,
@@ -1844,7 +1784,7 @@
       "simd": false,
       "standard_id": 300531
     },
-    "codec-primitives/tag-list": {
+    "data/tag-list": {
       "abi_version": 2,
       "lines": 333,
       "memory": true,
@@ -1852,7 +1792,7 @@
       "simd": false,
       "standard_id": 300051
     },
-    "codec-primitives/telemetry-value-core": {
+    "system/telemetry-value-core": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -1880,7 +1820,7 @@
       "simd": false,
       "standard_id": 300140
     },
-    "codec-primitives/terminal-control-scan": {
+    "data/terminal-control-scan": {
       "abi_version": 2,
       "lines": 531,
       "memory": true,
@@ -1888,7 +1828,7 @@
       "simd": false,
       "standard_id": 300112
     },
-    "codec-primitives/terminal-state-core": {
+    "data/terminal-state-core": {
       "abi_version": 2,
       "lines": 624,
       "memory": true,
@@ -1896,7 +1836,7 @@
       "simd": false,
       "standard_id": 300098
     },
-    "codec-primitives/time-rfc3339": {
+    "api/time-rfc3339": {
       "abi_version": 2,
       "lines": 300,
       "memory": true,
@@ -1904,7 +1844,7 @@
       "simd": false,
       "standard_id": 300053
     },
-    "codec-primitives/tls-certificate-list": {
+    "protocol/tls/tls-certificate-list": {
       "abi_version": 2,
       "lines": 85,
       "memory": true,
@@ -1912,7 +1852,7 @@
       "simd": false,
       "standard_id": 300024
     },
-    "codec-primitives/tls-clienthello": {
+    "protocol/tls/tls-clienthello": {
       "abi_version": 2,
       "lines": 176,
       "memory": true,
@@ -1920,7 +1860,7 @@
       "simd": false,
       "standard_id": 300023
     },
-    "codec-primitives/tls-core-state": {
+    "protocol/tls/tls-core-state": {
       "abi_version": 2,
       "lines": 153,
       "memory": true,
@@ -1928,7 +1868,7 @@
       "simd": false,
       "standard_id": 300110
     },
-    "codec-primitives/tls-extension-walk": {
+    "protocol/tls/tls-extension-walk": {
       "abi_version": 2,
       "lines": 76,
       "memory": true,
@@ -1936,7 +1876,7 @@
       "simd": false,
       "standard_id": 300039
     },
-    "codec-primitives/tls-frame": {
+    "protocol/tls/tls-frame": {
       "abi_version": 2,
       "lines": 122,
       "memory": true,
@@ -1944,7 +1884,7 @@
       "simd": false,
       "standard_id": 300006
     },
-    "codec-primitives/tls-name": {
+    "protocol/tls/tls-name": {
       "abi_version": 2,
       "lines": 333,
       "memory": true,
@@ -1952,7 +1892,7 @@
       "simd": false,
       "standard_id": 300014
     },
-    "codec-primitives/tls-vector": {
+    "protocol/tls/tls-vector": {
       "abi_version": 2,
       "lines": 130,
       "memory": true,
@@ -1960,7 +1900,7 @@
       "simd": false,
       "standard_id": 300013
     },
-    "codec-primitives/toml-scan": {
+    "format/toml/toml-scan": {
       "abi_version": 2,
       "lines": 325,
       "memory": true,
@@ -1968,7 +1908,7 @@
       "simd": false,
       "standard_id": 300017
     },
-    "codec-primitives/tracing-api-core": {
+    "system/tracing-api-core": {
       "abi_version": 2,
       "exports": [
         "proto_abi_version",
@@ -1997,7 +1937,7 @@
       "simd": false,
       "standard_id": 300136
     },
-    "codec-primitives/tracing-otel-core": {
+    "system/tracing-otel-core": {
       "abi_version": 2,
       "lines": 127,
       "memory": true,
@@ -2005,7 +1945,7 @@
       "simd": false,
       "standard_id": 300134
     },
-    "codec-primitives/ui-core-semantics": {
+    "api/ui-core-semantics": {
       "abi_version": 2,
       "lines": 307,
       "memory": true,
@@ -2013,7 +1953,7 @@
       "simd": false,
       "standard_id": 300141
     },
-    "codec-primitives/url-scan": {
+    "api/url-scan": {
       "abi_version": 2,
       "lines": 1388,
       "memory": true,
@@ -2021,7 +1961,7 @@
       "simd": true,
       "standard_id": 300104
     },
-    "codec-primitives/utf8-scan": {
+    "encoding/utf8-scan": {
       "abi_version": 2,
       "lines": 664,
       "memory": true,
@@ -2029,40 +1969,7 @@
       "simd": true,
       "standard_id": 300068
     },
-    "codec-primitives/utility-compat-core": {
-      "abi_version": 0,
-      "exports": [
-        "utility_compat_abi_version",
-        "arrayvec_push_result",
-        "arrayvec_len_after_push",
-        "arrayvec_len_after_pop",
-        "arrayvec_len_after_truncate",
-        "arrayvec_remaining_capacity",
-        "bytes_slice_result",
-        "bytes_split_to_result",
-        "bytes_len_after_advance",
-        "log_level_name_code",
-        "log_enabled",
-        "log_dispatch_path",
-        "try_lock_result",
-        "try_lock_ordering_result",
-        "async_channel_try_recv_result",
-        "async_channel_bounded_capacity",
-        "async_channel_unbounded_capacity_code",
-        "error_repr_display_code",
-        "error_chain_next_result",
-        "ensure_result",
-        "lazy_static_state_result",
-        "time_target_code",
-        "derive_macro_kind_code"
-      ],
-      "lines": 121,
-      "memory": false,
-      "path": "codec-primitives/utility-compat-core.wat",
-      "simd": false,
-      "standard_id": null
-    },
-    "codec-primitives/uuid-util": {
+    "data/uuid-util": {
       "abi_version": 2,
       "lines": 113,
       "memory": true,
@@ -2070,7 +1977,7 @@
       "simd": false,
       "standard_id": 300532
     },
-    "codec-primitives/wallet-decimal": {
+    "api/wallet-decimal": {
       "abi_version": 2,
       "lines": 402,
       "memory": true,
@@ -2078,7 +1985,7 @@
       "simd": false,
       "standard_id": 300086
     },
-    "codec-primitives/wallet-order-status": {
+    "api/wallet-order-status": {
       "abi_version": 2,
       "lines": 150,
       "memory": true,
@@ -2086,7 +1993,7 @@
       "simd": false,
       "standard_id": 300085
     },
-    "codec-primitives/wasm-bindgen-core": {
+    "system/wasm-bindgen-core": {
       "abi_version": 2,
       "lines": 279,
       "memory": true,
@@ -2094,7 +2001,7 @@
       "simd": false,
       "standard_id": 300135
     },
-    "codec-primitives/wayland-wire-core": {
+    "api/wayland-wire-core": {
       "abi_version": 2,
       "lines": 344,
       "memory": true,
@@ -2102,7 +2009,7 @@
       "simd": false,
       "standard_id": 300108
     },
-    "codec-primitives/ws-accept": {
+    "protocol/ws/ws-accept": {
       "abi_version": 2,
       "lines": 750,
       "memory": true,
@@ -2110,7 +2017,7 @@
       "simd": false,
       "standard_id": 300048
     },
-    "codec-primitives/ws-client": {
+    "protocol/ws/ws-client": {
       "abi_version": 2,
       "lines": 692,
       "memory": true,
@@ -2118,7 +2025,7 @@
       "simd": false,
       "standard_id": 300507
     },
-    "codec-primitives/ws-frame": {
+    "protocol/ws/ws-frame": {
       "abi_version": 2,
       "lines": 1299,
       "memory": true,
@@ -2126,7 +2033,7 @@
       "simd": false,
       "standard_id": 300004
     },
-    "codec-primitives/x509-certificate-core": {
+    "auth/x509-certificate-core": {
       "abi_version": 2,
       "lines": 313,
       "memory": true,
@@ -2134,7 +2041,7 @@
       "simd": false,
       "standard_id": 300028
     },
-    "codec-primitives/x509-name-core": {
+    "auth/x509-name-core": {
       "abi_version": 2,
       "lines": 329,
       "memory": true,
@@ -2142,7 +2049,7 @@
       "simd": false,
       "standard_id": 300030
     },
-    "codec-primitives/yaml-scan": {
+    "format/yaml/yaml-scan": {
       "abi_version": 2,
       "lines": 433,
       "memory": true,
@@ -2150,7 +2057,7 @@
       "simd": false,
       "standard_id": 300042
     },
-    "codec-primitives/zlib-wrapper": {
+    "serialization/zlib-wrapper": {
       "abi_version": 2,
       "lines": 308,
       "memory": true,
@@ -2158,7 +2065,7 @@
       "simd": false,
       "standard_id": 300065
     },
-    "device-primitives/ble-uart-service": {
+    "device/ble-uart-service": {
       "abi_version": 0,
       "lines": 64,
       "memory": true,
@@ -2166,7 +2073,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/bt-spp-host": {
+    "device/bt-spp-host": {
       "abi_version": 0,
       "lines": 61,
       "memory": true,
@@ -2174,7 +2081,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/device-types-core": {
+    "device/device-types-core": {
       "abi_version": 0,
       "exports": [
         "device_biometric_assurance",
@@ -2208,7 +2115,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/efi-bt-core": {
+    "device/efi-bt-core": {
       "abi_version": 0,
       "exports": [
         "efi_bt_rtl_vendor_id",
@@ -2263,7 +2170,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/linux-adapter-core": {
+    "device/linux-adapter-core": {
       "abi_version": 0,
       "exports": [
         "sysfs_hex_prefix_len",
@@ -2317,7 +2224,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/platform-core": {
+    "device/platform-core": {
       "abi_version": 0,
       "exports": [
         "platform_core_abi_version",
@@ -2363,7 +2270,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/tcl-bridge-esp32s3-core": {
+    "device/tcl-bridge-esp32s3-core": {
       "abi_version": 0,
       "exports": [
         "tcl_bridge_abi_version",
@@ -2403,7 +2310,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/tpm-identity-core": {
+    "device/tpm-identity-core": {
       "abi_version": 0,
       "lines": 89,
       "memory": true,
@@ -2411,7 +2318,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/unikernel-event-core": {
+    "device/unikernel-event-core": {
       "abi_version": 0,
       "exports": [
         "unikernel_abi_version",
@@ -2451,7 +2358,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/unit-usb-bridge-core": {
+    "device/unit-usb-bridge-core": {
       "abi_version": 0,
       "exports": [
         "edgerun_unit_abi_version",
@@ -2487,7 +2394,7 @@
       "simd": false,
       "standard_id": null
     },
-    "device-primitives/virtio-core": {
+    "device/virtio-core": {
       "abi_version": 0,
       "exports": [
         "virtio_modern_device_type",
@@ -2529,7 +2436,7 @@
       "simd": false,
       "standard_id": null
     },
-    "identity-primitives/identity-hardware-core": {
+    "app/identity-hardware-core": {
       "abi_version": 0,
       "exports": [
         "identity_mesh_public_key_len",
@@ -2576,7 +2483,7 @@
       "simd": false,
       "standard_id": null
     },
-    "network-primitives/mesh-core": {
+    "app/mesh-core": {
       "abi_version": 0,
       "exports": [
         "mesh_node_id_len",
@@ -2628,7 +2535,7 @@
       "simd": false,
       "standard_id": null
     },
-    "network-primitives/network-driver-core": {
+    "app/network-driver-core": {
       "abi_version": 0,
       "exports": [
         "network_driver_abi_version",
@@ -2666,7 +2573,7 @@
       "simd": false,
       "standard_id": null
     },
-    "protocol-primitives/core-validator-core": {
+    "app/core-validator-core": {
       "abi_version": 0,
       "exports": [
         "core_validator_abi_version",
@@ -2707,7 +2614,7 @@
       "simd": false,
       "standard_id": null
     },
-    "protocol-primitives/protocol-suite-core": {
+    "app/protocol-suite-core": {
       "abi_version": 0,
       "exports": [
         "protocol_suite_abi_version",
@@ -2738,7 +2645,7 @@
       "simd": false,
       "standard_id": null
     },
-    "protocol-primitives/work-protocol-core": {
+    "app/work-protocol-core": {
       "abi_version": 0,
       "exports": [
         "work_wire_abi_version",
@@ -2782,11 +2689,104 @@
       "simd": false,
       "standard_id": null
     },
-    "ui-framework-wat/ui_framework": {
+    "ui/ui_framework": {
       "abi_version": 0,
       "lines": 28342,
       "memory": true,
       "path": "ui-framework-wat/ui_framework.wat",
+      "simd": false,
+      "standard_id": null
+    },
+    "app/codex-app-protocol-core": {
+      "abi_version": 2,
+      "lines": 221,
+      "memory": true,
+      "path": "codec-primitives/codex-app-protocol-core.wat",
+      "simd": false,
+      "standard_id": 300112
+    },
+    "app/codex-patch-core": {
+      "abi_version": 2,
+      "lines": 83,
+      "memory": true,
+      "path": "codec-primitives/codex-patch-core.wat",
+      "simd": false,
+      "standard_id": 300113
+    },
+    "app/codex-shell-command-core": {
+      "abi_version": 2,
+      "lines": 119,
+      "memory": true,
+      "path": "codec-primitives/codex-shell-command-core.wat",
+      "simd": false,
+      "standard_id": 300114
+    },
+    "system/fs-walk-core": {
+      "abi_version": 0,
+      "exports": [
+        "walk_default_flags",
+        "walk_default_max_open",
+        "walk_min_depth_clamp",
+        "walk_max_depth_clamp",
+        "walk_max_open_clamp",
+        "walk_depth_visible",
+        "walk_should_descend",
+        "walk_entry_decision",
+        "walk_symlink_kind",
+        "walk_loop_error",
+        "walk_same_file_system_descend",
+        "walk_fd_spill",
+        "walk_filter_skip_descendants",
+        "same_file_unix_equal",
+        "same_file_std_drop_closes",
+        "tempfile_retry_allowed",
+        "tempfile_terminal_status",
+        "tempfile_drop_action"
+      ],
+      "lines": 327,
+      "memory": false,
+      "path": "codec-primitives/fs-walk-core.wat",
+      "simd": false,
+      "standard_id": null
+    },
+    "protocol/ipv4-net": {
+      "abi_version": 2,
+      "lines": 145,
+      "memory": true,
+      "path": "codec-primitives/ipv4-net.wat",
+      "simd": false,
+      "standard_id": 300055
+    },
+    "system/utility-compat-core": {
+      "abi_version": 0,
+      "exports": [
+        "utility_compat_abi_version",
+        "arrayvec_push_result",
+        "arrayvec_len_after_push",
+        "arrayvec_len_after_pop",
+        "arrayvec_len_after_truncate",
+        "arrayvec_remaining_capacity",
+        "bytes_slice_result",
+        "bytes_split_to_result",
+        "bytes_len_after_advance",
+        "log_level_name_code",
+        "log_enabled",
+        "log_dispatch_path",
+        "try_lock_result",
+        "try_lock_ordering_result",
+        "async_channel_try_recv_result",
+        "async_channel_bounded_capacity",
+        "async_channel_unbounded_capacity_code",
+        "error_repr_display_code",
+        "error_chain_next_result",
+        "ensure_result",
+        "lazy_static_state_result",
+        "time_target_code",
+        "derive_macro_kind_code"
+      ],
+      "lines": 121,
+      "memory": false,
+      "path": "codec-primitives/utility-compat-core.wat",
       "simd": false,
       "standard_id": null
     }

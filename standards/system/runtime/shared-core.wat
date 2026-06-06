@@ -48,10 +48,10 @@ ${lut_lower}
   (local $cl i32)
   (local.set $cl (call $char_class (local.get $b)))
   (if (i32.and (local.get $cl) (i32.const 2))
-    (then (return (i32.or (local.get $b) (i32.const 32))))
-    (else (if (i32.and (local.get $cl) (i32.const 4))
-      (then (return (local.get $b)))
-      (else (return (i32.const 0)))))))
+    (then (return (i32.or (local.get $b) (i32.const 32)))))
+  (if (i32.and (local.get $cl) (i32.const 4))
+    (then (return (local.get $b))))
+  (i32.const 0))
 
 ;; Pack/unpack helpers
 
@@ -156,6 +156,51 @@ ${lut_lower}
         (then (return (local.get $i))))
       (local.set $i (i32.sub (local.get $i) (i32.const 1)))
       (br $r_loop)))
+  (i32.const -1))
+
+(func $is_alnum (param $b i32) (result i32)
+  (i32.and (call $char_class (local.get $b)) (i32.const 7)))
+
+(func $is_print (param $b i32) (result i32)
+  (i32.and
+    (i32.ge_u (local.get $b) (i32.const 32))
+    (i32.le_u (local.get $b) (i32.const 126))))
+
+(func $to_upper (param $b i32) (result i32)
+  (if (i32.and (call $char_class (local.get $b)) (i32.const 4))
+    (then (return (i32.sub (local.get $b) (i32.const 32)))))
+  (local.get $b))
+
+;; System call stubs (replace with host imports in production)
+
+(func $sock_open (param $sock_type i32) (param $cfg i32) (param $cfg_len i32) (result i32)
+  (i32.const -1))
+
+(func $sock_send (param $fd i32) (param $buf i32) (param $len i32) (result i32)
+  (i32.const -1))
+
+(func $sock_recv (param $fd i32) (param $buf i32) (param $max_len i32) (result i32)
+  (i32.const -1))
+
+(func $sock_close (param $fd i32) (result i32)
+  (i32.const 0))
+
+(func $host_relay_digest_update20_sha1 (param $slot i32) (param $payload i32) (param $payload_len i32) (param $out i32) (result i32)
+  (i32.const -1))
+
+(func $host_aes_ctr_crypt (param $key i32) (param $iv i32) (param $in i32) (param $len i32) (param $out i32) (result i32)
+  (i32.const -1))
+
+(func $host_ntor_server_handshake_seeded (param $handshake i32) (param $node_id i32) (param $pub i32) (param $sec i32) (param $y i32) (param $out i32) (param $out_end i32) (result i32)
+  (i32.const -1))
+
+(func $host_ntor_v3_server_handshake_seeded (param $handshake i32) (param $hs_len i32) (param $node_id i32) (param $pub i32) (param $sec i32) (param $y i32) (param $arg7 i32) (param $arg8 i32) (param $server_msg i32) (param $server_msg_len i32) (result i32)
+  (i32.const -1))
+
+(func $host_relay_connect (param $addr i32) (param $port i32) (param $key i32) (param $flags i32) (result i32)
+  (i32.const -1))
+
+(func $host_send_cell (param $circuit i32) (param $cell i32) (param $len i32) (result i32)
   (i32.const -1))
 
 ;; ABI exports
