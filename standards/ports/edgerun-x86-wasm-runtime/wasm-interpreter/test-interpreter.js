@@ -68,7 +68,10 @@ async function main() {
     for (let i = 0; i < args.length; i++) i32[argsBase/4 + i] = args[i];
     const callErr = inst.exports.call(funcIdx, argsBase, args.length);
     if (callErr !== 0) return { error: callErr };
-    return { value: inst.exports.get_result_value(0), count: inst.exports.get_result_count() };
+    const count = inst.exports.get_result_count();
+    const values = [];
+    for (let i = 0; i < count; i++) values.push(Number(inst.exports.get_result_value(i)));
+    return { value: values[0] ?? 0, count, values };
   }
 
   // Execution tests
@@ -135,15 +138,128 @@ async function main() {
     { name: 'i32.le_s 5<=5', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 local.get 1 i32.le_s) (export "main" (func 0)))`, funcIdx: 0, args: [5, 5], expect: 1 },
     { name: 'i32.ge_s 5>=3', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 local.get 1 i32.ge_s) (export "main" (func 0)))`, funcIdx: 0, args: [5, 3], expect: 1 },
     { name: 'i32.ge_s 3>=5', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 local.get 1 i32.ge_s) (export "main" (func 0)))`, funcIdx: 0, args: [3, 5], expect: 0 },
+    // i32.clz/ctz/popcnt
+    { name: 'i32.clz 1 (leading zeros in i32=31)', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i32.clz) (export "main" (func 0)))`, funcIdx: 0, args: [1], expect: 31 },
+    { name: 'i32.clz 0 = 32', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i32.clz) (export "main" (func 0)))`, funcIdx: 0, args: [0], expect: 32 },
+    { name: 'i32.ctz 8 (trailing zeros=3)', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i32.ctz) (export "main" (func 0)))`, funcIdx: 0, args: [8], expect: 3 },
+    { name: 'i32.popcnt 7 = 3', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i32.popcnt) (export "main" (func 0)))`, funcIdx: 0, args: [7], expect: 3 },
+    { name: 'i32.popcnt 0 = 0', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i32.popcnt) (export "main" (func 0)))`, funcIdx: 0, args: [0], expect: 0 },
+    // i32.rotl/rotr
+    { name: 'i32.rotl 1<<3 (0x1 rol 3 = 0x8)', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 local.get 1 i32.rotl) (export "main" (func 0)))`, funcIdx: 0, args: [1, 3], expect: 8 },
+    { name: 'i32.rotr 8>>3 (0x8 ror 3 = 0x1)', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 local.get 1 i32.rotr) (export "main" (func 0)))`, funcIdx: 0, args: [8, 3], expect: 1 },
+    // i32.extend8_s / i32.extend16_s
+    { name: 'i32.extend8_s 0x80 -> -128', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i32.extend8_s) (export "main" (func 0)))`, funcIdx: 0, args: [0x80], expect: -128 },
+    { name: 'i32.extend16_s 0x8000 -> -32768', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i32.extend16_s) (export "main" (func 0)))`, funcIdx: 0, args: [0x8000], expect: -32768 },
+    // select
+    { name: 'select true (pick first)', wat: `(module (type (func (result i32))) (func (type 0) (result i32) i32.const 10 i32.const 20 i32.const 1 select) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 10 },
+    { name: 'select false (pick second)', wat: `(module (type (func (result i32))) (func (type 0) (result i32) i32.const 10 i32.const 20 i32.const 0 select) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 20 },
+    // global.get / global.set
+    { name: 'global.get i32 (42)', wat: `(module (global (mut i32) (i32.const 42)) (type (func (result i32))) (func (type 0) (result i32) global.get 0) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 42 },
+    { name: 'global.set then get', wat: `(module (global (mut i32) (i32.const 0)) (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 global.set 0 global.get 0) (export "main" (func 0)))`, funcIdx: 0, args: [99], expect: 99 },
+    // i64.const + wrap/extend
+    { name: 'i64.const 0x1234', wat: `(module (type (func (result i32))) (func (type 0) (result i32) i64.const 0x1234 i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0x1234 },
+    { name: 'i64.extend_i32_s (-1)', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [-1], expect: -1 },
+    { name: 'i64.extend_i32_u (0xFFFFFFFF = 0xFFFFFFFF)', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_u i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [-1], expect: -1 },
+    // i64 arithmetic
+    { name: 'i64.add 10+5', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.add i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [10, 5], expect: 15 },
+    { name: 'i64.sub 10-3', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.sub i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [10, 3], expect: 7 },
+    { name: 'i64.mul 6*7', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.mul i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [6, 7], expect: 42 },
+    { name: 'i64.div_s 10/3', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.div_s i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [10, 3], expect: 3 },
+    { name: 'i64.and 5&3 = 1', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.and i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [5, 3], expect: 1 },
+    { name: 'i64.or 1|2 = 3', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.or i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [1, 2], expect: 3 },
+    { name: 'i64.xor 1^3 = 2', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.xor i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [1, 3], expect: 2 },
+    { name: 'i64.shl 1<<3 = 8', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.shl i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [1, 3], expect: 8 },
+    { name: 'i64.eq 5==5', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.eq) (export "main" (func 0)))`, funcIdx: 0, args: [5, 5], expect: 1 },
+    { name: 'i64.ne 5!=7', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.ne) (export "main" (func 0)))`, funcIdx: 0, args: [5, 7], expect: 1 },
+    { name: 'i64.gt_s 5>3', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.gt_s) (export "main" (func 0)))`, funcIdx: 0, args: [5, 3], expect: 1 },
+    { name: 'i64.lt_s 3<5', wat: `(module (type (func (param i32 i32) (result i32))) (func (type 0) (param i32 i32) (result i32) local.get 0 i64.extend_i32_s local.get 1 i64.extend_i32_s i64.lt_s) (export "main" (func 0)))`, funcIdx: 0, args: [3, 5], expect: 1 },
+    // i32.load8_s/u, i32.load16_s/u, i32.store8/16
+    { name: 'i32.load8_u 0xFF = 255', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 i32.const 0xFF i32.store8 i32.const 0 i32.load8_u) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0xFF },
+    { name: 'i32.load8_s 0x80 = -128', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 i32.const 0x80 i32.store8 i32.const 0 i32.load8_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: -128 },
+    { name: 'i32.load16_u 0x7FFF = 32767', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 i32.const 0x7FFF i32.store16 i32.const 0 i32.load16_u) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0x7FFF },
+    { name: 'i32.load16_s 0x8000 = -32768', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 i32.const 0x8000 i32.store16 i32.const 0 i32.load16_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: -32768 },
+    // f32.const
+    { name: 'f32.reinterpret_i32 1.0 -> 0x3F800000', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 1.0 i32.reinterpret_f32) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0x3F800000 },
+    // f64.extend8_s / 16_s / 32_s
+    { name: 'i64.extend8_s 0xFF', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i64.extend8_s i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [0xFF], expect: -1 },
+    { name: 'i64.extend32_s 0xFFFFFFFF = -1', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i64.extend32_s i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [-1], expect: -1 },
+    // f32.eq basic
+    { name: 'f32.eq 1.0 1.0', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 1 f32.const 1 f32.eq) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 1 },
+    // i64.eqz
+    { name: 'i64.eqz 0', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i64.eqz) (export "main" (func 0)))`, funcIdx: 0, args: [0], expect: 1 },
+    { name: 'i64.eqz 42', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i64.eqz) (export "main" (func 0)))`, funcIdx: 0, args: [42], expect: 0 },
+    // i64.clz/ctz/popcnt
+    { name: 'i64.clz 1', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i64.clz i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [1], expect: 63 },
+    { name: 'i64.ctz 8', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i64.ctz i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [8], expect: 3 },
+    { name: 'i64.popcnt 7', wat: `(module (type (func (param i32) (result i32))) (func (type 0) (param i32) (result i32) local.get 0 i64.extend_i32_s i64.popcnt i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [7], expect: 3 },
+    // i32.trunc_f32_s
+    { name: 'i32.trunc_f32_s 3.14', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 3.14 i32.trunc_f32_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 3 },
+    // i32.trunc_f64_s
+    { name: 'i32.trunc_f64_s 3.99', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f64.const 3.99 i32.trunc_f64_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 3 },
+    // f32.convert_i32_s
+    { name: 'f32.convert_i32_s 42 -> i32.reinterpret_f32', wat: `(module (type (func (result i32))) (func (type 0) (result i32) i32.const 42 f32.convert_i32_s i32.reinterpret_f32) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0x42280000 },
+    // f64.convert_i64_s
+    { name: 'f64.convert_i64_s 42 -> i64.reinterpret_f64 -> i32.wrap_i64', wat: `(module (type (func (result i32))) (func (type 0) (result i32) i64.const 42 f64.convert_i64_s i64.reinterpret_f64 i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0 },
+    // f32.demote_f64
+    { name: 'f32.demote_f64 3.14 -> i32.trunc_f32_s', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f64.const 3.14 f32.demote_f64 i32.trunc_f32_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 3 },
+    // f64.promote_f32
+    { name: 'f64.promote_f32 1.0 -> f64.eq', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 1 f64.promote_f32 f64.const 1 f64.eq) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 1 },
+    // f32.reinterpret_i32
+    { name: 'f32.reinterpret_i32 0x3F800000', wat: `(module (type (func (result i32))) (func (type 0) (result i32) i32.const 0x3F800000 f32.reinterpret_i32 i32.reinterpret_f32) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0x3F800000 },
+    // f64.reinterpret_i64
+    { name: 'f64.reinterpret_i64 0 -> i32.wrap_i64', wat: `(module (type (func (result i32))) (func (type 0) (result i32) i64.const 0 f64.reinterpret_i64 i64.reinterpret_f64 i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0 },
+    // br_table
+    { name: 'br_table default (selector out of range)', wat: `(module (func (export "main") (result i32) (block $l0 (block $l1 (br_table $l0 (i32.const 99)) (return (i32.const 10))) (return (i32.const 20))) (i32.const 30)))`, funcIdx: 0, args: [], expect: 30 },
+    // call_indirect
+    { name: 'call_indirect', wat: `(module (type (func (result i32))) (table funcref (elem $f)) (func $f (result i32) (i32.const 42)) (func (export "main") (result i32) i32.const 0 call_indirect (type 0)))`, funcIdx: 1, args: [], expect: 42 },
+    { name: 'call_indirect with args', wat: `(module (type (func (param i32 i32) (result i32))) (table funcref (elem $add)) (func $add (type 0) local.get 0 local.get 1 i32.add) (func (export "main") (type 0) local.get 0 local.get 1 i32.const 0 call_indirect (type 0)))`, funcIdx: 1, args: [10, 32], expect: 42 },
+    // memory.copy (bulk-memory)
+    { name: 'memory.copy 42', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 i32.const 42 i32.store i32.const 4 i32.const 0 i32.const 4 memory.copy i32.const 4 i32.load) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 42 },
+    // memory.fill
+    { name: 'memory.fill FF', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 i32.const 0xFF i32.const 4 memory.fill i32.const 0 i32.load8_u) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0xFF },
+    // memory.init
+    { name: 'memory.init 42', wat: `(module (memory 1) (data "\\2a\\00\\00\\00") (type (func (result i32))) (func (type 0) (result i32) i32.const 0 i32.const 0 i32.const 4 memory.init 0 data.drop 0 i32.const 0 i32.load) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 42 },
+    // saturating trunc ops
+    { name: 'i32.trunc_sat_f32_s 3.14 = 3', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 3.14 i32.trunc_sat_f32_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 3 },
+    { name: 'i32.trunc_sat_f32_s overflow -> MAX', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 2147483648.0 i32.trunc_sat_f32_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 2147483647 },
+    { name: 'i32.trunc_sat_f32_s NaN -> 0', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const nan i32.trunc_sat_f32_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0 },
+    { name: 'i32.trunc_sat_f32_u neg -> 0', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const -1.0 i32.trunc_sat_f32_u) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 0 },
+    { name: 'i32.trunc_sat_f32_u normal', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 100.5 i32.trunc_sat_f32_u) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 100 },
+    { name: 'i64.trunc_sat_f32_s 42', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f32.const 42.0 i64.trunc_sat_f32_s i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 42 },
+    { name: 'i32.trunc_sat_f64_s 3.99', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f64.const 3.99 i32.trunc_sat_f64_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 3 },
+    { name: 'i32.trunc_sat_f64_s overflow -> MAX', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f64.const 2147483648.0 i32.trunc_sat_f64_s) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 2147483647 },
+    { name: 'i64.trunc_sat_f64_s 42', wat: `(module (type (func (result i32))) (func (type 0) (result i32) f64.const 42.0 i64.trunc_sat_f64_s i32.wrap_i64) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 42 },
+    // Float load/store
+    { name: 'f32.store + f32.load', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 f32.const 42.5 f32.store i32.const 0 f32.load i32.reinterpret_f32) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 1110048768 },
+    { name: 'f64.store + f64.load', wat: `(module (memory 1) (type (func (result i32))) (func (type 0) (result i32) i32.const 0 f64.const 3.14 f64.store i32.const 0 f64.load f64.const 3.14 f64.eq) (export "main" (func 0)))`, funcIdx: 0, args: [], expect: 1 },
+    // table.get / table.set
+    { name: 'table.set then table.get', wat: `(module (table 1 funcref) (type (func (result i32))) (func $a (type 0) (result i32) i32.const 99) (func $b (export "main") (type 0) (result i32) i32.const 0 ref.func 1 table.set 0 i32.const 0 table.get 0 ref.is_null i32.eqz))`, funcIdx: 1, args: [], expect: 1 },
+    // Extended table ops
+    { name: 'table.size', wat: `(module (table 2 10 funcref) (type (func (result i32))) (func (export "main") (type 0) (result i32) table.size 0))`, funcIdx: 0, args: [], expect: 2 },
+    { name: 'table.grow then size', wat: `(module (table 1 10 funcref) (type (func (result i32))) (func (export "main") (type 0) (result i32) ref.null func i32.const 3 table.grow 0 drop table.size 0))`, funcIdx: 0, args: [], expect: 4 },
+    { name: 'table.fill then table.get', wat: `(module (table 2 10 funcref) (type (func (result i32))) (func (export "main") (type 0) (result i32) i32.const 0 ref.null func i32.const 2 table.fill 0 i32.const 0 table.get 0 ref.is_null))`, funcIdx: 0, args: [], expect: 1 },
+    { name: 'table.copy', wat: `(module (table 3 10 funcref) (type (func (result i32))) (func $a (type 0) (result i32) i32.const 99) (elem (i32.const 0) func $a) (func (export "main") (type 0) (result i32) i32.const 2 i32.const 0 i32.const 1 table.copy 0 0 i32.const 2 table.get 0 ref.is_null i32.eqz))`, funcIdx: 1, args: [], expect: 1 },
+    // Multi-value return
+    { name: 'multi-return two i32s', wat: `(module (type (func (result i32 i32))) (func (type 0) (result i32 i32) i32.const 10 i32.const 20) (export "main" (func 0)))`, funcIdx: 0, args: [], multi: [10, 20] },
+    { name: 'multi-return return mid-function', wat: `(module (type (func (result i32 i32))) (func (type 0) (result i32 i32) i32.const 30 i32.const 40 return unreachable) (export "main" (func 0)))`, funcIdx: 0, args: [], multi: [30, 40] },
+    { name: 'call multi-return function', wat: `(module (type (func (result i32 i32))) (type (func (result i32))) (func $f2 (type 0) (result i32 i32) i32.const 100 i32.const 200) (func $main (export "main") (type 1) (result i32) call 0 drop) (export "main2" (func 0)))`, funcIdx: 1, args: [], expect: 100 },
+    { name: 'call_indirect multi-return', wat: `(module (type (func (result i32 i32))) (table 1 funcref) (func $f (type 0) (result i32 i32) i32.const 50 i32.const 60) (elem (i32.const 0) func $f) (type (func (result i32))) (func $main (export "main") (type 1) (result i32) i32.const 0 call_indirect (type 0) drop) (export "main2" (func 0)))`, funcIdx: 1, args: [], expect: 50 },
+    { name: 'block multi-value', wat: `(module (type (func (result i32 i32))) (func (type 0) (result i32 i32) block (result i32 i32) i32.const 7 i32.const 8 end) (export "main" (func 0)))`, funcIdx: 0, args: [], multi: [7, 8] },
   ];
 
   console.log('\n══════════ Execution Tests ══════════');
   let execPassed = 0, execFailed = 0;
   for (const et of execTests) {
     const r = loadAndCall(et.wat, et.funcIdx, et.args);
-    const ok = !r.error && r.count === 1 && Number(r.value) === et.expect;
-    const info = r.error ? `err=${r.error}` : `got ${Number(r.value)}`;
-    console.log(`  ${ok ? 'PASS' : 'FAIL'} ${et.name}: ${info} (expected ${et.expect})`);
+    let ok;
+    if (et.multi) {
+      ok = !r.error && r.count === et.multi.length && et.multi.every((v, i) => Number(r.values[i]) === v);
+    } else {
+      ok = !r.error && r.count === 1 && Number(r.value) === et.expect;
+    }
+    const info = r.error ? `err=${r.error}` : (et.multi ? `got [${r.values}]` : `got ${Number(r.value)}`);
+    const expected = et.multi ? `expected [${et.multi}]` : `expected ${et.expect}`;
+    console.log(`  ${ok ? 'PASS' : 'FAIL'} ${et.name}: ${info} (${expected})`);
     if (ok) execPassed++; else execFailed++;
   }
   console.log(`  --- ${execPassed}/${execTests.length} passed ---`);
