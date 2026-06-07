@@ -2,11 +2,15 @@
   "name": "edgerun-standards",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "build":     "bun tools/build_wat.mjs",
+    "build:watch": "bun tools/build_wat.mjs --watch",
     "validate":  "bun tools/validate.mjs",
     "test":      "bun tools/test.mjs",
-    "dashboard": "bun tools/serve-dashboard.mjs",
-    "ci":        "bun run build && bun run validate && bun run test"
+    "lint":      "make lint-wat",
+    "ci":        "bun run build && bun run validate && bun run test",
+    "stats":     "make stats",
+    "clean":     "make clean"
   }
 }

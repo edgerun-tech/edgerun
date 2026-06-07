@@ -313,6 +313,13 @@ Merged all 16 machine-generated Tor WAT fragments (~187K lines) into `tor/tor.wa
 2. ~~`data/` module — scan for 4 inline duplicates~~ ✅ Fixed — 4 data/ files refactored to use runtime scope: `$load8_u`, `$memcpy`, `$string_eq`, `$starts_with`
 3. ~~`$emit_aarch64_baarch64_*` naming bug~~ ✅ Fixed — 488 mangled call names corrected (481 in `compiler-aarch64.wat`, 7 in `simd-aarch64.wat`). Renamed `$emit_aarch64_baarch64_<rest>` → `$emit_aarch64_<rest>` to match definitions in `emit-aarch64.wat`.
 4. ~~`compiler/interpreter-wat.wat` consolidation~~ ✅ Fixed — 9 functions (`$wat_emit_byte`, `$wat_emit_leb_u32`, `$wat_emit_leb_i32`, `$wat_kw_match_rest`, `$wat_parse_body`, `$wat_parse_type_decl`, `$wat_parse_func_decl`, `$wat_parse_module`, `$load_wat`) appended to `interpreter.wat`; `interpreter-wat.wat` deleted.
+5. ~~**Friction cleanup** (Session — 2026-06-07)~~ ✅ Fixed:
+   - Removed 36 stale/orphan `.wasm` files from git tracking (14 orphaned with no source, 20 stale vs `.wat` sources)
+   - Removed `edgerun.wat` (110K lines) and `edgerun-full.wat` (23K lines) build outputs from git
+   - Added `*.wasm`, `edgerun*.wat`, `edgerun*.wasm` to `.gitignore`
+   - Removed empty `tor/` directory
+   - Removed stub files: `pipeline/wasm-interpreter.wat` (5-line comment shell) and `index.ts` (bun template)
+   - Fixed memory page count inconsistency: `memory-map.wat` comment → `2048` (matches canonical `memory.wat`)
 
 ---
 
@@ -369,4 +376,44 @@ Merged all 16 machine-generated Tor WAT fragments (~187K lines) into `tor/tor.wa
 
 ## Build & Test
 
-Currently no build system or test infrastructure. All files are raw `.wat` — no `wat2wasm`, no runner, no test framework. This is a WIP standards library (all commits are "wip: checkpoint").
+### Tooling
+
+| Tool | Command | Description |
+|------|---------|-------------|
+| **Build** | `bun run build` / `make` | Concatenates fragments → `edgerun.wat`, compiles to `edgerun.wasm` via `wat2wasm`, optionally strips via `wasm-tools strip` |
+| **Watch** | `bun run build:watch` / `make watch` | Rebuild on file changes (polls `.wat` files in all source dirs) |
+| **Validate** | `bun run validate` / `make validate` | Runs `wasm-tools validate` on `edgerun.wat` + `edgerun.wasm` |
+| **Test** | `bun run test` / `make test` | Instantiates `edgerun.wasm` in Node.js WASM runtime, runs 7 integration test groups |
+| **Lint** | `bun run lint` / `make lint-wat` | Validates every individual `.wat` file with `wasm-tools validate` |
+| **Stats** | `bun run stats` / `make stats` | Counts source files, lines, build output size |
+| **Clean** | `bun run clean` / `make clean` | Removes all build artifacts |
+| **CI** | `bun run ci` / `make ci` | Full pipeline: build → validate → test |
+
+### Build Pipeline
+
+```
+source .wat fragments  ──►  tools/build_wat.mjs  ──►  edgerun.wat  ──►  wat2wasm  ──►  edgerun.wasm
+                                  (concatenate +                       (compile)         (binary)
+                                   deduplicate +                       wasm-tools strip
+                                   strip wrappers)                     ──► edgerun-stripped.wasm
+```
+
+### Test Runner
+
+`tools/test.mjs` instantiates `edgerun.wasm` (no imports) and tests:
+1. Pipe I/O (create, write, read, available)
+2. Frame I/O (frame_write, frame_read with stream IDs)
+3. Pipeline lifecycle (create, set_stage, run, verify output)
+4. Stage table (funcref table length and population)
+5. UI framework exports (5 `er_ui_*` functions)
+6. Compiler/interpreter exports (6 decode/execute functions)
+7. Stage constants (16 `STAGE_*` constants with correct values)
+
+### Supported Flags (build_wat.mjs)
+
+| Flag | Effect |
+|------|--------|
+| `--out <path>` | Custom WAT output path (default: `edgerun.wat`) |
+| `--watch` | Watch mode — rebuilds on `.wat` file changes |
+| `--no-wasm` | Skip `wat2wasm` compilation |
+| `--no-strip` | Skip `wasm-tools strip` |

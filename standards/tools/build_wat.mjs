@@ -1,11 +1,16 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * EdgeRun Build System
  *
- * Concatenates source fragments into a single `edgerun.wasm`.
+ * Concatenates source fragments into `edgerun.wat`, then compiles to `edgerun.wasm`
+ * using `wat2wasm`. Optionally produces a stripped binary via `wasm-tools strip`.
  *
  * Usage:
- *   node tools/build_wat.mjs [--out edgerun.wat]
+ *   bun tools/build_wat.mjs                  # build edgerun.wat + edgerun.wasm
+ *   bun tools/build_wat.mjs --watch           # rebuild on file changes
+ *   bun tools/build_wat.mjs --out out.wat     # custom WAT output path
+ *   bun tools/build_wat.mjs --no-wasm         # skip WASM compilation
+ *   bun tools/build_wat.mjs --no-strip        # skip stripped binary
  *
  * Source order is defined by the MANIFEST array below.
  * Each entry can be:
@@ -16,8 +21,9 @@
  * and get their (import)s converted to local references when the target is in-module.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, watch } from 'fs';
 import { resolve, dirname, basename } from 'path';
+import { execSync } from 'child_process';
 
 const ROOT = resolve(import.meta.dirname, '..');
 
@@ -27,7 +33,7 @@ const MANIFEST = [
   // ── Layer 0: Runtime foundation ──
   'runtime/memory.wat',           // canonical (memory) + LUT data
   'runtime/memory-map.wat',       // address space constants
-  'runtime/edgerun-core.wat',     // char helpers, pack, memcpy, status, syscalls
+  {file: 'runtime/edgerun-core.wat', strip_funcs: ['\\$read_u16_be', '\\$read_u24_be', '\\$read_u32_be']},  // char helpers, pack, memcpy, status, syscalls
   'runtime/math-utils.wat',       // min, max, clamp, etc.
 
   // ── Layer 1: Pipeline transport ──
@@ -98,29 +104,36 @@ const MANIFEST = [
 
   // ── Layer 8: Protocol parsers (merged families) ──
   {file: 'protocol/binary-core.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/cache.wat', strip_module: true, strip_memory: true},
+  {file: 'protocol/cache.wat', strip_module: true, strip_memory: true, rename_map: {'$read_u8': '$cache_read_u8'}},
   {file: 'protocol/der.wat', strip_module: true, strip_memory: true},
   {file: 'protocol/dhcp.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/dns.wat', strip_module: true, strip_memory: true},
+  {file: 'protocol/dns.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$is_label_byte']},
   {file: 'protocol/hpack.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/http.wat', strip_module: true, strip_memory: true},
+  {file: 'protocol/http.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$is_tchar', '\\$prefix_encode']},
   {file: 'protocol/ipv4-net.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/packet-core.wat', strip_module: true, strip_memory: true},
+  {file: 'protocol/packet-core.wat', strip_module: true, strip_memory: true, rename_map: {
+    '$memcpy': '$pc_memcpy',
+    '$memset': '$pc_memset',
+    '$store_be32': '$pc_store_be32',
+    '$load_be32': '$pc_load_be32',
+    '$mix': '$pc_mix',
+    '$read_u8': '$pc_read_u8',
+  }},
   {file: 'protocol/quic.wat', strip_module: true, strip_memory: true},
   {file: 'protocol/sfx-tables.wat', strip_module: true, strip_memory: true},
   {file: 'protocol/tls.wat', strip_module: true, strip_memory: true},
   {file: 'protocol/ws.wat', strip_module: true, strip_memory: true},
 
   // ── Layer 9: Codec (merged families) ──
-  {file: 'codec/base64.wat', strip_module: true, strip_memory: true},
+  {file: 'codec/base64.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$adler32_update', '\\$adler32_update_byte', '\\$adler32_update_vec', '\\$crc32_update_byte', '\\$bounds_check']},
   {file: 'codec/json.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/compress.wat', strip_module: true, strip_memory: true},
+  {file: 'codec/compress.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$bounds_check']},
   {file: 'codec/text.wat', strip_module: true, strip_memory: true},
   {file: 'codec/serialize.wat', strip_module: true, strip_memory: true},
   {file: 'codec/binary.wat', strip_module: true, strip_memory: true},
   {file: 'codec/string-url.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/media.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/model.wat', strip_module: true, strip_memory: true},
+  {file: 'codec/media.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$reverse_bits']},
+  {file: 'codec/model.wat', strip_module: true, strip_memory: true, rename_map: {'$read_u8': '$model_read_u8'}},
   'pipeline/base64-encode-stage.wat',
   'pipeline/base64-decode-stage.wat',
 
@@ -241,9 +254,11 @@ function stripMemory(content) {
 
 function stripImport(content, file) {
   // Strip ALL imports from non-host modules — they resolve internally in the merge build.
+  // When the local import alias differs from the canonical name, rename all references.
   // Uses balanced-paren matching, properly skipping comments and strings.
   let result = '';
   let i = 0;
+  const renames = {};  // localName → canonicalName
   while (i < content.length) {
     // Skip line comments
     if (content[i] === ';' && i + 1 < content.length && content[i + 1] === ';') {
@@ -297,12 +312,30 @@ function stripImport(content, file) {
     const modName = modMatch ? modMatch[1] : '';
     if (modName === 'host' || modName === 'wasi_snapshot_preview1') {
       result += importStr;
+    } else {
+      // Track alias renames: when local name differs from canonical export name
+      const aliasMatch = importStr.match(/\(import\s+"([^"]+)"\s+"(\w+)"\s+\((?:func|global|memory|table)\s+\$(\w+)/);
+      if (aliasMatch) {
+        const [, mod, expName, localName] = aliasMatch;
+        if (localName !== expName) {
+          renames[localName] = expName;
+        }
+      }
     }
     i = j + 1;
     while (i < content.length && (content[i] === ' ' || content[i] === '\n' || content[i] === '\r' || content[i] === '\t')) i++;
   }
   content = result;
-  
+
+  // Apply renames — replace all references to local alias with canonical name.
+  // Uses word-boundary (\b) to avoid mangling longer identifiers that happen
+  // to share a prefix (e.g., $OK should not match $OK_FOO).
+  for (const [local, canonical] of Object.entries(renames)) {
+    const escaped = local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp('\\$' + escaped + '\\b', 'g');
+    content = content.replace(regex, '$' + canonical);
+  }
+
   // Also strip per-file explicit non-edgerun imports if set
   const imports = IMPORT_MAP[file];
   if (!imports) return content;
@@ -342,6 +375,92 @@ function stripFuncs(content, funcNames) {
     }
   }
   return content;
+}
+
+function deduplicateDefinitions(content) {
+  // Scans for duplicate (func $name), (global $name), (table $name) definitions
+  // and removes all but the first occurrence. Handles balanced parens, strings,
+  // and comments. Returns deduplicated content.
+  const seen = new Set();
+  let result = '';
+  let i = 0;
+  let skipped = 0;
+  while (i < content.length) {
+    // Line comments
+    if (content[i] === ';' && content[i + 1] === ';') {
+      const nl = content.indexOf('\n', i);
+      result += content.slice(i, nl !== -1 ? nl + 1 : content.length);
+      i = nl !== -1 ? nl + 1 : content.length;
+      continue;
+    }
+    // Block comments
+    if (content[i] === '(' && content[i + 1] === ';') {
+      const end = content.indexOf(';)', i + 2);
+      result += content.slice(i, end !== -1 ? end + 2 : content.length);
+      i = end !== -1 ? end + 2 : content.length;
+      continue;
+    }
+    // Strings
+    if (content[i] === '"') {
+      let end = i + 1;
+      while (end < content.length) {
+        if (content[end] === '"') break;
+        if (content[end] === '\\') end++;
+        end++;
+      }
+      result += content.slice(i, end + 1);
+      i = end + 1;
+      continue;
+    }
+    // Top-level definitions with $name — skip if seen before
+    if (content[i] === '(') {
+      const match = content.slice(i + 1).match(/^(func|global|table|type|data)\s+\$(\w+)/);
+      if (match) {
+        const key = match[1] + ':' + match[2];
+        if (seen.has(key)) {
+          // Skip to matching close paren, handling strings and comments
+          let depth = 1;
+          let j = i + 1;
+          while (j < content.length && depth > 0) {
+            // Skip block comments
+            if (content[j] === '(' && content[j + 1] === ';') {
+              const end = content.indexOf(';)', j + 2);
+              j = end !== -1 ? end + 2 : content.length;
+              continue;
+            }
+            // Skip line comments
+            if (content[j] === ';' && content[j + 1] === ';') {
+              const nl = content.indexOf('\n', j);
+              j = nl !== -1 ? nl + 1 : content.length;
+              continue;
+            }
+            // Skip strings
+            if (content[j] === '"') {
+              j++;
+              while (j < content.length) {
+                if (content[j] === '"') break;
+                if (content[j] === '\\') j++;
+                j++;
+              }
+              j++;
+              continue;
+            }
+            if (content[j] === '(') depth++;
+            if (content[j] === ')') depth--;
+            j++;
+          }
+          skipped++;
+          i = j;
+          continue;
+        }
+        seen.add(key);
+      }
+    }
+    result += content[i];
+    i++;
+  }
+  if (skipped > 0) console.log(`  Deduplicated ${skipped} definitions`);
+  return result;
 }
 
 function stripCanonicalGlobals(content, filePath) {
@@ -411,8 +530,47 @@ function processFile(filePath, opts = {}) {
   return `;; ── ${filePath} ──\n${content.trim()}\n\n`;
 }
 
+function resolveTool(name) {
+  try {
+    const out = execSync(`which ${name}`, { encoding: 'utf-8' }).trim();
+    return out || null;
+  } catch { return null; }
+}
+
+function compileWasm(watPath, wasmPath) {
+  const wat2wasm = resolveTool('wat2wasm');
+  if (!wat2wasm) {
+    console.warn('  ⚠  wat2wasm not found — skipping WASM compilation');
+    return false;
+  }
+  try {
+    execSync(`"${wat2wasm}" "${watPath}" -o "${wasmPath}"`, { stdio: 'pipe' });
+    return true;
+  } catch (e) {
+    console.error(`  ✗ wat2wasm failed: ${e.stderr?.slice(0, 200) || e.message}`);
+    return false;
+  }
+}
+
+function stripWasm(wasmPath, strippedPath) {
+  const wasmTools = resolveTool('wasm-tools');
+  if (!wasmTools) {
+    console.warn('  ⚠  wasm-tools not found — skipping stripped binary');
+    return false;
+  }
+  try {
+    execSync(`"${wasmTools}" strip -o "${strippedPath}" "${wasmPath}"`, { stdio: 'pipe' });
+    return true;
+  } catch (e) {
+    console.warn(`  ⚠  wasm-tools strip failed: ${e.stderr?.slice(0, 200) || e.message}`);
+    return false;
+  }
+}
+
 function build() {
   const outPath = resolve(ROOT, process.argv.find(a => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
+  const skipWasm = process.argv.includes('--no-wasm');
+  const skipStrip = process.argv.includes('--no-strip');
 
   console.log(`\nEdgeRun Build — ${new Date().toISOString()}`);
   console.log(`Output: ${outPath}\n`);
@@ -462,6 +620,9 @@ function build() {
     i = j + 1;
   }
 
+  // Deduplicate function/global/table definitions across fragments
+  cleaned = deduplicateDefinitions(cleaned);
+
   // Wrap in module
   const moduleDecl = '(module\n';
   const moduleClose = '\n)\n';
@@ -470,6 +631,74 @@ function build() {
 
   writeFileSync(outPath, final, 'utf-8');
   console.log(`\n✓ Written ${count} fragments → ${outPath} (${final.length} bytes)`);
+
+  // Compile WAT → WASM
+  if (!skipWasm) {
+    const wasmPath = outPath.replace(/\.wat$/, '.wasm');
+    console.log(`\nCompiling → ${wasmPath}...`);
+    if (compileWasm(outPath, wasmPath)) {
+      const wSize = statSync(wasmPath).size;
+      console.log(`  ✓ ${wasmPath} (${(wSize / 1024).toFixed(0)} KB)`);
+
+      // Strip
+      if (!skipStrip) {
+        const strippedPath = wasmPath.replace(/\.wasm$/, '-stripped.wasm');
+        console.log(`  Stripping → ${strippedPath}...`);
+        if (stripWasm(wasmPath, strippedPath)) {
+          const sSize = statSync(strippedPath).size;
+          console.log(`  ✓ ${strippedPath} (${(sSize / 1024).toFixed(0)} KB)`);
+        }
+      }
+    }
+  }
+
+  return true;
 }
 
-build();
+// ── Watch mode ──
+function watchMode() {
+  const sourceDirs = ['runtime', 'compiler', 'pipeline', 'crypto', 'protocol', 'codec',
+                       'ui', 'app', 'data', 'device', 'net', 'system', 'tools'];
+
+  console.log(`\n👀 Watching for changes in ${sourceDirs.join(', ')}...\n`);
+
+  // Debounce: collect change events, rebuild after 200ms of quiet
+  let timer = null;
+  const onChange = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      try { build(); } catch (e) { console.error(`Build error: ${e.message}`); }
+    }, 200);
+  };
+
+  for (const dir of sourceDirs) {
+    const dirPath = resolve(ROOT, dir);
+    if (!existsSync(dirPath)) continue;
+    try {
+      watch(dirPath, { recursive: true }, (event, filename) => {
+        if (filename?.endsWith('.wat')) {
+          console.log(`  Change: ${dir}/${filename}`);
+          onChange();
+        }
+      });
+    } catch (e) {
+      console.warn(`  ⚠  Cannot watch ${dir}: ${e.message}`);
+    }
+  }
+
+  // Also watch the MANIFEST file (this script) for changes
+  watch(resolve(ROOT, 'tools/build_wat.mjs'), () => {
+    console.log('  Change: tools/build_wat.mjs');
+    onChange();
+  });
+
+  // Initial build
+  build();
+}
+
+// ── Main ──
+if (process.argv.includes('--watch')) {
+  watchMode();
+} else {
+  build();
+}

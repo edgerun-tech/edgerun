@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "dtsvet.vscode-wasm",
+    "xplshn.wat-language",
+    "ms-vscode.makefile-tools"
+  ]
+}
