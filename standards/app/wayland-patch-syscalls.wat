@@ -49,5 +49,5 @@
 
     ;; 4. compile_to_elf handles jit_compile internally.
     ;;    The first module function is at index = import_count.
-    (return (call $compile_to_elf (local.get $import_count)))
+    (return (call $compile_to_elf (local.get $import_count) (i32.const 0)))
   )

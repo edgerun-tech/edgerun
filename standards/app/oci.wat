@@ -723,26 +723,7 @@
               (i32.eq (local.get $c) (i32.const 58))
               (i32.or (i32.eq (local.get $c) (i32.const 91)) (i32.eq (local.get $c) (i32.const 93)))))))))
 
-  (func $m142b (param $ptr i32) (param $off i32) (result i32)
-    local.get $ptr
-    local.get $off
-    i32.add
-    i32.load8_u)
-
-  (func $m142eq_lit (param $ptr i32) (param $len i32) (param $lit_ptr i32) (param $lit_len i32) (result i32)
-    (local $i i32)
-    (if (i32.ne (local.get $len) (local.get $lit_len))
-      (then (return (i32.const 0))))
-    (block $done
-      (loop $scan
-        (br_if $done (i32.ge_u (local.get $i) (local.get $lit_len)))
-        (if (i32.ne
-              (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
-              (i32.load8_u (i32.add (local.get $lit_ptr) (local.get $i))))
-          (then (return (i32.const 0))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $scan)))
-    i32.const 1)
+  ;; (m142eq_lit removed — use $string_eq from runtime)
 
 
   (func $validate_tag (param $ptr i32) (param $start i32) (param $len i32) (result i32)
@@ -750,7 +731,7 @@
     (local $c i32)
     (if (i32.or (i32.eqz (local.get $len)) (i32.gt_u (local.get $len) (i32.const 128)))
       (then (return (i32.const 0))))
-    (local.set $c (call $m142b (local.get $ptr) (local.get $start)))
+    (local.set $c (call $load8_u (local.get $ptr) (local.get $start)))
     (if (i32.eqz
           (i32.or
             (i32.eq (local.get $c) (i32.const 95))
@@ -764,7 +745,7 @@
     (block $done
       (loop $scan
         (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (if (i32.eqz (call $is_tag_char (call $m142b (local.get $ptr) (i32.add (local.get $start) (local.get $i)))))
+        (if (i32.eqz (call $is_tag_char (call $load8_u (local.get $ptr) (i32.add (local.get $start) (local.get $i)))))
           (then (return (i32.const 0))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $scan)))
@@ -774,14 +755,14 @@
     (local $i i32)
     (local $c i32)
     (if (i32.eqz (local.get $len)) (then (return (i32.const 1))))
-    (local.set $c (call $m142b (local.get $ptr) (local.get $start)))
+    (local.set $c (call $load8_u (local.get $ptr) (local.get $start)))
     (if (i32.eq (local.get $c) (i32.const 46)) (then (return (i32.const 0))))
-    (local.set $c (call $m142b (local.get $ptr) (i32.sub (i32.add (local.get $start) (local.get $len)) (i32.const 1))))
+    (local.set $c (call $load8_u (local.get $ptr) (i32.sub (i32.add (local.get $start) (local.get $len)) (i32.const 1))))
     (if (i32.eq (local.get $c) (i32.const 46)) (then (return (i32.const 0))))
     (block $done
       (loop $scan
         (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (if (i32.eqz (call $is_registry_char (call $m142b (local.get $ptr) (i32.add (local.get $start) (local.get $i)))))
+        (if (i32.eqz (call $is_registry_char (call $load8_u (local.get $ptr) (i32.add (local.get $start) (local.get $i)))))
           (then (return (i32.const 0))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $scan)))
@@ -792,14 +773,14 @@
     (local $prev_slash i32)
     (local $c i32)
     (if (i32.eqz (local.get $len)) (then (return (i32.const 0))))
-    (if (i32.eq (call $m142b (local.get $ptr) (local.get $start)) (i32.const 47)) (then (return (i32.const 0))))
-    (if (i32.eq (call $m142b (local.get $ptr) (i32.sub (i32.add (local.get $start) (local.get $len)) (i32.const 1))) (i32.const 47))
+    (if (i32.eq (call $load8_u (local.get $ptr) (local.get $start)) (i32.const 47)) (then (return (i32.const 0))))
+    (if (i32.eq (call $load8_u (local.get $ptr) (i32.sub (i32.add (local.get $start) (local.get $len)) (i32.const 1))) (i32.const 47))
       (then (return (i32.const 0))))
     (local.set $prev_slash (i32.const 0))
     (block $done
       (loop $scan
         (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (local.set $c (call $m142b (local.get $ptr) (i32.add (local.get $start) (local.get $i))))
+        (local.set $c (call $load8_u (local.get $ptr) (i32.add (local.get $start) (local.get $i))))
         (if (i32.eq (local.get $c) (i32.const 47))
           (then
             (if (local.get $prev_slash) (then (return (i32.const 0))))
@@ -870,15 +851,15 @@
     (block $done
       (loop $scan
         (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (if (i32.eq (call $m142b (local.get $ptr) (local.get $i)) (i32.const 47))
+        (if (i32.eq (call $load8_u (local.get $ptr) (local.get $i)) (i32.const 47))
           (then
             (if (i32.eq (local.get $first_slash) (i32.const -1)) (then (local.set $first_slash (local.get $i))))
             (local.set $last_slash (local.get $i))))
         (if (i32.and
               (i32.eq (local.get $at) (i32.const -1))
-              (i32.eq (call $m142b (local.get $ptr) (local.get $i)) (i32.const 58)))
+              (i32.eq (call $load8_u (local.get $ptr) (local.get $i)) (i32.const 58)))
           (then (local.set $last_colon (local.get $i))))
-        (if (i32.eq (call $m142b (local.get $ptr) (local.get $i)) (i32.const 64))
+        (if (i32.eq (call $load8_u (local.get $ptr) (local.get $i)) (i32.const 64))
           (then
             (if (i32.ne (local.get $at) (i32.const -1)) (then (return (i32.const 1))))
             (local.set $at (local.get $i))))
@@ -933,14 +914,14 @@
     i32.const 0)
 
   (func (export "oci_media_layer_compression") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4096) (i32.const 38)) (then (return (i32.const 0))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4160) (i32.const 55)) (then (return (i32.const 0))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4224) (i32.const 44)) (then (return (i32.const 0))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4288) (i32.const 43)) (then (return (i32.const 1))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4352) (i32.const 60)) (then (return (i32.const 1))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4416) (i32.const 49)) (then (return (i32.const 1))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4480) (i32.const 43)) (then (return (i32.const 2))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 4544) (i32.const 60)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4096) (i32.const 38)) (then (return (i32.const 0))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4160) (i32.const 55)) (then (return (i32.const 0))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4224) (i32.const 44)) (then (return (i32.const 0))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4288) (i32.const 43)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4352) (i32.const 60)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4416) (i32.const 49)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4480) (i32.const 43)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 4544) (i32.const 60)) (then (return (i32.const 2))))
     i32.const 3)
 
 
@@ -967,15 +948,15 @@
       (i32.eq (local.get $status) (i32.const 4))))
 
   (func (export "oci_status_code") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 1024) (i32.const 8))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 1024) (i32.const 8))
       (then (return (i32.const 0))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 1032) (i32.const 7))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 1032) (i32.const 7))
       (then (return (i32.const 1))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 1040) (i32.const 7))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 1040) (i32.const 7))
       (then (return (i32.const 2))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 1048) (i32.const 7))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 1048) (i32.const 7))
       (then (return (i32.const 3))))
-    (if (call $m142eq_lit (local.get $ptr) (local.get $len) (i32.const 1056) (i32.const 7))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 1056) (i32.const 7))
       (then (return (i32.const 4))))
     i32.const -1)
 

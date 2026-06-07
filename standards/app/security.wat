@@ -622,39 +622,39 @@
     i32.const 0)
 
   (func (export "acme_account_status_code") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 1))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 21) (i32.const 11)) (then (return (i32.const 2))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 32) (i32.const 7)) (then (return (i32.const 3))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 21) (i32.const 11)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32) (i32.const 7)) (then (return (i32.const 3))))
     i32.const 0)
 
   (func (export "acme_order_status_code") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 48) (i32.const 7)) (then (return (i32.const 1))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 55) (i32.const 5)) (then (return (i32.const 2))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 60) (i32.const 10)) (then (return (i32.const 3))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 4))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 70) (i32.const 7)) (then (return (i32.const 5))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 48) (i32.const 7)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 55) (i32.const 5)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 60) (i32.const 10)) (then (return (i32.const 3))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 4))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 70) (i32.const 7)) (then (return (i32.const 5))))
     i32.const 0)
 
   (func (export "acme_authorization_status_code") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 48) (i32.const 7)) (then (return (i32.const 1))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 2))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 70) (i32.const 7)) (then (return (i32.const 3))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 21) (i32.const 11)) (then (return (i32.const 4))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 77) (i32.const 7)) (then (return (i32.const 5))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 32) (i32.const 7)) (then (return (i32.const 6))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 48) (i32.const 7)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 70) (i32.const 7)) (then (return (i32.const 3))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 21) (i32.const 11)) (then (return (i32.const 4))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 77) (i32.const 7)) (then (return (i32.const 5))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32) (i32.const 7)) (then (return (i32.const 6))))
     i32.const 0)
 
   (func (export "acme_challenge_status_code") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 48) (i32.const 7)) (then (return (i32.const 1))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 60) (i32.const 10)) (then (return (i32.const 2))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 3))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 70) (i32.const 7)) (then (return (i32.const 4))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 48) (i32.const 7)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 60) (i32.const 10)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 3))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 70) (i32.const 7)) (then (return (i32.const 4))))
     i32.const 0)
 
   (func (export "acme_challenge_type_code") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 96) (i32.const 7)) (then (return (i32.const 1))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 103) (i32.const 6)) (then (return (i32.const 2))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 109) (i32.const 11)) (then (return (i32.const 3))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 96) (i32.const 7)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 103) (i32.const 6)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 109) (i32.const 11)) (then (return (i32.const 3))))
     i32.const 4)
 
   (func (export "acme_challenge_material_kind") (param $type_code i32) (result i32)
@@ -667,8 +667,8 @@
     (i32.and (i32.gt_u (local.get $token_len) (i32.const 0)) (i32.gt_u (local.get $thumbprint_len) (i32.const 0))))
 
   (func (export "acme_directory_builtin_code") (param $ptr i32) (param $len i32) (result i32)
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 128) (i32.const 11)) (then (return (i32.const 1))))
-    (if (call $m30eq (local.get $ptr) (local.get $len) (i32.const 139) (i32.const 18)) (then (return (i32.const 2))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 128) (i32.const 11)) (then (return (i32.const 1))))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 139) (i32.const 18)) (then (return (i32.const 2))))
     i32.const 0)
 
   (func (export "acme_jwk_kind") (param $has_n i32) (param $has_e i32) (param $has_crv i32) (param $has_x i32) (param $has_y i32) (result i32)
@@ -677,22 +677,6 @@
     i32.const 0)
 
 
-
-  (func $m30eq (param $ptr i32) (param $len i32) (param $lit_ptr i32) (param $lit_len i32) (result i32)
-    (local $i i32)
-    (if (i32.ne (local.get $len) (local.get $lit_len))
-      (then (return (i32.const 0))))
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $lit_len)))
-        (if
-          (i32.ne
-            (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
-            (i32.load8_u (i32.add (local.get $lit_ptr) (local.get $i))))
-          (then (return (i32.const 0))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))
-    i32.const 1)
 
   (func $m169is_space (param $b i32) (result i32)
     local.get $b
@@ -1085,17 +1069,11 @@
       (i32.eq (local.get $c) (i32.const 32))
       (i32.eq (local.get $c) (i32.const 9))))
 
-  (func $m76byte (param $ptr i32) (param $off i32) (result i32)
-    local.get $ptr
-    local.get $off
-    i32.add
-    i32.load8_u)
-
   (func $is_next_lf (param $in_ptr i32) (param $in_len i32) (param $i i32) (result i32)
     (if (i32.ge_u (i32.add (local.get $i) (i32.const 1)) (local.get $in_len))
       (then (return (i32.const 0))))
     (i32.eq
-      (call $m76byte (local.get $in_ptr) (i32.add (local.get $i) (i32.const 1)))
+      (call $load8_u (local.get $in_ptr) (i32.add (local.get $i) (i32.const 1)))
       (i32.const 10)))
 
   (func (export "dkim_body_simple") (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32) (result i64)
@@ -1133,7 +1111,7 @@
               (local.set $written (i32.wrap_i64 (i64.shr_u (local.get $packed) (i64.const 32))))))
           (return (call $pack (i32.const 0) (local.get $written)))))
 
-      (local.set $c (call $m76byte (local.get $in_ptr) (local.get $i)))
+      (local.set $c (call $load8_u (local.get $in_ptr) (local.get $i)))
 
       (if (i32.or (i32.eq (local.get $c) (i32.const 13)) (i32.eq (local.get $c) (i32.const 10)))
         (then
@@ -1222,7 +1200,7 @@
               (local.set $written (i32.wrap_i64 (i64.shr_u (local.get $packed) (i64.const 32))))))
           (return (call $pack (i32.const 0) (local.get $written)))))
 
-      (local.set $c (call $m76byte (local.get $in_ptr) (local.get $i)))
+      (local.set $c (call $load8_u (local.get $in_ptr) (local.get $i)))
 
       (if (i32.or (i32.eq (local.get $c) (i32.const 13)) (i32.eq (local.get $c) (i32.const 10)))
         (then

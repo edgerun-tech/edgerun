@@ -35,20 +35,77 @@ const ALL_BACKEND_FILES = [
   'compiler/dispatch.wat',
   'compiler/templates-x86-64.wat',
   'compiler/simd-x86-64.wat',
-  // ARM32
+  // ARM32 (compiler + emitter)
   'compiler/compiler-arm32.wat',
-  // AArch64
+  'compiler/emit-arm32.wat',
+  // AArch64 (compiler + emitter)
   'compiler/compiler-aarch64.wat',
+  'compiler/emit-aarch64.wat',
 ];
 
   // ── Module-level names that collide across backends ──
 const COLLIDING_NAMES = [
   // Function names
   '$jit_compile', '$copy_compiled_code', '$copy_code_to', '$jit_reset_state',
-  '$template_unreachable',
+  // Template functions (shared between ARM32 and AArch64)
+  '$template_unreachable', '$template_nop',
   '$template_block', '$template_loop', '$template_if',
   '$template_else', '$template_end', '$template_br', '$template_br_if',
   '$template_br_table', '$template_return', '$template_return_call',
+  '$template_drop', '$template_select',
+  '$template_local_get', '$template_local_set', '$template_local_tee',
+  '$template_global_get', '$template_global_set',
+  '$template_call',
+  '$template_memory_size', '$template_memory_grow',
+  '$template_table_get', '$template_table_set',
+  // i32 load/store
+  '$template_i32_load', '$template_i32_load8_s', '$template_i32_load8_u',
+  '$template_i32_load16_s', '$template_i32_load16_u',
+  '$template_i32_store', '$template_i32_store8', '$template_i32_store16',
+  // i64 load/store
+  '$template_i64_load', '$template_i64_store',
+  // i32 comparisons
+  '$template_i32_eq', '$template_i32_ne',
+  '$template_i32_lt_s', '$template_i32_lt_u',
+  '$template_i32_gt_s', '$template_i32_gt_u',
+  '$template_i32_le_s', '$template_i32_le_u',
+  '$template_i32_ge_s', '$template_i32_ge_u',
+  // i64 comparisons
+  '$template_i64_eq', '$template_i64_ne',
+  '$template_i64_lt_s', '$template_i64_lt_u',
+  '$template_i64_gt_s', '$template_i64_gt_u',
+  '$template_i64_le_s', '$template_i64_le_u',
+  '$template_i64_ge_s', '$template_i64_ge_u',
+  // i32 arithmetic
+  '$template_i32_eqz', '$template_i32_clz', '$template_i32_ctz', '$template_i32_popcnt',
+  '$template_i32_const',
+  '$template_i32_add', '$template_i32_sub', '$template_i32_mul',
+  '$template_i32_div_s', '$template_i32_div_u',
+  '$template_i32_rem_s', '$template_i32_rem_u',
+  '$template_i32_and', '$template_i32_or', '$template_i32_xor',
+  '$template_i32_shl', '$template_i32_shr_s', '$template_i32_shr_u',
+  '$template_i32_rotl', '$template_i32_rotr',
+  // i64 arithmetic
+  '$template_i64_eqz', '$template_i64_clz', '$template_i64_ctz', '$template_i64_popcnt',
+  '$template_i64_const',
+  '$template_i64_add', '$template_i64_sub', '$template_i64_mul',
+  '$template_i64_div_s', '$template_i64_div_u',
+  '$template_i64_rem_s', '$template_i64_rem_u',
+  '$template_i64_and', '$template_i64_or', '$template_i64_xor',
+  '$template_i64_shl', '$template_i64_shr_s', '$template_i64_shr_u',
+  '$template_i64_rotl', '$template_i64_rotr',
+  // Conversions
+  '$template_i32_wrap_i64',
+  '$template_i32_reinterpret_f32', '$template_f32_reinterpret_i32',
+  '$template_i64_reinterpret_f64', '$template_f64_reinterpret_i64',
+  '$template_i64_extend_i32_s', '$template_i64_extend_i32_u',
+  '$template_i32_trunc_f32_s', '$template_i32_trunc_f32_u',
+  '$template_i32_trunc_f64_s', '$template_i32_trunc_f64_u',
+  '$template_i32_trunc_sat_f32_s', '$template_i32_trunc_sat_f32_u',
+  '$template_i32_trunc_sat_f64_s', '$template_i32_trunc_sat_f64_u',
+  '$template_i64_trunc_f32_s', '$template_i64_trunc_f32_u',
+  '$template_i64_trunc_f64_s', '$template_i64_trunc_f64_u',
+  '$template_i64_trunc_sat_f32_s',
   // JIT state globals
   '$JIT_SLOT_SIZE', '$JIT_STATE',
   '$JS_CODE_PTR', '$JS_CACHE_BASE', '$JS_CACHE_END',
@@ -184,6 +241,9 @@ const MANIFEST = [
   'pipeline/frame-pacer.wat',
   'pipeline/mux-core.wat',
 
+  // ── Layer 3a: Socket/Transport ──
+  'net/socket-core.wat',
+
   // Queue/Buffer/CDC stages (slots 48-50)
   'pipeline/queue-stage.wat',
   'pipeline/buffer-stage.wat',
@@ -205,14 +265,16 @@ const MANIFEST = [
   'pipeline/edgerun-parse-stage.wat',
   'pipeline/edgerun-exec-stage.wat',
 
-  // ── Layer 6: JIT Compiler backends (all 3) ──
+  // ── Layer 6: JIT Compiler backends (all 3, compiler + emitter) ──
   'compiler/base-x86-64.wat',
   'compiler/emit-x86-64.wat',
   'compiler/dispatch.wat',
   'compiler/templates-x86-64.wat',
   'compiler/simd-x86-64.wat',
   'compiler/compiler-arm32.wat',
+  'compiler/emit-arm32.wat',
   'compiler/compiler-aarch64.wat',
+  'compiler/emit-aarch64.wat',
 
   // ── Layer 7: Crypto ──
   'crypto/hash-djb2.wat',
@@ -246,6 +308,22 @@ const MANIFEST = [
   'pipeline/djb2-hash-stage.wat',
   'pipeline/inet-checksum-stage.wat',
   'pipeline/crc32-bzip-stage.wat',
+  'pipeline/deflate-decode-stage.wat',
+  'pipeline/deflate-encode-stage.wat',
+  'pipeline/gzip-decode-stage.wat',
+  'pipeline/gzip-encode-stage.wat',
+  'pipeline/zlib-decode-stage.wat',
+  'pipeline/zlib-encode-stage.wat',
+  'pipeline/json-parse-stage.wat',
+  'pipeline/wasm-exec-stage.wat',
+  'pipeline/percent-decode-stage.wat',
+  'pipeline/percent-encode-stage.wat',
+  'pipeline/utf8-repair-stage.wat',
+  'pipeline/to-lower-stage.wat',
+  'pipeline/to-upper-stage.wat',
+  'pipeline/hex-decode-compat-stage.wat',
+  'pipeline/cp1252-decode-stage.wat',
+  'pipeline/pem-compact-stage.wat',
 
   // ── Layer 8: Protocol parsers ──
   'protocol/binary-core.wat',
@@ -348,7 +426,7 @@ function build() {
 
   // Map backend file index to its 0/1/2 group
   const backendFileStart = MANIFEST.findIndex(f => f === 'compiler/base-x86-64.wat');
-  const backendFileEnd = backendFileStart + 7; // 7 backend files
+  const backendFileEnd = backendFileStart + 9; // 9 backend files (5 x86-64 + 2 ARM32 + 2 AArch64)
 
   let body = '';
   let count = 0;

@@ -2602,7 +2602,7 @@
     local.get $p
     call $pack)
 
-  (func (export "json_parse_tape") (param $input_ptr i32) (param $input_len i32) (param $token_ptr i32) (param $token_cap i32) (param $scratch_ptr i32) (param $scratch_len i32) (result i64)
+  (func $json_parse_tape (export "json_parse_tape") (param $input_ptr i32) (param $input_len i32) (param $token_ptr i32) (param $token_cap i32) (param $scratch_ptr i32) (param $scratch_len i32) (result i64)
     (local $packed i64)
     (local $end i32)
     local.get $input_ptr

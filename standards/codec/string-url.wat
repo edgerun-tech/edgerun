@@ -239,7 +239,7 @@
     end
     i32.const 1)
 
-  (func (export "percent_decode_strict")
+  (func $percent_decode_strict (export "percent_decode_strict")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $i i32)
@@ -347,7 +347,7 @@
     local.get $o
     call $pack)
 
-  (func (export "percent_encode_component")
+  (func $percent_encode_component (export "percent_encode_component")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32) (param $mode i32)
     (result i64)
     (local $i i32)
@@ -437,7 +437,7 @@
     local.get $o
     call $pack)
 
-  (func (export "percent_encode_baggage")
+  (func $percent_encode_baggage (export "percent_encode_baggage")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $i i32)
@@ -527,7 +527,7 @@
     call $pack)
 
   ;; Writes key_start, key_len, value_start, value_len, next_offset.
-  (func (export "form_urlencoded_next_pair")
+  (func $form_urlencoded_next_pair (export "form_urlencoded_next_pair")
     (param $ptr i32) (param $len i32) (param $start i32) (param $out_ptr i32)
     (result i32)
     (local $i i32)
@@ -692,7 +692,7 @@
 
   ;; Writes path_start, path_len, query_start, query_len, fragment_start, fragment_len.
   ;; Absent query/fragment start is 0xffffffff.
-  (func (export "uri_scan_path_query")
+  (func $uri_scan_path_query (export "uri_scan_path_query")
     (param $ptr i32) (param $len i32) (param $out_ptr i32)
     (result i32)
     (local $i i32)
@@ -856,7 +856,7 @@
   ;; Exports:
   ;;   escape_text(in_ptr, in_len, out_ptr) -> out_len
   ;;   unescape_text(in_ptr, in_len, out_ptr) -> out_len
-  (func (export "escape_text") (param $in i32) (param $len i32) (param $out i32) (result i32)
+  (func $escape_text (export "escape_text") (param $in i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32) (local $o i32) (local $c i32)
     i32.const 0 local.set $i
     i32.const 0 local.set $o
@@ -902,7 +902,7 @@
     end
     local.get $o
   )
-  (func (export "unescape_text") (param $in i32) (param $len i32) (param $out i32) (result i32)
+  (func $unescape_text (export "unescape_text") (param $in i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32) (local $o i32) (local $c i32)
     i32.const 0 local.set $i
     i32.const 0 local.set $o
@@ -967,7 +967,7 @@
 
   ;; Return status 0 when a NUL terminator is found and status 4 when the input
   ;; ends before a terminator. Offsets are relative to ptr.
-  (func (export "c_string_scan")
+  (func $c_string_scan (export "c_string_scan")
     (param $ptr i32) (param $len i32) (param $out i32)
     (result i32)
     (local $i i32)
@@ -1024,7 +1024,7 @@
 
   ;; Scan the next entry in a NUL-separated multi-string. Empty entries terminate
   ;; the list with status 5 and a next offset after the empty terminator.
-  (func (export "c_multi_string_next")
+  (func $c_multi_string_next (export "c_multi_string_next")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     (local $i i32)
@@ -1452,7 +1452,7 @@
     end
     i32.const 0)
 
-  (func (export "pem_find_boundaries")
+  (func $pem_find_boundaries (export "pem_find_boundaries")
     (param $ptr i32) (param $len i32) (param $out_ptr i32)
     (result i32)
     (local $i i32)
@@ -1698,7 +1698,7 @@
     i32.store
     i32.const 0)
 
-  (func (export "pem_compact_base64")
+  (func $pem_compact_base64 (export "pem_compact_base64")
     (param $ptr i32) (param $len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $i i32)
@@ -1816,7 +1816,7 @@
     local.get $o
     call $pack)
 
-  (func (export "pem_encoded_len")
+  (func $pem_encoded_len (export "pem_encoded_len")
     (param $der_len i32) (param $label_len i32)
     (result i64)
     (local $base64_len i32)

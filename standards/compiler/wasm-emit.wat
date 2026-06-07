@@ -116,6 +116,23 @@
     (i32.store8 (local.get $p) (local.get $b))
   )
 
+  (func $compact_section (param $sec_size_p i32) (param $content_size i32) (result i32)
+    (local $leb_size i32) (local $gap i32)
+    (local.set $leb_size (call $leb_u32_size (local.get $content_size)))
+    (local.set $gap (i32.sub (i32.const 5) (local.get $leb_size)))
+    (if (local.get $gap)
+      (then
+        (call $memcpy
+          (i32.add (local.get $sec_size_p) (local.get $leb_size))
+          (i32.add (local.get $sec_size_p) (i32.const 5))
+          (local.get $content_size))
+      )
+    )
+    (i32.add
+      (i32.add (local.get $sec_size_p) (call $write_leb_u32 (local.get $sec_size_p) (local.get $content_size)))
+      (local.get $content_size))
+  )
+
   ;; ── Wasm Binary Writer ──
 
   (func $emit_wasm (export "emit_wasm") (param $out i32) (param $max_size i32) (result i64)
@@ -177,7 +194,7 @@
             (br $tl)
           )
         )
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -212,7 +229,7 @@
             (br $iml)
           )
         )
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -236,7 +253,7 @@
             (br $fl)
           )
         )
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -254,7 +271,7 @@
         (i32.store8 (local.get $p) (i32.const 0))
         (local.set $p (i32.add (local.get $p) (i32.const 1)))
         (local.set $p (i32.add (local.get $p) (call $write_leb_u32 (local.get $p) (i32.load (global.get $OFF_TABLE_MIN)))))
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -270,7 +287,7 @@
         (i32.store8 (local.get $p) (i32.const 0))
         (local.set $p (i32.add (local.get $p) (i32.const 1)))
         (local.set $p (i32.add (local.get $p) (call $write_leb_u32 (local.get $p) (local.get $mc))))
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -301,7 +318,7 @@
             (br $gl)
           )
         )
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -343,7 +360,7 @@
             (br $el)
           )
         )
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -356,7 +373,7 @@
         (local.set $sec_size_p (local.get $p))
         (local.set $p (i32.add (local.get $p) (i32.const 5)))
         (local.set $p (i32.add (local.get $p) (call $write_leb_u32 (local.get $p) (local.get $sc))))
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -375,7 +392,6 @@
             (if (i32.ge_u (local.get $i) (local.get $fc)) (then (br $cs)))
             (local.set $j (i32.load (i32.add (global.get $OFF_CODE_BUF) (i32.add (i32.mul (local.get $i) (global.get $SZ_CODE)) (i32.const 8)))))
             (local.set $p (i32.add (local.get $p) (call $write_leb_u32 (local.get $p) (local.get $j))))
-            (local.set $p (i32.add (local.get $p) (call $write_leb_u32 (local.get $p) (i32.const 0))))
             (call $memcpy (local.get $p)
               (i32.add (i32.load (global.get $OFF_WASM_PTR))
                 (i32.load (i32.add (global.get $OFF_CODE_BUF) (i32.add (i32.mul (local.get $i) (global.get $SZ_CODE)) (i32.const 0)))))
@@ -385,7 +401,7 @@
             (br $cl)
           )
         )
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 
@@ -422,7 +438,7 @@
             (br $dl)
           )
         )
-        (call $patch_leb_u32 (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5))))
+        (local.set $p (call $compact_section (local.get $sec_size_p) (i32.sub (local.get $p) (i32.add (local.get $sec_size_p) (i32.const 5)))))
       )
     )
 

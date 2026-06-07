@@ -271,7 +271,7 @@
       (loop $copy_lp
         (if (i32.ge_u (local.get $i) (local.get $len)) (then (br $copy_end)))
         (i32.store8 (i32.add (local.get $dst) (local.get $i))
-          (i32.load8_u (i32.add (local.get $p) (local.get $offset) (local.get $i)))
+          (i32.load8_u (i32.add (i32.add (local.get $p) (local.get $offset)) (local.get $i)))
         )
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $copy_lp)
@@ -391,7 +391,7 @@
       (loop $rl_lp
         (if (i32.ge_u (local.get $i) (local.get $rc)) (then (br $rl)))
         (local.set $wp (i32.load (global.get $OFF_WASM_PTR)))
-        (i32.store8 (i32.add (local.get $base) (i32.const 132) (local.get $i))
+        (i32.store8 (i32.add (i32.add (local.get $base) (i32.const 132)) (local.get $i))
           (i32.load8_u (i32.add (local.get $wp) (local.get $offset)))
         )
         (local.set $offset (i32.add (local.get $offset) (i32.const 1)))

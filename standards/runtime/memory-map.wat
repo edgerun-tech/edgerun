@@ -122,8 +122,7 @@
 (global $VEC256_ALIGN  (export "VEC256_ALIGN")  i32 (i32.const 32))
 
 ;; ── Interpreter globals (compatibility with legacy $OFF_* names) ─────
-;; These are referenced by compiler/interpreter-core.wat and
-;; compiler/compiler-x86_64.wat fragments.
+;; Referenced by compiler/interpreter-core.wat fragments.
 (global $OFF_TYPES_BUF       i32 (i32.const 0x00104))
 (global $SZ_TYPE              i32 (i32.const 140))
 (global $OFF_FUNCTIONS_BUF   i32 (i32.const 0x04510))

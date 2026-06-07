@@ -68,7 +68,7 @@ const u32 = new Uint32Array(mem.buffer);
   const pipe = wasm.pipe_create(1024);
   check(pipe > 0 && pipe !== 0xFFFFFFFF, `pipe_create=${pipe}`);
 
-  const DATA_ADDR = 0x2051000;
+  const DATA_ADDR = 0x1000000;
   const encoder = new TextEncoder();
   const msg = 'Hello EdgeRun!';
   const msgBytes = encoder.encode(msg);
@@ -80,7 +80,7 @@ const u32 = new Uint32Array(mem.buffer);
   const avail = wasm.pipe_available(pipe);
   check(avail === msgBytes.length, `pipe_available=${avail}`);
 
-  const SCR = 0x2040000;
+  const SCR = 0x1004000;
   const read = wasm.pipe_read(pipe, SCR, 256);
   check(read === msgBytes.length, `pipe_read=${read}`);
 
@@ -95,13 +95,13 @@ const u32 = new Uint32Array(mem.buffer);
 {
   const pipe = wasm.pipe_create(512);
   const STREAM_ID = 42;
-  const DATA_ADDR = 0x2051000;
+  const DATA_ADDR = 0x1000010;
 
   u8.set([0x48, 0x65, 0x6C, 0x6C, 0x6F], DATA_ADDR); // "Hello"
   const fw = wasm.frame_write(pipe, STREAM_ID, DATA_ADDR, 5);
   check(fw === 0, `frame_write=${fw}`);
 
-  const SCR = 0x2040000;
+  const SCR = 0x1004000;
   // frame_read returns pack(status, stream_id) as i64
   const result = wasm.frame_read(pipe, SCR, 4096);
   const status = toU32(Number(result >> 32n));
@@ -128,7 +128,7 @@ const u32 = new Uint32Array(mem.buffer);
   // Create pipes for pipeline test
   const input = wasm.pipe_create(1024);
   const output = wasm.pipe_create(1024);
-  const DATA = 0x2051000;
+  const DATA = 0x1000020;
   u8.set([0x41, 0x42, 0x43], DATA);
   wasm.pipe_write(input, DATA, 3);
 
@@ -137,7 +137,7 @@ const u32 = new Uint32Array(mem.buffer);
   check(desc > 0, `pipeline_create=${desc}`);
 
   wasm.pipeline_set_stage(desc, 0, STAGE_PASSTHROUGH, 0, 0);
-  const SCR = 0x2040000;
+  const SCR = 0x1004000;
   const result = wasm.pipeline_run(desc, input, output, SCR, 4096);
   check(result === 0, `pipeline_run status=${result}`);
 
@@ -236,7 +236,7 @@ const u32 = new Uint32Array(mem.buffer);
   check(globalCount > 0, `metadata_global_count=${globalCount}`);
 
   // Verify we can find a known function
-  const DATA = 0x2050000;
+  const DATA = 0x1000030;
   const enc = new TextEncoder();
   u8.set(enc.encode('pack'), DATA);
   const fIdx = wasm.metadata_find_function(DATA, 4);
@@ -248,7 +248,7 @@ const u32 = new Uint32Array(mem.buffer);
   check(gIdx >= 0, `metadata_find_global('INT_ERR')=${gIdx}`);
 
   // List functions
-  const LIST = 0x2051000;
+  const LIST = 0x1001000;
   const written = wasm.metadata_list_functions(LIST, 65536);
   check(written > 0, `metadata_list_functions wrote ${written} bytes`);
 
@@ -272,13 +272,13 @@ const u32 = new Uint32Array(mem.buffer);
   check(badKind === 0 && badIdx === 4294967295, `metadata_find_export('nonexistent')=pack(${badKind},${badIdx})`);
 
   // Verify module_functions for module 0 (module-header.wat)
-  const MODBUF = 0x2052000;
+  const MODBUF = 0x1002000;
   const mFuncCount = wasm.metadata_module_functions(0, MODBUF, 256);
   check(mFuncCount > 0, `metadata_module_functions(0) returned ${mFuncCount} functions`);
 
   // Verify search_functions finds functions matching a pattern
   u8.set(enc.encode('sha256'), DATA);
-  const SRCHBUF = 0x2053000;
+  const SRCHBUF = 0x1003000;
   const matchCount = wasm.metadata_search_functions(DATA, 6, SRCHBUF, 256);
   check(matchCount >= 3, `metadata_search_functions('sha256') found ${matchCount} matches`);
 }

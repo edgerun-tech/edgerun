@@ -734,7 +734,7 @@
       (br $blocks))
     (i32.const 1))
 
-  (func (export "deflate_inflate_raw")
+  (func $deflate_inflate_raw (export "deflate_inflate_raw")
     (param $src_ptr i32)
     (param $src_len i32)
     (param $out_ptr i32)
@@ -1235,7 +1235,7 @@
 
     (i32.const 1))
 
-  (func (export "deflate_stored_encode")
+  (func $deflate_stored_encode (export "deflate_stored_encode")
     (param $src_ptr i32)
     (param $src_len i32)
     (param $out_ptr i32)
@@ -1358,7 +1358,7 @@
         br $scan))
     i32.const -1)
 
-  (func (export "gzip_member_scan")
+  (func $gzip_member_scan (export "gzip_member_scan")
     (param $ptr i32)
     (param $len i32)
     (param $out i32)
@@ -1448,7 +1448,7 @@
       (local.get $trailer_off))
     i32.const 0)
 
-  (func (export "gzip_member_write_header")
+  (func $gzip_member_write_header (export "gzip_member_write_header")
     (param $out_ptr i32)
     (param $out_cap i32)
     (result i64)
@@ -1466,7 +1466,7 @@
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 9)) (i32.const 255))
     (call $pack (i32.const 0) (i32.const 10)))
 
-  (func (export "gzip_member_write_trailer")
+  (func $gzip_member_write_trailer (export "gzip_member_write_trailer")
     (param $crc32 i32)
     (param $isize i32)
     (param $out_ptr i32)
@@ -1556,7 +1556,7 @@
     local.get $expected_adler32
     i32.store)
 
-  (func (export "zlib_member_scan")
+  (func $zlib_member_scan (export "zlib_member_scan")
     (param $ptr i32)
     (param $len i32)
     (param $out i32)
@@ -1659,7 +1659,7 @@
 
     i32.const 0)
 
-  (func (export "zlib_write_header")
+  (func $zlib_write_header (export "zlib_write_header")
     (param $level i32)
     (param $out_ptr i32)
     (param $out_cap i32)
@@ -1725,7 +1725,7 @@
     i32.const 2
     call $pack)
 
-  (func (export "zlib_write_trailer")
+  (func $zlib_write_trailer (export "zlib_write_trailer")
     (param $adler32 i32)
     (param $out_ptr i32)
     (param $out_cap i32)

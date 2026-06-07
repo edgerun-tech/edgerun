@@ -18,26 +18,26 @@
 
     ;; estimate total length
     i32.const 512
-    call $strlen_at        ;; auth prefix
+    call $strlen        ;; auth prefix
     local.get $cidl
     i32.add
     i32.const 648
-    call $strlen_at        ;; redirect_uri tag
+    call $strlen        ;; redirect_uri tag
     i32.add
     local.get $scpl
     i32.add
     i32.const 832
-    call $strlen_at        ;; state tag
+    call $strlen        ;; state tag
     i32.add
     local.get $stl
     i32.add
     i32.const 864
-    call $strlen_at        ;; challenge tag
+    call $strlen        ;; challenge tag
     i32.add
     local.get $chl
     i32.add
     i32.const 896
-    call $strlen_at        ;; method tag
+    call $strlen        ;; method tag
     i32.add
     local.set $total
 
@@ -58,11 +58,11 @@
     local.get $out
     i32.add
     i32.const 512
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 512
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -84,11 +84,11 @@
     local.get $o
     i32.add
     i32.const 648
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 648
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -110,11 +110,11 @@
     local.get $o
     i32.add
     i32.const 832
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 832
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -135,11 +135,11 @@
     local.get $o
     i32.add
     i32.const 864
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 864
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -160,11 +160,11 @@
     local.get $o
     i32.add
     i32.const 896
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 896
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -187,16 +187,16 @@
     (local $total i32)
 
     i32.const 928
-    call $strlen_at       ;; grant_type + client_id tag
+    call $strlen       ;; grant_type + client_id tag
     local.get $cidl
     i32.add
     i32.const 976
-    call $strlen_at       ;; redirect_uri + code tag
+    call $strlen       ;; redirect_uri + code tag
     i32.add
     local.get $codel
     i32.add
     i32.const 1072
-    call $strlen_at       ;; verifier tag
+    call $strlen       ;; verifier tag
     i32.add
     local.get $verl
     i32.add
@@ -219,11 +219,11 @@
     local.get $o
     i32.add
     i32.const 928
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 928
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -245,11 +245,11 @@
     local.get $o
     i32.add
     i32.const 976
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 976
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -271,11 +271,11 @@
     local.get $o
     i32.add
     i32.const 1072
-    call $strlen_at
+    call $strlen
     call $m137memcpy_fixed
     local.get $o
     i32.const 1072
-    call $strlen_at
+    call $strlen
     i32.add
     local.set $o
 
@@ -299,26 +299,6 @@
     i64.or)
 
   ;; --- helpers ---
-
-  ;; strlen_at(addr) -> length (finds null terminator)
-  (func $strlen_at (param $ptr i32) (result i32)
-    (local $n i32)
-    block $done
-      loop $loop
-        local.get $ptr
-        local.get $n
-        i32.add
-        i32.load8_u
-        i32.eqz
-        br_if $done
-        local.get $n
-        i32.const 1
-        i32.add
-        local.set $n
-        br $loop
-      end
-    end
-    local.get $n)
 
   ;; memcpy(src, dst, len)
   (func $m137memcpy (param $src i32) (param $dst i32) (param $len i32)

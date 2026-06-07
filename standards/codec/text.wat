@@ -407,7 +407,7 @@
     i32.const 189
     i32.store8)
 
-  (func (export "utf8_lossy_repair")
+  (func $utf8_lossy_repair (export "utf8_lossy_repair")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $pos i32)
@@ -514,7 +514,7 @@
     local.get $written
     call $pack)
 
-  (func (export "utf8_scan_simd") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $utf8_scan_simd (export "utf8_scan_simd") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32)
     (local $j i32)
     (local $v v128)
@@ -1617,7 +1617,7 @@
     local.get $j
     call $pack)
 
-  (func (export "cesu8_encode_utf8") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
+  (func $cesu8_encode_utf8 (export "cesu8_encode_utf8") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
     local.get $ptr
     local.get $len
     local.get $out
@@ -1625,7 +1625,7 @@
     i32.const 0
     call $encode)
 
-  (func (export "mutf8_encode_utf8") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
+  (func $mutf8_encode_utf8 (export "mutf8_encode_utf8") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
     local.get $ptr
     local.get $len
     local.get $out
@@ -1633,7 +1633,7 @@
     i32.const 1
     call $encode)
 
-  (func (export "cesu8_decode_strict") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
+  (func $cesu8_decode_strict (export "cesu8_decode_strict") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
     local.get $ptr
     local.get $len
     local.get $out
@@ -1641,7 +1641,7 @@
     i32.const 0
     call $decode)
 
-  (func (export "mutf8_decode_strict") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
+  (func $mutf8_decode_strict (export "mutf8_decode_strict") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
     local.get $ptr
     local.get $len
     local.get $out
@@ -1676,7 +1676,7 @@
     local.get $byte
   )
 
-  (func (export "cp1252_decode_string") (param $in i32) (param $in_len i32) (param $out i32) (result i32)
+  (func $cp1252_decode_string (export "cp1252_decode_string") (param $in i32) (param $in_len i32) (param $out i32) (result i32)
     (local $i i32) (local $out_pos i32) (local $b i32) (local $cp i32)
     i32.const 0 local.set $i
     i32.const 0 local.set $out_pos
@@ -1719,7 +1719,7 @@
     local.get $c i32.const 90 i32.le_u i32.and
   )
 
-  (func (export "to_lower_ascii") (param $in i32) (param $len i32) (param $out i32) (result i32)
+  (func $to_lower_ascii (export "to_lower_ascii") (param $in i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32)
     i32.const 0 local.set $i
     block $done
@@ -1734,7 +1734,7 @@
     local.get $len
   )
 
-  (func (export "to_upper_ascii") (param $in i32) (param $len i32) (param $out i32) (result i32)
+  (func $to_upper_ascii (export "to_upper_ascii") (param $in i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32)
     i32.const 0 local.set $i
     block $done
@@ -1749,7 +1749,7 @@
     local.get $len
   )
 
-  (func (export "to_title_case") (param $in i32) (param $len i32) (param $out i32) (result i32)
+  (func $to_title_case (export "to_title_case") (param $in i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32) (local $o i32) (local $c i32) (local $word_start i32)
     i32.const 0 local.set $i
     i32.const 0 local.set $o

@@ -430,3 +430,52 @@ source .wat fragments  ──►  tools/build_wat.mjs  ──►  edgerun.wat  �
 | `--watch` | Watch mode — rebuilds on `.wat` file changes |
 | `--no-wasm` | Skip `wasm-tools parse` compilation |
 | `--no-strip` | Skip `wasm-tools strip` |
+
+## Pre-existing Issues (as of 2026-06-07)
+
+### 1. 3-Arg `i32.add` Parsing Bug in wasm-tools 1.251.0
+`(i32.add a b c)` (3 args) compiles to WRONG opcodes: only 1 `i32_add`, computing `b + c`, leaving `a` stray. This passes `wasm-tools parse` but fails `wasm-tools validate` with "values remaining on stack at end of block".
+
+**Fixed** — 7 instances across 2 files (Session 2026-06-07):
+
+| File | Line | Pattern |
+|------|------|---------|
+| `compiler/interpreter-core.wat` | 274 | `(i32.load8_u (i32.add (local.get $p) (local.get $offset) (local.get $i)))` |
+| `compiler/interpreter-core.wat` | 394 | `(i32.store8 (i32.add (local.get $base) (i32.const 132) (local.get $i))` |
+| `compiler/interpreter-core.wat` | 2535,2563,2652,2677 | `(i32.add (local.get $op_base) (i32.const 16) (i32.shl ...))` |
+| `app/repo-dashboard.wat` | 312 | `(i32.add (i32.const 12) (local.get $count) (local.get $i))` |
+
+Fixed by nesting: `(i32.add (i32.add a b) c)` — produces 2 `i32_add` instructions, validates and works correctly.
+
+### 18. JIT Backend Template Completion (Session 19 — 2026-06-07) ✅
+Completed all three JIT compiler backends (x86-64, ARM32, AArch64) so they coexist in a single build.
+
+**What was done:**
+- Removed duplicate exports (`compile_to_elf`/`compile_to_bin`/`copy_code_to`) from `emit-arm32.wat` and `emit-aarch64.wat` (already defined in compiler files)
+- Restored emit-only helpers accidentally removed (`bare_metal_stub`, `store_and_halt`, `copy_code_to`)
+- Fixed `$template_nop` signature (missing `(param $dec_ptr i32)`) in ARM32, AArch64, and x86-64
+- Added `$template_unreachable` (emits UD instruction) to both ARM32 and AArch64
+- Added all missing ARM32 templates (~90 template functions): i32/i64 arithmetic, comparisons, conversions, memory load/store, locals, select, drop
+- Added all missing AArch64 templates (~90 template functions): same set as ARM32 but using `emit_aarch64_*` functions
+- Fixed AArch64 reinterpret templates (were calling `emit_aarch64_fmov_w_s`/`fmov_x_d` without required register args; now do pop/push no-op like ARM32)
+- Added all ~90 `$template_*` names to `COLLIDING_NAMES` in `build_wat.mjs` so ARM32 and AArch64 don't collide
+- Fixed `compile_wasm_to_elf` bug in `app/wayland-patch-syscalls.wat` — was missing `$backend` arg to `$compile_to_elf` (2nd param)
+- Fixed test addresses in `tools/test.mjs` to fit within 288-page memory (was using 0x2051000 which is beyond 18MB)
+- **Build**: `wasm-tools parse` + `wasm-tools validate` both pass (6.2 MB WAT → 1342 KB WASM, 1042 KB stripped)
+- **Tests**: 37/38 pass (1 pre-existing `emit_wasm` size mismatch — wasm-emit.wat outputs 52 bytes vs 34 input)
+
+| File | Changes | Lines Changed |
+|------|---------|:------------:|
+| `compiler/compiler-arm32.wat` | +90 ARM32 template functions | +528 |
+| `compiler/compiler-aarch64.wat` | +90 AArch64 template functions | +432 |
+| `compiler/templates-x86-64.wat` | Fixed `$template_x86_nop` signature | +2 |
+| `compiler/emit-arm32.wat` | Removed 3 duplicate exports, restored 3 helpers | — |
+| `compiler/emit-aarch64.wat` | Removed 3 duplicate exports, restored 3 helpers | — |
+| `compiler/interpreter-core.wat` | Fixed 3-arg `i32.add` | +2 |
+| `tools/build_wat.mjs` | Added ~90 names to `COLLIDING_NAMES` | +69 |
+| `app/wayland-patch-syscalls.wat` | Fixed `compile_to_elf` call missing backend arg | +2 |
+| `app/repo-dashboard.wat` | Fixed 3-arg `i32.add` | +2 |
+| `tools/test.mjs` | Fixed memory addresses for 288-page memory | +20 |
+| **Total** | **10 files** | **~1050** |
+
+**Status**: All 3 backends (x86-64 + ARM32 + AArch64) compile, validate, and run in a single WASM binary.

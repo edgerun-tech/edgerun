@@ -9,7 +9,7 @@
   )
 
   ;; ── nop (0x01): nothing ────────────────────────────────────────────
-  (func $template_x86_nop)
+  (func $template_x86_nop (param $dec_ptr i32))
 
   ;; ── drop (0x1A): add rsp, 8 ───────────────────────────────────────
   (func $template_x86_drop

@@ -309,7 +309,7 @@
     (block $stage_done
       (loop $stage_loop
         (br_if $stage_done (i32.ge_u (local.get $i) (i32.const 26)))
-        (local.set $node (i32.add (i32.const 12) (local.get $count) (local.get $i)))
+        (local.set $node (i32.add (i32.add (i32.const 12) (local.get $count)) (local.get $i)))
         (local.set $p (i32.add (local.get $meta) (local.get $stage_off)))
         (local.set $p (i32.add (local.get $p) (i32.mul (local.get $i) (i32.const 16))))
         (local.set $v (i32.load (local.get $p)))

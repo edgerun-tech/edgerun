@@ -1,0 +1,42 @@
+;; Zlib Encode Pipeline Stage — slot 32
+  ;; Stage type: batch (state=0)
+  ;; Input:  raw bytes via input pipe
+  ;; Output: zlib-compressed bytes via output pipe
+  ;; Uses $zlib_write_header, $deflate_stored_encode, $adler32, $zlib_write_trailer
+
+  (func $process_zlib_encode (export "process_zlib_encode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $len_slot i32) (local $read i32) (local $out_len i32)
+    (local $result i64) (local $status i32) (local $adler i32)
+    (local $header_len i32) (local $comp_len i32) (local $level i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (drop (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
+    (drop (call $pipe_read (local.get $input) (i32.const 0x3000) (local.get $read)))
+    (local.set $level (i32.const 6))
+    (if (i32.ge_s (local.get $clen) (i32.const 4))
+      (then (local.set $level (i32.load (local.get $cfg)))))
+    (local.set $result (call $zlib_write_header (local.get $level) (local.get $scratch) (local.get $scap)))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $header_len (i32.wrap_i64 (local.get $result)))
+    (local.set $result (call $deflate_stored_encode
+      (i32.const 0x3000) (local.get $read)
+      (i32.add (local.get $scratch) (local.get $header_len))
+      (i32.sub (local.get $scap) (local.get $header_len))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $comp_len (i32.wrap_i64 (local.get $result)))
+    (local.set $adler (call $adler32 (i32.const 0x3000) (local.get $read)))
+    (local.set $out_len (i32.add (local.get $header_len) (local.get $comp_len)))
+    (local.set $result (call $zlib_write_trailer
+      (local.get $adler)
+      (i32.add (local.get $scratch) (local.get $out_len))
+      (i32.sub (local.get $scap) (local.get $out_len))))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.add (local.get $out_len) (i32.wrap_i64 (local.get $result))))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $out_len)))
+    local.get $out_len)

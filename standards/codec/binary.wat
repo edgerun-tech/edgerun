@@ -67,7 +67,7 @@
       i32.const 0
     end)
 
-  (func (export "hex_decode_compat")
+  (func $hex_decode_compat (export "hex_decode_compat")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $pos i32)
@@ -371,14 +371,14 @@
 
     i32.const 0)
 
-  (func (export "mac_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $mac_scan (export "mac_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     local.get $ptr
     local.get $len
     local.get $out
     i32.const 0
     call $parse_mac_into)
 
-  (func (export "bdaddr_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $bdaddr_scan (export "bdaddr_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     local.get $ptr
     local.get $len
     local.get $out
@@ -506,7 +506,7 @@
     i32.wrap_i64
     i32.store)
 
-  (func (export "endian_read")
+  (func $endian_read (export "endian_read")
     (param $ptr i32) (param $len i32) (param $offset i32)
     (param $width i32) (param $endian i32) (param $signed i32) (param $out i32)
     (result i32)
@@ -666,7 +666,7 @@
       end
     end)
 
-  (func (export "endian_write")
+  (func $endian_write (export "endian_write")
     (param $value_lo i32) (param $value_hi i32) (param $width i32)
     (param $endian i32) (param $out i32) (param $out_cap i32)
     (result i64)
@@ -1019,7 +1019,7 @@
     local.get $pos
     i32.sub)
 
-  (func (export "integer_format_u64")
+  (func $integer_format_u64 (export "integer_format_u64")
     (param $value i64) (param $out i32) (param $cap i32) (result i32)
     local.get $value
     call $u64_digits_to_tmp
@@ -1027,7 +1027,7 @@
     local.get $cap
     call $copy_tmp)
 
-  (func (export "integer_format_i64")
+  (func $integer_format_i64 (export "integer_format_i64")
     (param $value i64) (param $out i32) (param $cap i32) (result i32)
     (local $negative i32)
     (local $len i32)
@@ -1066,7 +1066,7 @@
     local.get $cap
     call $copy_tmp)
 
-  (func (export "integer_format_u128")
+  (func $integer_format_u128 (export "integer_format_u128")
     (param $value_lo i64) (param $value_hi i64) (param $out i32) (param $cap i32)
     (result i32)
     local.get $value_lo
@@ -1146,7 +1146,7 @@
     end
   )
 
-  (func (export "format_suffix") (param $val i32) (param $out i32) (result i32)
+  (func $format_suffix (export "format_suffix") (param $val i32) (param $out i32) (result i32)
     (local $abs i32) (local $suffix i32) (local $div i32) (local $d i32)
     (local $o i32) (local $neg i32)
     local.get $val i32.const 0 i32.lt_s
@@ -1220,7 +1220,7 @@
     end
   )
 
-  (func (export "parse_suffix") (param $in i32) (param $len i32) (result i64)
+  (func $parse_suffix (export "parse_suffix") (param $in i32) (param $len i32) (result i64)
     (local $val i64) (local $i i32) (local $c i32) (local $neg i32)
     (local $decimal i64) (local $div i64) (local $mult i64)
     i64.const 0 local.set $val
@@ -1402,7 +1402,7 @@
     local.get $next_offset
     call $pack)
 
-  (func (export "length_field_scan_u8")
+  (func $length_field_scan_u8 (export "length_field_scan_u8")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     local.get $offset
@@ -1425,7 +1425,7 @@
     i32.load8_u
     call $scan_i32)
 
-  (func (export "length_field_scan_u16_le")
+  (func $length_field_scan_u16_le (export "length_field_scan_u16_le")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     local.get $offset
@@ -1459,7 +1459,7 @@
     call $m128read_u16_le
     call $scan_i32)
 
-  (func (export "length_field_scan_u32_be")
+  (func $length_field_scan_u32_be (export "length_field_scan_u32_be")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     local.get $offset
@@ -1493,7 +1493,7 @@
     call $m128read_u32_be
     call $scan_i32)
 
-  (func (export "length_field_scan_u32_le")
+  (func $length_field_scan_u32_le (export "length_field_scan_u32_le")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     local.get $offset
@@ -1527,7 +1527,7 @@
     call $m128read_u32_le
     call $scan_i32)
 
-  (func (export "length_field_scan_u64_le")
+  (func $length_field_scan_u64_le (export "length_field_scan_u64_le")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     (local $field_len i64)
@@ -1599,7 +1599,7 @@
     local.get $prefix_len
     call $pack)
 
-  (func (export "length_field_write_u8")
+  (func $length_field_write_u8 (export "length_field_write_u8")
     (param $len i64) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     local.get $len
@@ -1623,7 +1623,7 @@
     i64.const 255
     call $write_check)
 
-  (func (export "length_field_write_u16_le")
+  (func $length_field_write_u16_le (export "length_field_write_u16_le")
     (param $len i64) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     local.get $len
@@ -1647,7 +1647,7 @@
     i64.const 65535
     call $write_check)
 
-  (func (export "length_field_write_u32_be")
+  (func $length_field_write_u32_be (export "length_field_write_u32_be")
     (param $len i64) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     local.get $len
@@ -1695,7 +1695,7 @@
     i64.const 0xffffffff
     call $write_check)
 
-  (func (export "length_field_write_u32_le")
+  (func $length_field_write_u32_le (export "length_field_write_u32_le")
     (param $len i64) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     local.get $len
@@ -1719,7 +1719,7 @@
     i64.const 0xffffffff
     call $write_check)
 
-  (func (export "length_field_write_u64_le")
+  (func $length_field_write_u64_le (export "length_field_write_u64_le")
     (param $len i64) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     local.get $len
@@ -1756,7 +1756,7 @@
     (i32.store (i32.add (local.get $out) (i32.const 4)) (local.get $len_high))
     (i32.store (i32.add (local.get $out) (i32.const 8)) (local.get $header_len)))
 
-  (func (export "frame_header_decode_u16_be")
+  (func $frame_header_decode_u16_be (export "frame_header_decode_u16_be")
     (param $ptr i32) (param $len i32) (param $out i32)
     (result i32)
     (local $payload_len i32)
@@ -1769,7 +1769,7 @@
     (call $m129write_record (local.get $out) (local.get $payload_len) (i32.const 0) (i32.const 2))
     (i32.const 0))
 
-  (func (export "frame_header_encode_u16_be")
+  (func $frame_header_encode_u16_be (export "frame_header_encode_u16_be")
     (param $payload_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (if (i32.lt_u (local.get $out_cap) (i32.const 2))
@@ -1780,7 +1780,7 @@
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 1)) (local.get $payload_len))
     (call $pack (i32.const 0) (i32.const 2)))
 
-  (func (export "frame_header_decode_u64_be")
+  (func $frame_header_decode_u64_be (export "frame_header_decode_u64_be")
     (param $ptr i32) (param $len i32) (param $out i32)
     (result i32)
     (local $hi i32)
@@ -1806,7 +1806,7 @@
     (call $m129write_record (local.get $out) (local.get $lo) (local.get $hi) (i32.const 8))
     (i32.const 0))
 
-  (func (export "frame_header_encode_u64_be")
+  (func $frame_header_encode_u64_be (export "frame_header_encode_u64_be")
     (param $payload_len_low i32) (param $payload_len_high i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (if (i32.lt_u (local.get $out_cap) (i32.const 8))
@@ -1826,7 +1826,7 @@
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 7)) (local.get $payload_len_low))
     (call $pack (i32.const 0) (i32.const 8)))
 
-  (func (export "frame_header_decode_u64_le")
+  (func $frame_header_decode_u64_le (export "frame_header_decode_u64_le")
     (param $ptr i32) (param $len i32) (param $out i32)
     (result i32)
     (local $hi i32)
@@ -1852,7 +1852,7 @@
     (call $m129write_record (local.get $out) (local.get $lo) (local.get $hi) (i32.const 8))
     (i32.const 0))
 
-  (func (export "frame_header_encode_u64_le")
+  (func $frame_header_encode_u64_le (export "frame_header_encode_u64_le")
     (param $payload_len_low i32) (param $payload_len_high i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (if (i32.lt_u (local.get $out_cap) (i32.const 8))
@@ -1916,7 +1916,7 @@
   ;; status: 0 ok, 1 input_short, 2 output_short, 3 invalid.
   ;; Record fields are little-endian u32:
   ;; tag,value_off,value_len,header_len,total_len.
-  (func (export "generic_tlv_next")
+  (func $generic_tlv_next (export "generic_tlv_next")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     (local $tag i32)

@@ -481,35 +481,18 @@
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $loop))))
 
-  (func $eq_mem (param $ptr i32) (param $len i32) (param $lit_ptr i32) (param $lit_len i32) (result i32)
-    (local $i i32)
-    (if (i32.ne (local.get $len) (local.get $lit_len))
-      (then (return (i32.const 0))))
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $lit_len)))
-        (if
-          (i32.ne
-            (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
-            (i32.load8_u (i32.add (local.get $lit_ptr) (local.get $i))))
-          (then (return (i32.const 0))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop)))
-    i32.const 1)
-
-
   (func $unit_index (param $ptr i32) (param $len i32) (result i32)
-    (if (call $eq_mem (local.get $ptr) (local.get $len) (i32.const 32800) (i32.const 23))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32800) (i32.const 23))
       (then (return (i32.const 0))))
-    (if (call $eq_mem (local.get $ptr) (local.get $len) (i32.const 32832) (i32.const 23))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32832) (i32.const 23))
       (then (return (i32.const 1))))
-    (if (call $eq_mem (local.get $ptr) (local.get $len) (i32.const 32864) (i32.const 22))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32864) (i32.const 22))
       (then (return (i32.const 2))))
-    (if (call $eq_mem (local.get $ptr) (local.get $len) (i32.const 32900) (i32.const 24))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32900) (i32.const 24))
       (then (return (i32.const 3))))
-    (if (call $eq_mem (local.get $ptr) (local.get $len) (i32.const 32932) (i32.const 28))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32932) (i32.const 28))
       (then (return (i32.const 4))))
-    (if (call $eq_mem (local.get $ptr) (local.get $len) (i32.const 32968) (i32.const 29))
+    (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32968) (i32.const 29))
       (then (return (i32.const 5))))
     i32.const -1)
 
