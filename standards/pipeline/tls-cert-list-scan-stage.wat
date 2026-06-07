@@ -1,7 +1,5 @@
-;; TLS Certificate List Scan Stage — slot 83
-  ;; Input:  TLS Certificate handshake message body via input pipe
-  ;; Output: 16-byte record {context_offset, context_len, cert_list_offset, cert_list_len}
 
+;; Process tls_cert_list_scan Stage — slot 83
   (func $process_tls_cert_list_scan (export "process_tls_cert_list_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

@@ -1,9 +1,5 @@
-;; HTTP Request Line Parse Stage — slot 44
-  ;; Stage type: batch (state=0)
-  ;; Input:  raw HTTP request line bytes via input pipe
-  ;; Output: 28-byte parse record {method_off, method_len, target_off, target_len, major, minor, next_off}
-  ;; Calls $http_parse_request_line from protocol/http.wat
 
+;; Process http_request_line_parse Stage — slot 44
   (func $process_http_request_line_parse (export "process_http_request_line_parse")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

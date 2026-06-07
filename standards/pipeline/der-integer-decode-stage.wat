@@ -1,7 +1,5 @@
-;; DER INTEGER Decode Stage — slot 91
-  ;; Input:  DER-encoded INTEGER via input pipe
-  ;; Output: 20-byte record {value_ptr, value_len, header_len, total_len, negative_flag}
 
+;; Process der_integer_decode Stage — slot 91
   (func $process_der_integer_decode (export "process_der_integer_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

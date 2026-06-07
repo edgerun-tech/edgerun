@@ -1,7 +1,5 @@
-;; DER Time Decode Stage — slot 93
-  ;; Input:  DER UTCTime or GeneralizedTime string via input pipe
-  ;; Output: 8-byte i64 Unix timestamp
 
+;; Process der_time_decode Stage — slot 93
   (func $process_der_time_decode (export "process_der_time_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

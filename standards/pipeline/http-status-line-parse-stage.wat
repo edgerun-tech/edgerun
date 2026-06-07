@@ -1,9 +1,5 @@
-;; HTTP Status Line Parse Stage — slot 45
-  ;; Stage type: batch (state=0)
-  ;; Input:  raw HTTP status line bytes via input pipe
-  ;; Output: 24-byte parse record {major, minor, status_code, reason_off, reason_len, next_off}
-  ;; Calls $http_parse_status_line from protocol/http.wat
 
+;; Process http_status_line_parse Stage — slot 45
   (func $process_http_status_line_parse (export "process_http_status_line_parse")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

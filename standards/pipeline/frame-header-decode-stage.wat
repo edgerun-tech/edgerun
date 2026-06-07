@@ -1,8 +1,5 @@
-;; Frame Header Decode (u16 BE) Stage — slot 69
-  ;; Input:  raw framed bytes via input pipe
-  ;; Output: 12-byte record {payload_len, 0, header_len} as i32le
-  ;; Calls $frame_header_decode_u16_be from codec/binary.wat
 
+;; Process frame_header_decode Stage — slot 69
   (func $process_frame_header_decode (export "process_frame_header_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

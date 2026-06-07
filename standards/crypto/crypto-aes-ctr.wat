@@ -1,7 +1,7 @@
 ;; AES-128-CTR mode — self-contained AES-128 key expansion + block encrypt + CTR XOR.
   ;; Exports: aes128_ctr_xor(out, in, len, key[16], counter[16]) -> 0
   
-  ;; AES S-box (0-255) and Rcon (256-265) — see aes-sbox-data.wat for shared definition
+  ;; AES S-box (0-255) and Rcon (256-265) — see crypto-aes-sbox-data.wat for shared definition
 
   ;; Memory layout:
   ;; 0-255: S-box

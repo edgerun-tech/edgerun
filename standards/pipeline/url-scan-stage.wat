@@ -1,7 +1,5 @@
-;; URL Scan Stage — slot 79
-  ;; Input:  raw URL bytes via input pipe
-  ;; Output: URL component offsets (scheme, authority, path, query, fragment)
 
+;; Process url_scan Stage — slot 79
   (func $process_url_scan (export "process_url_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

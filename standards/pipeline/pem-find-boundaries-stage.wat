@@ -1,4 +1,5 @@
-;; PEM Find Boundaries Stage — slot 106
+
+;; Process pem_find_boundaries Stage — slot 106
   (func $process_pem_find_boundaries (export "process_pem_find_boundaries")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

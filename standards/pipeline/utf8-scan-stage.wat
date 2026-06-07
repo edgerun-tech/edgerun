@@ -1,7 +1,5 @@
-;; UTF-8 Validation/Classification Stage — slot 98
-  ;; Input:  raw byte sequence via input pipe
-  ;; Output: per-byte classification map + summary status
 
+;; Process utf8_scan Stage — slot 98
   (func $process_utf8_scan (export "process_utf8_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

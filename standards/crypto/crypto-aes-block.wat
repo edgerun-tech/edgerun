@@ -1,4 +1,4 @@
-;; AES S-box, Inv S-box, and Rcon data — see aes-sbox-data.wat for shared definition
+;; AES S-box, Inv S-box, and Rcon data — see crypto-aes-sbox-data.wat for shared definition
 
   (func $m53range_ok (param $ptr i32) (param $len i32) (result i32)
     (local $end i32)

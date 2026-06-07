@@ -1,7 +1,5 @@
-;; TLS ClientHello SNI Host Stage — slot 84
-  ;; Input:  TLS SNI extension payload via input pipe
-  ;; Output: 8-byte record {host_offset, host_len}
 
+;; Process tls_sni_host Stage — slot 84
   (func $process_tls_sni_host (export "process_tls_sni_host")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

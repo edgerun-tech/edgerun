@@ -1,4 +1,5 @@
-;; UTF-8 Scan SIMD Stage — slot 112
+
+;; Process utf8_scan_simd Stage — slot 112
   (func $process_utf8_scan_simd (export "process_utf8_scan_simd")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

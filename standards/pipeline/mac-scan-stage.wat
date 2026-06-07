@@ -1,4 +1,5 @@
-;; MAC Address Scan Stage — slot 111
+
+;; Process mac_scan Stage — slot 111
   (func $process_mac_scan (export "process_mac_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

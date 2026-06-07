@@ -1,4 +1,5 @@
-;; URI Scan Path/Query Stage — slot 107
+
+;; Process uri_scan_path_query Stage — slot 107
   (func $process_uri_scan_path_query (export "process_uri_scan_path_query")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

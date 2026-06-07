@@ -1,7 +1,5 @@
-;; OCI Reference Scan Stage — slot 95
-  ;; Input:  OCI container image reference string via input pipe
-  ;; Output: component offset/length records via scratch buffer
 
+;; Process oci_reference_scan Stage — slot 95
   (func $process_oci_reference_scan (export "process_oci_reference_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

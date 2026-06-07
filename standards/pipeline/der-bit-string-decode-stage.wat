@@ -1,7 +1,5 @@
-;; DER BIT STRING Decode Stage — slot 97
-  ;; Input:  DER-encoded BIT STRING via input pipe
-  ;; Output: 20-byte record {payload_ptr, payload_len, header_len, total_len, unused_bits}
 
+;; Process der_bit_string_decode Stage — slot 97
   (func $process_der_bit_string_decode (export "process_der_bit_string_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

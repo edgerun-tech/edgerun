@@ -3,7 +3,7 @@
   ;; Exports:
   ;;   aes128_gcm_encrypt(out, in, len, aad, aad_len, key, iv12, tag16) -> i32 (0=ok, -1=error)
   ;;   aes128_gcm_decrypt(out, in, len, aad, aad_len, key, iv12, tag16) -> i32 (0=ok, -1=error)
-  ;; AES S-box (0-255) and Rcon (256-265) — see aes-sbox-data.wat for shared definition
+  ;; AES S-box (0-255) and Rcon (256-265) — see crypto-aes-sbox-data.wat for shared definition
 
   ;; ── Exports ──
   ;; ── Memory layout ──

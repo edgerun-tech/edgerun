@@ -1,7 +1,5 @@
-;; DER OCTET STRING Decode Stage — slot 92
-  ;; Input:  DER-encoded OCTET STRING via input pipe
-  ;; Output: 12-byte record {payload_ptr, payload_len, header_len, total_len}
 
+;; Process der_octet_string_decode Stage — slot 92
   (func $process_der_octet_string_decode (export "process_der_octet_string_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

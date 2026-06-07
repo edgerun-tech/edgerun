@@ -1,9 +1,5 @@
-;; HTTP Date Parse Stage — slot 57
-  ;; Stage type: batch (state=0)
-  ;; Input:  HTTP date string bytes via input pipe
-  ;; Output: 40-byte parse record {unix_secs_lo, unix_secs_hi, year, month, day, hour, min, sec, weekday, format_kind}
-  ;; Calls $http_date_parse from protocol/http.wat
 
+;; Process http_date_parse Stage — slot 57
   (func $process_http_date_parse (export "process_http_date_parse")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

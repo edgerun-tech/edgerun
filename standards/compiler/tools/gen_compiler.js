@@ -69,6 +69,7 @@ function assemble(arch, dir, tmplPath) {
 
   // Read fragment files (skip (module) header from templates)
   const memoryMap = fs.readFileSync(path.join(dir, '..', 'runtime', 'memory-map.wat'), 'utf8');
+  const emitCore = fs.readFileSync(path.join(dir, 'emit-core.wat'), 'utf8');
   const emit = fs.readFileSync(path.join(dir, `emit-${arch}.wat`), 'utf8');
   let templates = fs.readFileSync(path.join(dir, `templates-${arch}.wat`), 'utf8');
   const simd = fs.readFileSync(path.join(dir, `simd-${arch}.wat`), 'utf8');
@@ -79,7 +80,7 @@ function assemble(arch, dir, tmplPath) {
     templates = templates.replace(/^\(module\s*\n/, '');
   }
 
-  const parts = [memoryMap, dispatch, emit, templates, simd, wasmEmit];
+  const parts = [memoryMap, dispatch, emitCore, emit, templates, simd, wasmEmit];
   const full = `(module\n${parts.join('\n\n')})\n`;
 
   if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });

@@ -1,8 +1,5 @@
-;; HTTP Chunked Body Scan Stage — slot 64
-  ;; Input:  raw chunked body bytes via input pipe
-  ;; Output: 28-byte summary record {decoded_lo, decoded_hi, chunk_count, first_off, trailer_len, next_off, flags}
-  ;; Calls $http1_chunk_scan_body from protocol/http.wat
 
+;; Process http_chunk_scan Stage — slot 64
   (func $process_http_chunk_scan (export "process_http_chunk_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

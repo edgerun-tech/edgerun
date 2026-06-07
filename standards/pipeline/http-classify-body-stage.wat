@@ -1,8 +1,5 @@
-;; HTTP Classify Body Framing Stage — slot 78
-  ;; Input:  raw HTTP header bytes via input pipe
-  ;; Output: 16-byte record {kind, content_length_lo, content_length_hi, header_count}
-  ;; Calls $http_classify_body_framing from protocol/http.wat
 
+;; Process http_classify_body Stage — slot 78
   (func $process_http_classify_body (export "process_http_classify_body")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

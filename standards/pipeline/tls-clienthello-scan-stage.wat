@@ -1,8 +1,5 @@
-;; TLS ClientHello Scan Stage — slot 66
-  ;; Input:  raw TLS ClientHello message bytes via input pipe
-  ;; Output: 48-byte record (12 fields) from $tls_clienthello_scan output
-  ;; Calls $tls_clienthello_scan from protocol/tls.wat
 
+;; Process tls_clienthello_scan Stage — slot 66
   (func $process_tls_clienthello_scan (export "process_tls_clienthello_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

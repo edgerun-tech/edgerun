@@ -1,9 +1,5 @@
-;; DNS Header Decode Stage — slot 59
-  ;; Stage type: batch (state=0)
-  ;; Input:  12-byte raw DNS header via input pipe
-  ;; Output: 52-byte parse record {id, flags, qr, opcode, aa, tc, rd, ra, rcode, qdcount, ancount, nscount, arcount}
-  ;; Calls $dns_header_decode from protocol/dns.wat
 
+;; Process dns_header_decode Stage — slot 59
   (func $process_dns_header_decode (export "process_dns_header_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

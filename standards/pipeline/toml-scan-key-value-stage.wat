@@ -1,4 +1,5 @@
-;; TOML Scan Key-Value Stage — slot 114
+
+;; Process toml_scan_key_value Stage — slot 114
   (func $process_toml_scan_key_value (export "process_toml_scan_key_value")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

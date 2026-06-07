@@ -1,24 +1,14 @@
   ;; ── Helper: write bytes to code cache ──────────────────────────────
 
+  ;; Wrap shared emit core with aarch64 code pointer
   (func $emit_aarch64_byte (param $b i32)
-    (local $p i32)
-    (local.set $p (i32.add (global.get $JIT_CACHE) (i32.load (global.get $JS_CODE_PTR_aarch64))))
-    (i32.store8 (local.get $p) (local.get $b))
-    (i32.store (global.get $JS_CODE_PTR_aarch64) (i32.add (i32.load (global.get $JS_CODE_PTR_aarch64)) (i32.const 1)))
-  )
+    (call $emit_byte (local.get $b) (global.get $JS_CODE_PTR_aarch64)))
 
   (func $emit_aarch64_dword (param $v i32)
-    (call $emit_aarch64_byte (i32.and (local.get $v) (i32.const 0xFF)))
-    (call $emit_aarch64_byte (i32.and (i32.shr_u (local.get $v) (i32.const 8)) (i32.const 0xFF)))
-    (call $emit_aarch64_byte (i32.and (i32.shr_u (local.get $v) (i32.const 16)) (i32.const 0xFF)))
-    (call $emit_aarch64_byte (i32.and (i32.shr_u (local.get $v) (i32.const 24)) (i32.const 0xFF)))
-  )
+    (call $emit_dword (local.get $v) (global.get $JS_CODE_PTR_aarch64)))
 
-  ;; Emit a qword (8 bytes) little-endian
   (func $emit_aarch64_qword (param $v i64)
-    (call $emit_aarch64_dword (i32.wrap_i64 (local.get $v)))
-    (call $emit_aarch64_dword (i32.wrap_i64 (i64.shr_u (local.get $v) (i64.const 32))))
-  )
+    (call $emit_qword (local.get $v) (global.get $JS_CODE_PTR_aarch64)))
 
   ;; ── AArch64 instruction emitter ────────────────────────────────────
   ;; All AArch64 instructions are exactly 4 bytes (32 bits)

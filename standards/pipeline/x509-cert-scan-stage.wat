@@ -1,7 +1,5 @@
-;; X.509 Certificate Scan Stage — slot 80
-  ;; Input:  DER-encoded X.509v3 certificate via input pipe
-  ;; Output: 40 field offset/length records to output pipe
 
+;; Process x509_cert_scan Stage — slot 80
   (func $process_x509_cert_scan (export "process_x509_cert_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

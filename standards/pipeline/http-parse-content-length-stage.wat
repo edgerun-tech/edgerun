@@ -1,7 +1,5 @@
-;; HTTP Parse Content-Length Stage — slot 90
-  ;; Input:  decimal Content-Length value string via input pipe
-  ;; Output: 8-byte u64 content length value
 
+;; Process http_parse_content_length Stage — slot 90
   (func $process_http_parse_content_length (export "process_http_parse_content_length")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

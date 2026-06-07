@@ -1,4 +1,5 @@
-;; DER OID Root Decode Stage — slot 103
+
+;; Process der_oid_root_decode Stage — slot 103
   (func $process_der_oid_root_decode (export "process_der_oid_root_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

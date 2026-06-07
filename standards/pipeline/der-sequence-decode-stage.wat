@@ -1,7 +1,5 @@
-;; DER SEQUENCE Decode Stage — slot 88
-  ;; Input:  DER-encoded SEQUENCE via input pipe
-  ;; Output: 16-byte record {body_ptr, body_len, header_len, total_len}
 
+;; Process der_sequence_decode Stage — slot 88
   (func $process_der_sequence_decode (export "process_der_sequence_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

@@ -1,7 +1,5 @@
-;; SSH Authorized Key Scan Stage — slot 96
-  ;; Input:  SSH authorized_keys line via input pipe
-  ;; Output: 24-byte record {type_offset, type_len, payload_offset, payload_len, comment_offset, comment_len}
 
+;; Process ssh_auth_key_scan Stage — slot 96
   (func $process_ssh_auth_key_scan (export "process_ssh_auth_key_scan")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
