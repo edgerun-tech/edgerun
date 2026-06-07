@@ -344,7 +344,7 @@
     (drop (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
     (local.set $read (i32.load (local.get $len_slot)))
     (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
-    (drop (call $pipe_read (local.get $input) (i32.const 0x3000) (local.get $read)))
+    (drop (call $pipe_read (local.get $input) (global.get $SCRATCH_BUF) (local.get $read)))
     local.get $read)
 
   ;; stage_write_result: unpack i64 result (high32=status, low32=out_len),

@@ -69,6 +69,13 @@
   ;; Slots 44-45: HTTP request line / status line parse
   (elem (i32.const 44) $process_http_request_line_parse)
   (elem (i32.const 45) $process_http_status_line_parse)
+  ;; Slots 46-47: Edgerun compiler/interpreter stages
+  (elem (i32.const 46) $process_edgerun_parse)
+  (elem (i32.const 47) $process_edgerun_exec)
+  ;; Slots 48-50: Queue/Buffer/CDC stages
+  (elem (i32.const 48) $process_queue)
+  (elem (i32.const 49) $process_buffer)
+  (elem (i32.const 50) $process_cdc)
   ;; Slots 51-52: UUID format/parse
   (elem (i32.const 51) $process_uuid_format)
   (elem (i32.const 52) $process_uuid_parse)
@@ -234,16 +241,6 @@
   (elem (i32.const 139) $process_x25519_scalar_mult)
   ;; Slot 140: AES-256 encrypt
   (elem (i32.const 140) $process_aes256_encrypt)
-
-  ;; Slots 46-47: Edgerun compiler/interpreter stages
-  (elem (i32.const 46) $process_edgerun_parse)
-  (elem (i32.const 47) $process_edgerun_exec)
-
-  ;; Slots 48-50: Queue/Buffer/CDC stages
-  (elem (i32.const 48) $process_queue)
-  (elem (i32.const 49) $process_buffer)
-  (elem (i32.const 50) $process_cdc)
-
   ;; Slots 141-143: UI stages
   (elem (i32.const 141) $process_ui_layout)
   (elem (i32.const 142) $process_ui_paint)

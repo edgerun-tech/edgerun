@@ -21,13 +21,13 @@
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $header_len (i32.wrap_i64 (local.get $result)))
     (local.set $result (call $deflate_stored_encode
-      (i32.const 0x3000) (local.get $read)
+      (global.get $SCRATCH_BUF) (local.get $read)
       (i32.add (local.get $scratch) (local.get $header_len))
       (i32.sub (local.get $scap) (local.get $header_len))))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $comp_len (i32.wrap_i64 (local.get $result)))
-    (local.set $adler (call $adler32 (i32.const 0x3000) (local.get $read)))
+    (local.set $adler (call $adler32 (global.get $SCRATCH_BUF) (local.get $read)))
     (local.set $out_len (i32.add (local.get $header_len) (local.get $comp_len)))
     (local.set $result (call $zlib_write_trailer
       (local.get $adler)

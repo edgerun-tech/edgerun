@@ -3,6 +3,7 @@
     ;; Standard ID removed — merged into single module
 
   ;; ── Shared header scratch ──
+  ;; $HDR_BUF = 0x3FFF0 (from memory-map.wat)
   (global $HDR i32 (i32.const 0x3FFF0))
 
   ;; ── Frame: [stream_id:u32_le][payload_len:u32_le][payload] ──

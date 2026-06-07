@@ -11,4 +11,4 @@
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
     (return (call $stage_write_output (local.get $output) (local.get $scratch)
-      (call $to_upper_ascii (i32.const 0x3000) (local.get $read) (local.get $scratch)))))
+      (call $to_upper_ascii (global.get $SCRATCH_BUF) (local.get $read) (local.get $scratch)))))

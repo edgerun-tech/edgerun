@@ -745,6 +745,22 @@
 
   (func $template_table_set_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
 
+  ;; ── Float op stubs ────────────────────────────────────────────
+  (func $template_f32_load_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f64_load_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f32_store_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f64_store_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f32_convert_i32_s_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f32_convert_i32_u_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f32_convert_i64_s_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f32_convert_i64_u_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f32_demote_f64_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f64_convert_i32_s_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f64_convert_i32_u_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f64_convert_i64_s_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f64_convert_i64_u_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+  (func $template_f64_promote_f32_aarch64 (param $dec_ptr i32) (global.set $JIT_ERROR_aarch64 (i32.const -4)))
+
 
 
 

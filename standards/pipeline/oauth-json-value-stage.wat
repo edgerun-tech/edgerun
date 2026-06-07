@@ -11,7 +11,7 @@
     (local.set $cap (i32.sub (local.get $scap) (i32.const 8)))
     (local.set $key_len (i32.load (i32.add (local.get $cfg) (i32.const 4))))
     (local.set $result (call $oauth_json_value
-      (i32.const 0x3000) (local.get $read)
+      (global.get $SCRATCH_BUF) (local.get $read)
       (i32.load (local.get $cfg)) (local.get $key_len)
       (local.get $scratch) (local.get $cap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))

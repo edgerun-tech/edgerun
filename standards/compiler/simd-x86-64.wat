@@ -1244,6 +1244,20 @@
     (call $template_x86_unsupported (local.get $dec_ptr))
   )
 
+  ;; ── Additional SIMD v128 bitwise operations ──────────────────────
+  (func $template_simd_i8x16_and (param $dec_ptr i32)
+    (call $emit_sse128_int_binop (i32.const 0xDB))
+  )
+  (func $template_simd_i8x16_or (param $dec_ptr i32)
+    (call $emit_sse128_int_binop (i32.const 0xEB))
+  )
+  (func $template_simd_i8x16_xor (param $dec_ptr i32)
+    (call $emit_sse128_int_binop (i32.const 0xEF))
+  )
+  (func $template_simd_i8x16_mul (param $dec_ptr i32)
+    (global.set $JIT_ERROR_x86_64 (i32.const -4))
+  )
+
   ;; ═════════════════════════════════════════════════════════════════════
   ;; JIT compile: compile a WASM function to x86_64 machine code
   ;; ═════════════════════════════════════════════════════════════════════

@@ -12,71 +12,8 @@
     i32.or)
 
   (func $K (param $i i32) (result i32)
-    local.get $i i32.const 0 i32.eq if i32.const 0x428a2f98 return end
-    local.get $i i32.const 1 i32.eq if i32.const 0x71374491 return end
-    local.get $i i32.const 2 i32.eq if i32.const 0xb5c0fbcf return end
-    local.get $i i32.const 3 i32.eq if i32.const 0xe9b5dba5 return end
-    local.get $i i32.const 4 i32.eq if i32.const 0x3956c25b return end
-    local.get $i i32.const 5 i32.eq if i32.const 0x59f111f1 return end
-    local.get $i i32.const 6 i32.eq if i32.const 0x923f82a4 return end
-    local.get $i i32.const 7 i32.eq if i32.const 0xab1c5ed5 return end
-    local.get $i i32.const 8 i32.eq if i32.const 0xd807aa98 return end
-    local.get $i i32.const 9 i32.eq if i32.const 0x12835b01 return end
-    local.get $i i32.const 10 i32.eq if i32.const 0x243185be return end
-    local.get $i i32.const 11 i32.eq if i32.const 0x550c7dc3 return end
-    local.get $i i32.const 12 i32.eq if i32.const 0x72be5d74 return end
-    local.get $i i32.const 13 i32.eq if i32.const 0x80deb1fe return end
-    local.get $i i32.const 14 i32.eq if i32.const 0x9bdc06a7 return end
-    local.get $i i32.const 15 i32.eq if i32.const 0xc19bf174 return end
-    local.get $i i32.const 16 i32.eq if i32.const 0xe49b69c1 return end
-    local.get $i i32.const 17 i32.eq if i32.const 0xefbe4786 return end
-    local.get $i i32.const 18 i32.eq if i32.const 0x0fc19dc6 return end
-    local.get $i i32.const 19 i32.eq if i32.const 0x240ca1cc return end
-    local.get $i i32.const 20 i32.eq if i32.const 0x2de92c6f return end
-    local.get $i i32.const 21 i32.eq if i32.const 0x4a7484aa return end
-    local.get $i i32.const 22 i32.eq if i32.const 0x5cb0a9dc return end
-    local.get $i i32.const 23 i32.eq if i32.const 0x76f988da return end
-    local.get $i i32.const 24 i32.eq if i32.const 0x983e5152 return end
-    local.get $i i32.const 25 i32.eq if i32.const 0xa831c66d return end
-    local.get $i i32.const 26 i32.eq if i32.const 0xb00327c8 return end
-    local.get $i i32.const 27 i32.eq if i32.const 0xbf597fc7 return end
-    local.get $i i32.const 28 i32.eq if i32.const 0xc6e00bf3 return end
-    local.get $i i32.const 29 i32.eq if i32.const 0xd5a79147 return end
-    local.get $i i32.const 30 i32.eq if i32.const 0x06ca6351 return end
-    local.get $i i32.const 31 i32.eq if i32.const 0x14292967 return end
-    local.get $i i32.const 32 i32.eq if i32.const 0x27b70a85 return end
-    local.get $i i32.const 33 i32.eq if i32.const 0x2e1b2138 return end
-    local.get $i i32.const 34 i32.eq if i32.const 0x4d2c6dfc return end
-    local.get $i i32.const 35 i32.eq if i32.const 0x53380d13 return end
-    local.get $i i32.const 36 i32.eq if i32.const 0x650a7354 return end
-    local.get $i i32.const 37 i32.eq if i32.const 0x766a0abb return end
-    local.get $i i32.const 38 i32.eq if i32.const 0x81c2c92e return end
-    local.get $i i32.const 39 i32.eq if i32.const 0x92722c85 return end
-    local.get $i i32.const 40 i32.eq if i32.const 0xa2bfe8a1 return end
-    local.get $i i32.const 41 i32.eq if i32.const 0xa81a664b return end
-    local.get $i i32.const 42 i32.eq if i32.const 0xc24b8b70 return end
-    local.get $i i32.const 43 i32.eq if i32.const 0xc76c51a3 return end
-    local.get $i i32.const 44 i32.eq if i32.const 0xd192e819 return end
-    local.get $i i32.const 45 i32.eq if i32.const 0xd6990624 return end
-    local.get $i i32.const 46 i32.eq if i32.const 0xf40e3585 return end
-    local.get $i i32.const 47 i32.eq if i32.const 0x106aa070 return end
-    local.get $i i32.const 48 i32.eq if i32.const 0x19a4c116 return end
-    local.get $i i32.const 49 i32.eq if i32.const 0x1e376c08 return end
-    local.get $i i32.const 50 i32.eq if i32.const 0x2748774c return end
-    local.get $i i32.const 51 i32.eq if i32.const 0x34b0bcb5 return end
-    local.get $i i32.const 52 i32.eq if i32.const 0x391c0cb3 return end
-    local.get $i i32.const 53 i32.eq if i32.const 0x4ed8aa4a return end
-    local.get $i i32.const 54 i32.eq if i32.const 0x5b9cca4f return end
-    local.get $i i32.const 55 i32.eq if i32.const 0x682e6ff3 return end
-    local.get $i i32.const 56 i32.eq if i32.const 0x748f82ee return end
-    local.get $i i32.const 57 i32.eq if i32.const 0x78a5636f return end
-    local.get $i i32.const 58 i32.eq if i32.const 0x84c87814 return end
-    local.get $i i32.const 59 i32.eq if i32.const 0x8cc70208 return end
-    local.get $i i32.const 60 i32.eq if i32.const 0x90befffa return end
-    local.get $i i32.const 61 i32.eq if i32.const 0xa4506ceb return end
-    local.get $i i32.const 62 i32.eq if i32.const 0xbef9a3f7 return end
-    local.get $i i32.const 63 i32.eq if i32.const 0xc67178f2 return end
-    i32.const 0)
+    local.get $i
+    call $m62k)
 
   ;; Load big-endian word from ptr
   (func $m59load_be32 (param $p i32) (result i32)

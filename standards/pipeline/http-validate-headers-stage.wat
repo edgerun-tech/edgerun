@@ -13,7 +13,7 @@
     (local.set $max_h (i32.load (local.get $cfg)))
     (local.set $max_b (i32.load (i32.add (local.get $cfg) (i32.const 4))))
     (local.set $status (call $http1_validate_header_block
-      (i32.const 0x3000) (local.get $read) (local.get $max_h) (local.get $max_b) (local.get $scratch)))
+      (global.get $SCRATCH_BUF) (local.get $read) (local.get $max_h) (local.get $max_b) (local.get $scratch)))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 12)))
     i32.const 12)

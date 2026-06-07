@@ -31,17 +31,17 @@
     (local.set $ctr_ptr (i32.add (i32.add (local.get $key_ptr) (local.get $key_len)) (i32.const 4)))
 
     ;; Copy input to safe buffer
-    (drop (call $pipe_read (local.get $input) (i32.const 0x6000) (local.get $read)))
+    (drop (call $pipe_read (local.get $input) (global.get $CRYPTO_INPUT_BUF) (local.get $read)))
 
     ;; XOR with keystream
     (local.set $result
       (call $aes128_ctr_xor
-        (i32.const 0x5000)       ;; out
-        (i32.const 0x6000)       ;; in
+        (global.get $SHA256_OUT_BUF)       ;; out
+        (global.get $CRYPTO_INPUT_BUF)       ;; in
         (local.get $read)        ;; len
         (local.get $key_ptr)     ;; key
         (local.get $ctr_ptr)))   ;; ctr
 
     (if (local.get $result) (then (return (i32.sub (i32.const 0) (local.get $result)))))
-    (drop (call $pipe_write (local.get $output) (i32.const 0x5000) (local.get $read)))
+    (drop (call $pipe_write (local.get $output) (global.get $SHA256_OUT_BUF) (local.get $read)))
     local.get $read)

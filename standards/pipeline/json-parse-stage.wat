@@ -20,7 +20,7 @@
     (local.set $scratch_end (i32.add (local.get $scratch) (local.get $scap)))
     (local.set $scratch_len (i32.sub (local.get $scap) (i32.mul (local.get $token_cap) (i32.const 20))))
     (local.set $result (call $json_parse_tape
-      (i32.const 0x3000) (local.get $read)
+      (global.get $SCRATCH_BUF) (local.get $read)
       (local.get $token_ptr) (local.get $token_cap)
       (local.get $scratch_end) (local.get $scratch_len)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))

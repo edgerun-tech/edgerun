@@ -11,7 +11,7 @@
     (local $content_type i32) (local $version i32) (local $fragment_len i32) (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.lt_u (local.get $read) (i32.const 5)) (then (return (i32.const 0))))
-    (local.set $result (call $tls_record_header_decode (i32.const 0x3000) (local.get $read)))
+    (local.set $result (call $tls_record_header_decode (global.get $SCRATCH_BUF) (local.get $read)))
     (local.set $status (i32.wrap_i64 (i64.and (local.get $result) (i64.const 0xffff))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $content_type (i32.wrap_i64 (i64.and (i64.shr_u (local.get $result) (i64.const 16)) (i64.const 0xff))))

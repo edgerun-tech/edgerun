@@ -10,7 +10,12 @@
 ;; Temporary buffers for crypto, codec, parser intermediates
 (global $SCRATCH_BUF     (export "SCRATCH_BUF")     i32 (i32.const 0x3000))
 (global $SCRATCH_SIZE    (export "SCRATCH_SIZE")    i32 (i32.const 0x1000))
+(global $WORK_BUF        (export "WORK_BUF")        i32 (i32.const 0x4000))
 (global $SHA256_OUT_BUF  (export "SHA256_OUT_BUF")  i32 (i32.const 0x5000))
+(global $CRYPTO_INPUT_BUF (export "CRYPTO_INPUT_BUF") i32 (i32.const 0x6000))
+
+;; ── Region: Frame Header Scratch (just below heap) ──────────────────
+(global $HDR_BUF (export "HDR_BUF") i32 (i32.const 0x3FFF0))
 
 ;; ── Region: Pipeline Bump Allocator Heap (192 KB) ────────────────────
 ;; Pipes, pipeline descriptors, stage configs, intermediate buffers
@@ -65,6 +70,10 @@
 ;; ── Region: UI Writer Buffer (64 KB) ────────────────────────────────
 (global $UI_WRITER_BASE (export "UI_WRITER_BASE") i32 (i32.const 0x30000))
 (global $UI_WRITER_SIZE (export "UI_WRITER_SIZE") i32 (i32.const 0x10000))
+
+;; ── Region: UI Tree / Command / Event Temp Buffers ──────────────────
+(global $UI_TREE_BUF (export "UI_TREE_BUF") i32 (i32.const 0x1110000))
+(global $UI_CMD_BUF2 (export "UI_CMD_BUF2") i32 (i32.const 0x1120000))
 
 ;; ── Region: UI Command Buffer (64 KB) ───────────────────────────────
 (global $UI_CMD_BUF (export "UI_CMD_BUF") i32 (i32.const 0x10000))
@@ -128,6 +137,8 @@
 (global $PIPE_CLOSED        (export "PIPE_CLOSED")        i32 (i32.const 1))
 
 ;; ── Alignment constants ─────────────────────────────────────────────
+(global $BUF_SIZE_8K   (export "BUF_SIZE_8K")   i32 (i32.const 8192))
+(global $BUF_SIZE_64K  (export "BUF_SIZE_64K")  i32 (i32.const 64000))
 (global $PAGE_SIZE     (export "PAGE_SIZE")     i32 (i32.const 65536))
 (global $CACHE_LINE    (export "CACHE_LINE")    i32 (i32.const 64))
 (global $SIMD_ALIGN    (export "SIMD_ALIGN")    i32 (i32.const 16))

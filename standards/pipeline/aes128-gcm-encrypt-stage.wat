@@ -33,16 +33,16 @@
     (local.set $iv_ptr (i32.add (i32.add (local.get $key_ptr) (local.get $key_len)) (i32.const 4)))
     (local.set $aad_len (i32.load (i32.add (local.get $iv_ptr) (local.get $iv_len))))
     (local.set $aad_ptr (i32.add (i32.add (local.get $iv_ptr) (local.get $iv_len)) (i32.const 4)))
-    (local.set $tag_ptr (i32.add (i32.const 0x5000) (local.get $read)))
+    (local.set $tag_ptr (i32.add (global.get $SHA256_OUT_BUF) (local.get $read)))
 
     ;; Copy input to safe buffer
-    (drop (call $pipe_read (local.get $input) (i32.const 0x6000) (local.get $read)))
+    (drop (call $pipe_read (local.get $input) (global.get $CRYPTO_INPUT_BUF) (local.get $read)))
 
     ;; Encrypt
     (local.set $result
       (call $aes128_gcm_encrypt
-        (i32.const 0x5000)       ;; out
-        (i32.const 0x6000)       ;; in
+        (global.get $SHA256_OUT_BUF)       ;; out
+        (global.get $CRYPTO_INPUT_BUF)       ;; in
         (local.get $read)        ;; len
         (local.get $aad_ptr)     ;; aad
         (local.get $aad_len)     ;; aad_len
@@ -51,6 +51,6 @@
         (local.get $tag_ptr)))   ;; tag
 
     (if (local.get $result) (then (return (i32.sub (i32.const 0) (local.get $result)))))
-    (drop (call $pipe_write (local.get $output) (i32.const 0x5000) (local.get $read)))
+    (drop (call $pipe_write (local.get $output) (global.get $SHA256_OUT_BUF) (local.get $read)))
     (drop (call $pipe_write (local.get $output) (local.get $tag_ptr) (i32.const 16)))
     (i32.add (local.get $read) (i32.const 16)))

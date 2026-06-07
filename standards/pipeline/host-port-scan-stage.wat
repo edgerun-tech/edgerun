@@ -9,7 +9,7 @@
     (if (i32.ge_u (local.get $clen) (i32.const 4)) (then (local.set $default_port (i32.load (local.get $cfg)))))
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.lt_u (local.get $read) (i32.const 1)) (then (return (i32.const 0))))
-    (local.set $status (call $host_port_scan (i32.const 0x3000) (local.get $read) (local.get $default_port) (local.get $scratch)))
+    (local.set $status (call $host_port_scan (global.get $SCRATCH_BUF) (local.get $read) (local.get $default_port) (local.get $scratch)))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 16)))
     i32.const 16)

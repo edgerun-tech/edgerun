@@ -13,15 +13,15 @@
     (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
-    (local.set $record (i32.add (i32.const 0x3000) (local.get $read)))
-    (local.set $status (call $zlib_member_scan (i32.const 0x3000) (local.get $read) (local.get $record)))
+    (local.set $record (i32.add (global.get $SCRATCH_BUF) (local.get $read)))
+    (local.set $status (call $zlib_member_scan (global.get $SCRATCH_BUF) (local.get $read) (local.get $record)))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (local.set $deflate_off (i32.load (local.get $record)))
     (local.set $deflate_len (i32.load offset=4 (local.get $record)))
     (local.set $out_cap (i32.sub (local.get $scap) (i32.const 128)))
     (local.set $status
       (call $deflate_inflate_raw
-        (i32.add (i32.const 0x3000) (local.get $deflate_off)) (local.get $deflate_len)
+        (i32.add (global.get $SCRATCH_BUF) (local.get $deflate_off)) (local.get $deflate_len)
         (local.get $scratch) (local.get $out_cap)
         (local.get $out_cap)
         (i32.add (local.get $scratch) (local.get $out_cap))))

@@ -2058,4 +2058,48 @@
 
   ;; mov rax, imm64 (10 bytes) — with parameter
 
+  ;; ── Unsupported opcode handler ─────────────────────────────────────
+  (func $template_x86_unsupported (param $dec_ptr i32)
+    (global.set $JIT_ERROR_x86_64 (i32.const -4))
+  )
+
+  ;; ── Control flow templates ─────────────────────────────────────────
+  (func $template_block_x86_64 (param $dec_ptr i32))
+  (func $template_loop_x86_64 (param $dec_ptr i32))
+  (func $template_if_x86_64 (param $dec_ptr i32)
+    (call $emit_x86_pop_rax)
+    (call $emit_x86_test_eax)
+    (call $emit_x86_jz_rel32 (i32.const 0))
+  )
+  (func $template_else_x86_64 (param $dec_ptr i32)
+    (call $emit_x86_jmp_rel32 (i32.const 0))
+  )
+  (func $template_end_x86_64 (param $dec_ptr i32))
+  (func $template_br_x86_64 (param $dec_ptr i32)
+    (call $emit_x86_jmp_rel32 (i32.const 0))
+  )
+  (func $template_br_if_x86_64 (param $dec_ptr i32)
+    (call $emit_x86_pop_rax)
+    (call $emit_x86_test_eax)
+    (call $emit_x86_jne_rel32 (i32.const 0))
+  )
+  (func $template_br_table_x86_64 (param $dec_ptr i32)
+    (call $emit_x86_pop_rax)
+    (call $emit_x86_jmp_rel32 (i32.const 0))
+  )
+
+  ;; ── Return templates ──────────────────────────────────────────────
+  (func $template_return_x86_64 (param $dec_ptr i32)
+    (call $emit_x86_epilogue)
+  )
+  (func $template_return_call_x86_64 (param $dec_ptr i32)
+    (global.set $JIT_ERROR_x86_64 (i32.const -4))
+  )
+
+  ;; ── Reinterpret templates (bitcasts — no code needed) ────────────
+  (func $template_i32_reinterpret_f32_x86_64 (param $dec_ptr i32))
+  (func $template_f32_reinterpret_i32_x86_64 (param $dec_ptr i32))
+  (func $template_i64_reinterpret_f64_x86_64 (param $dec_ptr i32))
+  (func $template_f64_reinterpret_i64_x86_64 (param $dec_ptr i32))
+
 )

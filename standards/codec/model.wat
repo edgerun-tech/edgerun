@@ -264,7 +264,7 @@
         local.get $cur i32.const 1 i32.add local.set $cur
         br $continue
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     local.get $ctx local.get $cur i32.const 1 i32.add i32.store offset=0
     global.get $DEF_OK
@@ -386,7 +386,7 @@
         local.get $cur i32.const 1 i32.add local.set $cur
         br $continue
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     local.get $out_ptr local.get $start i32.store offset=0
     local.get $cur local.get $start i32.sub
@@ -441,7 +441,7 @@
         local.set $count
         br $continue
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     global.get $DEF_OK
   )
@@ -469,7 +469,7 @@
       local.get $vb i32.store8 offset=5
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $def_decode_varbit_payload (export "def_decode_varbit_payload") (param $ptr i32) (param $len i32) (param $vb i32) (result i32)
@@ -499,7 +499,7 @@
       local.get $inv i32.store offset=0
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func (export "def_decode_inventory_payload") (param $ptr i32) (param $len i32) (param $inv i32) (result i32)
@@ -671,7 +671,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $continue
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
   )
 
@@ -692,7 +692,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $continue
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
   )
 
@@ -724,7 +724,7 @@
       local.get $i i32.const 1 i32.add local.set $i
       br $ids
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $object_sound_79 (param $ctx i32) (param $obj i32)
@@ -743,7 +743,7 @@
       local.get $count i32.const 1 i32.sub local.set $count
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -1003,7 +1003,7 @@
       )
       br $loop
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func (export "def_decode_object_payload") (param $ptr i32) (param $len i32) (param $obj i32) (result i32)
@@ -1080,7 +1080,7 @@
       local.get $count i32.const 1 i32.sub local.set $count
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $skip_npc_headicons (param $ctx i32) (result i32)
@@ -1100,7 +1100,7 @@
       local.get $i i32.const 1 i32.add local.set $i
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $skip_item_subactions (param $ctx i32) (result i32)
@@ -1111,7 +1111,7 @@
       local.get $ctx call $skip_string drop
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $skip_sequence_frames (param $ctx i32) (result i32)
@@ -1137,7 +1137,7 @@
       local.get $count i32.const 1 i32.sub local.set $count
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -1224,7 +1224,7 @@
       )
       br $loop
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -1379,7 +1379,7 @@
       )
       br $loop
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -1414,7 +1414,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $lengths
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     local.get $seq global.get $SEQ_FRAME_IDS_PTR i32.add i32.load
     local.set $ptr
@@ -1438,7 +1438,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $lows
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     ;; high frame words + merge into low
     local.get $seq global.get $SEQ_FRAME_IDS_PTR i32.add i32.load
@@ -1468,7 +1468,7 @@
       local.get $i i32.const 1 i32.add local.set $i
       br $highs
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $def_decode_sequence_sound_map_count (param $ctx i32) (param $seq i32)
@@ -1483,7 +1483,7 @@
       local.get $count i32.const 1 i32.sub local.set $count
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $def_decode_sequence_ctx (export "def_decode_sequence_ctx") (param $ctx i32) (param $seq i32) (result i32)
@@ -1561,7 +1561,7 @@
       )
       br $loop
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -1660,7 +1660,7 @@
       )
       br $loop
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func (export "def_decode_sequence_skip_ctx") (param $ctx i32) (param $seq i32) (result i32)
@@ -1705,7 +1705,7 @@
       )
       br $loop
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -1763,7 +1763,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $types
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     local.get $ptr i32.const 1 i32.add local.get $count i32.add
     local.set $ptr
@@ -1802,7 +1802,7 @@
         local.get $ptr i32.const 1 i32.add local.set $ptr
         br $label_counts
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     local.get $skel global.get $SKEL_TOTAL_LABEL_COUNT i32.add local.get $val i32.store
     local.get $end local.get $ptr i32.sub
@@ -1827,7 +1827,7 @@
         local.get $ptr i32.const 1 i32.add local.set $ptr
         br $label_vals
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     global.get $DEF_OK
   )
@@ -1964,7 +1964,7 @@
       local.get $i i32.const 1 i32.add local.set $i
       br $slots
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -2031,7 +2031,7 @@
       local.get $i i32.const 1 i32.add local.set $i
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   (func $anim_frame_accumulate_type_delta_target (export "anim_frame_accumulate_type_delta_target") (param $frame i32) (param $skel i32) (param $type i32) (param $delta_out i32) (param $label_out i32) (result i32)
@@ -2125,7 +2125,7 @@
       local.get $i i32.const 1 i32.add local.set $i
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -2201,7 +2201,7 @@
       local.get $i i32.const 1 i32.add local.set $i
       br $continue
     end
-    unreachable
+      global.get $DEF_ERR_BOUNDS return
   )
 
   ;; ══════════════════════════════════════════════════════════════════
@@ -2287,7 +2287,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $copy_frame
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     global.get $REG_FRAME global.get $FRAME_TRANSFORM_COUNT i32.add local.get $tc i32.store
     global.get $REG_FRAME global.get $FRAME_SKELETON_ID i32.add local.get $frame global.get $FRAME_SKELETON_ID i32.add i32.load i32.store
@@ -2324,7 +2324,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $copy_skel
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     global.get $REG_SKEL global.get $SKEL_TRANSFORM_COUNT i32.add local.get $tc i32.store
     global.get $REG_SKEL global.get $SKEL_STORED_COUNT i32.add local.get $skel global.get $SKEL_STORED_COUNT i32.add i32.load i32.store
@@ -2346,7 +2346,7 @@
         local.get $i i32.const 1 i32.add local.set $i
         br $copy_labels
       end
-      unreachable
+      global.get $DEF_ERR_BOUNDS return
     end
     global.get $REG_KEY local.get $key i32.store offset=0
     global.get $REG_ACTIVE i32.const 1 i32.store offset=0

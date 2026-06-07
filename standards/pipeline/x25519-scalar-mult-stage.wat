@@ -6,7 +6,7 @@
     (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.lt_u (local.get $read) (i32.const 64)) (then (return (i32.const 0))))
-    (local.set $status (call $x25519_scalar_mult (local.get $scratch) (i32.const 0x3000) (i32.add (i32.const 0x3000) (i32.const 32))))
+    (local.set $status (call $x25519_scalar_mult (local.get $scratch) (global.get $SCRATCH_BUF) (i32.add (global.get $SCRATCH_BUF) (i32.const 32))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 32)))
     i32.const 32)

@@ -17,6 +17,6 @@
     (local.set $mode (i32.const 0))
     (if (i32.ge_s (local.get $clen) (i32.const 4))
       (then (local.set $mode (i32.load (local.get $cfg)))))
-    (local.set $result (call $percent_encode_component (i32.const 0x3000) (local.get $read) (local.get $scratch) (local.get $scap) (local.get $mode)))
+    (local.set $result (call $percent_encode_component (global.get $SCRATCH_BUF) (local.get $read) (local.get $scratch) (local.get $scap) (local.get $mode)))
     (return (call $stage_write_result (local.get $output) (local.get $result) (local.get $scratch)))
   )

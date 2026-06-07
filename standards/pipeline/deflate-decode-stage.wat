@@ -15,7 +15,7 @@
     (local.set $out_limit (local.get $out_cap))
     (local.set $status
       (call $deflate_inflate_raw
-        (i32.const 0x3000) (local.get $read)
+        (global.get $SCRATCH_BUF) (local.get $read)
         (local.get $scratch) (local.get $out_cap)
         (local.get $out_limit)
         (i32.add (local.get $scratch) (local.get $out_cap))))

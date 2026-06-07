@@ -11,7 +11,7 @@
     (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
-    (local.set $status (call $uuid_parse (i32.const 0x3000) (local.get $scratch)))
+    (local.set $status (call $uuid_parse (global.get $SCRATCH_BUF) (local.get $scratch)))
     (if (local.get $status) (then (return (local.get $status))))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 16)))
     i32.const 16)

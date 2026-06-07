@@ -7,9 +7,9 @@
     (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.lt_u (local.get $read) (i32.const 5)) (then (return (i32.const 0))))
-    (local.set $start (i32.load (i32.const 0x3000)))
+    (local.set $start (i32.load (global.get $SCRATCH_BUF)))
     (local.set $status (call $der_oid_next_arc
-      (i32.add (i32.const 0x3000) (i32.const 4))
+      (i32.add (global.get $SCRATCH_BUF) (i32.const 4))
       (i32.sub (local.get $read) (i32.const 4))
       (local.get $start) (local.get $scratch)))
     (if (i32.lt_s (local.get $status) (i32.const 0))

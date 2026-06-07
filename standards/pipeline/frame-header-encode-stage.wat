@@ -12,7 +12,7 @@
     (local $out_len i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
         (if (i32.lt_u (local.get $read) (i32.const 4)) (then (return (i32.const 0))))
-    (local.set $payload_len (i32.load (i32.const 0x3000)))
+    (local.set $payload_len (i32.load (global.get $SCRATCH_BUF)))
     (local.set $result (call $frame_header_encode_u16_be (local.get $payload_len) (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (local.get $result)))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))

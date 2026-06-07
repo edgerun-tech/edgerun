@@ -6,7 +6,7 @@
     (local $status i32) (local $written i32) (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.lt_u (local.get $read) (i32.const 8)) (then (return (i32.const 0))))
-    (local.set $result (call $quic_varint_encode_u64 (i32.load (i32.const 0x3000)) (i32.load (i32.add (i32.const 0x3000) (i32.const 4))) (local.get $scratch) (local.get $scap)))
+    (local.set $result (call $quic_varint_encode_u64 (i32.load (global.get $SCRATCH_BUF)) (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 4))) (local.get $scratch) (local.get $scap)))
     (local.set $status (i32.wrap_i64 (i64.and (local.get $result) (i64.const 0xffffffff))))
     (local.set $written (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))

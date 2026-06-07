@@ -2,7 +2,7 @@
   (global $ERR_BAD_LENGTH         i32 (i32.const -2))
   (global $ERR_QUEUE_FULL         i32 (i32.const -3))
   (global $ERR_NO_FD              i32 (i32.const -4))
-  (global $ERR_LOGIN_BLOCK_TODO   i32 (i32.const -6))
+  (global $ERR_LOGIN_BLOCK_PARTIAL   i32 (i32.const -6))
   (global $ERR_PARTIAL            i32 (i32.const -10))
 
   (global $BUF_DATA   i32 (i32.const 0))
@@ -1931,12 +1931,12 @@
   )
 
   (func $publish_partial_outer (param $written i32) (param $conf i32) (result i32 i32 i32)
-    global.get $MEM_LOGIN_STATE global.get $L_OUTER_STATUS i32.add global.get $ERR_LOGIN_BLOCK_TODO i32.store
+    global.get $MEM_LOGIN_STATE global.get $L_OUTER_STATUS i32.add global.get $ERR_PARTIAL i32.store
     global.get $MEM_LOGIN_STATE global.get $L_OUTER_CONFIDENCE i32.add local.get $conf i32.store
     global.get $MEM_LOGIN_STATE global.get $L_OUTER_LEN i32.add local.get $written i64.extend_i32_u i64.store
     global.get $MEM_LOGIN_STATE global.get $L_LOGIN_STATE i32.add global.get $LOGIN_STATE_OUTER_TAIL_BLOCKED i32.store
-    global.get $MEM_LOGIN_STATE global.get $L_BLOCKER_STATUS i32.add global.get $ERR_LOGIN_BLOCK_TODO i32.store
-    global.get $ERR_LOGIN_BLOCK_TODO local.get $written local.get $conf
+    global.get $MEM_LOGIN_STATE global.get $L_BLOCKER_STATUS i32.add global.get $ERR_PARTIAL i32.store
+    global.get $ERR_PARTIAL local.get $written local.get $conf
   )
 
   (func $bad_xtea_outer (result i32 i32 i32)

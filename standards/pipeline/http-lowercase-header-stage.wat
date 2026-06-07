@@ -13,7 +13,7 @@
     (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
     (local.set $cap (i32.load (local.get $cfg)))
     (local.set $result (call $http_lowercase_header_name
-      (i32.const 0x3000) (local.get $read) (local.get $scratch) (local.get $cap)))
+      (global.get $SCRATCH_BUF) (local.get $read) (local.get $scratch) (local.get $cap)))
     (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
     (local.set $written (i32.wrap_i64 (local.get $result)))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))

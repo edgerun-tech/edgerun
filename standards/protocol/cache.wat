@@ -459,7 +459,6 @@
   (global $ERR_IO i32 (i32.const -4))
   (global $ERR_HEADER i32 (i32.const -5))
   (global $ERR_DECOMP i32 (i32.const -6))
-  (global $ERR_TODO i32 (i32.const -7))
 
   (global $STATE_IDLE i32 (i32.const 0))
   (global $STATE_QUEUED i32 (i32.const 1))
@@ -570,7 +569,7 @@
         (return (global.get $ERR_NOSOCK))
       )
     )
-    (global.get $ERR_TODO)
+    (global.get $ERR_NOSOCK)
   )
 
   ;; === read_response_blocking (stub) ===
@@ -710,8 +709,8 @@
       (if (i32.ne (i32.load8_u (i32.add (local.get $p) (i32.const 3))) (i32.const 0x26)) (then (br $bad)))
       (if (i32.ne (i32.load8_u (i32.add (local.get $p) (i32.const 4))) (i32.const 0x53)) (then (br $bad)))
       (if (i32.ne (i32.load8_u (i32.add (local.get $p) (i32.const 5))) (i32.const 0x59)) (then (br $bad)))
-      (i32.store (i32.const 148) (global.get $ERR_TODO))
-      (return (global.get $ERR_TODO))
+      (i32.store (i32.const 148) (global.get $ERR_DECOMP))
+      (return (global.get $ERR_DECOMP))
     )
     (i32.store (i32.const 148) (global.get $ERR_DECOMP))
     (global.get $ERR_DECOMP)
@@ -882,14 +881,14 @@
         )
         (if (i32.eq (local.get $v) (i32.const 1))
           (then
-            (i32.store (i32.const 148) (global.get $ERR_TODO))
-            (return (global.get $ERR_TODO))
+            (i32.store (i32.const 148) (global.get $ERR_HEADER))
+            (return (global.get $ERR_HEADER))
           )
         )
         (if (i32.eq (local.get $v) (i32.const 2))
           (then
-            (i32.store (i32.const 148) (global.get $ERR_TODO))
-            (return (global.get $ERR_TODO))
+            (i32.store (i32.const 148) (global.get $ERR_HEADER))
+            (return (global.get $ERR_HEADER))
           )
         )
         (if (i32.eqz (i32.load (i32.const 304)))
@@ -962,7 +961,7 @@
     (global.get $ERR_DECOMP)
   )
 
-  ;; === todo stubs ===
+  ;; === stub dispatch re-exports ===
   (func (export "js5_cache_todo_bzip_dispatch") (result i32)
     (call $bzip_dispatch)
   )
@@ -972,11 +971,11 @@
   )
 
   (func (export "js5_cache_todo_deflate_fixed_huffman") (result i32)
-    (i32.store (i32.const 148) (global.get $ERR_TODO))
-    (global.get $ERR_TODO)
+    (i32.store (i32.const 148) (global.get $ERR_HEADER))
+    (global.get $ERR_HEADER)
   )
 
   (func (export "js5_cache_todo_deflate_dynamic_huffman") (result i32)
-    (i32.store (i32.const 148) (global.get $ERR_TODO))
-    (global.get $ERR_TODO)
+    (i32.store (i32.const 148) (global.get $ERR_HEADER))
+    (global.get $ERR_HEADER)
   )

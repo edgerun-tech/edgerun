@@ -6,7 +6,7 @@
     (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.lt_u (local.get $read) (i32.const 5)) (then (return (i32.const 0))))
-    (local.set $status (call $tls_extension_next (i32.add (i32.const 0x3000) (i32.const 4)) (i32.sub (local.get $read) (i32.const 4)) (i32.load (i32.const 0x3000)) (local.get $scratch)))
+    (local.set $status (call $tls_extension_next (i32.add (global.get $SCRATCH_BUF) (i32.const 4)) (i32.sub (local.get $read) (i32.const 4)) (i32.load (global.get $SCRATCH_BUF)) (local.get $scratch)))
     (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
     (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 16)))
     i32.const 16)

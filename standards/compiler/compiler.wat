@@ -51,22 +51,7 @@
   ;; JIT error code
   (global ${JIT_ERROR_GLOBAL} (mut i32) (i32.const 0))
 
-  ;; ── ELF output buffer (for compile_to_elf) ──
-  (global $ELF_OUT_BUF{SUFFIX}  i32 (i32.const 0x400000))
-  (global $ELF_OUT_OFF{SUFFIX}  i32 (i32.const 0x300000))
-
-  (global $TEXT_VA{SUFFIX}      i32 (i32.const 0x400000))
-  (global $BSS_VA{SUFFIX}       i32 (i32.const 0x500000))
-
-  (global $EHDR_SIZE{SUFFIX}    i32 (i32.const 64))
-  (global $PHDR_SIZE{SUFFIX}    i32 (i32.const 56))
-  (global $ELF_STUB_OFF{SUFFIX} i32 (i32.const 120))
-  (global $ELF_CODE_OFF{SUFFIX} i32 (i32.const 256))
-  (global $BSS_SIZE{SUFFIX}     i32 (i32.const 0x40000))
-
-  ;; ── Flat binary output buffer (for compile_to_bin) ──
-  (global $BIN_OUT_BUF{SUFFIX}  i32 (i32.const 0x500000))
-  (global $BIN_OUT_OFF{SUFFIX}  i32 (i32.const 0x400000))
+  ;; ELF/binary buffer globals are defined in per-arch emit-*.wat files
 
 
   ;; ═════════════════════════════════════════════════════════════════════
@@ -278,7 +263,7 @@
       )
     )
 
-    (call $fixup_calls{SUFFIX})
+    (call ${FIXUP_CALLS})
 
     (local.set $code_size (i32.load (global.get $JS_CODE_PTR{SUFFIX})))
     (local.set $syscall_data_size (i32.shl (local.get $import_count) (i32.const 2)))
@@ -301,13 +286,13 @@
     (i32.store (global.get $JS_CODE_PTR{SUFFIX}) (global.get $ELF_OUT_OFF{SUFFIX}))
 
     ;; ── Emit ELF64 header ──
-    (call $emit_elf64_ehdr
+    (call ${EMIT_ELF64_EHDR}
       (i32.add (global.get $TEXT_VA{SUFFIX}) (global.get $ELF_STUB_OFF{SUFFIX}))
       (i32.const 64)
       (i32.const 1))
 
     ;; ── Emit program header ──
-    (call $emit_elf64_phdr
+    (call ${EMIT_ELF64_PHDR}
       (i32.const 1) (i32.const 7) (i32.const 0)
       (global.get $TEXT_VA{SUFFIX}) (local.get $total_size)
       (i32.add
@@ -315,7 +300,7 @@
         (global.get $BSS_SIZE{SUFFIX})))
 
     ;; ── Emit runtime stub ──
-    (call $emit_elf_stub{SUFFIX} (local.get $bss_va) (local.get $data_va) (local.get $import_count))
+    (call ${EMIT_ELF_STUB} (local.get $bss_va) (local.get $data_va) (local.get $import_count))
 
     ;; ── Pad to ELF_CODE_OFF ──
     (block $pad_done
@@ -323,10 +308,10 @@
         (if (i32.ge_u (i32.load (global.get $JS_CODE_PTR{SUFFIX}))
                        (i32.add (global.get $ELF_OUT_OFF{SUFFIX}) (global.get $ELF_CODE_OFF{SUFFIX})))
           (then (br $pad_done)))
-        (call $emit_byte{SUFFIX} (i32.const 0))
+        (call ${EMIT_BYTE} (i32.const 0))
         (br $pad_loop)))
 
-    (call $copy_compiled_code{SUFFIX} (global.get $JIT_CACHE) (local.get $code_size))
+    (call ${COPY_COMPILED_CODE} (global.get $JIT_CACHE) (local.get $code_size))
 
     (i32.store (global.get $JS_CODE_PTR{SUFFIX})
       (i32.add (i32.load (global.get $JS_CODE_PTR{SUFFIX})) (local.get $code_size)))
@@ -335,7 +320,7 @@
     (block $data_loop_done
       (loop $data_loop
         (if (i32.ge_u (local.get $i) (local.get $import_count)) (then (br $data_loop_done)))
-        (call $emit_dword{SUFFIX}
+        (call ${EMIT_DWORD}
           (i32.load (i32.add (i32.const 0x90000) (i32.shl (local.get $i) (i32.const 2)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $data_loop)))

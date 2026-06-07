@@ -7,6 +7,7 @@
    ;; Include memory-map.wat before this fragment.
 
    ;; ── Bump allocator (HEAP_START/HEAP_END from memory-map.wat) ──
+   ;; $HEAP_START = 0x40000 (from memory-map.wat)
    (global $heap_ptr (mut i32) (i32.const 0x40000))
 
   (func $pipe_alloc (export "pipe_alloc") (param $size i32) (result i32)
