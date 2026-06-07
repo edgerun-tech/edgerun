@@ -83,6 +83,7 @@
   (global $icon_clip_by (mut f32) (f32.const 0))
   (global $icon_clip_bw (mut f32) (f32.const 1))
   (global $icon_clip_bh (mut f32) (f32.const 1))
+  (global $ui_layout_buf (mut i32) (i32.const 0))
 
   (func $min_f32 (param $a f32) (param $b f32) (result f32)
     local.get $a
@@ -185,22 +186,12 @@
       f32.div
     end)
 
-  (func $er_ui_snap_pixel (export "er_ui_snap_pixel") (param $v f32) (param $dpr f32) (result f32)
+  (func $er_ui_snap_pixel  (param $v f32) (param $dpr f32) (result f32)
     local.get $v
     local.get $dpr
     call $snap_pixel)
 
-  (func $er_ui_snap_px (export "er_ui_snap_px") (param $v f32) (param $dpr f32) (result f32)
-    local.get $v
-    local.get $dpr
-    call $snap_pixel)
-
-  (func $er_ui_pixel_snap (export "er_ui_pixel_snap") (param $v f32) (param $dpr f32) (result f32)
-    local.get $v
-    local.get $dpr
-    call $snap_pixel)
-
-  (func $er_ui_snap_stroke_center (export "er_ui_snap_stroke_center") (param $v f32) (param $dpr f32) (result f32)
+  (func $er_ui_snap_stroke_center  (param $v f32) (param $dpr f32) (result f32)
     local.get $dpr
     f32.const 0
     f32.le
@@ -292,6 +283,28 @@
     i32.add
     i32.const 0
     i32.store)
+
+  (func $er_ui_runtime_hover (export "er_ui_runtime_hover") (result i32)
+    global.get $runtime_hover)
+
+  (func $er_ui_runtime_focus (export "er_ui_runtime_focus") (result i32)
+    global.get $runtime_focus)
+
+  (func $er_ui_runtime_active (export "er_ui_runtime_active") (result i32)
+    global.get $runtime_active)
+
+  (func $er_ui_runtime_pointer_x (export "er_ui_runtime_pointer_x") (result f32)
+    global.get $runtime_pointer_x)
+
+  (func $er_ui_runtime_pointer_y (export "er_ui_runtime_pointer_y") (result f32)
+    global.get $runtime_pointer_y)
+
+  (func $er_ui_runtime_overlay (export "er_ui_runtime_overlay") (result i32)
+    global.get $runtime_overlay)
+
+  (func $er_ui_runtime_load_state (export "er_ui_runtime_load_state") (param $out i32)
+    local.get $out
+    call $store_runtime_state)
 
   (func $fnv1a_byte (param $hash i32) (param $byte i32) (result i32)
     local.get $hash
@@ -710,8 +723,11 @@
       i32.add
       local.set $p
       local.get $p
-      i32.const 48
-      call $zero
+      i32.const 24
+      i32.add
+      i32.const 8
+      i32.const 0
+      memory.fill
       local.get $p
       i32.const 1
       call $store32
@@ -768,12 +784,9 @@
         i32.mul
         i32.add
         local.set $p
-        local.get $p
-        i32.const 48
-        call $zero
-        local.get $p
-        i32.const 2
-        call $store32
+      local.get $p
+      i32.const 2
+      call $store32
         local.get $p
         i32.const 4
         i32.add
@@ -1004,7 +1017,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_rect_init (export "er_ui_rect_init") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
+  (func $er_ui_rect_init  (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
     local.get $out
     local.get $x
     local.get $y
@@ -1012,7 +1025,7 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_rect_valid (export "er_ui_rect_valid") (param $rect i32) (result i32)
+  (func $er_ui_rect_valid  (param $rect i32) (result i32)
     local.get $rect
     i32.eqz
     if
@@ -1026,7 +1039,7 @@
     local.get $rect i32.const 8 i32.add f32.load f32.const 0 f32.gt i32.and
     local.get $rect i32.const 12 i32.add f32.load f32.const 0 f32.gt i32.and)
 
-  (func $er_ui_rect_usable (export "er_ui_rect_usable") (param $rect i32) (result i32)
+  (func $er_ui_rect_usable  (param $rect i32) (result i32)
     local.get $rect
     i32.eqz
     if
@@ -1040,7 +1053,7 @@
     local.get $rect i32.const 8 i32.add f32.load f32.const 0 f32.ge i32.and
     local.get $rect i32.const 12 i32.add f32.load f32.const 0 f32.ge i32.and)
 
-  (func $er_ui_rect_inset (export "er_ui_rect_inset") (param $rect i32) (param $out i32) (param $dx f32) (param $dy f32) (result i32)
+  (func $er_ui_rect_inset  (param $rect i32) (param $out i32) (param $dx f32) (param $dy f32) (result i32)
     local.get $rect
     i32.eqz
     local.get $out
@@ -1057,14 +1070,14 @@
     local.get $rect i32.const 12 i32.add f32.load local.get $dy f32.const 2 f32.mul f32.sub f32.const 0 call $max_f32
     call $rect_store)
 
-  (func $er_ui_rect_inset_uniform (export "er_ui_rect_inset_uniform") (param $rect i32) (param $out i32) (param $amount f32) (result i32)
+  (func $er_ui_rect_inset_uniform  (param $rect i32) (param $out i32) (param $amount f32) (result i32)
     local.get $rect
     local.get $out
     local.get $amount
     local.get $amount
     call $er_ui_rect_inset)
 
-  (func $er_ui_rect_inset_ltrb (export "er_ui_rect_inset_ltrb") (param $rect i32) (param $out i32) (param $left f32) (param $top f32) (param $right f32) (param $bottom f32) (result i32)
+  (func $er_ui_rect_inset_ltrb  (param $rect i32) (param $out i32) (param $left f32) (param $top f32) (param $right f32) (param $bottom f32) (result i32)
     local.get $rect
     i32.eqz
     local.get $out
@@ -1081,7 +1094,7 @@
     local.get $rect i32.const 12 i32.add f32.load local.get $top f32.sub local.get $bottom f32.sub f32.const 0 call $max_f32
     call $rect_store)
 
-  (func $er_ui_rect_with_height_centered (export "er_ui_rect_with_height_centered") (param $rect i32) (param $out i32) (param $height f32) (result i32)
+  (func $er_ui_rect_with_height_centered  (param $rect i32) (param $out i32) (param $height f32) (result i32)
     (local $h f32)
     local.get $rect i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -1093,7 +1106,7 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_rect_with_width_centered (export "er_ui_rect_with_width_centered") (param $rect i32) (param $out i32) (param $width f32) (result i32)
+  (func $er_ui_rect_with_width_centered  (param $rect i32) (param $out i32) (param $width f32) (result i32)
     (local $w f32)
     local.get $rect i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -1105,7 +1118,7 @@
     local.get $rect i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_rect_right (export "er_ui_rect_right") (param $rect i32) (param $out i32) (param $width f32) (result i32)
+  (func $er_ui_rect_right  (param $rect i32) (param $out i32) (param $width f32) (result i32)
     local.get $rect i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -1115,7 +1128,7 @@
     local.get $rect i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_rect_bottom (export "er_ui_rect_bottom") (param $rect i32) (param $out i32) (param $height f32) (result i32)
+  (func $er_ui_rect_bottom  (param $rect i32) (param $out i32) (param $height f32) (result i32)
     local.get $rect i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -1125,30 +1138,30 @@
     local.get $height
     call $rect_store)
 
-  (func $er_ui_rect_contains_inclusive (export "er_ui_rect_contains_inclusive") (param $rect i32) (param $x f32) (param $y f32) (result i32)
+  (func $er_ui_rect_contains_inclusive  (param $rect i32) (param $x f32) (param $y f32) (result i32)
     local.get $rect i32.eqz if i32.const 0 return end
     local.get $x local.get $rect f32.load f32.ge
     local.get $y local.get $rect i32.const 4 i32.add f32.load f32.ge i32.and
     local.get $x local.get $rect f32.load local.get $rect i32.const 8 i32.add f32.load f32.add f32.le i32.and
     local.get $y local.get $rect i32.const 4 i32.add f32.load local.get $rect i32.const 12 i32.add f32.load f32.add f32.le i32.and)
 
-  (func $er_ui_rect_contains_exclusive (export "er_ui_rect_contains_exclusive") (param $rect i32) (param $x f32) (param $y f32) (result i32)
+  (func $er_ui_rect_contains_exclusive  (param $rect i32) (param $x f32) (param $y f32) (result i32)
     local.get $rect i32.eqz if i32.const 0 return end
     local.get $x local.get $rect f32.load f32.ge
     local.get $y local.get $rect i32.const 4 i32.add f32.load f32.ge i32.and
     local.get $x local.get $rect f32.load local.get $rect i32.const 8 i32.add f32.load f32.add f32.lt i32.and
     local.get $y local.get $rect i32.const 4 i32.add f32.load local.get $rect i32.const 12 i32.add f32.load f32.add f32.lt i32.and)
 
-  (func $er_ui_geometry_clamp (export "er_ui_geometry_clamp") (param $value f32) (param $lo f32) (param $hi f32) (result f32)
+  (func $er_ui_geometry_clamp  (param $value f32) (param $lo f32) (param $hi f32) (result f32)
     local.get $value
     local.get $lo
     local.get $hi
     call $clamp_f32)
 
-  (func $er_ui_theme_uniform_grid_size (export "er_ui_theme_uniform_grid_size") (result i32)
+  (func $er_ui_theme_uniform_grid_size  (result i32)
     i32.const 40)
 
-  (func $er_ui_theme_empty_rect (export "er_ui_theme_empty_rect") (param $out i32) (result i32)
+  (func $er_ui_theme_empty_rect  (param $out i32) (result i32)
     local.get $out
     f32.const 0
     f32.const 0
@@ -1156,7 +1169,7 @@
     f32.const 0
     call $rect_store)
 
-  (func $er_ui_theme_uniform_grid (export "er_ui_theme_uniform_grid") (param $bounds i32) (param $columns i32) (param $rows i32) (param $gap_x f32) (param $gap_y f32) (param $out i32) (result i32)
+  (func $er_ui_theme_uniform_grid  (param $bounds i32) (param $columns i32) (param $rows i32) (param $gap_x f32) (param $gap_y f32) (param $out i32) (result i32)
     (local $total_gap_x f32)
     (local $total_gap_y f32)
     (local $cell_w f32)
@@ -1271,7 +1284,7 @@
     local.get $out i32.const 36 i32.add local.get $gap_y f32.store
     i32.const 1)
 
-  (func $er_ui_theme_uniform_grid_cell (export "er_ui_theme_uniform_grid_cell") (param $grid i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_theme_uniform_grid_cell  (param $grid i32) (param $index i32) (param $out i32) (result i32)
     (local $column i32)
     (local $row i32)
     (local $columns i32)
@@ -1338,69 +1351,69 @@
     local.get $grid i32.const 28 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_theme_header_h (export "er_ui_theme_header_h") (result f32) f32.const 56)
-  (func $er_ui_theme_content_pad (export "er_ui_theme_content_pad") (result f32) f32.const 20)
-  (func $er_ui_theme_content_wide (export "er_ui_theme_content_wide") (result f32) f32.const 1180)
-  (func $er_ui_theme_surface_radius (export "er_ui_theme_surface_radius") (result f32) f32.const 8)
-  (func $er_ui_theme_workspace_rail_pad (export "er_ui_theme_workspace_rail_pad") (result f32) f32.const 12)
-  (func $er_ui_theme_workspace_icon_button (export "er_ui_theme_workspace_icon_button") (result f32) f32.const 36)
-  (func $er_ui_theme_icon_button_box (export "er_ui_theme_icon_button_box") (result f32) f32.const 34)
-  (func $er_ui_theme_icon_logo_box (export "er_ui_theme_icon_logo_box") (result f32) f32.const 24)
-  (func $er_ui_theme_icon_logo_inset (export "er_ui_theme_icon_logo_inset") (result f32) f32.const 5)
-  (func $er_ui_theme_type_caption_h (export "er_ui_theme_type_caption_h") (result f32) f32.const 12)
-  (func $er_ui_theme_type_body_h (export "er_ui_theme_type_body_h") (result f32) f32.const 17)
-  (func $er_ui_theme_type_body_line_h (export "er_ui_theme_type_body_line_h") (result f32) f32.const 20)
-  (func $er_ui_theme_type_section_h (export "er_ui_theme_type_section_h") (result f32) f32.const 22)
-  (func $er_ui_theme_type_title_h (export "er_ui_theme_type_title_h") (result f32) f32.const 26)
-  (func $er_ui_theme_type_title_line_h (export "er_ui_theme_type_title_line_h") (result f32) f32.const 46)
-  (func $er_ui_theme_type_code_h (export "er_ui_theme_type_code_h") (result f32) f32.const 13)
-  (func $er_ui_theme_type_average_body_w (export "er_ui_theme_type_average_body_w") (result f32) f32.const 8.8)
-  (func $er_ui_theme_component_control_radius (export "er_ui_theme_component_control_radius") (result f32) f32.const 6)
-  (func $er_ui_theme_component_focus_ring_outset (export "er_ui_theme_component_focus_ring_outset") (result f32) f32.const 2)
-  (func $er_ui_theme_component_state_loading_h (export "er_ui_theme_component_state_loading_h") (result f32) f32.const 3)
-  (func $er_ui_theme_component_row_radius (export "er_ui_theme_component_row_radius") (result f32) f32.const 4)
-  (func $er_ui_theme_component_control_text_padding (export "er_ui_theme_component_control_text_padding") (result f32) f32.const 12)
-  (func $er_ui_theme_component_control_label_height (export "er_ui_theme_component_control_label_height") (result f32) f32.const 16)
-  (func $er_ui_theme_component_control_average_char_width (export "er_ui_theme_component_control_average_char_width") (result f32) f32.const 8.5)
-  (func $er_ui_theme_component_surface_padding (export "er_ui_theme_component_surface_padding") (result f32) f32.const 16)
-  (func $er_ui_theme_component_surface_title_height (export "er_ui_theme_component_surface_title_height") (result f32) f32.const 18)
-  (func $er_ui_theme_component_surface_detail_height (export "er_ui_theme_component_surface_detail_height") (result f32) f32.const 16)
-  (func $er_ui_theme_component_surface_detail_gap (export "er_ui_theme_component_surface_detail_gap") (result f32) f32.const 8)
-  (func $er_ui_theme_component_badge_height (export "er_ui_theme_component_badge_height") (result f32) f32.const 24)
-  (func $er_ui_theme_component_badge_text_height (export "er_ui_theme_component_badge_text_height") (result f32) f32.const 13)
-  (func $er_ui_theme_component_badge_padding_x (export "er_ui_theme_component_badge_padding_x") (result f32) f32.const 12)
+  (func $er_ui_theme_header_h  (result f32) f32.const 56)
+  (func $er_ui_theme_content_pad  (result f32) f32.const 20)
+  (func $er_ui_theme_content_wide  (result f32) f32.const 1180)
+  (func $er_ui_theme_surface_radius  (result f32) f32.const 8)
+  (func $er_ui_theme_workspace_rail_pad  (result f32) f32.const 12)
+  (func $er_ui_theme_workspace_icon_button  (result f32) f32.const 36)
+  (func $er_ui_theme_icon_button_box  (result f32) f32.const 34)
+  (func $er_ui_theme_icon_logo_box  (result f32) f32.const 24)
+  (func $er_ui_theme_icon_logo_inset  (result f32) f32.const 5)
+  (func $er_ui_theme_type_caption_h  (result f32) f32.const 12)
+  (func $er_ui_theme_type_body_h  (result f32) f32.const 17)
+  (func $er_ui_theme_type_body_line_h  (result f32) f32.const 20)
+  (func $er_ui_theme_type_section_h  (result f32) f32.const 22)
+  (func $er_ui_theme_type_title_h  (result f32) f32.const 26)
+  (func $er_ui_theme_type_title_line_h  (result f32) f32.const 46)
+  (func $er_ui_theme_type_code_h  (result f32) f32.const 13)
+  (func $er_ui_theme_type_average_body_w  (result f32) f32.const 8.8)
+  (func $er_ui_theme_component_control_radius  (result f32) f32.const 6)
+  (func $er_ui_theme_component_focus_ring_outset  (result f32) f32.const 2)
+  (func $er_ui_theme_component_state_loading_h  (result f32) f32.const 3)
+  (func $er_ui_theme_component_row_radius  (result f32) f32.const 4)
+  (func $er_ui_theme_component_control_text_padding  (result f32) f32.const 12)
+  (func $er_ui_theme_component_control_label_height  (result f32) f32.const 16)
+  (func $er_ui_theme_component_control_average_char_width  (result f32) f32.const 8.5)
+  (func $er_ui_theme_component_surface_padding  (result f32) f32.const 16)
+  (func $er_ui_theme_component_surface_title_height  (result f32) f32.const 18)
+  (func $er_ui_theme_component_surface_detail_height  (result f32) f32.const 16)
+  (func $er_ui_theme_component_surface_detail_gap  (result f32) f32.const 8)
+  (func $er_ui_theme_component_badge_height  (result f32) f32.const 24)
+  (func $er_ui_theme_component_badge_text_height  (result f32) f32.const 13)
+  (func $er_ui_theme_component_badge_padding_x  (result f32) f32.const 12)
 
-  (func $er_ui_theme_palette_bg (export "er_ui_theme_palette_bg") (result i32) i32.const 0xff110e0c)
-  (func $er_ui_theme_palette_panel (export "er_ui_theme_palette_panel") (result i32) i32.const 0xff1e1916)
-  (func $er_ui_theme_palette_panel_alt (export "er_ui_theme_palette_panel_alt") (result i32) i32.const 0xff26201c)
-  (func $er_ui_theme_palette_panel_floor (export "er_ui_theme_palette_panel_floor") (result i32) i32.const 0xff16120f)
-  (func $er_ui_theme_palette_code_bg (export "er_ui_theme_palette_code_bg") (result i32) i32.const 0xff0c0907)
-  (func $er_ui_theme_palette_row (export "er_ui_theme_palette_row") (result i32) i32.const 0xff2a231f)
-  (func $er_ui_theme_palette_border (export "er_ui_theme_palette_border") (result i32) i32.const 0xff52463f)
-  (func $er_ui_theme_palette_text (export "er_ui_theme_palette_text") (result i32) i32.const 0xfff8f3ef)
-  (func $er_ui_theme_palette_muted (export "er_ui_theme_palette_muted") (result i32) i32.const 0xffb4a89e)
-  (func $er_ui_theme_palette_dim (export "er_ui_theme_palette_dim") (result i32) i32.const 0xff8a7b6f)
-  (func $er_ui_theme_palette_active (export "er_ui_theme_palette_active") (result i32) i32.const 0xffd6701c)
-  (func $er_ui_theme_palette_accent (export "er_ui_theme_palette_accent") (result i32) i32.const 0xffb6d635)
-  (func $er_ui_theme_palette_danger (export "er_ui_theme_palette_danger") (result i32) i32.const 0xff7171f8)
-  (func $er_ui_theme_palette_yellow (export "er_ui_theme_palette_yellow") (result i32) i32.const 0xff15ccfa)
-  (func $er_ui_theme_palette_cyan (export "er_ui_theme_palette_cyan") (result i32) i32.const 0xffeed322)
-  (func $er_ui_theme_state_hover_border (export "er_ui_theme_state_hover_border") (result i32) i32.const 0xfffcd37d)
-  (func $er_ui_theme_state_active_border (export "er_ui_theme_state_active_border") (result i32) i32.const 0xffeed322)
-  (func $er_ui_theme_state_focus_border (export "er_ui_theme_state_focus_border") (result i32) i32.const 0xff15ccfa)
-  (func $er_ui_theme_state_invalid_border (export "er_ui_theme_state_invalid_border") (result i32) i32.const 0xff7171f8)
-  (func $er_ui_theme_state_disabled_tint (export "er_ui_theme_state_disabled_tint") (result i32) i32.const 0x8e140e0a)
-  (func $er_ui_theme_state_loading_fill (export "er_ui_theme_state_loading_fill") (result i32) i32.const 0xffbfd42d)
-  (func $er_ui_version (export "er_ui_version") (result i32)
+  (func $er_ui_theme_palette_bg  (result i32) i32.const 0xff110e0c)
+  (func $er_ui_theme_palette_panel  (result i32) i32.const 0xff1e1916)
+  (func $er_ui_theme_palette_panel_alt  (result i32) i32.const 0xff26201c)
+  (func $er_ui_theme_palette_panel_floor  (result i32) i32.const 0xff16120f)
+  (func $er_ui_theme_palette_code_bg  (result i32) i32.const 0xff0c0907)
+  (func $er_ui_theme_palette_row  (result i32) i32.const 0xff2a231f)
+  (func $er_ui_theme_palette_border  (result i32) i32.const 0xff52463f)
+  (func $er_ui_theme_palette_text  (result i32) i32.const 0xfff8f3ef)
+  (func $er_ui_theme_palette_muted  (result i32) i32.const 0xffb4a89e)
+  (func $er_ui_theme_palette_dim  (result i32) i32.const 0xff8a7b6f)
+  (func $er_ui_theme_palette_active  (result i32) i32.const 0xffd6701c)
+  (func $er_ui_theme_palette_accent  (result i32) i32.const 0xffb6d635)
+  (func $er_ui_theme_palette_danger  (result i32) i32.const 0xff7171f8)
+  (func $er_ui_theme_palette_yellow  (result i32) i32.const 0xff15ccfa)
+  (func $er_ui_theme_palette_cyan  (result i32) i32.const 0xffeed322)
+  (func $er_ui_theme_state_hover_border  (result i32) i32.const 0xfffcd37d)
+  (func $er_ui_theme_state_active_border  (result i32) i32.const 0xffeed322)
+  (func $er_ui_theme_state_focus_border  (result i32) i32.const 0xff15ccfa)
+  (func $er_ui_theme_state_invalid_border  (result i32) i32.const 0xff7171f8)
+  (func $er_ui_theme_state_disabled_tint  (result i32) i32.const 0x8e140e0a)
+  (func $er_ui_theme_state_loading_fill  (result i32) i32.const 0xffbfd42d)
+  (func $er_ui_version  (result i32)
     i32.const 1)
 
-  (func $er_ui_record_kind_count (export "er_ui_record_kind_count") (result i32)
+  (func $er_ui_record_kind_count  (result i32)
     i32.const 58)
 
-  (func $er_ui_command_size (export "er_ui_command_size") (result i32)
+  (func $er_ui_command_size  (result i32)
     i32.const 48)
 
-  (func $er_ui_color_pack (export "er_ui_color_pack") (param $r i32) (param $g i32) (param $b i32) (param $a i32) (result i32)
+  (func $er_ui_color_pack  (param $r i32) (param $g i32) (param $b i32) (param $a i32) (result i32)
     local.get $r
     i32.const 255
     i32.and
@@ -1423,7 +1436,7 @@
     i32.shl
     i32.or)
 
-  (func $er_ui_encode_unit (export "er_ui_encode_unit") (param $value f32) (result i32)
+  (func $er_ui_encode_unit  (param $value f32) (result i32)
     local.get $value
     f32.const 0
     f32.const 1
@@ -1433,7 +1446,7 @@
     f32.nearest
     i32.trunc_f32_u)
 
-  (func $er_ui_decode_unit (export "er_ui_decode_unit") (param $value i32) (result f32)
+  (func $er_ui_decode_unit  (param $value i32) (result f32)
     local.get $value
     i32.const 65535
     i32.and
@@ -1441,28 +1454,28 @@
     f32.const 65535
     f32.div)
 
-  (func $er_ui_font_reference_body_offset (export "er_ui_font_reference_body_offset") (result i32)
+  (func $er_ui_font_reference_body_offset  (result i32)
     i32.const 148)
 
-  (func $er_ui_font_glyph_record_size (export "er_ui_font_glyph_record_size") (result i32)
+  (func $er_ui_font_glyph_record_size  (result i32)
     i32.const 20)
 
-  (func $er_ui_font_kern_record_size (export "er_ui_font_kern_record_size") (result i32)
+  (func $er_ui_font_kern_record_size  (result i32)
     i32.const 12)
 
-  (func $er_ui_font_command_record_size (export "er_ui_font_command_record_size") (result i32)
+  (func $er_ui_font_command_record_size  (result i32)
     i32.const 20)
 
-  (func $er_ui_font_weight_regular (export "er_ui_font_weight_regular") (result i32)
+  (func $er_ui_font_weight_regular  (result i32)
     i32.const 0)
 
-  (func $er_ui_font_weight_semibold (export "er_ui_font_weight_semibold") (result i32)
+  (func $er_ui_font_weight_semibold  (result i32)
     i32.const 1)
 
-  (func $er_ui_font_weight_bold (export "er_ui_font_weight_bold") (result i32)
+  (func $er_ui_font_weight_bold  (result i32)
     i32.const 2)
 
-  (func $er_ui_font_weight_value (export "er_ui_font_weight_value") (param $weight i32) (result f32)
+  (func $er_ui_font_weight_value  (param $weight i32) (result f32)
     local.get $weight
     i32.const 0
     i32.eq
@@ -1486,7 +1499,7 @@
     end
     f32.const 0)
 
-  (func $er_ui_font_render_px (export "er_ui_font_render_px") (param $origin_h f32) (result i32)
+  (func $er_ui_font_render_px  (param $origin_h f32) (result i32)
     local.get $origin_h
     f32.const 0
     f32.le
@@ -1498,12 +1511,12 @@
     f32.ceil
     i32.trunc_f32_u)
 
-  (func $er_ui_font_should_snap_text (export "er_ui_font_should_snap_text") (param $px i32) (result i32)
+  (func $er_ui_font_should_snap_text  (param $px i32) (result i32)
     local.get $px
     i32.const 18
     i32.le_u)
 
-  (func $er_ui_font_snap_text_position (export "er_ui_font_snap_text_position") (param $value f32) (param $px i32) (result f32)
+  (func $er_ui_font_snap_text_position  (param $value f32) (param $px i32) (result f32)
     local.get $px
     call $er_ui_font_should_snap_text
     if (result f32)
@@ -1513,7 +1526,7 @@
       local.get $value
     end)
 
-  (func $er_ui_font_glyph_key (export "er_ui_font_glyph_key") (param $codepoint i32) (param $weight i32) (result i32)
+  (func $er_ui_font_glyph_key  (param $codepoint i32) (param $weight i32) (result i32)
     local.get $codepoint
     i32.const 0x10ffff
     i32.gt_u
@@ -1534,12 +1547,12 @@
     local.get $weight
     i32.add)
 
-  (func $er_ui_font_glyph_key_codepoint (export "er_ui_font_glyph_key_codepoint") (param $glyph_key i32) (result i32)
+  (func $er_ui_font_glyph_key_codepoint  (param $glyph_key i32) (result i32)
     local.get $glyph_key
     i32.const 2
     i32.shr_u)
 
-  (func $er_ui_font_glyph_key_weight (export "er_ui_font_glyph_key_weight") (param $glyph_key i32) (result i32)
+  (func $er_ui_font_glyph_key_weight  (param $glyph_key i32) (result i32)
     local.get $glyph_key
     i32.const 3
     i32.and)
@@ -1636,7 +1649,7 @@
     local.get $len
     i32.eq)
 
-  (func $er_ui_font_body_set (export "er_ui_font_body_set") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_font_body_set  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr
     local.get $len
     call $font_body_valid_at
@@ -1657,7 +1670,7 @@
     global.set $font_regular_len
     i32.const 1)
 
-  (func $er_ui_font_body_set_weight (export "er_ui_font_body_set_weight") (param $weight i32) (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_font_body_set_weight  (param $weight i32) (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr
     local.get $len
     call $font_body_valid_at
@@ -1701,7 +1714,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_font_select_weight (export "er_ui_font_select_weight") (param $weight i32) (result i32)
+  (func $er_ui_font_select_weight  (param $weight i32) (result i32)
     local.get $weight
     i32.const 0
     i32.eq
@@ -1767,10 +1780,10 @@
     end
     i32.const 0)
 
-  (func $er_ui_font_selected_weight (export "er_ui_font_selected_weight") (result i32)
+  (func $er_ui_font_selected_weight  (result i32)
     global.get $font_weight)
 
-  (func $er_ui_font_weight_loaded (export "er_ui_font_weight_loaded") (param $weight i32) (result i32)
+  (func $er_ui_font_weight_loaded  (param $weight i32) (result i32)
     local.get $weight
     i32.const 0
     i32.eq
@@ -1800,7 +1813,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_font_weight_body_ptr (export "er_ui_font_weight_body_ptr") (param $weight i32) (result i32)
+  (func $er_ui_font_weight_body_ptr  (param $weight i32) (result i32)
     local.get $weight
     i32.const 0
     i32.eq
@@ -1824,7 +1837,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_font_weight_body_len (export "er_ui_font_weight_body_len") (param $weight i32) (result i32)
+  (func $er_ui_font_weight_body_len  (param $weight i32) (result i32)
     local.get $weight
     i32.const 0
     i32.eq
@@ -1848,15 +1861,15 @@
     end
     i32.const 0)
 
-  (func $er_ui_font_reference_loaded (export "er_ui_font_reference_loaded") (result i32)
+  (func $er_ui_font_reference_loaded  (result i32)
     global.get $font_body_ptr
     global.get $font_body_len
     call $font_body_valid_at)
 
-  (func $er_ui_font_body_ptr (export "er_ui_font_body_ptr") (result i32)
+  (func $er_ui_font_body_ptr  (result i32)
     global.get $font_body_ptr)
 
-  (func $er_ui_font_body_len (export "er_ui_font_body_len") (result i32)
+  (func $er_ui_font_body_len  (result i32)
     global.get $font_body_len)
 
   (func $font_glyph_count (result i32)
@@ -1877,13 +1890,13 @@
     i32.add
     i32.load)
 
-  (func $er_ui_font_ref_glyph_count (export "er_ui_font_ref_glyph_count") (result i32)
+  (func $er_ui_font_ref_glyph_count  (result i32)
     call $font_glyph_count)
 
-  (func $er_ui_font_ref_command_count (export "er_ui_font_ref_command_count") (result i32)
+  (func $er_ui_font_ref_command_count  (result i32)
     call $font_command_count)
 
-  (func $er_ui_font_ref_kern_count (export "er_ui_font_ref_kern_count") (result i32)
+  (func $er_ui_font_ref_kern_count  (result i32)
     call $font_kern_count)
 
   (func $font_units_per_em (result f32)
@@ -1893,37 +1906,37 @@
     i32.load16_u
     f32.convert_i32_u)
 
-  (func $er_ui_font_ref_units_per_em (export "er_ui_font_ref_units_per_em") (result i32)
+  (func $er_ui_font_ref_units_per_em  (result i32)
     global.get $font_body_ptr
     i32.const 8
     i32.add
     i32.load16_u)
 
-  (func $er_ui_font_ref_ascender (export "er_ui_font_ref_ascender") (result f32)
+  (func $er_ui_font_ref_ascender  (result f32)
     global.get $font_body_ptr
     i32.const 24
     i32.add
     f32.load)
 
-  (func $er_ui_font_ref_descender (export "er_ui_font_ref_descender") (result f32)
+  (func $er_ui_font_ref_descender  (result f32)
     global.get $font_body_ptr
     i32.const 28
     i32.add
     f32.load)
 
-  (func $er_ui_font_ref_line_gap (export "er_ui_font_ref_line_gap") (result f32)
+  (func $er_ui_font_ref_line_gap  (result f32)
     global.get $font_body_ptr
     i32.const 32
     i32.add
     f32.load)
 
-  (func $er_ui_font_ref_y_min (export "er_ui_font_ref_y_min") (result f32)
+  (func $er_ui_font_ref_y_min  (result f32)
     global.get $font_body_ptr
     i32.const 36
     i32.add
     f32.load)
 
-  (func $er_ui_font_ref_y_max (export "er_ui_font_ref_y_max") (result f32)
+  (func $er_ui_font_ref_y_max  (result f32)
     global.get $font_body_ptr
     i32.const 40
     i32.add
@@ -1976,7 +1989,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_font_ref_glyph_index (export "er_ui_font_ref_glyph_index") (param $codepoint i32) (result i32)
+  (func $er_ui_font_ref_glyph_index  (param $codepoint i32) (result i32)
     (local $i i32)
     (local $count i32)
     global.get $font_body_ptr
@@ -2013,7 +2026,7 @@
     end
     i32.const -1)
 
-  (func $er_ui_font_ref_glyph_id (export "er_ui_font_ref_glyph_id") (param $codepoint i32) (result i32)
+  (func $er_ui_font_ref_glyph_id  (param $codepoint i32) (result i32)
     local.get $codepoint
     call $font_glyph_record_ptr
     local.tee $codepoint
@@ -2027,7 +2040,7 @@
     i32.add
     i32.load16_u)
 
-  (func $er_ui_font_ref_glyph_command_offset (export "er_ui_font_ref_glyph_command_offset") (param $codepoint i32) (result i32)
+  (func $er_ui_font_ref_glyph_command_offset  (param $codepoint i32) (result i32)
     local.get $codepoint
     call $font_glyph_record_ptr
     local.tee $codepoint
@@ -2041,7 +2054,7 @@
     i32.add
     i32.load)
 
-  (func $er_ui_font_ref_glyph_command_count (export "er_ui_font_ref_glyph_command_count") (param $codepoint i32) (result i32)
+  (func $er_ui_font_ref_glyph_command_count  (param $codepoint i32) (result i32)
     local.get $codepoint
     call $font_glyph_record_ptr
     local.tee $codepoint
@@ -2055,7 +2068,7 @@
     i32.add
     i32.load)
 
-  (func $er_ui_font_ref_glyph_advance_units (export "er_ui_font_ref_glyph_advance_units") (param $codepoint i32) (result f32)
+  (func $er_ui_font_ref_glyph_advance_units  (param $codepoint i32) (result f32)
     local.get $codepoint
     call $font_glyph_record_ptr
     local.tee $codepoint
@@ -2069,7 +2082,7 @@
     i32.add
     f32.load)
 
-  (func $er_ui_font_ref_glyph_advance (export "er_ui_font_ref_glyph_advance") (param $codepoint i32) (param $size f32) (result f32)
+  (func $er_ui_font_ref_glyph_advance  (param $codepoint i32) (param $size f32) (result f32)
     local.get $codepoint
     call $font_glyph_record_ptr
     local.tee $codepoint
@@ -2244,7 +2257,7 @@
     i32.const 1
     i32.add)
 
-  (func $er_ui_font_glyph_commands_write (export "er_ui_font_glyph_commands_write") (param $codepoint i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_font_glyph_commands_write  (param $codepoint i32) (param $out i32) (param $cap i32) (result i32)
     (local $glyph i32)
     (local $i i32)
     (local $start i32)
@@ -2300,7 +2313,7 @@
     end
     local.get $written)
 
-  (func $er_ui_font_glyph_commands_write_scaled (export "er_ui_font_glyph_commands_write_scaled") (param $codepoint i32) (param $out i32) (param $cap i32) (param $x f32) (param $baseline_y f32) (param $size f32) (param $dpr f32) (result i32)
+  (func $er_ui_font_glyph_commands_write_scaled  (param $codepoint i32) (param $out i32) (param $cap i32) (param $x f32) (param $baseline_y f32) (param $size f32) (param $dpr f32) (result i32)
     (local $glyph i32)
     (local $i i32)
     (local $start i32)
@@ -2365,7 +2378,7 @@
     end
     local.get $written)
 
-  (func $er_ui_font_text_command_count (export "er_ui_font_text_command_count") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_font_text_command_count  (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $glyph i32)
     (local $count i32)
@@ -2409,7 +2422,7 @@
     end
     local.get $count)
 
-  (func $er_ui_font_text_commands_write_scaled (export "er_ui_font_text_commands_write_scaled") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $x f32) (param $baseline_y f32) (param $size f32) (param $dpr f32) (result i32)
+  (func $er_ui_font_text_commands_write_scaled  (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $x f32) (param $baseline_y f32) (param $size f32) (param $dpr f32) (result i32)
     (local $i i32)
     (local $glyph i32)
     (local $start i32)
@@ -2810,7 +2823,7 @@
     end
     local.get $inside)
 
-  (func $er_ui_font_text_render_alpha (export "er_ui_font_text_render_alpha") (param $ptr i32) (param $len i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $baseline_y f32) (param $size f32) (result i32)
+  (func $er_ui_font_text_render_alpha  (param $ptr i32) (param $len i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $baseline_y f32) (param $size f32) (result i32)
     (local $i i32)
     (local $px i32)
     (local $py i32)
@@ -2995,7 +3008,7 @@
     call $font_glyph_point_inside
     i32.add)
 
-  (func $er_ui_font_text_render_alpha_aa (export "er_ui_font_text_render_alpha_aa") (param $ptr i32) (param $len i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $baseline_y f32) (param $size f32) (result i32)
+  (func $er_ui_font_text_render_alpha_aa  (param $ptr i32) (param $len i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $baseline_y f32) (param $size f32) (result i32)
     (local $i i32)
     (local $px i32)
     (local $py i32)
@@ -3698,7 +3711,7 @@
         br $loop_x
       end
     end)
-  (func $er_ui_font_glyph_render_alpha_baked (export "er_ui_font_glyph_render_alpha_baked") (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
+  (func $er_ui_font_glyph_render_alpha_baked  (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
     (local $glyph i32)
     (local $x i32)
     (local $y i32)
@@ -3879,7 +3892,7 @@
     i32.store
     local.get $drawn)
 
-  (func $er_ui_font_glyph_bake_alpha (export "er_ui_font_glyph_bake_alpha") (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
+  (func $er_ui_font_glyph_bake_alpha  (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
     (local $glyph i32)
     (local $start i32)
     (local $cmd_count i32)
@@ -4107,7 +4120,7 @@
     local.get $out_metrics i32.const 12 i32.add local.get $top i32.store
     local.get $drawn)
 
-  (func $er_ui_font_glyph_bake_alpha_exact (export "er_ui_font_glyph_bake_alpha_exact") (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
+  (func $er_ui_font_glyph_bake_alpha_exact  (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
     (local $glyph i32)
     (local $edge_count i32)
     (local $edge i32)
@@ -4313,7 +4326,7 @@
     local.get $out_metrics i32.const 12 i32.add local.get $top i32.store
     local.get $drawn)
 
-  (func $er_ui_font_text_render_alpha_exact (export "er_ui_font_text_render_alpha_exact") (param $ptr i32) (param $len i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $baseline_y f32) (param $size f32) (result i32)
+  (func $er_ui_font_text_render_alpha_exact  (param $ptr i32) (param $len i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $baseline_y f32) (param $size f32) (result i32)
     (local $i i32)
     (local $gx i32)
     (local $gy i32)
@@ -4497,32 +4510,32 @@
       end
     end
     local.get $drawn)
-  (func $er_ui_font_ascent (export "er_ui_font_ascent") (param $size f32) (result f32)
+  (func $er_ui_font_ascent  (param $size f32) (result f32)
     local.get $size
     f32.const 0.8
     f32.mul)
 
-  (func $er_ui_font_descent (export "er_ui_font_descent") (param $size f32) (result f32)
+  (func $er_ui_font_descent  (param $size f32) (result f32)
     local.get $size
     f32.const 0.2
     f32.mul)
 
-  (func $er_ui_font_line_height (export "er_ui_font_line_height") (param $size f32) (result f32)
+  (func $er_ui_font_line_height  (param $size f32) (result f32)
     local.get $size
     f32.const 1.25
     f32.mul)
 
-  (func $er_ui_font_cap_height (export "er_ui_font_cap_height") (param $size f32) (result f32)
+  (func $er_ui_font_cap_height  (param $size f32) (result f32)
     local.get $size
     f32.const 0.72
     f32.mul)
 
-  (func $er_ui_font_x_height (export "er_ui_font_x_height") (param $size f32) (result f32)
+  (func $er_ui_font_x_height  (param $size f32) (result f32)
     local.get $size
     f32.const 0.52
     f32.mul)
 
-  (func $er_ui_font_baseline (export "er_ui_font_baseline") (param $size f32) (result f32)
+  (func $er_ui_font_baseline  (param $size f32) (result f32)
     local.get $size
     call $er_ui_font_line_gap
     f32.const 0.5
@@ -4531,7 +4544,7 @@
     call $er_ui_font_ascent
     f32.add)
 
-  (func $er_ui_font_line_gap (export "er_ui_font_line_gap") (param $size f32) (result f32)
+  (func $er_ui_font_line_gap  (param $size f32) (result f32)
     local.get $size
     call $er_ui_font_line_height
     local.get $size
@@ -4541,19 +4554,19 @@
     call $er_ui_font_descent
     f32.sub)
 
-  (func $er_ui_font_underline_position (export "er_ui_font_underline_position") (param $size f32) (result f32)
+  (func $er_ui_font_underline_position  (param $size f32) (result f32)
     local.get $size
     f32.const 0.08
     f32.mul)
 
-  (func $er_ui_font_underline_thickness (export "er_ui_font_underline_thickness") (param $size f32) (result f32)
+  (func $er_ui_font_underline_thickness  (param $size f32) (result f32)
     local.get $size
     f32.const 0.07
     f32.mul
     f32.const 1
     call $max_f32)
 
-  (func $er_ui_font_glyph_advance (export "er_ui_font_glyph_advance") (param $codepoint i32) (param $size f32) (result f32)
+  (func $er_ui_font_glyph_advance  (param $codepoint i32) (param $size f32) (result f32)
     (local $glyph i32)
     global.get $font_body_ptr
     global.get $font_body_len
@@ -4662,7 +4675,7 @@
     local.get $size
     f32.mul)
 
-  (func $er_ui_font_text_width (export "er_ui_font_text_width") (param $ptr i32) (param $len i32) (param $size f32) (result f32)
+  (func $er_ui_font_text_width  (param $ptr i32) (param $len i32) (param $size f32) (result f32)
     (local $i i32)
     (local $width f32)
     block $done
@@ -4689,7 +4702,7 @@
     end
     local.get $width)
 
-  (func $er_ui_font_text_fit_len (export "er_ui_font_text_fit_len") (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (result i32)
+  (func $er_ui_font_text_fit_len  (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (result i32)
     (local $i i32)
     (local $width f32)
     local.get $max_w
@@ -4729,7 +4742,7 @@
     end
     local.get $len)
 
-  (func $er_ui_font_text_fits (export "er_ui_font_text_fits") (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (result i32)
+  (func $er_ui_font_text_fits  (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (result i32)
     local.get $ptr
     local.get $len
     local.get $size
@@ -4737,7 +4750,7 @@
     local.get $max_w
     f32.le)
 
-  (func $er_ui_font_text_truncate_len (export "er_ui_font_text_truncate_len") (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (param $ellipsis_ptr i32) (param $ellipsis_len i32) (result i32)
+  (func $er_ui_font_text_truncate_len  (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (param $ellipsis_ptr i32) (param $ellipsis_len i32) (result i32)
     (local $ellipsis_w f32)
     local.get $ptr
     local.get $len
@@ -4767,7 +4780,7 @@
     f32.sub
     call $er_ui_font_text_fit_len)
 
-  (func $er_ui_font_measure_text (export "er_ui_font_measure_text") (param $ptr i32) (param $len i32) (param $size f32) (param $out i32) (result i32)
+  (func $er_ui_font_measure_text  (param $ptr i32) (param $len i32) (param $size f32) (param $out i32) (result i32)
     local.get $out
     i32.eqz
     if
@@ -4800,7 +4813,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_font_text_box (export "er_ui_font_text_box") (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (param $out i32) (result i32)
+  (func $er_ui_font_text_box  (param $ptr i32) (param $len i32) (param $size f32) (param $max_w f32) (param $out i32) (result i32)
     (local $fit_len i32)
     local.get $out
     i32.eqz
@@ -4918,7 +4931,7 @@
     i32.le_u
     i32.and)
 
-  (func $er_ui_icon_asset_pack_set (export "er_ui_icon_asset_pack_set") (param $index_ptr i32) (param $index_len i32) (param $ir_ptr i32) (param $ir_len i32) (param $names_ptr i32) (param $names_len i32) (result i32)
+  (func $er_ui_icon_asset_pack_set  (param $index_ptr i32) (param $index_len i32) (param $ir_ptr i32) (param $ir_len i32) (param $names_ptr i32) (param $names_len i32) (result i32)
     (local $count i32)
     local.get $index_len
     i32.const 8
@@ -4971,19 +4984,19 @@
     global.set $icon_names_len
     i32.const 1)
 
-  (func $er_ui_icon_asset_pack_loaded (export "er_ui_icon_asset_pack_loaded") (result i32)
+  (func $er_ui_icon_asset_pack_loaded  (result i32)
     call $icon_pack_loaded)
 
-  (func $er_ui_icon_segment_size (export "er_ui_icon_segment_size") (result i32)
+  (func $er_ui_icon_segment_size  (result i32)
     i32.const 20)
 
-  (func $er_ui_icon_viewbox (export "er_ui_icon_viewbox") (result f32)
+  (func $er_ui_icon_viewbox  (result f32)
     f32.const 24)
 
-  (func $er_ui_icon_count (export "er_ui_icon_count") (result i32)
+  (func $er_ui_icon_count  (result i32)
     call $icon_pack_count)
 
-  (func $er_ui_icon_valid (export "er_ui_icon_valid") (param $icon i32) (result i32)
+  (func $er_ui_icon_valid  (param $icon i32) (result i32)
     call $icon_pack_loaded
     if
       local.get $icon
@@ -4998,7 +5011,7 @@
     i32.le_u
     i32.and)
 
-  (func $er_ui_icon_path_ptr (export "er_ui_icon_path_ptr") (param $icon i32) (result i32)
+  (func $er_ui_icon_path_ptr  (param $icon i32) (result i32)
     local.get $icon
     i32.const 1
     i32.eq
@@ -5022,7 +5035,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_icon_path_len (export "er_ui_icon_path_len") (param $icon i32) (result i32)
+  (func $er_ui_icon_path_len  (param $icon i32) (result i32)
     local.get $icon
     i32.const 1
     i32.eq
@@ -5046,7 +5059,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_icon_ir_byte_offset (export "er_ui_icon_ir_byte_offset") (param $icon i32) (result i32)
+  (func $er_ui_icon_ir_byte_offset  (param $icon i32) (result i32)
     local.get $icon
     call $icon_pack_entry_valid
     i32.eqz
@@ -5058,7 +5071,7 @@
     call $icon_pack_entry_offset
     i32.load)
 
-  (func $er_ui_icon_ir_byte_len (export "er_ui_icon_ir_byte_len") (param $icon i32) (result i32)
+  (func $er_ui_icon_ir_byte_len  (param $icon i32) (result i32)
     local.get $icon
     call $icon_pack_entry_valid
     i32.eqz
@@ -5072,7 +5085,7 @@
     i32.add
     i32.load)
 
-  (func $er_ui_icon_ir_ptr (export "er_ui_icon_ir_ptr") (param $icon i32) (result i32)
+  (func $er_ui_icon_ir_ptr  (param $icon i32) (result i32)
     local.get $icon
     call $icon_pack_entry_valid
     i32.eqz
@@ -5086,7 +5099,7 @@
     i32.load
     i32.add)
 
-  (func $er_ui_icon_ir_float_count (export "er_ui_icon_ir_float_count") (param $icon i32) (result i32)
+  (func $er_ui_icon_ir_float_count  (param $icon i32) (result i32)
     local.get $icon
     call $icon_pack_entry_valid
     i32.eqz
@@ -5102,7 +5115,7 @@
     i32.const 2
     i32.shr_u)
 
-  (func $er_ui_icon_ir_copy (export "er_ui_icon_ir_copy") (param $icon i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_icon_ir_copy  (param $icon i32) (param $out i32) (param $cap i32) (result i32)
     (local $src i32)
     (local $len i32)
     local.get $icon
@@ -5136,7 +5149,7 @@
     i32.const 2
     i32.shr_u)
 
-  (func $er_ui_icon_name_ptr (export "er_ui_icon_name_ptr") (param $icon i32) (result i32)
+  (func $er_ui_icon_name_ptr  (param $icon i32) (result i32)
     (local $pos i32)
     (local $ptr i32)
     (local $end i32)
@@ -5211,7 +5224,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_icon_name_len (export "er_ui_icon_name_len") (param $icon i32) (result i32)
+  (func $er_ui_icon_name_len  (param $icon i32) (result i32)
     (local $ptr i32)
     (local $end i32)
     (local $start i32)
@@ -5249,46 +5262,46 @@
     local.get $ptr
     local.get $start
     i32.sub)
-  (func $er_ui_icon_op_polyline (export "er_ui_icon_op_polyline") (result f32) f32.const 1)
-  (func $er_ui_icon_op_circle (export "er_ui_icon_op_circle") (result f32) f32.const 2)
-  (func $er_ui_icon_op_ellipse (export "er_ui_icon_op_ellipse") (result f32) f32.const 3)
-  (func $er_ui_icon_op_round_rect (export "er_ui_icon_op_round_rect") (result f32) f32.const 4)
-  (func $er_ui_icon_op_filled_circle (export "er_ui_icon_op_filled_circle") (result f32) f32.const 5)
-  (func $er_ui_icon_op_move_to (export "er_ui_icon_op_move_to") (result f32) f32.const 6)
-  (func $er_ui_icon_op_line_to (export "er_ui_icon_op_line_to") (result f32) f32.const 7)
-  (func $er_ui_icon_op_quad_to (export "er_ui_icon_op_quad_to") (result f32) f32.const 8)
-  (func $er_ui_icon_op_cubic_to (export "er_ui_icon_op_cubic_to") (result f32) f32.const 9)
-  (func $er_ui_icon_op_arc_to (export "er_ui_icon_op_arc_to") (result f32) f32.const 10)
-  (func $er_ui_icon_op_close_path (export "er_ui_icon_op_close_path") (result f32) f32.const 11)
-  (func $er_ui_icon_op_filled_ellipse (export "er_ui_icon_op_filled_ellipse") (result f32) f32.const 12)
-  (func $er_ui_icon_op_filled_round_rect (export "er_ui_icon_op_filled_round_rect") (result f32) f32.const 13)
-  (func $er_ui_icon_op_begin_fill_path (export "er_ui_icon_op_begin_fill_path") (result f32) f32.const 14)
-  (func $er_ui_icon_op_end_fill_path (export "er_ui_icon_op_end_fill_path") (result f32) f32.const 15)
-  (func $er_ui_icon_op_begin_evenodd_fill_path (export "er_ui_icon_op_begin_evenodd_fill_path") (result f32) f32.const 16)
-  (func $er_ui_icon_op_paint_rgba (export "er_ui_icon_op_paint_rgba") (result f32) f32.const 17)
-  (func $er_ui_icon_op_paint_current_color (export "er_ui_icon_op_paint_current_color") (result f32) f32.const 18)
-  (func $er_ui_icon_op_paint_linear_gradient (export "er_ui_icon_op_paint_linear_gradient") (result f32) f32.const 19)
-  (func $er_ui_icon_op_paint_radial_gradient (export "er_ui_icon_op_paint_radial_gradient") (result f32) f32.const 20)
-  (func $er_ui_icon_op_paint_current_color_alpha (export "er_ui_icon_op_paint_current_color_alpha") (result f32) f32.const 21)
-  (func $er_ui_icon_op_stroke_width (export "er_ui_icon_op_stroke_width") (result f32) f32.const 22)
-  (func $er_ui_icon_op_stroke_cap (export "er_ui_icon_op_stroke_cap") (result f32) f32.const 23)
-  (func $er_ui_icon_op_stroke_join (export "er_ui_icon_op_stroke_join") (result f32) f32.const 24)
-  (func $er_ui_icon_op_stroke_miter_limit (export "er_ui_icon_op_stroke_miter_limit") (result f32) f32.const 25)
-  (func $er_ui_icon_op_begin_clip_path (export "er_ui_icon_op_begin_clip_path") (result f32) f32.const 26)
-  (func $er_ui_icon_op_end_clip_path (export "er_ui_icon_op_end_clip_path") (result f32) f32.const 27)
-  (func $er_ui_icon_op_clear_clip_path (export "er_ui_icon_op_clear_clip_path") (result f32) f32.const 28)
-  (func $er_ui_icon_op_begin_evenodd_clip_path (export "er_ui_icon_op_begin_evenodd_clip_path") (result f32) f32.const 29)
-  (func $er_ui_icon_op_stroke_dash (export "er_ui_icon_op_stroke_dash") (result f32) f32.const 30)
-  (func $er_ui_icon_op_paint_matrix (export "er_ui_icon_op_paint_matrix") (result f32) f32.const 31)
+  (func $er_ui_icon_op_polyline  (result f32) f32.const 1)
+  (func $er_ui_icon_op_circle  (result f32) f32.const 2)
+  (func $er_ui_icon_op_ellipse  (result f32) f32.const 3)
+  (func $er_ui_icon_op_round_rect  (result f32) f32.const 4)
+  (func $er_ui_icon_op_filled_circle  (result f32) f32.const 5)
+  (func $er_ui_icon_op_move_to  (result f32) f32.const 6)
+  (func $er_ui_icon_op_line_to  (result f32) f32.const 7)
+  (func $er_ui_icon_op_quad_to  (result f32) f32.const 8)
+  (func $er_ui_icon_op_cubic_to  (result f32) f32.const 9)
+  (func $er_ui_icon_op_arc_to  (result f32) f32.const 10)
+  (func $er_ui_icon_op_close_path  (result f32) f32.const 11)
+  (func $er_ui_icon_op_filled_ellipse  (result f32) f32.const 12)
+  (func $er_ui_icon_op_filled_round_rect  (result f32) f32.const 13)
+  (func $er_ui_icon_op_begin_fill_path  (result f32) f32.const 14)
+  (func $er_ui_icon_op_end_fill_path  (result f32) f32.const 15)
+  (func $er_ui_icon_op_begin_evenodd_fill_path  (result f32) f32.const 16)
+  (func $er_ui_icon_op_paint_rgba  (result f32) f32.const 17)
+  (func $er_ui_icon_op_paint_current_color  (result f32) f32.const 18)
+  (func $er_ui_icon_op_paint_linear_gradient  (result f32) f32.const 19)
+  (func $er_ui_icon_op_paint_radial_gradient  (result f32) f32.const 20)
+  (func $er_ui_icon_op_paint_current_color_alpha  (result f32) f32.const 21)
+  (func $er_ui_icon_op_stroke_width  (result f32) f32.const 22)
+  (func $er_ui_icon_op_stroke_cap  (result f32) f32.const 23)
+  (func $er_ui_icon_op_stroke_join  (result f32) f32.const 24)
+  (func $er_ui_icon_op_stroke_miter_limit  (result f32) f32.const 25)
+  (func $er_ui_icon_op_begin_clip_path  (result f32) f32.const 26)
+  (func $er_ui_icon_op_end_clip_path  (result f32) f32.const 27)
+  (func $er_ui_icon_op_clear_clip_path  (result f32) f32.const 28)
+  (func $er_ui_icon_op_begin_evenodd_clip_path  (result f32) f32.const 29)
+  (func $er_ui_icon_op_stroke_dash  (result f32) f32.const 30)
+  (func $er_ui_icon_op_paint_matrix  (result f32) f32.const 31)
 
-  (func $er_ui_icon_stroke_cap_butt (export "er_ui_icon_stroke_cap_butt") (result f32) f32.const 0)
-  (func $er_ui_icon_stroke_cap_round (export "er_ui_icon_stroke_cap_round") (result f32) f32.const 1)
-  (func $er_ui_icon_stroke_cap_square (export "er_ui_icon_stroke_cap_square") (result f32) f32.const 2)
-  (func $er_ui_icon_stroke_join_miter (export "er_ui_icon_stroke_join_miter") (result f32) f32.const 0)
-  (func $er_ui_icon_stroke_join_round (export "er_ui_icon_stroke_join_round") (result f32) f32.const 1)
-  (func $er_ui_icon_stroke_join_bevel (export "er_ui_icon_stroke_join_bevel") (result f32) f32.const 2)
-  (func $er_ui_icon_default_stroke_width (export "er_ui_icon_default_stroke_width") (result f32) f32.const 0.083333336)
-  (func $er_ui_icon_default_miter_limit (export "er_ui_icon_default_miter_limit") (result f32) f32.const 4)
+  (func $er_ui_icon_stroke_cap_butt  (result f32) f32.const 0)
+  (func $er_ui_icon_stroke_cap_round  (result f32) f32.const 1)
+  (func $er_ui_icon_stroke_cap_square  (result f32) f32.const 2)
+  (func $er_ui_icon_stroke_join_miter  (result f32) f32.const 0)
+  (func $er_ui_icon_stroke_join_round  (result f32) f32.const 1)
+  (func $er_ui_icon_stroke_join_bevel  (result f32) f32.const 2)
+  (func $er_ui_icon_default_stroke_width  (result f32) f32.const 0.083333336)
+  (func $er_ui_icon_default_miter_limit  (result f32) f32.const 4)
   (func $svg_is_ws (param $ch i32) (result i32)
     local.get $ch
     i32.const 32
@@ -5715,12 +5728,7 @@
       end
     end)
 
-  (func $svg_color_pack (param $r i32) (param $g i32) (param $b i32) (param $a i32) (result i32)
-    local.get $r i32.const 255 i32.and
-    local.get $g i32.const 255 i32.and i32.const 8 i32.shl i32.or
-    local.get $b i32.const 255 i32.and i32.const 16 i32.shl i32.or
-    local.get $a i32.const 255 i32.and i32.const 24 i32.shl i32.or)
-  (func $er_ui_svg_color_parse_rgba (export "er_ui_svg_color_parse_rgba") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_svg_color_parse_rgba  (param $ptr i32) (param $len i32) (result i32)
     (local $idx i32) (local $end i32) (local $r i32) (local $g i32) (local $b i32) (local $a i32)
     (local $h0 i32) (local $h1 i32) (local $h2 i32) (local $h3 i32) (local $h4 i32) (local $h5 i32) (local $h6 i32) (local $h7 i32)
     (local $idx_slot i32) (local $fv f32)
@@ -5808,7 +5816,7 @@
       local.get $g i32.const 255 i32.gt_s if i32.const 255 local.set $g end
       local.get $b i32.const 255 i32.gt_s if i32.const 255 local.set $b end
       local.get $a i32.const 255 i32.gt_s if i32.const 255 local.set $a end
-      local.get $r local.get $g local.get $b local.get $a call $svg_color_pack return
+      local.get $r local.get $g local.get $b local.get $a call $er_ui_color_pack return
     end
     local.get $ptr local.get $end local.get $idx i32.const 35 call $svg_byte_eq i32.eqz if i32.const -1 return end
     local.get $len i32.const 4 i32.eq
@@ -5820,7 +5828,7 @@
       local.get $h1 i32.const 17 i32.mul local.set $g
       local.get $h2 i32.const 17 i32.mul local.set $b
       i32.const 255 local.set $a
-      local.get $r local.get $g local.get $b local.get $a call $svg_color_pack return
+      local.get $r local.get $g local.get $b local.get $a call $er_ui_color_pack return
     end
     local.get $len i32.const 5 i32.eq
     if
@@ -5832,7 +5840,7 @@
       local.get $h1 i32.const 17 i32.mul local.set $g
       local.get $h2 i32.const 17 i32.mul local.set $b
       local.get $h3 i32.const 17 i32.mul local.set $a
-      local.get $r local.get $g local.get $b local.get $a call $svg_color_pack return
+      local.get $r local.get $g local.get $b local.get $a call $er_ui_color_pack return
     end
     local.get $len i32.const 7 i32.eq
     local.get $len i32.const 9 i32.eq
@@ -5854,11 +5862,11 @@
         local.get $ptr local.get $idx i32.const 8 i32.add i32.add i32.load8_u call $svg_hex_value local.tee $h7 i32.const 0 i32.lt_s if i32.const -1 return end
         local.get $h6 i32.const 4 i32.shl local.get $h7 i32.or local.set $a
       end
-      local.get $r local.get $g local.get $b local.get $a call $svg_color_pack return
+      local.get $r local.get $g local.get $b local.get $a call $er_ui_color_pack return
     end
     i32.const -1)
 
-  (func $er_ui_svg_opacity_parse_alpha (export "er_ui_svg_opacity_parse_alpha") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_svg_opacity_parse_alpha  (param $ptr i32) (param $len i32) (result i32)
     (local $idx i32) (local $end i32) (local $idx_slot i32) (local $value f32) (local $alpha i32)
     local.get $ptr i32.eqz if i32.const -1 return end
     local.get $ptr local.get $len i32.const 0 call $svg_skip_separators local.set $idx
@@ -5892,7 +5900,7 @@
     local.get $alpha i32.const 255 i32.gt_s if i32.const 255 local.set $alpha end
     local.get $alpha)
 
-  (func $er_ui_svg_color_apply_alpha (export "er_ui_svg_color_apply_alpha") (param $rgba i32) (param $alpha i32) (result i32)
+  (func $er_ui_svg_color_apply_alpha  (param $rgba i32) (param $alpha i32) (result i32)
     (local $base_alpha i32) (local $out_alpha i32)
     local.get $rgba i32.const -1 i32.eq
     local.get $rgba i32.const -2 i32.eq i32.or
@@ -5923,7 +5931,7 @@
     end
     local.get $len)
 
-  (func $er_ui_svg_stroke_cap_parse (export "er_ui_svg_stroke_cap_parse") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_svg_stroke_cap_parse  (param $ptr i32) (param $len i32) (result i32)
     (local $idx i32) (local $end i32) (local $n i32)
     local.get $ptr i32.eqz if i32.const -1 return end
     local.get $ptr local.get $len call $svg_trim_start local.set $idx
@@ -5952,7 +5960,7 @@
     if i32.const 2 return end
     i32.const -1)
 
-  (func $er_ui_svg_stroke_join_parse (export "er_ui_svg_stroke_join_parse") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_svg_stroke_join_parse  (param $ptr i32) (param $len i32) (result i32)
     (local $idx i32) (local $end i32) (local $n i32)
     local.get $ptr i32.eqz if i32.const -1 return end
     local.get $ptr local.get $len call $svg_trim_start local.set $idx
@@ -5981,7 +5989,7 @@
     if i32.const 2 return end
     i32.const -1)
 
-  (func $er_ui_svg_fill_rule_parse (export "er_ui_svg_fill_rule_parse") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_svg_fill_rule_parse  (param $ptr i32) (param $len i32) (result i32)
     (local $idx i32) (local $end i32) (local $n i32)
     local.get $ptr i32.eqz if i32.const -1 return end
     local.get $ptr local.get $len call $svg_trim_start local.set $idx
@@ -6007,7 +6015,7 @@
     if i32.const 1 return end
     i32.const -1)
 
-  (func $er_ui_svg_style_record_init (export "er_ui_svg_style_record_init") (param $out i32) (result i32)
+  (func $er_ui_svg_style_record_init  (param $out i32) (result i32)
     local.get $out i32.eqz if i32.const -1 return end
     local.get $out i32.const 0 i32.store
     local.get $out i32.const 4 i32.add i32.const -16777216 i32.store
@@ -6028,7 +6036,7 @@
     local.get $out i32.const 64 i32.add i32.const 1 i32.store
     i32.const 1)
 
-  (func $er_ui_svg_style_record_inherit (export "er_ui_svg_style_record_inherit") (param $parent i32) (param $out i32) (result i32)
+  (func $er_ui_svg_style_record_inherit  (param $parent i32) (param $out i32) (result i32)
     local.get $parent i32.eqz
     local.get $out i32.eqz i32.or
     if i32.const -1 return end
@@ -6041,7 +6049,7 @@
     i32.store
     i32.const 1)
 
-  (func $er_ui_svg_style_resolve_paint (export "er_ui_svg_style_resolve_paint") (param $style i32) (param $which i32) (result i32)
+  (func $er_ui_svg_style_resolve_paint  (param $style i32) (param $which i32) (result i32)
     (local $paint i32) (local $alpha i32)
     local.get $style i32.eqz if i32.const -1 return end
     local.get $style i32.const 60 i32.add i32.load i32.eqz
@@ -6075,7 +6083,7 @@
     if f32.const -340282346638528859811704183484516925440 return end
     local.get $v)
 
-  (func $er_ui_svg_length_parse_normalized (export "er_ui_svg_length_parse_normalized") (param $ptr i32) (param $len i32) (param $scale f32) (result f32)
+  (func $er_ui_svg_length_parse_normalized  (param $ptr i32) (param $len i32) (param $scale f32) (result f32)
     (local $idx i32) (local $end i32) (local $slot i32) (local $v f32)
     local.get $ptr i32.eqz
     local.get $scale f32.const 0 f32.le i32.or
@@ -6107,7 +6115,7 @@
     end
     f32.const -340282346638528859811704183484516925440)
 
-  (func $er_ui_svg_style_attr_apply (export "er_ui_svg_style_attr_apply") (param $name_ptr i32) (param $name_len i32) (param $value_ptr i32) (param $value_len i32) (param $out i32) (result i32)
+  (func $er_ui_svg_style_attr_apply  (param $name_ptr i32) (param $name_len i32) (param $value_ptr i32) (param $value_len i32) (param $out i32) (result i32)
     (local $idx i32) (local $end i32) (local $n i32) (local $flags i32) (local $iv i32) (local $fv f32) (local $slot i32)
     local.get $name_ptr i32.eqz
     local.get $value_ptr i32.eqz i32.or
@@ -6324,7 +6332,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_svg_style_attr_apply_normalized (export "er_ui_svg_style_attr_apply_normalized") (param $name_ptr i32) (param $name_len i32) (param $value_ptr i32) (param $value_len i32) (param $out i32) (param $scale f32) (result i32)
+  (func $er_ui_svg_style_attr_apply_normalized  (param $name_ptr i32) (param $name_len i32) (param $value_ptr i32) (param $value_len i32) (param $out i32) (param $scale f32) (result i32)
     (local $idx i32) (local $end i32) (local $n i32) (local $flags i32) (local $fv f32) (local $slot i32)
     local.get $name_ptr i32.eqz
     local.get $value_ptr i32.eqz i32.or
@@ -6394,7 +6402,7 @@
     end
     local.get $name_ptr local.get $name_len local.get $value_ptr local.get $value_len local.get $out call $er_ui_svg_style_attr_apply)
 
-  (func $er_ui_svg_style_declaration_list_apply (export "er_ui_svg_style_declaration_list_apply") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $er_ui_svg_style_declaration_list_apply  (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $idx i32) (local $name_start i32) (local $name_end i32) (local $value_start i32) (local $value_end i32) (local $ch i32) (local $applied i32) (local $r i32)
     local.get $ptr i32.eqz
     local.get $out i32.eqz i32.or
@@ -6487,7 +6495,7 @@
     local.get $out i32.const 16 i32.add local.get $otx f32.store
     local.get $out i32.const 20 i32.add local.get $oty f32.store)
 
-  (func $er_ui_svg_matrix_invert (export "er_ui_svg_matrix_invert") (param $matrix i32) (param $out i32) (result i32)
+  (func $er_ui_svg_matrix_invert  (param $matrix i32) (param $out i32) (result i32)
     (local $a f32) (local $b f32) (local $c f32) (local $d f32) (local $tx f32) (local $ty f32) (local $det f32)
     local.get $matrix i32.eqz
     local.get $out i32.eqz i32.or
@@ -6522,7 +6530,7 @@
       f32.store
     i32.const 1)
 
-  (func $er_ui_svg_transform_parse_to_matrix (export "er_ui_svg_transform_parse_to_matrix") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $er_ui_svg_transform_parse_to_matrix  (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $idx i32) (local $idx_slot i32)
     (local $a f32) (local $b f32) (local $c f32) (local $d f32) (local $tx f32) (local $ty f32)
     (local $angle f32) (local $cx f32) (local $cy f32) (local $rad f32) (local $cos f32) (local $sin f32)
@@ -6817,7 +6825,7 @@
       local.get $paint i32.const 24 i32.shr_u i32.const 255 i32.and f32.convert_i32_u
       call $svg_write_op5)
 
-  (func $er_ui_svg_path_style_parse_to_ir_transform_impl (export "er_ui_svg_path_style_parse_to_ir_transform") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (param $style i32) (param $a f32) (param $b f32) (param $c f32) (param $d f32) (param $tx f32) (param $ty f32) (result i32)
+  (func $er_ui_svg_path_style_parse_to_ir_transform_impl  (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (param $style i32) (param $a f32) (param $b f32) (param $c f32) (param $d f32) (param $tx f32) (param $ty f32) (result i32)
     (local $count i32) (local $body i32) (local $paint i32)
     local.get $ptr i32.eqz
     local.get $out i32.eqz i32.or
@@ -6875,7 +6883,7 @@
     end
     local.get $count)
 
-  (func $er_ui_svg_path_style_parse_to_ir (export "er_ui_svg_path_style_parse_to_ir") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (param $style i32) (result i32)
+  (func $er_ui_svg_path_style_parse_to_ir  (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (param $style i32) (result i32)
     local.get $ptr
     local.get $len
     local.get $out
@@ -6899,7 +6907,7 @@
     local.get $out local.get $cap local.get $count f32.const 24 local.get $style i32.const 32 i32.add i32.load f32.convert_i32_s call $svg_write_op2 local.tee $count i32.const -1 i32.eq if i32.const -1 return end
     local.get $out local.get $cap local.get $count f32.const 25 local.get $style i32.const 40 i32.add f32.load call $svg_write_op2)
 
-  (func $er_ui_svg_circle_style_emit_ir (export "er_ui_svg_circle_style_emit_ir") (param $out i32) (param $cap i32) (param $cx f32) (param $cy f32) (param $r f32) (param $style i32) (result i32)
+  (func $er_ui_svg_circle_style_emit_ir  (param $out i32) (param $cap i32) (param $cx f32) (param $cy f32) (param $r f32) (param $style i32) (result i32)
     (local $count i32) (local $paint i32)
     local.get $out i32.eqz
     local.get $style i32.eqz i32.or
@@ -6925,7 +6933,7 @@
     end
     local.get $count)
 
-  (func $er_ui_svg_ellipse_style_emit_ir (export "er_ui_svg_ellipse_style_emit_ir") (param $out i32) (param $cap i32) (param $cx f32) (param $cy f32) (param $rx f32) (param $ry f32) (param $style i32) (result i32)
+  (func $er_ui_svg_ellipse_style_emit_ir  (param $out i32) (param $cap i32) (param $cx f32) (param $cy f32) (param $rx f32) (param $ry f32) (param $style i32) (result i32)
     (local $count i32) (local $paint i32)
     local.get $out i32.eqz
     local.get $style i32.eqz i32.or
@@ -6952,7 +6960,7 @@
     end
     local.get $count)
 
-  (func $er_ui_svg_rect_style_emit_ir (export "er_ui_svg_rect_style_emit_ir") (param $out i32) (param $cap i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $r f32) (param $style i32) (result i32)
+  (func $er_ui_svg_rect_style_emit_ir  (param $out i32) (param $cap i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $r f32) (param $style i32) (result i32)
     (local $count i32) (local $paint i32)
     local.get $out i32.eqz
     local.get $style i32.eqz i32.or
@@ -6979,7 +6987,7 @@
     end
     local.get $count)
 
-  (func $er_ui_svg_line_style_emit_ir (export "er_ui_svg_line_style_emit_ir") (param $out i32) (param $cap i32) (param $x1 f32) (param $y1 f32) (param $x2 f32) (param $y2 f32) (param $style i32) (result i32)
+  (func $er_ui_svg_line_style_emit_ir  (param $out i32) (param $cap i32) (param $x1 f32) (param $y1 f32) (param $x2 f32) (param $y2 f32) (param $style i32) (result i32)
     (local $count i32) (local $paint i32)
     local.get $out i32.eqz
     local.get $style i32.eqz i32.or
@@ -7004,7 +7012,7 @@
     local.get $out local.get $cap local.get $count f32.const 7 local.get $x2 local.get $y2 call $svg_write_op3 local.tee $count i32.const -1 i32.eq if i32.const -1 return end
     local.get $count)
 
-  (func $er_ui_svg_polyline_style_emit_ir (export "er_ui_svg_polyline_style_emit_ir") (param $points i32) (param $point_count i32) (param $out i32) (param $cap i32) (param $style i32) (result i32)
+  (func $er_ui_svg_polyline_style_emit_ir  (param $points i32) (param $point_count i32) (param $out i32) (param $cap i32) (param $style i32) (result i32)
     (local $count i32) (local $paint i32) (local $i i32) (local $p i32) (local $needed i32)
     local.get $points i32.eqz
     local.get $out i32.eqz i32.or
@@ -7049,7 +7057,7 @@
     end
     local.get $count local.get $needed i32.add)
 
-  (func $er_ui_svg_polygon_style_emit_ir (export "er_ui_svg_polygon_style_emit_ir") (param $points i32) (param $point_count i32) (param $out i32) (param $cap i32) (param $style i32) (result i32)
+  (func $er_ui_svg_polygon_style_emit_ir  (param $points i32) (param $point_count i32) (param $out i32) (param $cap i32) (param $style i32) (result i32)
     (local $count i32) (local $paint i32) (local $i i32)
     local.get $points i32.eqz
     local.get $out i32.eqz i32.or
@@ -7151,7 +7159,7 @@
     local.get $vh
     f32.div)
 
-  (func $er_ui_svg_path_parse_to_ir_transform_impl (export "er_ui_svg_path_parse_to_ir_transform") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (param $a f32) (param $b f32) (param $c f32) (param $d f32) (param $tx f32) (param $ty f32) (result i32)
+  (func $er_ui_svg_path_parse_to_ir_transform_impl  (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (param $a f32) (param $b f32) (param $c f32) (param $d f32) (param $tx f32) (param $ty f32) (result i32)
     (local $idx i32) (local $idx_slot i32) (local $cmd i32) (local $ch i32) (local $count i32) (local $started i32)
     (local $has_prev_c i32) (local $has_prev_q i32)
     (local $cx f32) (local $cy f32) (local $sx f32) (local $sy f32) (local $x f32) (local $y f32)
@@ -7482,7 +7490,7 @@
     end
     local.get $count)
 
-  (func $er_ui_svg_path_parse_to_ir (export "er_ui_svg_path_parse_to_ir") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (result i32)
+  (func $er_ui_svg_path_parse_to_ir  (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (param $min_x f32) (param $min_y f32) (param $vw f32) (param $vh f32) (result i32)
     local.get $ptr
     local.get $len
     local.get $out
@@ -9536,7 +9544,7 @@
     local.get $seg_y local.set $p0y
     local.get $alpha local.get $width local.get $height local.get $bx local.get $by local.get $bw local.get $bh local.get $p0x local.get $p0y local.get $x1 local.get $y1 local.get $stroke local.get $line_cap local.get $dash_on local.get $dash_off local.get $phase call $icon_render_dashed_line_alpha
     local.get $phase local.get $p0x local.get $p0y local.get $x1 local.get $y1 call $icon_dash_phase_after_segment)
-  (func $er_ui_icon_render_alpha (export "er_ui_icon_render_alpha") (param $icon i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
+  (func $er_ui_icon_render_alpha  (param $icon i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
     (local $ptr i32) (local $end i32) (local $op f32) (local $stroke f32) (local $stroke_cap f32) (local $stroke_join f32) (local $stroke_miter_limit f32)
     (local $dash_on f32) (local $dash_off f32) (local $dash_base_offset f32) (local $dash_offset f32) (local $dash_dx f32) (local $dash_dy f32)
     (local $cx f32) (local $cy f32) (local $sx f32) (local $sy f32) (local $nx f32) (local $ny f32) (local $px0 f32) (local $py0 f32) (local $has_current i32) (local $has_segment i32)
@@ -10421,7 +10429,7 @@
     end
     local.get $alpha local.get $width local.get $height call $icon_alpha_count)
 
-  (func $er_ui_icon_render_rgba (export "er_ui_icon_render_rgba") (param $icon i32) (param $rgba i32) (param $width i32) (param $height i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $current_rgba i32) (result i32)
+  (func $er_ui_icon_render_rgba  (param $icon i32) (param $rgba i32) (param $width i32) (param $height i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $current_rgba i32) (result i32)
     (local $count i32)
     local.get $rgba
     i32.eqz
@@ -10463,7 +10471,7 @@
     global.set $icon_rgba_out
     local.get $count)
 
-  (func $er_ui_icon_stroke_width (export "er_ui_icon_stroke_width") (param $icon i32) (result f32)
+  (func $er_ui_icon_stroke_width  (param $icon i32) (result f32)
     local.get $icon
     call $er_ui_icon_valid
     if (result f32)
@@ -10472,7 +10480,7 @@
       f32.const 0
     end)
 
-  (func $er_ui_icon_bounds (export "er_ui_icon_bounds") (param $icon i32) (param $out i32) (result i32)
+  (func $er_ui_icon_bounds  (param $icon i32) (param $out i32) (result i32)
     local.get $icon
     call $er_ui_icon_valid
     i32.eqz
@@ -10503,10 +10511,10 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_command_tag_icon (export "er_ui_command_tag_icon") (result i32)
+  (func $er_ui_command_tag_icon  (result i32)
     i32.const 3)
 
-  (func $er_ui_icon_segment_count (export "er_ui_icon_segment_count") (param $icon i32) (result i32)
+  (func $er_ui_icon_segment_count  (param $icon i32) (result i32)
     local.get $icon
     i32.const 44
     i32.eq
@@ -10624,7 +10632,7 @@
     call $snap_pixel
     call $icon_write_line)
 
-  (func $er_ui_icon_scaled_stroke_width (export "er_ui_icon_scaled_stroke_width") (param $icon i32) (param $size f32) (result f32)
+  (func $er_ui_icon_scaled_stroke_width  (param $icon i32) (param $size f32) (result f32)
     local.get $icon
     call $er_ui_icon_valid
     local.get $size
@@ -10642,7 +10650,7 @@
       f32.const 0
     end)
 
-  (func $er_ui_icon_stroke_width_scaled (export "er_ui_icon_stroke_width_scaled") (param $icon i32) (param $w f32) (param $h f32) (param $dpr f32) (result f32)
+  (func $er_ui_icon_stroke_width_scaled  (param $icon i32) (param $w f32) (param $h f32) (param $dpr f32) (result f32)
     (local $stroke f32)
     local.get $icon
     call $er_ui_icon_valid
@@ -10679,7 +10687,7 @@
       f32.const 0
     end)
 
-  (func $er_ui_icon_fit_rect (export "er_ui_icon_fit_rect") (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $dpr f32) (param $out i32) (result i32)
+  (func $er_ui_icon_fit_rect  (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $dpr f32) (param $out i32) (result i32)
     (local $size f32)
     local.get $out
     i32.eqz
@@ -10736,7 +10744,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_icon_fit_viewport (export "er_ui_icon_fit_viewport") (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $dpr f32) (param $out i32) (result i32)
+  (func $er_ui_icon_fit_viewport  (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $dpr f32) (param $out i32) (result i32)
     local.get $x
     local.get $y
     local.get $w
@@ -10745,7 +10753,7 @@
     local.get $out
     call $er_ui_icon_fit_rect)
 
-  (func $er_ui_icon_segments_write (export "er_ui_icon_segments_write") (param $icon i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_icon_segments_write  (param $icon i32) (param $out i32) (param $cap i32) (result i32)
     (local $count i32)
     local.get $cap
     local.get $icon
@@ -10816,7 +10824,7 @@
     local.get $out local.get $cap local.get $count f32.const 18 f32.const 18 f32.const 6 f32.const 18 call $icon_write_line local.set $count
     local.get $out local.get $cap local.get $count f32.const 6 f32.const 18 f32.const 6 f32.const 6 call $icon_write_line)
 
-  (func $er_ui_icon_segments_write_scaled (export "er_ui_icon_segments_write_scaled") (param $icon i32) (param $out i32) (param $cap i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $dpr f32) (result i32)
+  (func $er_ui_icon_segments_write_scaled  (param $icon i32) (param $out i32) (param $cap i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $dpr f32) (result i32)
     (local $count i32)
     (local $fit_x f32)
     (local $fit_y f32)
@@ -10914,7 +10922,8 @@
     local.get $out local.get $cap local.get $count local.get $fit_x local.get $fit_y local.get $scale local.get $dpr f32.const 18 f32.const 18 f32.const 6 f32.const 18 call $icon_write_line_scaled local.set $count
     local.get $out local.get $cap local.get $count local.get $fit_x local.get $fit_y local.get $scale local.get $dpr f32.const 6 f32.const 18 f32.const 6 f32.const 6 call $icon_write_line_scaled)
 
-  (func $er_ui_rect_contains (export "er_ui_rect_contains") (param $rect i32) (param $x f32) (param $y f32) (result i32)
+  (func $er_ui_rect_contains  (param $rect i32) (param $x f32) (param $y f32) (result i32)
+    local.get $rect i32.eqz if i32.const 0 return end
     local.get $x
     local.get $rect
     f32.load
@@ -11032,7 +11041,7 @@
     global.set $writer_cursor
     global.get $writer_cursor)
 
-  (func $er_ui_writer_cursor (export "er_ui_writer_cursor") (result i32)
+  (func $er_ui_writer_cursor  (result i32)
     global.get $writer_cursor)
 
   (func $writer_store_used_len
@@ -11093,7 +11102,7 @@
     local.get $len
     call $string_ref)
 
-  (func $er_ui_writer_record (export "er_ui_writer_record") (param $index i32) (param $kind i32) (param $id i32) (param $first_ref i32) (param $second_ref i32) (result i32)
+  (func $er_ui_writer_record  (param $index i32) (param $kind i32) (param $id i32) (param $first_ref i32) (param $second_ref i32) (result i32)
     (local $p i32)
     local.get $index
     global.get $writer_node_count
@@ -11144,7 +11153,7 @@
     call $writer_store_used_len
     i32.const 1)
 
-  (func $er_ui_writer_record_child (export "er_ui_writer_record_child") (param $index i32) (param $parent i32) (param $kind i32) (param $id i32) (param $first_ref i32) (param $second_ref i32) (result i32)
+  (func $er_ui_writer_record_child  (param $index i32) (param $parent i32) (param $kind i32) (param $id i32) (param $first_ref i32) (param $second_ref i32) (result i32)
     (local $p i32)
     local.get $index
     global.get $writer_node_count
@@ -11184,7 +11193,7 @@
     call $store16
     i32.const 1)
 
-  (func $er_ui_write_one_string (export "er_ui_write_one_string") (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $src i32) (param $len i32) (result i32)
+  (func $er_ui_write_one_string  (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $src i32) (param $len i32) (result i32)
     (local $ref i32)
     local.get $base
     local.get $cap
@@ -11222,7 +11231,7 @@
     drop
     global.get $writer_cursor)
 
-  (func $er_ui_measure (export "er_ui_measure") (param $base i32) (param $len i32) (param $index i32) (result i64)
+  (func $er_ui_measure  (param $base i32) (param $len i32) (param $index i32) (result i64)
     (local $node_count i32)
     (local $axis i32)
     (local $gap f32)
@@ -11508,31 +11517,444 @@
     i64.extend_i32_u
     i64.or)
 
-  (func $er_ui_measure_packed_width (export "er_ui_measure_packed_width") (param $measure i64) (result f32)
+  (func $er_ui_measure_packed_width  (param $measure i64) (result f32)
     local.get $measure
     i64.const 32
     i64.shr_u
     i32.wrap_i64
     f32.reinterpret_i32)
 
-  (func $er_ui_measure_packed_height (export "er_ui_measure_packed_height") (param $measure i64) (result f32)
+  (func $er_ui_measure_packed_height  (param $measure i64) (result f32)
     local.get $measure
     i32.wrap_i64
     f32.reinterpret_i32)
 
-  (func $er_ui_measure_width (export "er_ui_measure_width") (param $base i32) (param $len i32) (param $index i32) (result f32)
+  (func $er_ui_measure_width  (param $base i32) (param $len i32) (param $index i32) (result f32)
     local.get $base
     local.get $len
     local.get $index
     call $er_ui_measure
     call $er_ui_measure_packed_width)
 
-  (func $er_ui_measure_height (export "er_ui_measure_height") (param $base i32) (param $len i32) (param $index i32) (result f32)
+  (func $er_ui_measure_height  (param $base i32) (param $len i32) (param $index i32) (result f32)
     local.get $base
     local.get $len
     local.get $index
     call $er_ui_measure
     call $er_ui_measure_packed_height)
+  (func $er_ui_layout_set_buf (export "er_ui_layout_set_buf") (param $buf i32)
+    local.get $buf
+    global.set $ui_layout_buf)
+
+  ;; er_ui_layout: walk node tree, compute positions, store in layout buffer.
+  ;; Root positions use preferred_w/preferred_h + axis-based override.
+  ;; Child positions use parent dimensions + depth-based indentation.
+  ;; Buffer entry: [x:f32, y:f32, w:f32, h:f32] — 16 bytes per node; w < 0 = invisible
+  (func $er_ui_layout (export "er_ui_layout") (param $base i32) (param $len i32) (param $vp_w f32) (param $vp_h f32) (result i32)
+    (local $node_count i32) (local $axis i32) (local $gap f32) (local $padding f32)
+    (local $i i32) (local $record i32) (local $kind i32)
+    (local $cw f32) (local $ch f32) (local $cx f32) (local $cy f32)
+    (local $root_cw f32) (local $root_ch f32)
+    (local $ancestor_ref i32) (local $ancestor_index i32)
+    (local $is_descendant i32) (local $desc_depth i32)
+    (local $child_i i32) (local $lb i32) (local $first_len i32) (local $first_ref i32)
+    local.get $base
+    local.get $len
+    call $er_ui_validate_deep
+    i32.eqz
+    if
+      i32.const -1
+      return
+    end
+    local.get $base
+    i32.load
+    i32.const 0x49755245
+    i32.ne
+    if
+      i32.const -1
+      return
+    end
+    local.get $base
+    i32.const 16
+    i32.add
+    call $load16
+    local.set $node_count
+    local.get $node_count
+    i32.eqz
+    if
+      i32.const -1
+      return
+    end
+    local.get $base
+    i32.const 10
+    i32.add
+    call $load16
+    local.set $axis
+    local.get $base
+    i32.const 12
+    i32.add
+    call $load16
+    f32.convert_i32_u
+    local.set $gap
+    local.get $base
+    i32.const 14
+    i32.add
+    call $load16
+    f32.convert_i32_u
+    local.set $padding
+    local.get $padding
+    local.set $cx
+    local.get $padding
+    local.set $cy
+    local.get $vp_w
+    local.get $padding
+    f32.const 2
+    f32.mul
+    f32.sub
+    local.set $root_cw
+    local.get $vp_h
+    local.get $padding
+    f32.const 2
+    f32.mul
+    f32.sub
+    local.set $root_ch
+    loop $loop
+      local.get $i
+      local.get $node_count
+      i32.lt_u
+      if
+        local.get $base
+        i32.const 20
+        i32.add
+        local.get $i
+        i32.const 16
+        i32.mul
+        i32.add
+        local.set $record
+        local.get $record
+        i32.const 2
+        i32.add
+        call $load16
+        local.tee $first_ref
+        i32.eqz
+        i32.eqz
+        if
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br $loop
+        end
+        local.get $record
+        call $load16
+        local.set $kind
+        ;; Resolve first string length for preferred_w
+        local.get $record
+        i32.const 8
+        i32.add
+        call $load16
+        local.get $record
+        i32.const 10
+        i32.add
+        call $load16
+        call $string_ref
+        call $string_len
+        local.set $first_len
+        ;; Compute preferred dimensions from component kind
+        local.get $kind
+        local.get $first_len
+        call $preferred_w
+        local.set $cw
+        local.get $kind
+        call $preferred_h
+        local.set $ch
+        ;; Override based on layout axis
+        local.get $axis
+        i32.const 0
+        i32.eq
+        if
+          local.get $root_cw
+          local.set $cw
+        else
+          local.get $root_ch
+          local.set $ch
+        end
+        local.get $cw
+        local.get $ch
+        call $valid_rect
+        if
+          local.get $i
+          i32.const 4
+          i32.shl
+          global.get $ui_layout_buf
+          i32.add
+          local.set $lb
+          local.get $lb
+          local.get $cx
+          f32.store offset=0
+          local.get $lb
+          local.get $cy
+          f32.store offset=4
+          local.get $lb
+          local.get $cw
+          f32.store offset=8
+          local.get $lb
+          local.get $ch
+          f32.store offset=12
+          local.get $cw
+          local.set $root_cw
+          local.get $ch
+          local.set $root_ch
+        end
+        ;; Children loop
+        i32.const 0
+        local.set $child_i
+        block $children_done
+          loop $children
+            local.get $child_i
+            local.get $node_count
+            i32.ge_u
+            br_if $children_done
+            local.get $base
+            i32.const 20
+            i32.add
+            local.get $child_i
+            i32.const 16
+            i32.mul
+            i32.add
+            local.set $record
+            i32.const 0
+            local.set $is_descendant
+            i32.const 0
+            local.set $desc_depth
+            local.get $record
+            i32.const 2
+            i32.add
+            call $load16
+            local.tee $ancestor_ref
+            i32.eqz
+            i32.eqz
+            if
+              block $ancestor_done
+                loop $ancestor_loop
+                  local.get $ancestor_ref
+                  i32.const 1
+                  i32.sub
+                  local.tee $ancestor_index
+                  local.get $i
+                  i32.eq
+                  if
+                    i32.const 1
+                    local.set $is_descendant
+                    br $ancestor_done
+                  end
+                  local.get $desc_depth
+                  i32.const 1
+                  i32.add
+                  local.set $desc_depth
+                  local.get $base
+                  local.get $ancestor_index
+                  call $record_at
+                  i32.const 2
+                  i32.add
+                  call $load16
+                  local.tee $ancestor_ref
+                  i32.eqz
+                  br_if $ancestor_done
+                  br $ancestor_loop
+                end
+              end
+            end
+            local.get $is_descendant
+            if
+              local.get $record
+              call $load16
+              local.set $kind
+              local.get $root_cw
+              f32.const 24
+              local.get $desc_depth
+              f32.convert_i32_u
+              f32.const 16
+              f32.mul
+              f32.add
+              f32.sub
+              local.set $cw
+              local.get $root_ch
+              f32.const 16
+              local.get $desc_depth
+              f32.convert_i32_u
+              f32.const 8
+              f32.mul
+              f32.add
+              f32.sub
+              local.set $ch
+              local.get $cw
+              local.get $ch
+              call $valid_rect
+              if
+                local.get $child_i
+                i32.const 4
+                i32.shl
+                global.get $ui_layout_buf
+                i32.add
+                local.set $lb
+                local.get $lb
+                local.get $cx
+                f32.const 12
+                f32.add
+                local.get $desc_depth
+                f32.convert_i32_u
+                f32.const 8
+                f32.mul
+                f32.add
+                f32.store offset=0
+                local.get $lb
+                local.get $cy
+                f32.const 8
+                f32.add
+                local.get $desc_depth
+                f32.convert_i32_u
+                f32.const 4
+                f32.mul
+                f32.add
+                f32.store offset=4
+                local.get $lb
+                local.get $cw
+                f32.store offset=8
+                local.get $lb
+                local.get $ch
+                f32.store offset=12
+              end
+            end
+            local.get $child_i
+            i32.const 1
+            i32.add
+            local.set $child_i
+            br $children
+          end
+        end
+        ;; Advance root position
+        local.get $axis
+        i32.const 0
+        i32.eq
+        if
+          local.get $cy
+          local.get $root_ch
+          local.get $gap
+          f32.add
+          f32.add
+          local.set $cy
+        else
+          local.get $cx
+          local.get $root_cw
+          local.get $gap
+          f32.add
+          f32.add
+          local.set $cx
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $loop
+      end
+    end
+    local.get $node_count)
+
+  (func $er_ui_layout_get  (param $index i32) (param $out i32)
+    (local $p i32)
+    local.get $index
+    i32.const 4
+    i32.shl
+    global.get $ui_layout_buf
+    i32.add
+    local.set $p
+    local.get $out
+    local.get $p
+    f32.load offset=0
+    f32.store offset=0
+    local.get $out
+    local.get $p
+    f32.load offset=4
+    f32.store offset=4
+    local.get $out
+    local.get $p
+    f32.load offset=8
+    f32.store offset=8
+    local.get $out
+    local.get $p
+    f32.load offset=12
+    f32.store offset=12)
+
+  (func $er_ui_layout_hit_test (export "er_ui_layout_hit_test") (param $px f32) (param $py f32) (param $node_count i32) (result i32)
+    (local $i i32) (local $p i32) (local $x f32) (local $y f32) (local $w f32) (local $h f32) (local $hit i32)
+    i32.const -1
+    local.set $hit
+    block $done
+      loop $loop
+        local.get $i
+        local.get $node_count
+        i32.ge_u
+        br_if $done
+        local.get $i
+        i32.const 4
+        i32.shl
+        global.get $ui_layout_buf
+        i32.add
+        local.set $p
+        local.get $p
+        f32.load offset=8
+        local.tee $w
+        f32.const 0
+        f32.lt
+        if
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br $loop
+        end
+        local.get $p
+        f32.load offset=0
+        local.set $x
+        local.get $p
+        f32.load offset=4
+        local.set $y
+        local.get $p
+        f32.load offset=12
+        local.set $h
+        local.get $px
+        local.get $x
+        f32.ge
+        local.get $px
+        local.get $x
+        local.get $w
+        f32.add
+        f32.lt
+        i32.and
+        local.get $py
+        local.get $y
+        f32.ge
+        local.get $py
+        local.get $y
+        local.get $h
+        f32.add
+        f32.lt
+        i32.and
+        i32.and
+        if
+          local.get $i
+          local.set $hit
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $loop
+      end
+    end
+    local.get $hit)
+
   (func $er_ui_render (export "er_ui_render") (param $base i32) (param $len i32) (param $out i32) (param $cap i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
     (local $node_count i32)
     (local $axis i32)
@@ -12454,45 +12876,81 @@
             i32.mul
             i32.add
             local.set $record
-            i32.const 0
-            local.set $is_descendant
-            i32.const 0
-            local.set $desc_depth
-            local.get $record
-            i32.const 2
-            i32.add
-            call $load16
-            local.tee $ancestor_ref
-            i32.eqz
-            i32.eqz
+            global.get $ui_layout_buf
             if
-              block $ancestor_done
-                loop $ancestor_loop
-                  local.get $ancestor_ref
-                  i32.const 1
-                  i32.sub
-                  local.tee $ancestor_index
-                  local.get $i
-                  i32.eq
-                  if
+              local.get $child_i
+              i32.const 4
+              i32.shl
+              global.get $ui_layout_buf
+              i32.add
+              local.set $ancestor_ref
+              local.get $ancestor_ref
+              f32.load offset=8
+              local.tee $cw
+              f32.const 0
+              f32.gt
+              if
+                i32.const 1
+                local.set $is_descendant
+                local.get $ancestor_ref
+                f32.load offset=12
+                local.set $ch
+                local.get $root_cw
+                f32.const 24
+                f32.sub
+                local.get $cw
+                f32.sub
+                f32.const 16
+                f32.div
+                f32.const 0.0001
+                f32.add
+                i32.trunc_f32_s
+                local.set $desc_depth
+              else
+                i32.const 0
+                local.set $is_descendant
+              end
+            else
+              i32.const 0
+              local.set $is_descendant
+              i32.const 0
+              local.set $desc_depth
+              local.get $record
+              i32.const 2
+              i32.add
+              call $load16
+              local.tee $ancestor_ref
+              i32.eqz
+              i32.eqz
+              if
+                block $ancestor_done
+                  loop $ancestor_loop
+                    local.get $ancestor_ref
                     i32.const 1
-                    local.set $is_descendant
-                    br $ancestor_done
+                    i32.sub
+                    local.tee $ancestor_index
+                    local.get $i
+                    i32.eq
+                    if
+                      i32.const 1
+                      local.set $is_descendant
+                      br $ancestor_done
+                    end
+                    local.get $desc_depth
+                    i32.const 1
+                    i32.add
+                    local.set $desc_depth
+                    local.get $base
+                    local.get $ancestor_index
+                    call $record_at
+                    i32.const 2
+                    i32.add
+                    call $load16
+                    local.tee $ancestor_ref
+                    i32.eqz
+                    br_if $ancestor_done
+                    br $ancestor_loop
                   end
-                  local.get $desc_depth
-                  i32.const 1
-                  i32.add
-                  local.set $desc_depth
-                  local.get $base
-                  local.get $ancestor_index
-                  call $record_at
-                  i32.const 2
-                  i32.add
-                  call $load16
-                  local.tee $ancestor_ref
-                  i32.eqz
-                  br_if $ancestor_done
-                  br $ancestor_loop
                 end
               end
             end
@@ -12537,38 +12995,42 @@
               local.get $second_ref
               call $string_len
               local.set $second_len
-              local.get $kind
-              call $second_ref_is_packed
-              i32.eqz
-              local.get $second_len
-              i32.eqz
-              i32.eqz
-              i32.and
-              if
-                local.get $base
-                local.get $node_count
-                local.get $second_ref
-                call $string_ptr
-                local.set $second_ptr
-              end
-              local.get $root_cw
-              f32.const 24
-              local.get $desc_depth
-              f32.convert_i32_u
-              f32.const 16
-              f32.mul
-              f32.add
-              f32.sub
-              local.set $cw
-              local.get $root_ch
-              f32.const 16
-              local.get $desc_depth
-              f32.convert_i32_u
-              f32.const 8
-              f32.mul
-              f32.add
-              f32.sub
-              local.set $ch
+                local.get $kind
+                call $second_ref_is_packed
+                i32.eqz
+                local.get $second_len
+                i32.eqz
+                i32.eqz
+                i32.and
+                if
+                  local.get $base
+                  local.get $node_count
+                  local.get $second_ref
+                  call $string_ptr
+                  local.set $second_ptr
+                end
+                global.get $ui_layout_buf
+                i32.eqz
+                if
+                  local.get $root_cw
+                  f32.const 24
+                  local.get $desc_depth
+                  f32.convert_i32_u
+                  f32.const 16
+                  f32.mul
+                  f32.add
+                  f32.sub
+                  local.set $cw
+                  local.get $root_ch
+                  f32.const 16
+                  local.get $desc_depth
+                  f32.convert_i32_u
+                  f32.const 8
+                  f32.mul
+                  f32.add
+                  f32.sub
+                  local.set $ch
+                end
               local.get $cw
               local.get $ch
               call $valid_rect
@@ -13392,7 +13854,7 @@
     end
     local.get $count)
 
-  (func $er_ui_validate (export "er_ui_validate") (param $base i32) (param $len i32) (result i32)
+  (func $er_ui_validate  (param $base i32) (param $len i32) (result i32)
     (local $node_count i32)
     (local $root_count i32)
     (local $axis i32)
@@ -13583,7 +14045,7 @@
     end
     i32.const 1)
 
-  (func $er_ui_node_count (export "er_ui_node_count") (param $base i32) (param $len i32) (result i32)
+  (func $er_ui_node_count  (param $base i32) (param $len i32) (result i32)
     local.get $base
     local.get $len
     call $er_ui_validate
@@ -13596,7 +14058,7 @@
       i32.const 0
     end)
 
-  (func $er_ui_root_count (export "er_ui_root_count") (param $base i32) (param $len i32) (result i32)
+  (func $er_ui_root_count  (param $base i32) (param $len i32) (result i32)
     local.get $base
     local.get $len
     call $er_ui_validate
@@ -13609,7 +14071,7 @@
       i32.const 0
     end)
 
-  (func $er_ui_axis (export "er_ui_axis") (param $base i32) (param $len i32) (result i32)
+  (func $er_ui_axis  (param $base i32) (param $len i32) (result i32)
     local.get $base
     local.get $len
     call $er_ui_validate
@@ -13622,7 +14084,7 @@
       i32.const -1
     end)
 
-  (func $er_ui_gap (export "er_ui_gap") (param $base i32) (param $len i32) (result i32)
+  (func $er_ui_gap  (param $base i32) (param $len i32) (result i32)
     local.get $base
     local.get $len
     call $er_ui_validate
@@ -13635,7 +14097,7 @@
       i32.const 0
     end)
 
-  (func $er_ui_padding (export "er_ui_padding") (param $base i32) (param $len i32) (result i32)
+  (func $er_ui_padding  (param $base i32) (param $len i32) (result i32)
     local.get $base
     local.get $len
     call $er_ui_validate
@@ -13657,7 +14119,7 @@
     i32.mul
     i32.add)
 
-  (func $er_ui_record_kind (export "er_ui_record_kind") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_kind  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     local.get $base
     local.get $len
@@ -13684,7 +14146,7 @@
     call $record_at
     call $load16)
 
-  (func $er_ui_record_parent (export "er_ui_record_parent") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_parent  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $parent_ref i32)
     local.get $base
@@ -13723,7 +14185,7 @@
     i32.const 1
     i32.sub)
 
-  (func $er_ui_record_is_root (export "er_ui_record_is_root") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_is_root  (param $base i32) (param $len i32) (param $index i32) (result i32)
     local.get $base
     local.get $len
     local.get $index
@@ -13731,7 +14193,7 @@
     i32.const -1
     i32.eq)
 
-  (func $er_ui_record_id (export "er_ui_record_id") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_id  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     local.get $base
     local.get $len
@@ -13760,7 +14222,7 @@
     i32.add
     i32.load)
 
-  (func $er_ui_record_state_value (export "er_ui_record_state_value") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_state_value  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $record i32)
     (local $kind i32)
@@ -13801,7 +14263,7 @@
     local.get $id
     call $record_encoded_state)
 
-  (func $er_ui_record_base_id (export "er_ui_record_base_id") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_base_id  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $record i32)
     (local $kind i32)
@@ -13852,7 +14314,7 @@
     call $record_encoded_mul
     i32.div_u)
 
-  (func $er_ui_record_icon_value (export "er_ui_record_icon_value") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_icon_value  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $record i32)
     (local $kind i32)
@@ -13946,7 +14408,7 @@
     i32.const 65535
     i32.and)
 
-  (func $er_ui_record_variant_value (export "er_ui_record_variant_value") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_variant_value  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $record i32)
     (local $kind i32)
@@ -14018,7 +14480,7 @@
     end
     i32.const -1)
 
-  (func $er_ui_record_bool_value (export "er_ui_record_bool_value") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_bool_value  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $record i32)
     (local $kind i32)
@@ -14072,7 +14534,7 @@
     i32.const 0
     i32.ne)
 
-  (func $er_ui_record_unit_value (export "er_ui_record_unit_value") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_unit_value  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $record i32)
     (local $kind i32)
@@ -14128,7 +14590,7 @@
     i32.add
     call $load16)
 
-  (func $er_ui_record_aspect_ratio_w (export "er_ui_record_aspect_ratio_w") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_aspect_ratio_w  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $id i32)
     local.get $base
     local.get $len
@@ -14151,7 +14613,7 @@
     i32.const 65535
     i32.and)
 
-  (func $er_ui_record_aspect_ratio_h (export "er_ui_record_aspect_ratio_h") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_aspect_ratio_h  (param $base i32) (param $len i32) (param $index i32) (result i32)
     local.get $base
     local.get $len
     local.get $index
@@ -14169,7 +14631,7 @@
     i32.const 65535
     i32.and)
 
-  (func $er_ui_record_first_ref (export "er_ui_record_first_ref") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_first_ref  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $r i32)
     local.get $base
@@ -14206,7 +14668,7 @@
     call $load16
     call $string_ref)
 
-  (func $er_ui_record_second_ref (export "er_ui_record_second_ref") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_second_ref  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $n i32)
     (local $r i32)
     local.get $base
@@ -14243,16 +14705,16 @@
     call $load16
     call $string_ref)
 
-  (func $er_ui_ref_offset (export "er_ui_ref_offset") (param $ref i32) (result i32)
+  (func $er_ui_ref_offset  (param $ref i32) (result i32)
     local.get $ref
     i32.const 65535
     i32.and)
 
-  (func $er_ui_ref_len (export "er_ui_ref_len") (param $ref i32) (result i32)
+  (func $er_ui_ref_len  (param $ref i32) (result i32)
     local.get $ref
     call $string_len)
 
-  (func $er_ui_string_ptr (export "er_ui_string_ptr") (param $base i32) (param $len i32) (param $ref i32) (result i32)
+  (func $er_ui_string_ptr  (param $base i32) (param $len i32) (param $ref i32) (result i32)
     (local $n i32)
     local.get $base
     local.get $len
@@ -14272,7 +14734,7 @@
     local.get $ref
     call $string_ptr)
 
-  (func $er_ui_string_ptr_checked (export "er_ui_string_ptr_checked") (param $base i32) (param $len i32) (param $ref i32) (result i32)
+  (func $er_ui_string_ptr_checked  (param $base i32) (param $len i32) (param $ref i32) (result i32)
     local.get $base
     local.get $len
     local.get $ref
@@ -14287,7 +14749,7 @@
     local.get $ref
     call $er_ui_string_ptr)
 
-  (func $er_ui_string_len_checked (export "er_ui_string_len_checked") (param $base i32) (param $len i32) (param $ref i32) (result i32)
+  (func $er_ui_string_len_checked  (param $base i32) (param $len i32) (param $ref i32) (result i32)
     local.get $base
     local.get $len
     local.get $ref
@@ -14300,7 +14762,7 @@
     local.get $ref
     call $string_len)
 
-  (func $er_ui_record_ref_valid (export "er_ui_record_ref_valid") (param $base i32) (param $len i32) (param $ref i32) (result i32)
+  (func $er_ui_record_ref_valid  (param $base i32) (param $len i32) (param $ref i32) (result i32)
     (local $n i32)
     (local $strings_len i32)
     local.get $base
@@ -14340,7 +14802,7 @@
     i32.le_u
     i32.and)
 
-  (func $er_ui_record_refs_valid (export "er_ui_record_refs_valid") (param $base i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_record_refs_valid  (param $base i32) (param $len i32) (param $index i32) (result i32)
     (local $first i32)
     (local $second i32)
     (local $kind i32)
@@ -14383,7 +14845,7 @@
     end
     i32.and)
 
-  (func $er_ui_validate_deep (export "er_ui_validate_deep") (param $base i32) (param $len i32) (result i32)
+  (func $er_ui_validate_deep  (param $base i32) (param $len i32) (result i32)
     (local $n i32)
     (local $i i32)
     (local $kind i32)
@@ -14434,7 +14896,7 @@
       end
     end
     i32.const 1)
-  (func $er_ui_record_set_id (export "er_ui_record_set_id") (param $base i32) (param $len i32) (param $index i32) (param $id i32) (result i32)
+  (func $er_ui_record_set_id  (param $base i32) (param $len i32) (param $index i32) (param $id i32) (result i32)
     (local $n i32)
     local.get $base
     local.get $len
@@ -14465,7 +14927,7 @@
     i32.store
     i32.const 1)
 
-  (func $er_ui_record_set_parent (export "er_ui_record_set_parent") (param $base i32) (param $len i32) (param $index i32) (param $parent i32) (result i32)
+  (func $er_ui_record_set_parent  (param $base i32) (param $len i32) (param $index i32) (param $parent i32) (result i32)
     (local $n i32)
     local.get $base
     local.get $len
@@ -14523,7 +14985,7 @@
     call $store16
     i32.const 1)
 
-  (func $er_ui_record_set_first_ref (export "er_ui_record_set_first_ref") (param $base i32) (param $len i32) (param $index i32) (param $ref i32) (result i32)
+  (func $er_ui_record_set_first_ref  (param $base i32) (param $len i32) (param $index i32) (param $ref i32) (result i32)
     (local $n i32)
     (local $r i32)
     local.get $base
@@ -14566,7 +15028,7 @@
     call $store16
     i32.const 1)
 
-  (func $er_ui_record_set_second_ref (export "er_ui_record_set_second_ref") (param $base i32) (param $len i32) (param $index i32) (param $ref i32) (result i32)
+  (func $er_ui_record_set_second_ref  (param $base i32) (param $len i32) (param $index i32) (param $ref i32) (result i32)
     (local $n i32)
     (local $r i32)
     local.get $base
@@ -14609,7 +15071,7 @@
     call $store16
     i32.const 1)
 
-  (func $er_ui_write_empty (export "er_ui_write_empty") (param $base i32) (param $cap i32) (param $kind i32) (result i32)
+  (func $er_ui_write_empty  (param $base i32) (param $cap i32) (param $kind i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 1
@@ -14632,7 +15094,7 @@
     drop
     global.get $writer_cursor)
 
-  (func $er_ui_write_ref (export "er_ui_write_ref") (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $ref i32) (result i32)
+  (func $er_ui_write_ref  (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $ref i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 1
@@ -14655,7 +15117,7 @@
     drop
     global.get $writer_cursor)
 
-  (func $er_ui_write_two_strings (export "er_ui_write_two_strings") (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (result i32)
+  (func $er_ui_write_two_strings  (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (result i32)
     (local $a_ref i32)
     (local $b_ref i32)
     local.get $base
@@ -14707,7 +15169,7 @@
     call $er_ui_writer_record
     drop
     global.get $writer_cursor)
-  (func $er_ui_patch_encode_bool (export "er_ui_patch_encode_bool") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value i32) (result i32)
+  (func $er_ui_patch_encode_bool  (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value i32) (result i32)
     local.get $cap
     i32.const 3
     i32.lt_u
@@ -14732,7 +15194,7 @@
     i32.store8
     i32.const 3)
 
-  (func $er_ui_patch_encode_u16 (export "er_ui_patch_encode_u16") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value i32) (result i32)
+  (func $er_ui_patch_encode_u16  (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value i32) (result i32)
     local.get $cap
     i32.const 4
     i32.lt_u
@@ -14755,7 +15217,7 @@
     call $store16
     i32.const 4)
 
-  (func $er_ui_patch_encode_f32 (export "er_ui_patch_encode_f32") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value f32) (result i32)
+  (func $er_ui_patch_encode_f32  (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value f32) (result i32)
     local.get $cap
     i32.const 6
     i32.lt_u
@@ -14778,7 +15240,7 @@
     f32.store
     i32.const 6)
 
-  (func $er_ui_patch_encode_string (export "er_ui_patch_encode_string") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $src i32) (param $src_len i32) (result i32)
+  (func $er_ui_patch_encode_string  (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $src i32) (param $src_len i32) (result i32)
     local.get $src_len
     i32.const 255
     i32.gt_u
@@ -14818,7 +15280,7 @@
     i32.const 3
     i32.add)
 
-  (func $er_ui_patch_encode_two_strings (export "er_ui_patch_encode_two_strings") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (result i32)
+  (func $er_ui_patch_encode_two_strings  (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (result i32)
     local.get $a_len
     i32.const 255
     i32.gt_u
@@ -14881,7 +15343,7 @@
     i32.const 4
     i32.add)
 
-  (func $er_ui_patch_encode_two_strings_bool (export "er_ui_patch_encode_two_strings_bool") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (param $flag i32) (result i32)
+  (func $er_ui_patch_encode_two_strings_bool  (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (param $flag i32) (result i32)
     (local $n i32)
     local.get $cap
     local.get $a_len
@@ -14929,7 +15391,7 @@
     i32.const 1
     i32.add)
 
-  (func $er_ui_patch_encode_color (export "er_ui_patch_encode_color") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $rgba i32) (result i32)
+  (func $er_ui_patch_encode_color  (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $rgba i32) (result i32)
     local.get $cap
     i32.const 6
     i32.lt_u
@@ -14952,7 +15414,7 @@
     call $store32
     i32.const 6)
 
-  (func $er_ui_patch_kind (export "er_ui_patch_kind") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_kind  (param $patch i32) (param $len i32) (result i32)
     local.get $len
     i32.const 2
     i32.lt_u
@@ -14963,7 +15425,7 @@
     local.get $patch
     i32.load8_u)
 
-  (func $er_ui_patch_component_id (export "er_ui_patch_component_id") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_component_id  (param $patch i32) (param $len i32) (result i32)
     local.get $len
     i32.const 2
     i32.lt_u
@@ -15024,7 +15486,7 @@
     i32.eq
     i32.and)
 
-  (func $er_ui_patch_apply_one_string (export "er_ui_patch_apply_one_string") (param $base i32) (param $cap i32) (param $current_end i32) (param $index i32) (param $src i32) (param $src_len i32) (result i32)
+  (func $er_ui_patch_apply_one_string  (param $base i32) (param $cap i32) (param $current_end i32) (param $index i32) (param $src i32) (param $src_len i32) (result i32)
     (local $n i32)
     (local $offset i32)
     (local $r i32)
@@ -15122,7 +15584,7 @@
     local.get $src_len
     i32.add)
 
-  (func $er_ui_patch_apply_second_bool (export "er_ui_patch_apply_second_bool") (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
+  (func $er_ui_patch_apply_second_bool  (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
     local.get $patch
     local.get $patch_len
     call $er_ui_patch_bool_value
@@ -15141,7 +15603,7 @@
     call $string_ref
     call $er_ui_record_set_second_ref)
 
-  (func $er_ui_patch_apply_second_bool_checked (export "er_ui_patch_apply_second_bool_checked") (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
+  (func $er_ui_patch_apply_second_bool_checked  (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
     (local $kind i32)
     local.get $base
     local.get $len
@@ -15190,7 +15652,7 @@
     local.get $len
     call $er_ui_validate_deep)
 
-  (func $er_ui_patch_apply_second_u16 (export "er_ui_patch_apply_second_u16") (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
+  (func $er_ui_patch_apply_second_u16  (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
     local.get $patch
     local.get $patch_len
     call $er_ui_patch_u16_value
@@ -15209,7 +15671,7 @@
     call $string_ref
     call $er_ui_record_set_second_ref)
 
-  (func $er_ui_patch_apply_id_u16 (export "er_ui_patch_apply_id_u16") (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
+  (func $er_ui_patch_apply_id_u16  (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
     local.get $patch
     local.get $patch_len
     call $er_ui_patch_u16_value
@@ -15226,7 +15688,7 @@
     local.get $patch_len
     call $er_ui_record_set_id)
 
-  (func $er_ui_patch_apply_color_to_id (export "er_ui_patch_apply_color_to_id") (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
+  (func $er_ui_patch_apply_color_to_id  (param $base i32) (param $len i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
     local.get $patch_len
     i32.const 6
     i32.lt_u
@@ -15243,21 +15705,21 @@
     i32.load
     call $er_ui_record_set_id)
 
-  (func $er_ui_patch_apply_id (export "er_ui_patch_apply_id") (param $base i32) (param $len i32) (param $index i32) (param $id i32) (result i32)
+  (func $er_ui_patch_apply_id  (param $base i32) (param $len i32) (param $index i32) (param $id i32) (result i32)
     local.get $base
     local.get $len
     local.get $index
     local.get $id
     call $er_ui_record_set_id)
 
-  (func $er_ui_patch_apply_second_ref (export "er_ui_patch_apply_second_ref") (param $base i32) (param $len i32) (param $index i32) (param $ref i32) (result i32)
+  (func $er_ui_patch_apply_second_ref  (param $base i32) (param $len i32) (param $index i32) (param $ref i32) (result i32)
     local.get $base
     local.get $len
     local.get $index
     local.get $ref
     call $er_ui_record_set_second_ref)
 
-  (func $er_ui_patch_apply_bool_ref (export "er_ui_patch_apply_bool_ref") (param $base i32) (param $len i32) (param $index i32) (param $value i32) (result i32)
+  (func $er_ui_patch_apply_bool_ref  (param $base i32) (param $len i32) (param $index i32) (param $value i32) (result i32)
     local.get $base
     local.get $len
     local.get $index
@@ -15268,7 +15730,7 @@
     call $string_ref
     call $er_ui_record_set_second_ref)
 
-  (func $er_ui_patch_apply_u16_ref (export "er_ui_patch_apply_u16_ref") (param $base i32) (param $len i32) (param $index i32) (param $value i32) (result i32)
+  (func $er_ui_patch_apply_u16_ref  (param $base i32) (param $len i32) (param $index i32) (param $value i32) (result i32)
     local.get $base
     local.get $len
     local.get $index
@@ -15277,7 +15739,7 @@
     call $string_ref
     call $er_ui_record_set_second_ref)
 
-  (func $er_ui_patch_apply_two_strings (export "er_ui_patch_apply_two_strings") (param $base i32) (param $cap i32) (param $current_end i32) (param $index i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (result i32)
+  (func $er_ui_patch_apply_two_strings  (param $base i32) (param $cap i32) (param $current_end i32) (param $index i32) (param $a_ptr i32) (param $a_len i32) (param $b_ptr i32) (param $b_len i32) (result i32)
     (local $n i32)
     (local $a_offset i32)
     (local $b_offset i32)
@@ -15406,7 +15868,7 @@
     local.get $b_len
     i32.add)
 
-  (func $er_ui_patch_apply_two_strings_checked (export "er_ui_patch_apply_two_strings_checked") (param $base i32) (param $cap i32) (param $current_end i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
+  (func $er_ui_patch_apply_two_strings_checked  (param $base i32) (param $cap i32) (param $current_end i32) (param $index i32) (param $patch i32) (param $patch_len i32) (result i32)
     (local $doc_len i32)
     (local $kind i32)
     (local $next_end i32)
@@ -15489,7 +15951,7 @@
     else
       i32.const 0
     end)
-  (func $er_ui_ble_encode_frame (export "er_ui_ble_encode_frame") (param $out i32) (param $cap i32) (param $stream_id i32) (param $sequence i32) (param $kind i32) (param $body i32) (param $body_len i32) (result i32)
+  (func $er_ui_ble_encode_frame  (param $out i32) (param $cap i32) (param $stream_id i32) (param $sequence i32) (param $kind i32) (param $body i32) (param $body_len i32) (result i32)
     local.get $body_len
     i32.const 19
     i32.gt_u
@@ -15544,7 +16006,7 @@
     i32.const 8
     i32.add)
 
-  (func $er_ui_ble_decode_frame (export "er_ui_ble_decode_frame") (param $frame i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_ble_decode_frame  (param $frame i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
     local.get $len
     i32.const 8
     i32.lt_u
@@ -15627,7 +16089,7 @@
     call $store32
     i32.const 12)
 
-  (func $er_ui_ble_encode_route (export "er_ui_ble_encode_route") (param $out i32) (param $cap i32) (param $route_id i32) (param $flags i32) (param $name i32) (param $name_len i32) (result i32)
+  (func $er_ui_ble_encode_route  (param $out i32) (param $cap i32) (param $route_id i32) (param $flags i32) (param $name i32) (param $name_len i32) (result i32)
     local.get $name_len
     i32.const 255
     i32.gt_u
@@ -15664,7 +16126,7 @@
     i32.const 3
     i32.add)
 
-  (func $er_ui_ble_encode_manufacturer_ad (export "er_ui_ble_encode_manufacturer_ad") (param $out i32) (param $cap i32) (param $frame i32) (param $frame_len i32) (result i32)
+  (func $er_ui_ble_encode_manufacturer_ad  (param $out i32) (param $cap i32) (param $frame i32) (param $frame_len i32) (result i32)
     local.get $frame_len
     i32.const 8
     i32.lt_u
@@ -15735,7 +16197,7 @@
     local.get $frame_len
     i32.const 4
     i32.add)
-  (func $er_ui_patch_bool_value (export "er_ui_patch_bool_value") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_bool_value  (param $patch i32) (param $len i32) (result i32)
     local.get $len
     i32.const 3
     i32.lt_u
@@ -15750,7 +16212,7 @@
     i32.const 0
     i32.ne)
 
-  (func $er_ui_patch_u16_value (export "er_ui_patch_u16_value") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_u16_value  (param $patch i32) (param $len i32) (result i32)
     local.get $len
     i32.const 4
     i32.lt_u
@@ -15763,7 +16225,7 @@
     i32.add
     call $load16)
 
-  (func $er_ui_patch_f32_value (export "er_ui_patch_f32_value") (param $patch i32) (param $len i32) (result f32)
+  (func $er_ui_patch_f32_value  (param $patch i32) (param $len i32) (result f32)
     local.get $len
     i32.const 6
     i32.lt_u
@@ -15776,7 +16238,7 @@
     i32.add
     f32.load)
 
-  (func $er_ui_patch_string_ptr (export "er_ui_patch_string_ptr") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_string_ptr  (param $patch i32) (param $len i32) (result i32)
     local.get $len
     i32.const 3
     i32.lt_u
@@ -15788,7 +16250,7 @@
     i32.const 3
     i32.add)
 
-  (func $er_ui_patch_string_len (export "er_ui_patch_string_len") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_string_len  (param $patch i32) (param $len i32) (result i32)
     (local $n i32)
     local.get $len
     i32.const 3
@@ -15812,7 +16274,7 @@
     end
     local.get $n)
 
-  (func $er_ui_patch_second_string_ptr (export "er_ui_patch_second_string_ptr") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_second_string_ptr  (param $patch i32) (param $len i32) (result i32)
     (local $a i32)
     local.get $len
     i32.const 4
@@ -15841,7 +16303,7 @@
     local.get $a
     i32.add)
 
-  (func $er_ui_patch_second_string_len (export "er_ui_patch_second_string_len") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_second_string_len  (param $patch i32) (param $len i32) (result i32)
     (local $a i32)
     (local $b i32)
     local.get $len
@@ -15884,7 +16346,7 @@
     end
     local.get $b)
 
-  (func $er_ui_patch_color_value (export "er_ui_patch_color_value") (param $patch i32) (param $len i32) (result i32)
+  (func $er_ui_patch_color_value  (param $patch i32) (param $len i32) (result i32)
     local.get $len
     i32.const 6
     i32.lt_u
@@ -15896,7 +16358,7 @@
     i32.const 2
     i32.add
     i32.load)
-  (func $er_ui_ble_decode_route (export "er_ui_ble_decode_route") (param $route i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_ble_decode_route  (param $route i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
     (local $name_len i32)
     local.get $len
     i32.const 3
@@ -15949,7 +16411,7 @@
     call $store32
     i32.const 12)
 
-  (func $er_ui_ble_decode_manufacturer_ad (export "er_ui_ble_decode_manufacturer_ad") (param $scan i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_ble_decode_manufacturer_ad  (param $scan i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
     (local $index i32)
     (local $ad_len i32)
     (local $ad i32)
@@ -16020,7 +16482,7 @@
       end
     end
     i32.const 0)
-  (func $er_ui_command_hit_test (export "er_ui_command_hit_test") (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
+  (func $er_ui_command_hit_test  (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
     (local $i i32)
     (local $p i32)
     (local $hit i32)
@@ -16099,7 +16561,7 @@
     end
     local.get $hit)
 
-  (func $er_ui_command_hit_id (export "er_ui_command_hit_id") (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
+  (func $er_ui_command_hit_id  (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
     (local $index i32)
     local.get $commands
     local.get $count
@@ -16118,77 +16580,77 @@
     local.get $index
     call $er_ui_command_owner_id_at)
 
-  (func $er_ui_command_tag (export "er_ui_command_tag") (param $command i32) (result i32)
+  (func $er_ui_command_tag  (param $command i32) (result i32)
     local.get $command
     i32.load)
 
-  (func $er_ui_command_color (export "er_ui_command_color") (param $command i32) (result i32)
+  (func $er_ui_command_color  (param $command i32) (result i32)
     local.get $command
     i32.const 4
     i32.add
     i32.load)
 
-  (func $er_ui_command_x (export "er_ui_command_x") (param $command i32) (result f32)
+  (func $er_ui_command_x  (param $command i32) (result f32)
     local.get $command
     i32.const 8
     i32.add
     f32.load)
 
-  (func $er_ui_command_y (export "er_ui_command_y") (param $command i32) (result f32)
+  (func $er_ui_command_y  (param $command i32) (result f32)
     local.get $command
     i32.const 12
     i32.add
     f32.load)
 
-  (func $er_ui_command_w (export "er_ui_command_w") (param $command i32) (result f32)
+  (func $er_ui_command_w  (param $command i32) (result f32)
     local.get $command
     i32.const 16
     i32.add
     f32.load)
 
-  (func $er_ui_command_h (export "er_ui_command_h") (param $command i32) (result f32)
+  (func $er_ui_command_h  (param $command i32) (result f32)
     local.get $command
     i32.const 20
     i32.add
     f32.load)
 
-  (func $er_ui_command_text_ptr (export "er_ui_command_text_ptr") (param $command i32) (result i32)
+  (func $er_ui_command_text_ptr  (param $command i32) (result i32)
     local.get $command
     i32.const 24
     i32.add
     i32.load)
 
-  (func $er_ui_command_text_len (export "er_ui_command_text_len") (param $command i32) (result i32)
+  (func $er_ui_command_text_len  (param $command i32) (result i32)
     local.get $command
     i32.const 28
     i32.add
     i32.load)
 
-  (func $er_ui_command_owner_id (export "er_ui_command_owner_id") (param $command i32) (result i32)
+  (func $er_ui_command_owner_id  (param $command i32) (result i32)
     local.get $command
     i32.const 32
     i32.add
     i32.load)
 
-  (func $er_ui_command_owner_kind (export "er_ui_command_owner_kind") (param $command i32) (result i32)
+  (func $er_ui_command_owner_kind  (param $command i32) (result i32)
     local.get $command
     i32.const 36
     i32.add
     i32.load)
 
-  (func $er_ui_command_role (export "er_ui_command_role") (param $command i32) (result i32)
+  (func $er_ui_command_role  (param $command i32) (result i32)
     local.get $command
     i32.const 40
     i32.add
     i32.load)
 
-  (func $er_ui_command_meta (export "er_ui_command_meta") (param $command i32) (result i32)
+  (func $er_ui_command_meta  (param $command i32) (result i32)
     local.get $command
     i32.const 44
     i32.add
     i32.load)
 
-  (func $er_ui_command_set_owner (export "er_ui_command_set_owner") (param $command i32) (param $id i32) (param $kind i32) (param $role i32) (result i32)
+  (func $er_ui_command_set_owner  (param $command i32) (param $id i32) (param $kind i32) (param $role i32) (result i32)
     local.get $command
     i32.const 32
     i32.add
@@ -16206,7 +16668,7 @@
     call $store32
     i32.const 1)
 
-  (func $er_ui_command_set_meta (export "er_ui_command_set_meta") (param $command i32) (param $meta i32) (result i32)
+  (func $er_ui_command_set_meta  (param $command i32) (param $meta i32) (result i32)
     local.get $command
     i32.const 44
     i32.add
@@ -16214,7 +16676,7 @@
     call $store32
     i32.const 1)
 
-  (func $er_ui_command_ptr (export "er_ui_command_ptr") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_ptr  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $index
     local.get $count
     i32.ge_u
@@ -16228,12 +16690,12 @@
     i32.mul
     i32.add)
 
-  (func $er_ui_command_valid_at (export "er_ui_command_valid_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_valid_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $index
     local.get $count
     i32.lt_u)
 
-  (func $er_ui_command_copy (export "er_ui_command_copy") (param $commands i32) (param $count i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_command_copy  (param $commands i32) (param $count i32) (param $index i32) (param $out i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16251,7 +16713,7 @@
     call $copy
     i32.const 1)
 
-  (func $er_ui_command_tag_at (export "er_ui_command_tag_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_tag_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16266,7 +16728,7 @@
     local.get $commands
     call $er_ui_command_tag)
 
-  (func $er_ui_command_color_at (export "er_ui_command_color_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_color_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16281,7 +16743,7 @@
     local.get $commands
     call $er_ui_command_color)
 
-  (func $er_ui_command_x_at (export "er_ui_command_x_at") (param $commands i32) (param $count i32) (param $index i32) (result f32)
+  (func $er_ui_command_x_at  (param $commands i32) (param $count i32) (param $index i32) (result f32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16296,7 +16758,7 @@
     local.get $commands
     call $er_ui_command_x)
 
-  (func $er_ui_command_y_at (export "er_ui_command_y_at") (param $commands i32) (param $count i32) (param $index i32) (result f32)
+  (func $er_ui_command_y_at  (param $commands i32) (param $count i32) (param $index i32) (result f32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16311,7 +16773,7 @@
     local.get $commands
     call $er_ui_command_y)
 
-  (func $er_ui_command_w_at (export "er_ui_command_w_at") (param $commands i32) (param $count i32) (param $index i32) (result f32)
+  (func $er_ui_command_w_at  (param $commands i32) (param $count i32) (param $index i32) (result f32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16326,7 +16788,7 @@
     local.get $commands
     call $er_ui_command_w)
 
-  (func $er_ui_command_h_at (export "er_ui_command_h_at") (param $commands i32) (param $count i32) (param $index i32) (result f32)
+  (func $er_ui_command_h_at  (param $commands i32) (param $count i32) (param $index i32) (result f32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16341,7 +16803,7 @@
     local.get $commands
     call $er_ui_command_h)
 
-  (func $er_ui_command_text_ptr_at (export "er_ui_command_text_ptr_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_text_ptr_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16356,7 +16818,7 @@
     local.get $commands
     call $er_ui_command_text_ptr)
 
-  (func $er_ui_command_text_len_at (export "er_ui_command_text_len_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_text_len_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16371,7 +16833,7 @@
     local.get $commands
     call $er_ui_command_text_len)
 
-  (func $er_ui_command_owner_id_at (export "er_ui_command_owner_id_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_owner_id_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16386,7 +16848,7 @@
     local.get $commands
     call $er_ui_command_owner_id)
 
-  (func $er_ui_command_owner_kind_at (export "er_ui_command_owner_kind_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_owner_kind_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16401,7 +16863,7 @@
     local.get $commands
     call $er_ui_command_owner_kind)
 
-  (func $er_ui_command_role_at (export "er_ui_command_role_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_role_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16416,7 +16878,7 @@
     local.get $commands
     call $er_ui_command_role)
 
-  (func $er_ui_command_meta_at (export "er_ui_command_meta_at") (param $commands i32) (param $count i32) (param $index i32) (result i32)
+  (func $er_ui_command_meta_at  (param $commands i32) (param $count i32) (param $index i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16431,7 +16893,7 @@
     local.get $commands
     call $er_ui_command_meta)
 
-  (func $er_ui_command_set_owner_at (export "er_ui_command_set_owner_at") (param $commands i32) (param $count i32) (param $index i32) (param $id i32) (param $kind i32) (param $role i32) (result i32)
+  (func $er_ui_command_set_owner_at  (param $commands i32) (param $count i32) (param $index i32) (param $id i32) (param $kind i32) (param $role i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16460,7 +16922,7 @@
     call $store32
     i32.const 1)
 
-  (func $er_ui_command_set_meta_at (export "er_ui_command_set_meta_at") (param $commands i32) (param $count i32) (param $index i32) (param $meta i32) (result i32)
+  (func $er_ui_command_set_meta_at  (param $commands i32) (param $count i32) (param $index i32) (param $meta i32) (result i32)
     local.get $commands
     local.get $count
     local.get $index
@@ -16479,7 +16941,7 @@
     call $store32
     i32.const 1)
 
-  (func $er_ui_command_write_rect (export "er_ui_command_write_rect") (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $color i32) (result i32)
+  (func $er_ui_command_write_rect  (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $color i32) (result i32)
     local.get $w
     local.get $h
     call $valid_rect
@@ -16498,7 +16960,7 @@
     local.get $color
     call $emit_rect)
 
-  (func $er_ui_command_write_text (export "er_ui_command_write_text") (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $text_ptr i32) (param $text_len i32) (param $color i32) (result i32)
+  (func $er_ui_command_write_text  (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $text_ptr i32) (param $text_len i32) (param $color i32) (result i32)
     (local $p i32)
     local.get $count
     i32.const 48
@@ -16570,7 +17032,7 @@
     i32.const 1
     i32.add)
 
-  (func $er_ui_command_write_icon (export "er_ui_command_write_icon") (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $icon i32) (param $color i32) (result i32)
+  (func $er_ui_command_write_icon  (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $icon i32) (param $color i32) (result i32)
     (local $p i32)
     local.get $icon
     call $er_ui_icon_valid
@@ -16656,7 +17118,7 @@
     i32.const 1
     i32.add)
 
-  (func $er_ui_command_write_icon_fit (export "er_ui_command_write_icon_fit") (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $icon i32) (param $color i32) (param $dpr f32) (result i32)
+  (func $er_ui_command_write_icon_fit  (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $icon i32) (param $color i32) (param $dpr f32) (result i32)
     (local $fit_x f32)
     (local $fit_y f32)
     (local $size f32)
@@ -16705,7 +17167,7 @@
     local.get $color
     call $er_ui_command_write_icon)
 
-  (func $er_ui_command_hit_find (export "er_ui_command_hit_find") (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (param $out_command i32) (param $out_index i32) (result i32)
+  (func $er_ui_command_hit_find  (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (param $out_command i32) (param $out_index i32) (result i32)
     (local $i i32)
     (local $p i32)
     (local $rx f32)
@@ -16800,11 +17262,12 @@
     end
     i32.const 0)
 
-  (func $er_ui_rect_intersect (export "er_ui_rect_intersect") (param $a i32) (param $b i32) (param $out i32) (result i32)
+  (func $er_ui_rect_intersect  (param $a i32) (param $b i32) (param $out i32) (result i32)
     (local $x0 f32)
     (local $y0 f32)
     (local $x1 f32)
     (local $y1 f32)
+    local.get $a i32.eqz local.get $b i32.eqz i32.or local.get $out i32.eqz i32.or if i32.const 0 return end
     local.get $a
     f32.load
     local.get $b
@@ -16947,7 +17410,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_text (export "er_ui_wasm_new_text") (param $base i32) (param $cap i32) (param $value_ptr i32) (param $value_len i32) (result i32)
+  (func $er_ui_wasm_new_text  (param $base i32) (param $cap i32) (param $value_ptr i32) (param $value_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 1
@@ -16957,7 +17420,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_button (export "er_ui_wasm_new_button") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $variant i32) (param $leading_icon i32) (param $trailing_icon i32) (result i32)
+  (func $er_ui_wasm_new_button  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $variant i32) (param $leading_icon i32) (param $trailing_icon i32) (result i32)
     (local $tag i32)
     (local $len i32)
     local.get $leading_icon
@@ -16988,7 +17451,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_row_item (export "er_ui_wasm_new_row_item") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $icon i32) (result i32)
+  (func $er_ui_wasm_new_row_item  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $icon i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 26
@@ -17023,7 +17486,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_checkbox (export "er_ui_wasm_new_checkbox") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $checked i32) (result i32)
+  (func $er_ui_wasm_new_checkbox  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $checked i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 22
@@ -17037,7 +17500,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_input (export "er_ui_wasm_new_input") (param $base i32) (param $cap i32) (param $id i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $leading_icon i32) (result i32)
+  (func $er_ui_wasm_new_input  (param $base i32) (param $cap i32) (param $id i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $leading_icon i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 16
@@ -17049,7 +17512,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_slider (export "er_ui_wasm_new_slider") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $unit16 i32) (result i32)
+  (func $er_ui_wasm_new_slider  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $unit16 i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 24
@@ -17072,13 +17535,13 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_separator (export "er_ui_wasm_new_separator") (param $base i32) (param $cap i32) (result i32)
+  (func $er_ui_wasm_new_separator  (param $base i32) (param $cap i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 33
     call $er_ui_write_empty)
 
-  (func $er_ui_wasm_new_icon (export "er_ui_wasm_new_icon") (param $base i32) (param $cap i32) (param $label_ptr i32) (param $label_len i32) (param $icon_value i32) (result i32)
+  (func $er_ui_wasm_new_icon  (param $base i32) (param $cap i32) (param $label_ptr i32) (param $label_len i32) (param $icon_value i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 55
@@ -17090,7 +17553,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_switch (export "er_ui_wasm_new_switch") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $checked i32) (result i32)
+  (func $er_ui_wasm_new_switch  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $checked i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 23
@@ -17104,7 +17567,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_toggle (export "er_ui_wasm_new_toggle") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $checked i32) (result i32)
+  (func $er_ui_wasm_new_toggle  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $checked i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 56
@@ -17118,7 +17581,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_progress (export "er_ui_wasm_new_progress") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $unit16 i32) (result i32)
+  (func $er_ui_wasm_new_progress  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $unit16 i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 37
@@ -17130,7 +17593,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_icon_button (export "er_ui_wasm_new_icon_button") (param $base i32) (param $cap i32) (param $id i32) (param $icon i32) (param $variant i32) (result i32)
+  (func $er_ui_wasm_new_icon_button  (param $base i32) (param $cap i32) (param $id i32) (param $icon i32) (param $variant i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 1
@@ -17155,7 +17618,7 @@
     drop
     global.get $writer_cursor)
 
-  (func $er_ui_wasm_new_icon_button_named (export "er_ui_wasm_new_icon_button_named") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $icon i32) (param $variant i32) (result i32)
+  (func $er_ui_wasm_new_icon_button_named  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $icon i32) (param $variant i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 13
@@ -17167,7 +17630,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_label (export "er_ui_wasm_new_label") (param $base i32) (param $cap i32) (param $text_ptr i32) (param $text_len i32) (result i32)
+  (func $er_ui_wasm_new_label  (param $base i32) (param $cap i32) (param $text_ptr i32) (param $text_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 31
@@ -17177,7 +17640,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_accordion (export "er_ui_wasm_new_accordion") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $open i32) (result i32)
+  (func $er_ui_wasm_new_accordion  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $open i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 3
@@ -17190,7 +17653,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_accordion_full (export "er_ui_wasm_new_accordion_full") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $open i32) (result i32)
+  (func $er_ui_wasm_new_accordion_full  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $open i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 3
@@ -17207,7 +17670,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_button_group (export "er_ui_wasm_new_button_group") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_button_group  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 14
@@ -17220,7 +17683,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_button_group_full (export "er_ui_wasm_new_button_group_full") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_button_group_full  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 14
@@ -17237,7 +17700,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_toggle_group (export "er_ui_wasm_new_toggle_group") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_toggle_group  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 15
@@ -17250,7 +17713,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_toggle_group_full (export "er_ui_wasm_new_toggle_group_full") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_toggle_group_full  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 15
@@ -17267,7 +17730,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_radio_group (export "er_ui_wasm_new_radio_group") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $selected i32) (result i32)
+  (func $er_ui_wasm_new_radio_group  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $selected i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 25
@@ -17280,7 +17743,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_radio_group_full (export "er_ui_wasm_new_radio_group_full") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $selected i32) (result i32)
+  (func $er_ui_wasm_new_radio_group_full  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $selected i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 25
@@ -17297,7 +17760,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_tabs (export "er_ui_wasm_new_tabs") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_tabs  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 42
@@ -17310,7 +17773,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_tabs_full (export "er_ui_wasm_new_tabs_full") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_tabs_full  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 42
@@ -17327,7 +17790,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_direction (export "er_ui_wasm_new_direction") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_direction  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 43
@@ -17340,7 +17803,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_pagination (export "er_ui_wasm_new_pagination") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $page i32) (result i32)
+  (func $er_ui_wasm_new_pagination  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $page i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 41
@@ -17353,7 +17816,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_menubar (export "er_ui_wasm_new_menubar") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_menubar  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 39
@@ -17366,7 +17829,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_menubar_full (export "er_ui_wasm_new_menubar_full") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_menubar_full  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 39
@@ -17383,7 +17846,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_navigation_menu (export "er_ui_wasm_new_navigation_menu") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_navigation_menu  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 40
@@ -17396,7 +17859,7 @@
     local.get $label_len
     call $write_id_multiplier_string)
 
-  (func $er_ui_wasm_new_navigation_menu_full (export "er_ui_wasm_new_navigation_menu_full") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
+  (func $er_ui_wasm_new_navigation_menu_full  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 40
@@ -17413,7 +17876,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_resizable (export "er_ui_wasm_new_resizable") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $unit16 i32) (result i32)
+  (func $er_ui_wasm_new_resizable  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $unit16 i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 57
@@ -17425,7 +17888,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_kbd (export "er_ui_wasm_new_kbd") (param $base i32) (param $cap i32) (param $text_ptr i32) (param $text_len i32) (result i32)
+  (func $er_ui_wasm_new_kbd  (param $base i32) (param $cap i32) (param $text_ptr i32) (param $text_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 30
@@ -17435,19 +17898,19 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_skeleton (export "er_ui_wasm_new_skeleton") (param $base i32) (param $cap i32) (result i32)
+  (func $er_ui_wasm_new_skeleton  (param $base i32) (param $cap i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 35
     call $er_ui_write_empty)
 
-  (func $er_ui_wasm_new_spinner (export "er_ui_wasm_new_spinner") (param $base i32) (param $cap i32) (result i32)
+  (func $er_ui_wasm_new_spinner  (param $base i32) (param $cap i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 36
     call $er_ui_write_empty)
 
-  (func $er_ui_wasm_new_textarea (export "er_ui_wasm_new_textarea") (param $base i32) (param $cap i32) (param $id i32) (param $value_ptr i32) (param $value_len i32) (result i32)
+  (func $er_ui_wasm_new_textarea  (param $base i32) (param $cap i32) (param $id i32) (param $value_ptr i32) (param $value_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 19
@@ -17457,7 +17920,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_avatar (export "er_ui_wasm_new_avatar") (param $base i32) (param $cap i32) (param $label_ptr i32) (param $label_len i32) (result i32)
+  (func $er_ui_wasm_new_avatar  (param $base i32) (param $cap i32) (param $label_ptr i32) (param $label_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 29
@@ -17467,7 +17930,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_tooltip (export "er_ui_wasm_new_tooltip") (param $base i32) (param $cap i32) (param $id i32) (param $text_ptr i32) (param $text_len i32) (result i32)
+  (func $er_ui_wasm_new_tooltip  (param $base i32) (param $cap i32) (param $id i32) (param $text_ptr i32) (param $text_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 51
@@ -17477,7 +17940,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_tooltip_full (export "er_ui_wasm_new_tooltip_full") (param $base i32) (param $cap i32) (param $id i32) (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (result i32)
+  (func $er_ui_wasm_new_tooltip_full  (param $base i32) (param $cap i32) (param $id i32) (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 51
@@ -17488,7 +17951,7 @@
     local.get $content_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_alert (export "er_ui_wasm_new_alert") (param $base i32) (param $cap i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $destructive i32) (param $icon i32) (result i32)
+  (func $er_ui_wasm_new_alert  (param $base i32) (param $cap i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $destructive i32) (param $icon i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 4
@@ -17507,7 +17970,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_alert_dialog (export "er_ui_wasm_new_alert_dialog") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
+  (func $er_ui_wasm_new_alert_dialog  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 5
@@ -17518,7 +17981,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_aspect_ratio (export "er_ui_wasm_new_aspect_ratio") (param $base i32) (param $cap i32) (param $ratio_w i32) (param $ratio_h i32) (result i32)
+  (func $er_ui_wasm_new_aspect_ratio  (param $base i32) (param $cap i32) (param $ratio_w i32) (param $ratio_h i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 6
@@ -17532,7 +17995,7 @@
     i32.const 0
     call $er_ui_write_ref)
 
-  (func $er_ui_wasm_new_calendar (export "er_ui_wasm_new_calendar") (param $base i32) (param $cap i32) (param $id i32) (param $month_ptr i32) (param $month_len i32) (param $selected_day i32) (result i32)
+  (func $er_ui_wasm_new_calendar  (param $base i32) (param $cap i32) (param $id i32) (param $month_ptr i32) (param $month_len i32) (param $selected_day i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 7
@@ -17544,7 +18007,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_carousel (export "er_ui_wasm_new_carousel") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (result i32)
+  (func $er_ui_wasm_new_carousel  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 8
@@ -17554,7 +18017,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_chart (export "er_ui_wasm_new_chart") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (result i32)
+  (func $er_ui_wasm_new_chart  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 9
@@ -17564,7 +18027,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_combobox (export "er_ui_wasm_new_combobox") (param $base i32) (param $cap i32) (param $id i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $selected_ptr i32) (param $selected_len i32) (result i32)
+  (func $er_ui_wasm_new_combobox  (param $base i32) (param $cap i32) (param $id i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $selected_ptr i32) (param $selected_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 10
@@ -17575,7 +18038,7 @@
     local.get $selected_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_empty_state (export "er_ui_wasm_new_empty_state") (param $base i32) (param $cap i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $icon i32) (result i32)
+  (func $er_ui_wasm_new_empty_state  (param $base i32) (param $cap i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $icon i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 11
@@ -17588,7 +18051,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_input_group (export "er_ui_wasm_new_input_group") (param $base i32) (param $cap i32) (param $id i32) (param $addon_ptr i32) (param $addon_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (result i32)
+  (func $er_ui_wasm_new_input_group  (param $base i32) (param $cap i32) (param $id i32) (param $addon_ptr i32) (param $addon_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 17
@@ -17599,7 +18062,7 @@
     local.get $placeholder_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_input_otp (export "er_ui_wasm_new_input_otp") (param $base i32) (param $cap i32) (param $id i32) (param $value_ptr i32) (param $value_len i32) (result i32)
+  (func $er_ui_wasm_new_input_otp  (param $base i32) (param $cap i32) (param $id i32) (param $value_ptr i32) (param $value_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 18
@@ -17609,7 +18072,7 @@
     i32.const 0
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_select (export "er_ui_wasm_new_select") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $trailing_icon i32) (result i32)
+  (func $er_ui_wasm_new_select  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $trailing_icon i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 20
@@ -17621,7 +18084,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_field (export "er_ui_wasm_new_field") (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (result i32)
+  (func $er_ui_wasm_new_field  (param $base i32) (param $cap i32) (param $id i32) (param $label_ptr i32) (param $label_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 21
@@ -17632,7 +18095,7 @@
     local.get $placeholder_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_table (export "er_ui_wasm_new_table") (param $base i32) (param $cap i32) (param $id i32) (param $name_ptr i32) (param $name_len i32) (param $role_ptr i32) (param $role_len i32) (result i32)
+  (func $er_ui_wasm_new_table  (param $base i32) (param $cap i32) (param $id i32) (param $name_ptr i32) (param $name_len i32) (param $role_ptr i32) (param $role_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 32
@@ -17643,13 +18106,13 @@
     local.get $role_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_scroll_area (export "er_ui_wasm_new_scroll_area") (param $base i32) (param $cap i32) (result i32)
+  (func $er_ui_wasm_new_scroll_area  (param $base i32) (param $cap i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 34
     call $er_ui_write_empty)
 
-  (func $er_ui_wasm_new_breadcrumb (export "er_ui_wasm_new_breadcrumb") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (result i32)
+  (func $er_ui_wasm_new_breadcrumb  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 38
@@ -17660,7 +18123,7 @@
     local.get $current_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_command (export "er_ui_wasm_new_command") (param $base i32) (param $cap i32) (param $id i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $leading_icon i32) (result i32)
+  (func $er_ui_wasm_new_command  (param $base i32) (param $cap i32) (param $id i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $leading_icon i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 44
@@ -17672,7 +18135,7 @@
     call $string_ref
     call $write_single_string_ref)
 
-  (func $er_ui_wasm_new_context_menu (export "er_ui_wasm_new_context_menu") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (result i32)
+  (func $er_ui_wasm_new_context_menu  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 45
@@ -17683,7 +18146,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_dialog (export "er_ui_wasm_new_dialog") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
+  (func $er_ui_wasm_new_dialog  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 46
@@ -17694,7 +18157,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_drawer (export "er_ui_wasm_new_drawer") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
+  (func $er_ui_wasm_new_drawer  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 47
@@ -17705,7 +18168,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_dropdown_menu (export "er_ui_wasm_new_dropdown_menu") (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (result i32)
+  (func $er_ui_wasm_new_dropdown_menu  (param $base i32) (param $cap i32) (param $id i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 48
@@ -17716,7 +18179,7 @@
     local.get $second_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_hover_card (export "er_ui_wasm_new_hover_card") (param $base i32) (param $cap i32) (param $id i32) (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (result i32)
+  (func $er_ui_wasm_new_hover_card  (param $base i32) (param $cap i32) (param $id i32) (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 49
@@ -17727,7 +18190,7 @@
     local.get $content_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_popover (export "er_ui_wasm_new_popover") (param $base i32) (param $cap i32) (param $id i32) (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (result i32)
+  (func $er_ui_wasm_new_popover  (param $base i32) (param $cap i32) (param $id i32) (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 50
@@ -17738,7 +18201,7 @@
     local.get $content_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_toast (export "er_ui_wasm_new_toast") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
+  (func $er_ui_wasm_new_toast  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 52
@@ -17749,7 +18212,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_sheet (export "er_ui_wasm_new_sheet") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
+  (func $er_ui_wasm_new_sheet  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 53
@@ -17760,7 +18223,7 @@
     local.get $detail_len
     call $er_ui_write_two_strings)
 
-  (func $er_ui_wasm_new_sidebar (export "er_ui_wasm_new_sidebar") (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $item_ptr i32) (param $item_len i32) (result i32)
+  (func $er_ui_wasm_new_sidebar  (param $base i32) (param $cap i32) (param $id i32) (param $title_ptr i32) (param $title_len i32) (param $item_ptr i32) (param $item_len i32) (result i32)
     local.get $base
     local.get $cap
     i32.const 54
@@ -17770,10 +18233,10 @@
     local.get $item_ptr
     local.get $item_len
     call $er_ui_write_two_strings)
-  (func $er_ui_region_size (export "er_ui_region_size") (result i32)
+  (func $er_ui_region_size  (result i32)
     i32.const 28)
 
-  (func $er_ui_regions_add (export "er_ui_regions_add") (param $base i32) (param $cap i32) (param $len i32) (param $slot i32) (param $kind i32) (param $id i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
+  (func $er_ui_regions_add  (param $base i32) (param $cap i32) (param $len i32) (param $slot i32) (param $kind i32) (param $id i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
     (local $p i32)
     local.get $kind
     i32.const 58
@@ -17844,7 +18307,7 @@
     i32.const 1
     i32.add)
 
-  (func $er_ui_regions_hit_test (export "er_ui_regions_hit_test") (param $base i32) (param $len i32) (param $x f32) (param $y f32) (param $out i32) (result i32)
+  (func $er_ui_regions_hit_test  (param $base i32) (param $len i32) (param $x f32) (param $y f32) (param $out i32) (result i32)
     (local $i i32)
     (local $p i32)
     local.get $len
@@ -17919,7 +18382,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_hit_id (export "er_ui_hit_id") (param $namespace_ptr i32) (param $namespace_len i32) (param $role_ptr i32) (param $role_len i32) (param $key_ptr i32) (param $key_len i32) (result i32)
+  (func $er_ui_hit_id  (param $namespace_ptr i32) (param $namespace_len i32) (param $role_ptr i32) (param $role_len i32) (param $key_ptr i32) (param $key_len i32) (result i32)
     (local $hash i32)
     i32.const 0x811c9dc5
     i32.const 65000
@@ -17952,10 +18415,10 @@
     end
     local.get $hash)
 
-  (func $er_ui_hit_event_size (export "er_ui_hit_event_size") (result i32)
+  (func $er_ui_hit_event_size  (result i32)
     i32.const 20)
 
-  (func $er_ui_hit_event_encode (export "er_ui_hit_event_encode") (param $out i32) (param $cap i32) (param $kind i32) (param $id i32) (param $location_tag i32) (param $action_tag i32) (param $source_tag i32) (result i32)
+  (func $er_ui_hit_event_encode  (param $out i32) (param $cap i32) (param $kind i32) (param $id i32) (param $location_tag i32) (param $action_tag i32) (param $source_tag i32) (result i32)
     local.get $cap
     i32.const 12
     i32.lt_u
@@ -18009,7 +18472,7 @@
     i32.store8
     i32.const 12)
 
-  (func $er_ui_hit_event_encode_point (export "er_ui_hit_event_encode_point") (param $out i32) (param $cap i32) (param $kind i32) (param $id i32) (param $action_tag i32) (param $source_tag i32) (param $x f32) (param $y f32) (result i32)
+  (func $er_ui_hit_event_encode_point  (param $out i32) (param $cap i32) (param $kind i32) (param $id i32) (param $action_tag i32) (param $source_tag i32) (param $x f32) (param $y f32) (result i32)
     local.get $cap
     i32.const 20
     i32.lt_u
@@ -18069,7 +18532,7 @@
     f32.store
     i32.const 20)
 
-  (func $er_ui_hit_event_kind (export "er_ui_hit_event_kind") (param $event i32) (param $len i32) (result i32)
+  (func $er_ui_hit_event_kind  (param $event i32) (param $len i32) (result i32)
     local.get $len
     i32.const 12
     i32.lt_u
@@ -18080,7 +18543,7 @@
     local.get $event
     i32.load)
 
-  (func $er_ui_hit_event_id (export "er_ui_hit_event_id") (param $event i32) (param $len i32) (result i32)
+  (func $er_ui_hit_event_id  (param $event i32) (param $len i32) (result i32)
     local.get $len
     i32.const 12
     i32.lt_u
@@ -18093,7 +18556,7 @@
     i32.add
     i32.load)
 
-  (func $er_ui_hit_event_location_tag (export "er_ui_hit_event_location_tag") (param $event i32) (param $len i32) (result i32)
+  (func $er_ui_hit_event_location_tag  (param $event i32) (param $len i32) (result i32)
     local.get $len
     i32.const 12
     i32.lt_u
@@ -18106,7 +18569,7 @@
     i32.add
     i32.load8_u)
 
-  (func $er_ui_hit_event_action_tag (export "er_ui_hit_event_action_tag") (param $event i32) (param $len i32) (result i32)
+  (func $er_ui_hit_event_action_tag  (param $event i32) (param $len i32) (result i32)
     local.get $len
     i32.const 12
     i32.lt_u
@@ -18119,7 +18582,7 @@
     i32.add
     i32.load8_u)
 
-  (func $er_ui_hit_event_source_tag (export "er_ui_hit_event_source_tag") (param $event i32) (param $len i32) (result i32)
+  (func $er_ui_hit_event_source_tag  (param $event i32) (param $len i32) (result i32)
     local.get $len
     i32.const 12
     i32.lt_u
@@ -18132,7 +18595,7 @@
     i32.add
     i32.load8_u)
 
-  (func $er_ui_hit_event_validate (export "er_ui_hit_event_validate") (param $event i32) (param $len i32) (result i32)
+  (func $er_ui_hit_event_validate  (param $event i32) (param $len i32) (result i32)
     local.get $len
     i32.const 12
     i32.lt_u
@@ -18190,7 +18653,7 @@
       i32.ge_u
     end)
 
-  (func $er_ui_hit_event_point_x (export "er_ui_hit_event_point_x") (param $event i32) (param $len i32) (result f32)
+  (func $er_ui_hit_event_point_x  (param $event i32) (param $len i32) (result f32)
     local.get $len
     i32.const 20
     i32.lt_u
@@ -18210,7 +18673,7 @@
     i32.add
     f32.load)
 
-  (func $er_ui_hit_event_point_y (export "er_ui_hit_event_point_y") (param $event i32) (param $len i32) (result f32)
+  (func $er_ui_hit_event_point_y  (param $event i32) (param $len i32) (result f32)
     local.get $len
     i32.const 20
     i32.lt_u
@@ -18229,10 +18692,10 @@
     i32.const 16
     i32.add
     f32.load)
-  (func $er_ui_runtime_state_size (export "er_ui_runtime_state_size") (result i32)
+  (func $er_ui_runtime_state_size  (result i32)
     i32.const 32)
 
-  (func $er_ui_runtime_reset (export "er_ui_runtime_reset") (param $out i32) (result i32)
+  (func $er_ui_runtime_reset  (param $out i32) (result i32)
     i32.const 0
     global.set $runtime_hover
     i32.const 0
@@ -18256,7 +18719,7 @@
     end
     i32.const 32)
 
-  (func $er_ui_runtime_update_pointer (export "er_ui_runtime_update_pointer") (param $out i32) (param $x f32) (param $y f32) (param $hover_id i32) (result i32)
+  (func $er_ui_runtime_update_pointer  (param $out i32) (param $x f32) (param $y f32) (param $hover_id i32) (result i32)
     local.get $x
     global.set $runtime_pointer_x
     local.get $y
@@ -18272,7 +18735,7 @@
     end
     i32.const 32)
 
-  (func $er_ui_runtime_update_focus (export "er_ui_runtime_update_focus") (param $out i32) (param $focus_id i32) (param $active_id i32) (result i32)
+  (func $er_ui_runtime_update_focus  (param $out i32) (param $focus_id i32) (param $active_id i32) (result i32)
     local.get $focus_id
     global.set $runtime_focus
     local.get $active_id
@@ -18286,7 +18749,7 @@
     end
     i32.const 32)
 
-  (func $er_ui_runtime_update_key (export "er_ui_runtime_update_key") (param $out i32) (param $key i32) (result i32)
+  (func $er_ui_runtime_update_key  (param $out i32) (param $key i32) (result i32)
     local.get $key
     global.set $runtime_key
     local.get $out
@@ -18298,7 +18761,7 @@
     end
     i32.const 32)
 
-  (func $er_ui_runtime_set_overlay (export "er_ui_runtime_set_overlay") (param $out i32) (param $overlay_id i32) (result i32)
+  (func $er_ui_runtime_set_overlay  (param $out i32) (param $overlay_id i32) (result i32)
     local.get $overlay_id
     global.set $runtime_overlay
     local.get $out
@@ -18310,7 +18773,7 @@
     end
     i32.const 32)
 
-  (func $er_ui_runtime_snapshot (export "er_ui_runtime_snapshot") (param $out i32) (result i32)
+  (func $er_ui_runtime_snapshot  (param $out i32) (result i32)
     local.get $out
     i32.eqz
     i32.eqz
@@ -18320,30 +18783,30 @@
     end
     i32.const 32)
 
-  (func $er_ui_runtime_state_init (export "er_ui_runtime_state_init") (param $out i32) (result i32)
+  (func $er_ui_runtime_state_init  (param $out i32) (result i32)
     local.get $out
     call $er_ui_runtime_reset)
 
-  (func $er_ui_runtime_set_hover (export "er_ui_runtime_set_hover") (param $out i32) (param $hover_id i32) (result i32)
+  (func $er_ui_runtime_set_hover  (param $out i32) (param $hover_id i32) (result i32)
     local.get $out
     global.get $runtime_pointer_x
     global.get $runtime_pointer_y
     local.get $hover_id
     call $er_ui_runtime_update_pointer)
 
-  (func $er_ui_runtime_set_focus (export "er_ui_runtime_set_focus") (param $out i32) (param $focus_id i32) (result i32)
+  (func $er_ui_runtime_set_focus  (param $out i32) (param $focus_id i32) (result i32)
     local.get $out
     local.get $focus_id
     global.get $runtime_active
     call $er_ui_runtime_update_focus)
 
-  (func $er_ui_runtime_pointer_event (export "er_ui_runtime_pointer_event") (param $out i32) (param $x f32) (param $y f32) (param $hover_id i32) (result i32)
+  (func $er_ui_runtime_pointer_event  (param $out i32) (param $x f32) (param $y f32) (param $hover_id i32) (result i32)
     local.get $out
     local.get $x
     local.get $y
     local.get $hover_id
     call $er_ui_runtime_update_pointer)
-  (func $er_ui_layout_linear_child (export "er_ui_layout_linear_child") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $axis i32) (param $gap f32) (param $padding f32) (result i32)
+  (func $er_ui_layout_linear_child  (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $axis i32) (param $gap f32) (param $padding f32) (result i32)
     (local $content_x f32)
     (local $content_y f32)
     (local $content_w f32)
@@ -18489,7 +18952,7 @@
     end
     i32.const 1)
 
-  (func $er_ui_layout_scrolled_child (export "er_ui_layout_scrolled_child") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $gap f32) (param $padding f32) (param $scroll_y f32) (result i32)
+  (func $er_ui_layout_scrolled_child  (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $gap f32) (param $padding f32) (param $scroll_y f32) (result i32)
     local.get $out
     local.get $x
     local.get $y
@@ -18504,13 +18967,13 @@
     local.get $padding
     call $er_ui_layout_linear_child)
 
-  (func $er_ui_layout_scratch_base (export "er_ui_layout_scratch_base") (result i32)
+  (func $er_ui_layout_scratch_base  (result i32)
     i32.const 120000)
 
-  (func $er_ui_layout_scratch_size (export "er_ui_layout_scratch_size") (result i32)
+  (func $er_ui_layout_scratch_size  (result i32)
     i32.const 1024)
 
-  (func $er_ui_layout_grid_child (export "er_ui_layout_grid_child") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $columns i32) (param $gap f32) (param $padding f32) (result i32)
+  (func $er_ui_layout_grid_child  (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $columns i32) (param $gap f32) (param $padding f32) (result i32)
     (local $rows i32)
     (local $col i32)
     (local $row i32)
@@ -18638,7 +19101,7 @@
     local.get $ch
     f32.store
     i32.const 1)
-  (func $er_ui_layout_masonry_child (export "er_ui_layout_masonry_child") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $columns i32) (param $gap f32) (param $padding f32) (param $heights_ptr i32) (result i32)
+  (func $er_ui_layout_masonry_child  (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $columns i32) (param $gap f32) (param $padding f32) (param $heights_ptr i32) (result i32)
     (local $i i32)
     (local $col i32)
     (local $best_col i32)
@@ -18848,7 +19311,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_layout_bento_child (export "er_ui_layout_bento_child") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $columns i32) (param $gap f32) (param $padding f32) (param $col_spans_ptr i32) (param $row_spans_ptr i32) (result i32)
+  (func $er_ui_layout_bento_child  (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $columns i32) (param $gap f32) (param $padding f32) (param $col_spans_ptr i32) (param $row_spans_ptr i32) (result i32)
     (local $rows i32)
     (local $i i32)
     (local $row i32)
@@ -19199,7 +19662,7 @@
       end
     end
     i32.const 0)
-  (func $er_ui_list_equal_segment_bounds_gap (export "er_ui_list_equal_segment_bounds_gap") (param $bounds i32) (param $index i32) (param $item_count i32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_list_equal_segment_bounds_gap  (param $bounds i32) (param $index i32) (param $item_count i32) (param $gap f32) (param $out i32) (result i32)
     (local $count f32)
     (local $total_gap f32)
     (local $segment_w f32)
@@ -19257,7 +19720,7 @@
     f32.load
     call $rect_store)
 
-  (func $er_ui_list_equal_segment_bounds (export "er_ui_list_equal_segment_bounds") (param $bounds i32) (param $index i32) (param $item_count i32) (param $out i32) (result i32)
+  (func $er_ui_list_equal_segment_bounds  (param $bounds i32) (param $index i32) (param $item_count i32) (param $out i32) (result i32)
     local.get $bounds
     local.get $index
     local.get $item_count
@@ -19265,7 +19728,7 @@
     local.get $out
     call $er_ui_list_equal_segment_bounds_gap)
 
-  (func $er_ui_list_padded_equal_segment_bounds (export "er_ui_list_padded_equal_segment_bounds") (param $bounds i32) (param $index i32) (param $item_count i32) (param $padding f32) (param $out i32) (result i32)
+  (func $er_ui_list_padded_equal_segment_bounds  (param $bounds i32) (param $index i32) (param $item_count i32) (param $padding f32) (param $out i32) (result i32)
     (local $content_x f32)
     (local $content_y f32)
     (local $content_w f32)
@@ -19338,7 +19801,7 @@
     local.get $content_h
     call $rect_store)
 
-  (func $er_ui_list_item_strip_bounds (export "er_ui_list_item_strip_bounds") (param $bounds i32) (param $index i32) (param $widths_ptr i32) (param $width_count i32) (param $padding f32) (param $gap f32) (param $item_h f32) (param $out i32) (result i32)
+  (func $er_ui_list_item_strip_bounds  (param $bounds i32) (param $index i32) (param $widths_ptr i32) (param $width_count i32) (param $padding f32) (param $gap f32) (param $item_h f32) (param $out i32) (result i32)
     (local $i i32)
     (local $limit i32)
     (local $x f32)
@@ -19441,7 +19904,7 @@
     local.get $resolved_h
     call $rect_store)
 
-  (func $er_ui_list_clamped_index (export "er_ui_list_clamped_index") (param $value i32) (param $item_count i32) (result i32)
+  (func $er_ui_list_clamped_index  (param $value i32) (param $item_count i32) (result i32)
     local.get $item_count
     i32.eqz
     if
@@ -19461,7 +19924,7 @@
       local.get $value
     end)
 
-  (func $er_ui_list_resolve_index (export "er_ui_list_resolve_index") (param $controlled i32) (param $default_value i32) (param $item_count i32) (result i32)
+  (func $er_ui_list_resolve_index  (param $controlled i32) (param $default_value i32) (param $item_count i32) (result i32)
     local.get $controlled
     i32.const -1
     i32.eq
@@ -19473,7 +19936,7 @@
     local.get $item_count
     call $er_ui_list_clamped_index)
 
-  (func $er_ui_list_encoded_indexed_id (export "er_ui_list_encoded_indexed_id") (param $id i32) (param $active i32) (param $item_count i32) (result i32)
+  (func $er_ui_list_encoded_indexed_id  (param $id i32) (param $active i32) (param $item_count i32) (result i32)
     local.get $id
     local.get $item_count
     i32.mul
@@ -19481,16 +19944,16 @@
     local.get $item_count
     call $er_ui_list_clamped_index
     i32.add)
-  (func $er_ui_view_stack_cursor_size (export "er_ui_view_stack_cursor_size") (result i32)
+  (func $er_ui_view_stack_cursor_size  (result i32)
     i32.const 24)
 
-  (func $er_ui_view_row_cursor_size (export "er_ui_view_row_cursor_size") (result i32)
+  (func $er_ui_view_row_cursor_size  (result i32)
     i32.const 24)
 
-  (func $er_ui_view_split_size (export "er_ui_view_split_size") (result i32)
+  (func $er_ui_view_split_size  (result i32)
     i32.const 32)
 
-  (func $er_ui_view_stack_cursor_init (export "er_ui_view_stack_cursor_init") (param $cursor i32) (param $bounds i32) (param $gap f32) (result i32)
+  (func $er_ui_view_stack_cursor_init  (param $cursor i32) (param $bounds i32) (param $gap f32) (result i32)
     local.get $cursor
     i32.eqz
     local.get $bounds
@@ -19532,7 +19995,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_view_stack_cursor_take (export "er_ui_view_stack_cursor_take") (param $cursor i32) (param $height f32) (param $out i32) (result i32)
+  (func $er_ui_view_stack_cursor_take  (param $cursor i32) (param $height f32) (param $out i32) (result i32)
     (local $resolved_h f32)
     (local $cursor_y f32)
     local.get $cursor
@@ -19578,7 +20041,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_view_stack_cursor_take_if_fits (export "er_ui_view_stack_cursor_take_if_fits") (param $cursor i32) (param $height f32) (param $out i32) (result i32)
+  (func $er_ui_view_stack_cursor_take_if_fits  (param $cursor i32) (param $height f32) (param $out i32) (result i32)
     local.get $cursor
     i32.eqz
     local.get $out
@@ -19613,7 +20076,7 @@
     local.get $out
     call $er_ui_view_stack_cursor_take)
 
-  (func $er_ui_view_stack_cursor_skip (export "er_ui_view_stack_cursor_skip") (param $cursor i32) (param $amount f32) (result i32)
+  (func $er_ui_view_stack_cursor_skip  (param $cursor i32) (param $amount f32) (result i32)
     local.get $cursor
     i32.eqz
     if
@@ -19632,7 +20095,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_view_stack_cursor_remaining (export "er_ui_view_stack_cursor_remaining") (param $cursor i32) (param $out i32) (result i32)
+  (func $er_ui_view_stack_cursor_remaining  (param $cursor i32) (param $out i32) (result i32)
     local.get $cursor
     i32.eqz
     local.get $out
@@ -19671,7 +20134,7 @@
     call $max_f32
     call $rect_store)
 
-  (func $er_ui_view_row_cursor_init (export "er_ui_view_row_cursor_init") (param $cursor i32) (param $bounds i32) (param $gap f32) (result i32)
+  (func $er_ui_view_row_cursor_init  (param $cursor i32) (param $bounds i32) (param $gap f32) (result i32)
     local.get $cursor
     i32.eqz
     local.get $bounds
@@ -19711,7 +20174,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_view_row_cursor_take (export "er_ui_view_row_cursor_take") (param $cursor i32) (param $width f32) (param $out i32) (result i32)
+  (func $er_ui_view_row_cursor_take  (param $cursor i32) (param $width f32) (param $out i32) (result i32)
     (local $resolved_w f32)
     (local $cursor_x f32)
     local.get $cursor
@@ -19759,7 +20222,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_view_row_cursor_remaining (export "er_ui_view_row_cursor_remaining") (param $cursor i32) (param $out i32) (result i32)
+  (func $er_ui_view_row_cursor_remaining  (param $cursor i32) (param $out i32) (result i32)
     local.get $cursor
     i32.eqz
     local.get $out
@@ -19798,7 +20261,7 @@
     f32.load
     call $rect_store)
 
-  (func $er_ui_view_grid_item (export "er_ui_view_grid_item") (param $bounds i32) (param $columns i32) (param $gap f32) (param $item_h f32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_view_grid_item  (param $bounds i32) (param $columns i32) (param $gap f32) (param $item_h f32) (param $index i32) (param $out i32) (result i32)
     (local $columns_value i32)
     (local $col i32)
     (local $row i32)
@@ -19871,7 +20334,7 @@
     local.get $item_h
     call $rect_store)
 
-  (func $er_ui_view_grid_height (export "er_ui_view_grid_height") (param $columns i32) (param $gap f32) (param $item_h f32) (param $item_count i32) (result f32)
+  (func $er_ui_view_grid_height  (param $columns i32) (param $gap f32) (param $item_h f32) (param $item_count i32) (result f32)
     (local $columns_value i32)
     (local $rows i32)
     local.get $item_count
@@ -19909,7 +20372,7 @@
     f32.mul
     f32.add)
 
-  (func $er_ui_view_split_left (export "er_ui_view_split_left") (param $bounds i32) (param $width f32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_view_split_left  (param $bounds i32) (param $width f32) (param $gap f32) (param $out i32) (result i32)
     (local $first_w f32)
     (local $rest_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
@@ -19919,7 +20382,7 @@
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $first_w local.get $bounds i32.const 12 i32.add f32.load call $rect_store drop
     local.get $out i32.const 16 i32.add local.get $rest_x local.get $bounds i32.const 4 i32.add f32.load local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add local.get $rest_x f32.sub f32.const 1 call $max_f32 local.get $bounds i32.const 12 i32.add f32.load call $rect_store)
 
-  (func $er_ui_view_split_right (export "er_ui_view_split_right") (param $bounds i32) (param $width f32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_view_split_right  (param $bounds i32) (param $width f32) (param $gap f32) (param $out i32) (result i32)
     (local $second_w f32)
     (local $second_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
@@ -19929,7 +20392,7 @@
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $second_x local.get $gap f32.sub local.get $bounds f32.load f32.sub f32.const 1 call $max_f32 local.get $bounds i32.const 12 i32.add f32.load call $rect_store drop
     local.get $out i32.const 16 i32.add local.get $second_x local.get $bounds i32.const 4 i32.add f32.load local.get $second_w local.get $bounds i32.const 12 i32.add f32.load call $rect_store)
 
-  (func $er_ui_view_split_top (export "er_ui_view_split_top") (param $bounds i32) (param $height f32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_view_split_top  (param $bounds i32) (param $height f32) (param $gap f32) (param $out i32) (result i32)
     (local $first_h f32)
     (local $rest_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
@@ -19939,7 +20402,7 @@
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 8 i32.add f32.load local.get $first_h call $rect_store drop
     local.get $out i32.const 16 i32.add local.get $bounds f32.load local.get $rest_y local.get $bounds i32.const 8 i32.add f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add local.get $rest_y f32.sub f32.const 1 call $max_f32 call $rect_store)
 
-  (func $er_ui_view_split_bottom (export "er_ui_view_split_bottom") (param $bounds i32) (param $height f32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_view_split_bottom  (param $bounds i32) (param $height f32) (param $gap f32) (param $out i32) (result i32)
     (local $second_h f32)
     (local $second_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
@@ -19948,24 +20411,24 @@
     local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load local.get $second_h f32.sub f32.const 0 call $max_f32 f32.add local.set $second_y
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 8 i32.add f32.load local.get $second_y local.get $gap f32.sub local.get $bounds i32.const 4 i32.add f32.load f32.sub f32.const 1 call $max_f32 call $rect_store drop
     local.get $out i32.const 16 i32.add local.get $bounds f32.load local.get $second_y local.get $bounds i32.const 8 i32.add f32.load local.get $second_h call $rect_store)
-  (func $er_ui_layout_axis_horizontal (export "er_ui_layout_axis_horizontal") (result i32) i32.const 0)
-  (func $er_ui_layout_axis_vertical (export "er_ui_layout_axis_vertical") (result i32) i32.const 1)
-  (func $er_ui_layout_align_start (export "er_ui_layout_align_start") (result i32) i32.const 0)
-  (func $er_ui_layout_align_stretch (export "er_ui_layout_align_stretch") (result i32) i32.const 1)
-  (func $er_ui_layout_constraint_unconstrained (export "er_ui_layout_constraint_unconstrained") (result i32) i32.const 0)
-  (func $er_ui_layout_constraint_at_most (export "er_ui_layout_constraint_at_most") (result i32) i32.const 1)
-  (func $er_ui_layout_constraint_exact (export "er_ui_layout_constraint_exact") (result i32) i32.const 2)
-  (func $er_ui_layout_wrap_auto (export "er_ui_layout_wrap_auto") (result i32) i32.const 0)
-  (func $er_ui_layout_wrap_wrap (export "er_ui_layout_wrap_wrap") (result i32) i32.const 1)
-  (func $er_ui_layout_wrap_nowrap (export "er_ui_layout_wrap_nowrap") (result i32) i32.const 2)
-  (func $er_ui_layout_wrap_truncate (export "er_ui_layout_wrap_truncate") (result i32) i32.const 3)
-  (func $er_ui_layout_axis_constraint_size (export "er_ui_layout_axis_constraint_size") (result i32) i32.const 8)
-  (func $er_ui_layout_insets_size (export "er_ui_layout_insets_size") (result i32) i32.const 16)
-  (func $er_ui_layout_constraints_size (export "er_ui_layout_constraints_size") (result i32) i32.const 20)
-  (func $er_ui_layout_measurement_size (export "er_ui_layout_measurement_size") (result i32) i32.const 24)
-  (func $er_ui_layout_text_metrics_size (export "er_ui_layout_text_metrics_size") (result i32) i32.const 12)
-  (func $er_ui_flex_options_size (export "er_ui_flex_options_size") (result i32) i32.const 28)
-  (func $er_ui_flex_cursor_size (export "er_ui_flex_cursor_size") (result i32) i32.const 60)
+  (func $er_ui_layout_axis_horizontal  (result i32) i32.const 0)
+  (func $er_ui_layout_axis_vertical  (result i32) i32.const 1)
+  (func $er_ui_layout_align_start  (result i32) i32.const 0)
+  (func $er_ui_layout_align_stretch  (result i32) i32.const 1)
+  (func $er_ui_layout_constraint_unconstrained  (result i32) i32.const 0)
+  (func $er_ui_layout_constraint_at_most  (result i32) i32.const 1)
+  (func $er_ui_layout_constraint_exact  (result i32) i32.const 2)
+  (func $er_ui_layout_wrap_auto  (result i32) i32.const 0)
+  (func $er_ui_layout_wrap_wrap  (result i32) i32.const 1)
+  (func $er_ui_layout_wrap_nowrap  (result i32) i32.const 2)
+  (func $er_ui_layout_wrap_truncate  (result i32) i32.const 3)
+  (func $er_ui_layout_axis_constraint_size  (result i32) i32.const 8)
+  (func $er_ui_layout_insets_size  (result i32) i32.const 16)
+  (func $er_ui_layout_constraints_size  (result i32) i32.const 20)
+  (func $er_ui_layout_measurement_size  (result i32) i32.const 24)
+  (func $er_ui_layout_text_metrics_size  (result i32) i32.const 12)
+  (func $er_ui_flex_options_size  (result i32) i32.const 28)
+  (func $er_ui_flex_cursor_size  (result i32) i32.const 60)
 
   (func $layout_sanitize_size (param $value f32) (result f32)
     local.get $value
@@ -19996,14 +20459,7 @@
     local.get $value)
 
   (func $layout_min_i32_u (param $a i32) (param $b i32) (result i32)
-    local.get $a
-    local.get $b
-    i32.lt_u
-    if (result i32)
-      local.get $a
-    else
-      local.get $b
-    end)
+    local.get $a local.get $b call $min_i32_u)
 
   (func $layout_max_i32_u (param $a i32) (param $b i32) (result i32)
     local.get $a
@@ -20052,13 +20508,13 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_layout_axis_constraint_init (export "er_ui_layout_axis_constraint_init") (param $out i32) (param $tag i32) (param $value f32) (result i32)
+  (func $er_ui_layout_axis_constraint_init  (param $out i32) (param $tag i32) (param $value f32) (result i32)
     local.get $out
     local.get $tag
     local.get $value
     call $layout_store_constraint)
 
-  (func $er_ui_layout_axis_constraint_limit (export "er_ui_layout_axis_constraint_limit") (param $constraint i32) (param $fallback f32) (result f32)
+  (func $er_ui_layout_axis_constraint_limit  (param $constraint i32) (param $fallback f32) (result f32)
     local.get $constraint
     i32.eqz
     if
@@ -20078,7 +20534,7 @@
     f32.load
     call $layout_sanitize_size)
 
-  (func $er_ui_layout_axis_constraint_exact_value (export "er_ui_layout_axis_constraint_exact_value") (param $constraint i32) (param $out i32) (result i32)
+  (func $er_ui_layout_axis_constraint_exact_value  (param $constraint i32) (param $out i32) (result i32)
     local.get $constraint
     i32.eqz
     local.get $out
@@ -20105,7 +20561,7 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_layout_insets_uniform (export "er_ui_layout_insets_uniform") (param $value f32) (param $out i32) (result i32)
+  (func $er_ui_layout_insets_uniform  (param $value f32) (param $out i32) (result i32)
     (local $safe f32)
     local.get $out
     i32.eqz
@@ -20122,7 +20578,7 @@
     local.get $out i32.const 12 i32.add local.get $safe f32.store
     i32.const 1)
 
-  (func $er_ui_layout_insets_horizontal (export "er_ui_layout_insets_horizontal") (param $insets i32) (result f32)
+  (func $er_ui_layout_insets_horizontal  (param $insets i32) (result f32)
     local.get $insets
     i32.eqz
     if
@@ -20139,7 +20595,7 @@
     f32.load
     f32.add)
 
-  (func $er_ui_layout_insets_vertical (export "er_ui_layout_insets_vertical") (param $insets i32) (result f32)
+  (func $er_ui_layout_insets_vertical  (param $insets i32) (result f32)
     local.get $insets
     i32.eqz
     if
@@ -20174,7 +20630,7 @@
     call $max_f32
     call $layout_store_constraint)
 
-  (func $er_ui_layout_constraints_init (export "er_ui_layout_constraints_init") (param $out i32) (param $width_tag i32) (param $width_value f32) (param $height_tag i32) (param $height_value f32) (param $text_wrap i32) (result i32)
+  (func $er_ui_layout_constraints_init  (param $out i32) (param $width_tag i32) (param $width_value f32) (param $height_tag i32) (param $height_value f32) (param $text_wrap i32) (result i32)
     local.get $out
     i32.eqz
     if
@@ -20186,7 +20642,7 @@
     local.get $out i32.const 16 i32.add local.get $text_wrap i32.store
     i32.const 1)
 
-  (func $er_ui_layout_constraints_inner (export "er_ui_layout_constraints_inner") (param $constraints i32) (param $insets i32) (param $out i32) (result i32)
+  (func $er_ui_layout_constraints_inner  (param $constraints i32) (param $insets i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $insets i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $constraints local.get $insets call $er_ui_layout_insets_horizontal local.get $out call $layout_shrink_constraint drop
@@ -20202,13 +20658,13 @@
     local.get $out i32.const 16 i32.add local.get $max_w local.get $max_h call $layout_store_size drop
     i32.const 1)
 
-  (func $er_ui_layout_measurement_fixed (export "er_ui_layout_measurement_fixed") (param $w f32) (param $h f32) (param $out i32) (result i32)
+  (func $er_ui_layout_measurement_fixed  (param $w f32) (param $h f32) (param $out i32) (result i32)
     (local $sw f32) (local $sh f32)
     local.get $w call $layout_sanitize_size local.set $sw
     local.get $h call $layout_sanitize_size local.set $sh
     local.get $out local.get $sw local.get $sh local.get $sw local.get $sh local.get $sw local.get $sh call $layout_measurement_store)
 
-  (func $er_ui_layout_measurement_flexible (export "er_ui_layout_measurement_flexible") (param $min_w f32) (param $min_h f32) (param $pref_w f32) (param $pref_h f32) (param $max_w f32) (param $max_h f32) (param $out i32) (result i32)
+  (func $er_ui_layout_measurement_flexible  (param $min_w f32) (param $min_h f32) (param $pref_w f32) (param $pref_h f32) (param $max_w f32) (param $max_h f32) (param $out i32) (result i32)
     (local $mnw f32) (local $mnh f32) (local $pfw f32) (local $pfh f32) (local $mxw f32) (local $mxh f32)
     local.get $min_w call $layout_sanitize_size local.set $mnw
     local.get $min_h call $layout_sanitize_size local.set $mnh
@@ -20218,7 +20674,7 @@
     local.get $max_h call $layout_sanitize_size local.get $pfh call $max_f32 local.set $mxh
     local.get $out local.get $mnw local.get $mnh local.get $pfw local.get $pfh local.get $mxw local.get $mxh call $layout_measurement_store)
 
-  (func $er_ui_layout_measurement_with_insets (export "er_ui_layout_measurement_with_insets") (param $measurement i32) (param $insets i32) (param $out i32) (result i32)
+  (func $er_ui_layout_measurement_with_insets  (param $measurement i32) (param $insets i32) (param $out i32) (result i32)
     (local $h f32) (local $v f32)
     local.get $measurement i32.eqz local.get $insets i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -20233,7 +20689,7 @@
     local.get $measurement i32.const 20 i32.add f32.load local.get $v f32.add
     call $layout_measurement_store)
 
-  (func $er_ui_layout_measurement_apply_exact (export "er_ui_layout_measurement_apply_exact") (param $measurement i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_layout_measurement_apply_exact  (param $measurement i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $measurement i32.eqz local.get $constraints i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -20252,7 +20708,7 @@
     local.get $measurement i32.const 20 i32.add f32.load local.get $pref_h call $max_f32
     call $layout_measurement_store)
 
-  (func $er_ui_layout_to_logical (export "er_ui_layout_to_logical") (param $axis i32) (param $w f32) (param $h f32) (param $out i32) (result i32)
+  (func $er_ui_layout_to_logical  (param $axis i32) (param $w f32) (param $h f32) (param $out i32) (result i32)
     local.get $axis i32.const 1 i32.eq
     if
       local.get $out local.get $h local.get $w call $layout_store_size
@@ -20260,10 +20716,10 @@
     end
     local.get $out local.get $w local.get $h call $layout_store_size)
 
-  (func $er_ui_layout_from_logical (export "er_ui_layout_from_logical") (param $axis i32) (param $w f32) (param $h f32) (param $out i32) (result i32)
+  (func $er_ui_layout_from_logical  (param $axis i32) (param $w f32) (param $h f32) (param $out i32) (result i32)
     local.get $axis local.get $w local.get $h local.get $out call $er_ui_layout_to_logical)
 
-  (func $er_ui_layout_text_metrics_init (export "er_ui_layout_text_metrics_init") (param $out i32) (param $line_height f32) (param $average_char_width f32) (param $max_lines i32) (result i32)
+  (func $er_ui_layout_text_metrics_init  (param $out i32) (param $line_height f32) (param $average_char_width f32) (param $max_lines i32) (result i32)
     local.get $out
     i32.eqz
     if
@@ -20448,7 +20904,7 @@
     local.get $byte i32.const 10 i32.eq i32.or
     local.get $byte i32.const 13 i32.eq i32.or)
 
-  (func $er_ui_utf8_codepoint_count (export "er_ui_utf8_codepoint_count") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_utf8_codepoint_count  (param $ptr i32) (param $len i32) (result i32)
     (local $index i32)
     (local $count i32)
     (local $seq i32)
@@ -20493,7 +20949,7 @@
     end
     local.get $count)
 
-  (func $er_ui_text_skip_ascii_space (export "er_ui_text_skip_ascii_space") (param $ptr i32) (param $len i32) (param $start i32) (result i32)
+  (func $er_ui_text_skip_ascii_space  (param $ptr i32) (param $len i32) (param $start i32) (result i32)
     (local $index i32)
     local.get $start
     local.set $index
@@ -20519,7 +20975,7 @@
     end
     local.get $index)
 
-  (func $er_ui_text_longest_utf8_run (export "er_ui_text_longest_utf8_run") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_text_longest_utf8_run  (param $ptr i32) (param $len i32) (result i32)
     (local $index i32)
     (local $advance i32)
     (local $longest i32)
@@ -20577,7 +21033,7 @@
       local.get $longest
     end)
 
-  (func $er_ui_text_wrapped_line (export "er_ui_text_wrapped_line") (param $ptr i32) (param $len i32) (param $start i32) (param $char_capacity i32) (param $out i32) (result i32)
+  (func $er_ui_text_wrapped_line  (param $ptr i32) (param $len i32) (param $start i32) (param $char_capacity i32) (param $out i32) (result i32)
     (local $index i32)
     (local $chars i32)
     (local $last_space i32)
@@ -20653,7 +21109,7 @@
       i32.const 1
       i32.add
       local.get $len
-      call $layout_min_i32_u
+      call $min_i32_u
       i32.store
       i32.const 1
       return
@@ -20671,7 +21127,7 @@
     local.get $out i32.const 8 i32.add local.get $index i32.store
     i32.const 1)
 
-  (func $er_ui_text_wrapped_line_count (export "er_ui_text_wrapped_line_count") (param $ptr i32) (param $len i32) (param $width f32) (param $average_char_width f32) (param $max_lines i32) (result i32)
+  (func $er_ui_text_wrapped_line_count  (param $ptr i32) (param $len i32) (param $width f32) (param $average_char_width f32) (param $max_lines i32) (result i32)
     (local $byte_cursor i32)
     (local $line_count i32)
     (local $char_capacity i32)
@@ -20732,7 +21188,7 @@
     end
     local.get $line_count)
 
-  (func $er_ui_layout_measure_text (export "er_ui_layout_measure_text") (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $metrics i32) (param $out i32) (result i32)
+  (func $er_ui_layout_measure_text  (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $metrics i32) (param $out i32) (result i32)
     (local $line_height f32)
     (local $avg f32)
     (local $char_count i32)
@@ -20834,7 +21290,7 @@
       local.get $measurement local.get $slot call $layout_measure_h
     end)
 
-  (func $er_ui_flex_measure (export "er_ui_flex_measure") (param $children i32) (param $child_count i32) (param $constraints i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $out i32) (result i32)
+  (func $er_ui_flex_measure  (param $children i32) (param $child_count i32) (param $constraints i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $out i32) (result i32)
     (local $i i32) (local $child i32) (local $gap_i f32)
     (local $min_main f32) (local $min_cross f32) (local $pref_main f32) (local $pref_cross f32) (local $max_main f32) (local $max_cross f32)
     local.get $children i32.eqz local.get $constraints i32.eqz i32.or local.get $insets i32.eqz i32.or local.get $out i32.eqz i32.or
@@ -20891,7 +21347,7 @@
       local.get $inner i32.const 12 i32.add f32.load
     end)
 
-  (func $er_ui_flex_resolve_main_sizes (export "er_ui_flex_resolve_main_sizes") (param $bounds i32) (param $children i32) (param $child_count i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $out_sizes i32) (param $out_cap i32) (result i32)
+  (func $er_ui_flex_resolve_main_sizes  (param $bounds i32) (param $children i32) (param $child_count i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $out_sizes i32) (param $out_cap i32) (result i32)
     (local $count i32) (local $i i32) (local $child i32)
     (local $available f32) (local $available_children f32) (local $preferred_total f32) (local $min_total f32) (local $scale f32) (local $overflow f32) (local $shrink_capacity f32) (local $child_pref f32) (local $child_min f32) (local $child_shrink f32)
     local.get $bounds i32.eqz local.get $children i32.eqz i32.or local.get $insets i32.eqz i32.or local.get $out_sizes i32.eqz i32.or
@@ -20961,7 +21417,7 @@
     end
     local.get $count)
 
-  (func $er_ui_flex_place (export "er_ui_flex_place") (param $bounds i32) (param $children i32) (param $child_count i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $cross_align i32) (param $out_rects i32) (param $out_cap i32) (param $scratch_sizes i32) (result i32)
+  (func $er_ui_flex_place  (param $bounds i32) (param $children i32) (param $child_count i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $cross_align i32) (param $out_rects i32) (param $out_cap i32) (param $scratch_sizes i32) (result i32)
     (local $count i32) (local $i i32) (local $child i32) (local $main_offset f32) (local $main_size f32) (local $cross_size f32) (local $inner_cross f32)
     local.get $bounds i32.eqz local.get $children i32.eqz i32.or local.get $insets i32.eqz i32.or local.get $out_rects i32.eqz i32.or local.get $scratch_sizes i32.eqz i32.or
     if i32.const 0 return end
@@ -21004,7 +21460,7 @@
     end
     local.get $count)
 
-  (func $er_ui_flex_options_init (export "er_ui_flex_options_init") (param $out i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $cross_align i32) (result i32)
+  (func $er_ui_flex_options_init  (param $out i32) (param $axis i32) (param $gap f32) (param $insets i32) (param $cross_align i32) (result i32)
     local.get $out i32.eqz local.get $insets i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $axis i32.store
@@ -21016,7 +21472,7 @@
     local.get $out i32.const 24 i32.add local.get $cross_align i32.store
     i32.const 1)
 
-  (func $er_ui_flex_cursor_init (export "er_ui_flex_cursor_init") (param $cursor i32) (param $bounds i32) (param $options i32) (param $sizes_ptr i32) (param $sizes_len i32) (result i32)
+  (func $er_ui_flex_cursor_init  (param $cursor i32) (param $bounds i32) (param $options i32) (param $sizes_ptr i32) (param $sizes_len i32) (result i32)
     local.get $cursor i32.eqz local.get $bounds i32.eqz i32.or local.get $options i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $options i32.const 8 i32.add local.get $cursor call $flex_inner_rect drop
@@ -21115,7 +21571,7 @@
     i32.add
     i32.store)
 
-  (func $er_ui_flex_cursor_next (export "er_ui_flex_cursor_next") (param $cursor i32) (param $child i32) (param $out i32) (result i32)
+  (func $er_ui_flex_cursor_next  (param $cursor i32) (param $child i32) (param $out i32) (result i32)
     (local $main_offset f32)
     local.get $cursor i32.eqz local.get $child i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21124,7 +21580,7 @@
     local.get $cursor local.get $main_offset local.get $child call $flex_cursor_claim
     i32.const 1)
 
-  (func $er_ui_flex_cursor_next_within_bounds (export "er_ui_flex_cursor_next_within_bounds") (param $cursor i32) (param $child i32) (param $out i32) (result i32)
+  (func $er_ui_flex_cursor_next_within_bounds  (param $cursor i32) (param $child i32) (param $out i32) (result i32)
     (local $main_offset f32)
     local.get $cursor i32.eqz local.get $child i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21141,11 +21597,11 @@
     local.get $cursor local.get $main_offset local.get $child local.get $out call $flex_cursor_rect_at drop
     local.get $cursor local.get $main_offset local.get $child call $flex_cursor_claim
     i32.const 1)
-  (func $er_ui_primitives_min_extent (export "er_ui_primitives_min_extent") (result f32) f32.const 1)
-  (func $er_ui_primitives_side_panel_layout_size (export "er_ui_primitives_side_panel_layout_size") (result i32) i32.const 16)
-  (func $er_ui_primitives_menu_list_layout_size (export "er_ui_primitives_menu_list_layout_size") (result i32) i32.const 24)
+  (func $er_ui_primitives_min_extent  (result f32) f32.const 1)
+  (func $er_ui_primitives_side_panel_layout_size  (result i32) i32.const 16)
+  (func $er_ui_primitives_menu_list_layout_size  (result i32) i32.const 24)
 
-  (func $er_ui_primitives_constrain_preferred_size (export "er_ui_primitives_constrain_preferred_size") (param $preferred_w f32) (param $preferred_h f32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_primitives_constrain_preferred_size  (param $preferred_w f32) (param $preferred_h f32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -21153,16 +21609,16 @@
     local.get $constraints i32.const 8 i32.add local.get $preferred_h call $er_ui_layout_axis_constraint_limit
     call $layout_store_size)
 
-  (func $er_ui_primitives_max_measured_width (export "er_ui_primitives_max_measured_width") (param $constraints i32) (param $preferred_width f32) (result f32)
+  (func $er_ui_primitives_max_measured_width  (param $constraints i32) (param $preferred_width f32) (result f32)
     local.get $constraints local.get $preferred_width call $er_ui_layout_axis_constraint_limit)
 
-  (func $er_ui_primitives_max_measured_height (export "er_ui_primitives_max_measured_height") (param $constraints i32) (param $preferred_height f32) (result f32)
+  (func $er_ui_primitives_max_measured_height  (param $constraints i32) (param $preferred_height f32) (result f32)
     local.get $constraints i32.const 8 i32.add local.get $preferred_height call $er_ui_layout_axis_constraint_limit)
 
-  (func $er_ui_primitives_max_measured_size (export "er_ui_primitives_max_measured_size") (param $constraints i32) (param $preferred_w f32) (param $preferred_h f32) (param $out i32) (result i32)
+  (func $er_ui_primitives_max_measured_size  (param $constraints i32) (param $preferred_w f32) (param $preferred_h f32) (param $out i32) (result i32)
     local.get $preferred_w local.get $preferred_h local.get $constraints local.get $out call $er_ui_primitives_constrain_preferred_size)
 
-  (func $er_ui_primitives_content_inset (export "er_ui_primitives_content_inset") (param $bounds i32) (param $padding f32) (param $out i32) (result i32)
+  (func $er_ui_primitives_content_inset  (param $bounds i32) (param $padding f32) (param $out i32) (result i32)
     (local $clamped f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21184,7 +21640,7 @@
     local.get $out
     call $er_ui_rect_valid)
 
-  (func $er_ui_primitives_side_panel_layout (export "er_ui_primitives_side_panel_layout") (param $out i32) (param $trigger_y f32) (param $trigger_w f32) (param $trigger_h f32) (param $gap f32) (result i32)
+  (func $er_ui_primitives_side_panel_layout  (param $out i32) (param $trigger_y f32) (param $trigger_w f32) (param $trigger_h f32) (param $gap f32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $out local.get $trigger_y f32.store
@@ -21193,7 +21649,7 @@
     local.get $out i32.const 12 i32.add local.get $gap f32.store
     i32.const 1)
 
-  (func $er_ui_primitives_side_panel_trigger_bounds (export "er_ui_primitives_side_panel_trigger_bounds") (param $bounds i32) (param $spec i32) (param $out i32) (result i32)
+  (func $er_ui_primitives_side_panel_trigger_bounds  (param $bounds i32) (param $spec i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $spec i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -21203,7 +21659,7 @@
     local.get $spec i32.const 8 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_primitives_side_panel_content_bounds (export "er_ui_primitives_side_panel_content_bounds") (param $bounds i32) (param $spec i32) (param $out i32) (result i32)
+  (func $er_ui_primitives_side_panel_content_bounds  (param $bounds i32) (param $spec i32) (param $out i32) (result i32)
     (local $x f32)
     local.get $bounds i32.eqz local.get $spec i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21220,16 +21676,16 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_primitives_overlay_trigger_offset (export "er_ui_primitives_overlay_trigger_offset") (result i32) i32.const 0)
-  (func $er_ui_primitives_overlay_primary_offset (export "er_ui_primitives_overlay_primary_offset") (result i32) i32.const 1)
-  (func $er_ui_primitives_overlay_secondary_offset (export "er_ui_primitives_overlay_secondary_offset") (result i32) i32.const 2)
-  (func $er_ui_primitives_overlay_trigger_id (export "er_ui_primitives_overlay_trigger_id") (param $id i32) (result i32) local.get $id)
-  (func $er_ui_primitives_overlay_primary_id (export "er_ui_primitives_overlay_primary_id") (param $id i32) (result i32) local.get $id i32.const 1 i32.add)
-  (func $er_ui_primitives_overlay_secondary_id (export "er_ui_primitives_overlay_secondary_id") (param $id i32) (result i32) local.get $id i32.const 2 i32.add)
-  (func $er_ui_primitives_overlay_indexed_id (export "er_ui_primitives_overlay_indexed_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_primitives_overlay_trigger_offset  (result i32) i32.const 0)
+  (func $er_ui_primitives_overlay_primary_offset  (result i32) i32.const 1)
+  (func $er_ui_primitives_overlay_secondary_offset  (result i32) i32.const 2)
+  (func $er_ui_primitives_overlay_trigger_id  (param $id i32) (result i32) local.get $id)
+  (func $er_ui_primitives_overlay_primary_id  (param $id i32) (result i32) local.get $id i32.const 1 i32.add)
+  (func $er_ui_primitives_overlay_secondary_id  (param $id i32) (result i32) local.get $id i32.const 2 i32.add)
+  (func $er_ui_primitives_overlay_indexed_id  (param $id i32) (param $index i32) (result i32)
     local.get $id local.get $index i32.add i32.const 1 i32.add)
 
-  (func $er_ui_primitives_menu_list_layout (export "er_ui_primitives_menu_list_layout") (param $out i32) (param $padding f32) (param $item_h f32) (param $item_pitch f32) (param $item_radius f32) (param $item_padding f32) (param $item_text_h f32) (result i32)
+  (func $er_ui_primitives_menu_list_layout  (param $out i32) (param $padding f32) (param $item_h f32) (param $item_pitch f32) (param $item_radius f32) (param $item_padding f32) (param $item_text_h f32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $out local.get $padding f32.store
@@ -21240,7 +21696,7 @@
     local.get $out i32.const 20 i32.add local.get $item_text_h f32.store
     i32.const 1)
 
-  (func $er_ui_primitives_menu_item_bounds (export "er_ui_primitives_menu_item_bounds") (param $content i32) (param $index i32) (param $spec i32) (param $out i32) (result i32)
+  (func $er_ui_primitives_menu_item_bounds  (param $content i32) (param $index i32) (param $spec i32) (param $out i32) (result i32)
     local.get $content i32.eqz local.get $spec i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -21300,7 +21756,7 @@
     local.get $out
     call $er_ui_layout_measure_text)
 
-  (func $er_ui_primitives_measured_label_width (export "er_ui_primitives_measured_label_width") (param $text_ptr i32) (param $text_len i32) (param $line_height f32) (param $max_lines i32) (param $padding f32) (result f32)
+  (func $er_ui_primitives_measured_label_width  (param $text_ptr i32) (param $text_len i32) (param $line_height f32) (param $max_lines i32) (param $padding f32) (result f32)
     local.get $text_ptr
     local.get $text_len
     local.get $line_height
@@ -21310,7 +21766,7 @@
     f32.mul
     f32.add)
 
-  (func $er_ui_primitives_measure_two_item_menu_panel (export "er_ui_primitives_measure_two_item_menu_panel") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $spec i32) (param $out i32) (result i32)
+  (func $er_ui_primitives_measure_two_item_menu_panel  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $spec i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32) (local $min_w f32) (local $min_h f32) (local $max_w f32)
     local.get $constraints i32.eqz local.get $spec i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21352,9 +21808,9 @@
     local.get $min_w local.get $min_h local.get $pref_w local.get $pref_h local.get $max_w local.get $pref_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_primitives_title_detail_panel_size (export "er_ui_primitives_title_detail_panel_size") (result i32) i32.const 32)
+  (func $er_ui_primitives_title_detail_panel_size  (result i32) i32.const 32)
 
-  (func $er_ui_primitives_title_detail_panel (export "er_ui_primitives_title_detail_panel") (param $out i32) (param $radius f32) (param $padding f32) (param $title_y f32) (param $title_h f32) (param $detail_y f32) (param $detail_h f32) (param $title_right_inset f32) (param $title_max_lines i32) (param $detail_max_lines i32) (result i32)
+  (func $er_ui_primitives_title_detail_panel  (param $out i32) (param $radius f32) (param $padding f32) (param $title_y f32) (param $title_h f32) (param $detail_y f32) (param $detail_h f32) (param $title_right_inset f32) (param $title_max_lines i32) (param $detail_max_lines i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $out local.get $radius f32.store
@@ -21368,7 +21824,7 @@
     local.get $out i32.const 30 i32.add local.get $detail_max_lines i32.store16
     i32.const 1)
 
-  (func $er_ui_primitives_measure_title_detail_panel (export "er_ui_primitives_measure_title_detail_panel") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $spec i32) (param $out i32) (result i32)
+  (func $er_ui_primitives_measure_title_detail_panel  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $spec i32) (param $out i32) (result i32)
     (local $detail_gap f32) (local $pref_w f32) (local $pref_h f32) (local $min_w f32) (local $min_h f32) (local $max_w f32) (local $max_h f32)
     local.get $constraints i32.eqz local.get $spec i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21398,7 +21854,7 @@
     local.get $min_w local.get $min_h local.get $pref_w local.get $pref_h local.get $max_w local.get $max_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_primitives_measure_side_panel_menu (export "er_ui_primitives_measure_side_panel_menu") (param $trigger_ptr i32) (param $trigger_len i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $panel i32) (param $trigger_padding f32) (param $menu i32) (param $out i32) (result i32)
+  (func $er_ui_primitives_measure_side_panel_menu  (param $trigger_ptr i32) (param $trigger_len i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $panel i32) (param $trigger_padding f32) (param $menu i32) (param $out i32) (result i32)
     (local $trigger_w f32) (local $pref_w f32) (local $pref_h f32) (local $min_w f32) (local $min_h f32) (local $max_w f32) (local $max_h f32)
     local.get $constraints i32.eqz local.get $panel i32.eqz i32.or local.get $menu i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21425,11 +21881,11 @@
     local.get $pref_h i32.const 120340 f32.load call $max_f32 local.set $max_h
     local.get $min_w local.get $min_h local.get $pref_w local.get $pref_h local.get $max_w local.get $max_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_text_component_line_height (export "er_ui_text_component_line_height") (result f32) f32.const 18)
-  (func $er_ui_text_component_max_lines (export "er_ui_text_component_max_lines") (result i32) i32.const 8)
-  (func $er_ui_text_component_min_width (export "er_ui_text_component_min_width") (result f32) f32.const 24)
+  (func $er_ui_text_component_line_height  (result f32) f32.const 18)
+  (func $er_ui_text_component_max_lines  (result i32) i32.const 8)
+  (func $er_ui_text_component_min_width  (result f32) f32.const 24)
 
-  (func $er_ui_text_component_measure_value (export "er_ui_text_component_measure_value") (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $metrics i32) (param $out i32) (result i32)
+  (func $er_ui_text_component_measure_value  (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $metrics i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $metrics i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $text_ptr local.get $text_len local.get $constraints local.get $metrics i32.const 120416 call $er_ui_layout_measure_text drop
@@ -21445,7 +21901,7 @@
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_text_component_measure (export "er_ui_text_component_measure") (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_text_component_measure  (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $out i32) (result i32)
     i32.const 120456
     f32.const 18
     local.get $text_ptr
@@ -21461,16 +21917,16 @@
     i32.const 120456
     local.get $out
     call $er_ui_text_component_measure_value)
-  (func $er_ui_component_size_small (export "er_ui_component_size_small") (result i32) i32.const 0)
-  (func $er_ui_component_size_default (export "er_ui_component_size_default") (result i32) i32.const 1)
-  (func $er_ui_component_size_large (export "er_ui_component_size_large") (result i32) i32.const 2)
+  (func $er_ui_component_size_small  (result i32) i32.const 0)
+  (func $er_ui_component_size_default  (result i32) i32.const 1)
+  (func $er_ui_component_size_large  (result i32) i32.const 2)
 
-  (func $er_ui_badge_height (export "er_ui_badge_height") (result f32) f32.const 24)
-  (func $er_ui_badge_text_height (export "er_ui_badge_text_height") (result f32) f32.const 13)
-  (func $er_ui_badge_padding_x (export "er_ui_badge_padding_x") (result f32) f32.const 12)
-  (func $er_ui_badge_min_width (export "er_ui_badge_min_width") (result f32) f32.const 28)
+  (func $er_ui_badge_height  (result f32) f32.const 24)
+  (func $er_ui_badge_text_height  (result f32) f32.const 13)
+  (func $er_ui_badge_padding_x  (result f32) f32.const 12)
+  (func $er_ui_badge_min_width  (result f32) f32.const 28)
 
-  (func $er_ui_badge_label_bounds (export "er_ui_badge_label_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_badge_label_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $padding f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21485,7 +21941,7 @@
     f32.const 13
     call $rect_store)
 
-  (func $er_ui_badge_measure (export "er_ui_badge_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_badge_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $preferred_w f32) (local $preferred_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21508,35 +21964,35 @@
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_button_height_for_size (export "er_ui_button_height_for_size") (param $size i32) (result f32)
+  (func $er_ui_button_height_for_size  (param $size i32) (result f32)
     local.get $size i32.eqz
     if f32.const 32 return end
     local.get $size i32.const 2 i32.eq
     if f32.const 44 return end
     f32.const 36)
 
-  (func $er_ui_button_label_padding_for_size (export "er_ui_button_label_padding_for_size") (param $size i32) (result f32)
+  (func $er_ui_button_label_padding_for_size  (param $size i32) (result f32)
     local.get $size i32.eqz
     if f32.const 12 return end
     local.get $size i32.const 2 i32.eq
     if f32.const 20 return end
     f32.const 16)
 
-  (func $er_ui_button_min_width_for_size (export "er_ui_button_min_width_for_size") (param $size i32) (result f32)
+  (func $er_ui_button_min_width_for_size  (param $size i32) (result f32)
     local.get $size i32.eqz
     if f32.const 36 return end
     local.get $size i32.const 2 i32.eq
     if f32.const 52 return end
     f32.const 44)
 
-  (func $er_ui_icon_button_size_for_size (export "er_ui_icon_button_size_for_size") (param $size i32) (result f32)
+  (func $er_ui_icon_button_size_for_size  (param $size i32) (result f32)
     local.get $size i32.eqz
     if f32.const 32 return end
     local.get $size i32.const 2 i32.eq
     if f32.const 44 return end
     f32.const 36)
 
-  (func $er_ui_button_icon_cluster_width (export "er_ui_button_icon_cluster_width") (param $icon_count i32) (param $has_label i32) (result f32)
+  (func $er_ui_button_icon_cluster_width  (param $icon_count i32) (param $has_label i32) (result f32)
     (local $width f32)
     local.get $icon_count i32.eqz
     if f32.const 0 return end
@@ -21553,7 +22009,7 @@
     end
     local.get $width)
 
-  (func $er_ui_button_preferred_width_for_size (export "er_ui_button_preferred_width_for_size") (param $label_ptr i32) (param $label_len i32) (param $icon_count i32) (param $size i32) (result f32)
+  (func $er_ui_button_preferred_width_for_size  (param $label_ptr i32) (param $label_len i32) (param $icon_count i32) (param $size i32) (result f32)
     (local $label_w f32)
     local.get $label_len
     i32.eqz
@@ -21575,7 +22031,7 @@
     local.get $size call $er_ui_button_label_padding_for_size f32.const 2 f32.mul f32.add
     call $max_f32)
 
-  (func $er_ui_button_measure (export "er_ui_button_measure") (param $label_ptr i32) (param $label_len i32) (param $icon_count i32) (param $size i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_button_measure  (param $label_ptr i32) (param $label_len i32) (param $icon_count i32) (param $size i32) (param $constraints i32) (param $out i32) (result i32)
     (local $preferred_w f32) (local $preferred_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21591,7 +22047,7 @@
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_icon_button_measure (export "er_ui_icon_button_measure") (param $size i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_icon_button_measure  (param $size i32) (param $constraints i32) (param $out i32) (result i32)
     (local $resolved f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21603,24 +22059,24 @@
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_input_control_height (export "er_ui_input_control_height") (param $size i32) (result f32)
+  (func $er_ui_input_control_height  (param $size i32) (result f32)
     local.get $size i32.eqz
     if f32.const 32 return end
     local.get $size i32.const 2 i32.eq
     if f32.const 48 return end
     f32.const 40)
 
-  (func $er_ui_input_padding (export "er_ui_input_padding") (param $size i32) (result f32)
+  (func $er_ui_input_padding  (param $size i32) (result f32)
     local.get $size i32.eqz
     if f32.const 10 return end
     local.get $size i32.const 2 i32.eq
     if f32.const 16 return end
     f32.const 12)
 
-  (func $er_ui_input_preferred_size (export "er_ui_input_preferred_size") (param $size i32) (param $out i32) (result i32)
+  (func $er_ui_input_preferred_size  (param $size i32) (param $out i32) (result i32)
     local.get $out f32.const 44 local.get $size call $er_ui_input_control_height call $layout_store_size)
 
-  (func $er_ui_input_measure (export "er_ui_input_measure") (param $text_ptr i32) (param $text_len i32) (param $has_icon i32) (param $size i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_input_measure  (param $text_ptr i32) (param $text_len i32) (param $has_icon i32) (param $size i32) (param $constraints i32) (param $out i32) (result i32)
     (local $padding f32) (local $icon_w f32) (local $label_w f32) (local $label_h f32) (local $height f32) (local $preferred_w f32) (local $preferred_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21641,7 +22097,7 @@
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_textarea_measure (export "er_ui_textarea_measure") (param $placeholder_ptr i32) (param $placeholder_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_textarea_measure  (param $placeholder_ptr i32) (param $placeholder_len i32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 120488 f32.const 12 f32.store
@@ -21684,7 +22140,7 @@
 
   (func $textarea_line_end_at (param $ptr i32) (param $len i32) (param $start i32) (result i32)
     (local $index i32)
-    local.get $start local.get $len call $layout_min_i32_u local.set $index
+    local.get $start local.get $len call $min_i32_u local.set $index
     block $done
       loop $scan
         local.get $index local.get $len i32.ge_u br_if $done
@@ -21695,7 +22151,7 @@
     end
     local.get $index)
 
-  (func $er_ui_textarea_cursor_from_point (export "er_ui_textarea_cursor_from_point") (param $text_ptr i32) (param $text_len i32) (param $bounds i32) (param $x f32) (param $y f32) (param $first_line i32) (param $line_height f32) (param $char_width f32) (param $gutter_width f32) (param $padding_left f32) (param $padding_top f32) (result i32)
+  (func $er_ui_textarea_cursor_from_point  (param $text_ptr i32) (param $text_len i32) (param $bounds i32) (param $x f32) (param $y f32) (param $first_line i32) (param $line_height f32) (param $char_width f32) (param $gutter_width f32) (param $padding_left f32) (param $padding_top f32) (result i32)
     (local $local_x f32) (local $local_y f32) (local $line_offset i32) (local $target_column i32) (local $start i32) (local $end i32)
     local.get $x local.get $bounds f32.load f32.sub local.get $padding_left f32.sub local.get $gutter_width f32.sub f32.const 0 call $max_f32 local.set $local_x
     local.get $y local.get $bounds i32.const 4 i32.add f32.load f32.sub local.get $padding_top f32.sub f32.const 0 call $max_f32 local.set $local_y
@@ -21703,10 +22159,10 @@
     local.get $local_x local.get $char_width f32.const 1 call $max_f32 f32.div i32.trunc_f32_u local.set $target_column
     local.get $text_ptr local.get $text_len local.get $first_line local.get $line_offset i32.add call $textarea_line_start_at local.set $start
     local.get $text_ptr local.get $text_len local.get $start call $textarea_line_end_at local.set $end
-    local.get $start local.get $target_column local.get $end local.get $start i32.sub call $layout_min_i32_u i32.add)
-  (func $er_ui_row_item_min_width (export "er_ui_row_item_min_width") (result f32) f32.const 96)
-  (func $er_ui_row_item_min_height (export "er_ui_row_item_min_height") (result f32) f32.const 32)
-  (func $er_ui_row_item_text_width (export "er_ui_row_item_text_width") (param $bounds i32) (param $has_icon i32) (result f32)
+    local.get $start local.get $target_column local.get $end local.get $start i32.sub call $min_i32_u i32.add)
+  (func $er_ui_row_item_min_width  (result f32) f32.const 96)
+  (func $er_ui_row_item_min_height  (result f32) f32.const 32)
+  (func $er_ui_row_item_text_width  (param $bounds i32) (param $has_icon i32) (result f32)
     (local $width f32)
     local.get $bounds i32.eqz
     if f32.const 0 return end
@@ -21725,7 +22181,7 @@
     f32.const 1
     call $max_f32)
 
-  (func $er_ui_row_item_text_bounds (export "er_ui_row_item_text_bounds") (param $bounds i32) (param $has_icon i32) (param $out i32) (result i32)
+  (func $er_ui_row_item_text_bounds  (param $bounds i32) (param $has_icon i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds
@@ -21745,7 +22201,7 @@
     drop
     local.get $out call $er_ui_rect_valid)
 
-  (func $er_ui_row_item_measure (export "er_ui_row_item_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $has_icon i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_row_item_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $has_icon i32) (param $constraints i32) (param $out i32) (result i32)
     (local $icon_extra f32) (local $gap f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21790,7 +22246,7 @@
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_card_measure (export "er_ui_card_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_card_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $gap f32) (local $content_w f32) (local $content_h f32) (local $min_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21842,7 +22298,7 @@
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_empty_measure (export "er_ui_empty_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_empty_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $content_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21871,10 +22327,10 @@
     call $er_ui_layout_measurement_flexible
     drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_checkbox_box_size (export "er_ui_checkbox_box_size") (result f32) f32.const 18)
-  (func $er_ui_checkbox_min_width (export "er_ui_checkbox_min_width") (result f32) f32.const 96)
+  (func $er_ui_checkbox_box_size  (result f32) f32.const 18)
+  (func $er_ui_checkbox_min_width  (result f32) f32.const 96)
 
-  (func $er_ui_checkbox_measure (export "er_ui_checkbox_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_checkbox_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21898,11 +22354,11 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_switch_width (export "er_ui_switch_width") (result f32) f32.const 36)
-  (func $er_ui_switch_height (export "er_ui_switch_height") (result f32) f32.const 20)
-  (func $er_ui_switch_min_width (export "er_ui_switch_min_width") (result f32) f32.const 112)
+  (func $er_ui_switch_width  (result f32) f32.const 36)
+  (func $er_ui_switch_height  (result f32) f32.const 20)
+  (func $er_ui_switch_min_width  (result f32) f32.const 112)
 
-  (func $er_ui_switch_measure (export "er_ui_switch_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_switch_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21926,11 +22382,11 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_slider_thumb_size (export "er_ui_slider_thumb_size") (result f32) f32.const 12)
-  (func $er_ui_slider_min_width (export "er_ui_slider_min_width") (result f32) f32.const 120)
-  (func $er_ui_slider_min_height (export "er_ui_slider_min_height") (result f32) f32.const 32)
+  (func $er_ui_slider_thumb_size  (result f32) f32.const 12)
+  (func $er_ui_slider_min_width  (result f32) f32.const 120)
+  (func $er_ui_slider_min_height  (result f32) f32.const 32)
 
-  (func $er_ui_slider_measure (export "er_ui_slider_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_slider_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21949,10 +22405,10 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_progress_height (export "er_ui_progress_height") (result f32) f32.const 8)
-  (func $er_ui_progress_min_width (export "er_ui_progress_min_width") (result f32) f32.const 96)
+  (func $er_ui_progress_height  (result f32) f32.const 8)
+  (func $er_ui_progress_min_width  (result f32) f32.const 96)
 
-  (func $er_ui_progress_measure (export "er_ui_progress_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_progress_measure  (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21967,7 +22423,7 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_progress_track_bounds (export "er_ui_progress_track_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_progress_track_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -21977,7 +22433,7 @@
     f32.const 8
     call $rect_store)
 
-  (func $er_ui_progress_fill_bounds (export "er_ui_progress_fill_bounds") (param $track i32) (param $value f32) (param $out i32) (result i32)
+  (func $er_ui_progress_fill_bounds  (param $track i32) (param $value f32) (param $out i32) (result i32)
     (local $clamped f32)
     local.get $track i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -21989,7 +22445,7 @@
     local.get $track i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_aspect_ratio_frame_bounds (export "er_ui_aspect_ratio_frame_bounds") (param $bounds i32) (param $ratio_w i32) (param $ratio_h i32) (param $out i32) (result i32)
+  (func $er_ui_aspect_ratio_frame_bounds  (param $bounds i32) (param $ratio_w i32) (param $ratio_h i32) (param $out i32) (result i32)
     (local $safe_w f32) (local $safe_h f32) (local $frame_w f32) (local $frame_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22009,28 +22465,28 @@
     local.get $frame_w
     local.get $frame_h
     call $rect_store)
-  (func $er_ui_separator_height (export "er_ui_separator_height") (result f32) f32.const 1)
-  (func $er_ui_separator_min_width (export "er_ui_separator_min_width") (result f32) f32.const 1)
-  (func $er_ui_skeleton_min_width (export "er_ui_skeleton_min_width") (result f32) f32.const 96)
-  (func $er_ui_skeleton_height (export "er_ui_skeleton_height") (result f32) f32.const 20)
-  (func $er_ui_skeleton_alpha (export "er_ui_skeleton_alpha") (result i32) i32.const 32)
-  (func $er_ui_skeleton_radius (export "er_ui_skeleton_radius") (result f32) f32.const 6)
-  (func $er_ui_spinner_size (export "er_ui_spinner_size") (result f32) f32.const 28)
-  (func $er_ui_spinner_slice_inset (export "er_ui_spinner_slice_inset") (result f32) f32.const 3)
-  (func $er_ui_spinner_start_turn (export "er_ui_spinner_start_turn") (result f32) f32.const 0.08)
-  (func $er_ui_spinner_end_turn (export "er_ui_spinner_end_turn") (result f32) f32.const 0.78)
-  (func $er_ui_aspect_ratio_min_width (export "er_ui_aspect_ratio_min_width") (result f32) f32.const 160)
-  (func $er_ui_kbd_height (export "er_ui_kbd_height") (result f32) f32.const 24)
-  (func $er_ui_kbd_text_height (export "er_ui_kbd_text_height") (result f32) f32.const 12)
-  (func $er_ui_kbd_label_max_lines (export "er_ui_kbd_label_max_lines") (result i32) i32.const 1)
-  (func $er_ui_kbd_label_padding (export "er_ui_kbd_label_padding") (result f32) f32.const 8)
-  (func $er_ui_kbd_min_width (export "er_ui_kbd_min_width") (result f32) f32.const 24)
-  (func $er_ui_avatar_size (export "er_ui_avatar_size") (result f32) f32.const 40)
-  (func $er_ui_avatar_text_height (export "er_ui_avatar_text_height") (result f32) f32.const 14)
-  (func $er_ui_avatar_label_inset (export "er_ui_avatar_label_inset") (result f32) f32.const 6)
-  (func $er_ui_label_height (export "er_ui_label_height") (result f32) f32.const 16)
-  (func $er_ui_label_min_width (export "er_ui_label_min_width") (result f32) f32.const 24)
-  (func $er_ui_label_max_lines (export "er_ui_label_max_lines") (result i32) i32.const 2)
+  (func $er_ui_separator_height  (result f32) f32.const 1)
+  (func $er_ui_separator_min_width  (result f32) f32.const 1)
+  (func $er_ui_skeleton_min_width  (result f32) f32.const 96)
+  (func $er_ui_skeleton_height  (result f32) f32.const 20)
+  (func $er_ui_skeleton_alpha  (result i32) i32.const 32)
+  (func $er_ui_skeleton_radius  (result f32) f32.const 6)
+  (func $er_ui_spinner_size  (result f32) f32.const 28)
+  (func $er_ui_spinner_slice_inset  (result f32) f32.const 3)
+  (func $er_ui_spinner_start_turn  (result f32) f32.const 0.08)
+  (func $er_ui_spinner_end_turn  (result f32) f32.const 0.78)
+  (func $er_ui_aspect_ratio_min_width  (result f32) f32.const 160)
+  (func $er_ui_kbd_height  (result f32) f32.const 24)
+  (func $er_ui_kbd_text_height  (result f32) f32.const 12)
+  (func $er_ui_kbd_label_max_lines  (result i32) i32.const 1)
+  (func $er_ui_kbd_label_padding  (result f32) f32.const 8)
+  (func $er_ui_kbd_min_width  (result f32) f32.const 24)
+  (func $er_ui_avatar_size  (result f32) f32.const 40)
+  (func $er_ui_avatar_text_height  (result f32) f32.const 14)
+  (func $er_ui_avatar_label_inset  (result f32) f32.const 6)
+  (func $er_ui_label_height  (result f32) f32.const 16)
+  (func $er_ui_label_min_width  (result f32) f32.const 24)
+  (func $er_ui_label_max_lines  (result i32) i32.const 2)
 
   (func $er_ui_measure_intrinsic (param $w f32) (param $h f32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
@@ -22062,13 +22518,13 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_separator_measure (export "er_ui_separator_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_separator_measure  (param $constraints i32) (param $out i32) (result i32)
     f32.const 1 f32.const 1 local.get $constraints local.get $out call $er_ui_measure_flexible_line)
 
-  (func $er_ui_skeleton_measure (export "er_ui_skeleton_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_skeleton_measure  (param $constraints i32) (param $out i32) (result i32)
     f32.const 96 f32.const 20 local.get $constraints local.get $out call $er_ui_measure_flexible_line)
 
-  (func $er_ui_spinner_measure (export "er_ui_spinner_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_spinner_measure  (param $constraints i32) (param $out i32) (result i32)
     f32.const 28 f32.const 28 local.get $constraints local.get $out call $er_ui_measure_intrinsic)
 
   (func $er_ui_aspect_ratio_intrinsic_size_impl (param $ratio_w i32) (param $ratio_h i32) (param $out i32) (result i32)
@@ -22082,10 +22538,10 @@
     f32.const 160 local.get $safe_h f32.mul local.get $safe_w f32.div
     call $layout_store_size)
 
-  (func $er_ui_aspect_ratio_intrinsic_size (export "er_ui_aspect_ratio_intrinsic_size") (param $ratio_w i32) (param $ratio_h i32) (param $out i32) (result i32)
+  (func $er_ui_aspect_ratio_intrinsic_size  (param $ratio_w i32) (param $ratio_h i32) (param $out i32) (result i32)
     local.get $ratio_w local.get $ratio_h local.get $out call $er_ui_aspect_ratio_intrinsic_size_impl)
 
-  (func $er_ui_aspect_ratio_measure (export "er_ui_aspect_ratio_measure") (param $ratio_w i32) (param $ratio_h i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_aspect_ratio_measure  (param $ratio_w i32) (param $ratio_h i32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $ratio_w local.get $ratio_h i32.const 120856 call $er_ui_aspect_ratio_intrinsic_size_impl drop
@@ -22095,7 +22551,7 @@
     local.get $out
     call $er_ui_measure_intrinsic)
 
-  (func $er_ui_kbd_measure (export "er_ui_kbd_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_kbd_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22124,10 +22580,10 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_avatar_measure (export "er_ui_avatar_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_avatar_measure  (param $constraints i32) (param $out i32) (result i32)
     f32.const 40 f32.const 40 local.get $constraints local.get $out call $er_ui_measure_intrinsic)
 
-  (func $er_ui_label_measure (export "er_ui_label_measure") (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_label_measure  (param $text_ptr i32) (param $text_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22147,7 +22603,7 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_separator_line_bounds (export "er_ui_separator_line_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_separator_line_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22172,13 +22628,13 @@
     local.get $size
     call $rect_store)
 
-  (func $er_ui_spinner_bounds (export "er_ui_spinner_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_spinner_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds f32.const 28 local.get $out call $er_ui_centered_square_bounds)
 
-  (func $er_ui_avatar_bounds (export "er_ui_avatar_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_avatar_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds f32.const 40 local.get $out call $er_ui_centered_square_bounds)
 
-  (func $er_ui_kbd_label_bounds (export "er_ui_kbd_label_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_kbd_label_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22188,7 +22644,7 @@
     f32.const 12
     call $rect_store)
 
-  (func $er_ui_kbd_bounds (export "er_ui_kbd_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_kbd_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $height f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22203,7 +22659,7 @@
     local.get $height
     call $rect_store)
 
-  (func $er_ui_avatar_label_bounds (export "er_ui_avatar_label_bounds") (param $avatar_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_avatar_label_bounds  (param $avatar_bounds i32) (param $out i32) (result i32)
     local.get $avatar_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22212,21 +22668,21 @@
     local.get $avatar_bounds i32.const 8 i32.add f32.load f32.const 12 f32.sub f32.const 0 call $max_f32
     f32.const 14
     call $rect_store)
-  (func $er_ui_tooltip_trigger_y (export "er_ui_tooltip_trigger_y") (result f32) f32.const 8)
-  (func $er_ui_tooltip_trigger_w (export "er_ui_tooltip_trigger_w") (result f32) f32.const 80)
-  (func $er_ui_tooltip_trigger_h (export "er_ui_tooltip_trigger_h") (result f32) f32.const 28)
-  (func $er_ui_tooltip_gap (export "er_ui_tooltip_gap") (result f32) f32.const 10)
-  (func $er_ui_tooltip_content_y (export "er_ui_tooltip_content_y") (result f32) f32.const 7)
-  (func $er_ui_tooltip_content_h (export "er_ui_tooltip_content_h") (result f32) f32.const 24)
-  (func $er_ui_tooltip_radius (export "er_ui_tooltip_radius") (result f32) f32.const 6)
-  (func $er_ui_tooltip_padding (export "er_ui_tooltip_padding") (result f32) f32.const 8)
-  (func $er_ui_tooltip_text_h (export "er_ui_tooltip_text_h") (result f32) f32.const 12)
-  (func $er_ui_tooltip_text_max_lines (export "er_ui_tooltip_text_max_lines") (result i32) i32.const 2)
-  (func $er_ui_tooltip_trigger_max_lines (export "er_ui_tooltip_trigger_max_lines") (result i32) i32.const 2)
-  (func $er_ui_tooltip_min_width (export "er_ui_tooltip_min_width") (result f32) f32.const 160)
-  (func $er_ui_tooltip_min_height (export "er_ui_tooltip_min_height") (result f32) f32.const 44)
+  (func $er_ui_tooltip_trigger_y  (result f32) f32.const 8)
+  (func $er_ui_tooltip_trigger_w  (result f32) f32.const 80)
+  (func $er_ui_tooltip_trigger_h  (result f32) f32.const 28)
+  (func $er_ui_tooltip_gap  (result f32) f32.const 10)
+  (func $er_ui_tooltip_content_y  (result f32) f32.const 7)
+  (func $er_ui_tooltip_content_h  (result f32) f32.const 24)
+  (func $er_ui_tooltip_radius  (result f32) f32.const 6)
+  (func $er_ui_tooltip_padding  (result f32) f32.const 8)
+  (func $er_ui_tooltip_text_h  (result f32) f32.const 12)
+  (func $er_ui_tooltip_text_max_lines  (result i32) i32.const 2)
+  (func $er_ui_tooltip_trigger_max_lines  (result i32) i32.const 2)
+  (func $er_ui_tooltip_min_width  (result f32) f32.const 160)
+  (func $er_ui_tooltip_min_height  (result f32) f32.const 44)
 
-  (func $er_ui_tooltip_trigger_bounds (export "er_ui_tooltip_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_tooltip_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22247,7 +22703,7 @@
     local.get $line_height
     f32.mul)
 
-  (func $er_ui_tooltip_content_bounds (export "er_ui_tooltip_content_bounds") (param $bounds i32) (param $content_ptr i32) (param $content_len i32) (param $out i32) (result i32)
+  (func $er_ui_tooltip_content_bounds  (param $bounds i32) (param $content_ptr i32) (param $content_len i32) (param $out i32) (result i32)
     (local $x f32) (local $width f32) (local $text_w f32) (local $content_h f32) (local $available_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22266,7 +22722,7 @@
     local.get $content_h local.get $available_h call $min_f32
     call $rect_store)
 
-  (func $er_ui_tooltip_content_inner_bounds (export "er_ui_tooltip_content_inner_bounds") (param $tip_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_tooltip_content_inner_bounds  (param $tip_bounds i32) (param $out i32) (result i32)
     (local $pad f32)
     local.get $tip_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22285,7 +22741,7 @@
     local.get $tip_bounds i32.const 12 i32.add f32.load local.get $pad f32.const 2 f32.mul f32.sub f32.const 0 call $max_f32
     call $rect_store)
 
-  (func $er_ui_tooltip_text_bounds (export "er_ui_tooltip_text_bounds") (param $tip_bounds i32) (param $content_ptr i32) (param $content_len i32) (param $out i32) (result i32)
+  (func $er_ui_tooltip_text_bounds  (param $tip_bounds i32) (param $content_ptr i32) (param $content_len i32) (param $out i32) (result i32)
     (local $text_h f32)
     local.get $tip_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22301,7 +22757,7 @@
     local.get $text_h
     call $rect_store)
 
-  (func $er_ui_tooltip_measure (export "er_ui_tooltip_measure") (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_tooltip_measure  (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $trigger_w f32) (local $trigger_h f32) (local $content_w f32) (local $content_h f32) (local $control_w f32) (local $raw_w f32) (local $raw_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22342,11 +22798,11 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_toggle_text_padding (export "er_ui_toggle_text_padding") (result f32) f32.const 8)
-  (func $er_ui_toggle_label_max_lines (export "er_ui_toggle_label_max_lines") (result i32) i32.const 1)
-  (func $er_ui_toggle_group_item_count (export "er_ui_toggle_group_item_count") (result i32) i32.const 3)
-  (func $er_ui_toggle_group_id_stride (export "er_ui_toggle_group_id_stride") (result i32) i32.const 3)
-  (func $er_ui_toggle_group_third_label_len (export "er_ui_toggle_group_third_label_len") (result i32) i32.const 5)
+  (func $er_ui_toggle_text_padding  (result f32) f32.const 8)
+  (func $er_ui_toggle_label_max_lines  (result i32) i32.const 1)
+  (func $er_ui_toggle_group_item_count  (result i32) i32.const 3)
+  (func $er_ui_toggle_group_id_stride  (result i32) i32.const 3)
+  (func $er_ui_toggle_group_third_label_len  (result i32) i32.const 5)
 
   (func $er_ui_toggle_write_right_label (result i32)
     i32.const 121140 i32.const 82 i32.store8
@@ -22375,7 +22831,7 @@
     i32.const 121180 i32.const 1 i32.store
     local.get $label_ptr local.get $label_len i32.const 121148 i32.const 121172 local.get $out call $er_ui_text_component_measure_value)
 
-  (func $er_ui_toggle_preferred_size (export "er_ui_toggle_preferred_size") (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_toggle_preferred_size  (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $label_ptr local.get $label_len i32.const 121184 call $er_ui_toggle_measure_label drop
@@ -22384,7 +22840,7 @@
     i32.const 121196 f32.load f32.const 16 f32.add
     call $layout_store_size)
 
-  (func $er_ui_toggle_measure (export "er_ui_toggle_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_toggle_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22405,7 +22861,7 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_toggle_text_bounds (export "er_ui_toggle_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_toggle_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $pad f32) (local $inner_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22425,18 +22881,18 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_toggle_group_active_index (export "er_ui_toggle_group_active_index") (param $active i32) (result i32)
+  (func $er_ui_toggle_group_active_index  (param $active i32) (result i32)
     local.get $active i32.const 3 call $er_ui_list_clamped_index)
 
-  (func $er_ui_toggle_group_indexed_id (export "er_ui_toggle_group_indexed_id") (param $id i32) (param $active i32) (result i32)
+  (func $er_ui_toggle_group_indexed_id  (param $id i32) (param $active i32) (result i32)
     local.get $id i32.const 3 i32.mul
     local.get $active i32.const 3 call $er_ui_list_clamped_index
     i32.add)
 
-  (func $er_ui_toggle_group_item_bounds (export "er_ui_toggle_group_item_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_toggle_group_item_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds local.get $index i32.const 3 f32.const 0 local.get $out call $er_ui_list_equal_segment_bounds_gap)
 
-  (func $er_ui_toggle_group_item_text_bounds (export "er_ui_toggle_group_item_text_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_toggle_group_item_text_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $index i32.const 3 f32.const 0 i32.const 121224 call $er_ui_list_equal_segment_bounds_gap drop
@@ -22447,7 +22903,7 @@
     f32.const 16
     f32.add)
 
-  (func $er_ui_toggle_group_measure (export "er_ui_toggle_group_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_toggle_group_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $item_w f32) (local $item_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22471,38 +22927,38 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_alert_radius (export "er_ui_alert_radius") (result f32) f32.const 8)
-  (func $er_ui_alert_padding_x (export "er_ui_alert_padding_x") (result f32) f32.const 16)
-  (func $er_ui_alert_padding_y (export "er_ui_alert_padding_y") (result f32) f32.const 12)
-  (func $er_ui_alert_icon_size (export "er_ui_alert_icon_size") (result f32) f32.const 16)
-  (func $er_ui_alert_text_x (export "er_ui_alert_text_x") (result f32) f32.const 44)
-  (func $er_ui_alert_title_height (export "er_ui_alert_title_height") (result f32) f32.const 16)
-  (func $er_ui_alert_title_max_lines (export "er_ui_alert_title_max_lines") (result i32) i32.const 2)
-  (func $er_ui_alert_detail_gap (export "er_ui_alert_detail_gap") (result f32) f32.const 2)
-  (func $er_ui_alert_detail_height (export "er_ui_alert_detail_height") (result f32) f32.const 16)
-  (func $er_ui_alert_detail_max_lines (export "er_ui_alert_detail_max_lines") (result i32) i32.const 2)
-  (func $er_ui_alert_min_width (export "er_ui_alert_min_width") (result f32) f32.const 160)
-  (func $er_ui_alert_min_height (export "er_ui_alert_min_height") (result f32) f32.const 48)
-  (func $er_ui_alert_icon_shift (export "er_ui_alert_icon_shift") (result i32) i32.const 1)
-  (func $er_ui_alert_danger_color (export "er_ui_alert_danger_color") (result i32) i32.const 4282664175)
+  (func $er_ui_alert_radius  (result f32) f32.const 8)
+  (func $er_ui_alert_padding_x  (result f32) f32.const 16)
+  (func $er_ui_alert_padding_y  (result f32) f32.const 12)
+  (func $er_ui_alert_icon_size  (result f32) f32.const 16)
+  (func $er_ui_alert_text_x  (result f32) f32.const 44)
+  (func $er_ui_alert_title_height  (result f32) f32.const 16)
+  (func $er_ui_alert_title_max_lines  (result i32) i32.const 2)
+  (func $er_ui_alert_detail_gap  (result f32) f32.const 2)
+  (func $er_ui_alert_detail_height  (result f32) f32.const 16)
+  (func $er_ui_alert_detail_max_lines  (result i32) i32.const 2)
+  (func $er_ui_alert_min_width  (result f32) f32.const 160)
+  (func $er_ui_alert_min_height  (result f32) f32.const 48)
+  (func $er_ui_alert_icon_shift  (result i32) i32.const 1)
+  (func $er_ui_alert_danger_color  (result i32) i32.const 4282664175)
 
-  (func $er_ui_alert_packed_id (export "er_ui_alert_packed_id") (param $destructive i32) (param $icon_tag i32) (result i32)
+  (func $er_ui_alert_packed_id  (param $destructive i32) (param $icon_tag i32) (result i32)
     local.get $destructive i32.const 0 i32.ne
     local.get $icon_tag i32.const 1 i32.shl
     i32.or)
 
-  (func $er_ui_alert_packed_destructive (export "er_ui_alert_packed_destructive") (param $packed i32) (result i32)
+  (func $er_ui_alert_packed_destructive  (param $packed i32) (result i32)
     local.get $packed i32.const 1 i32.and)
 
-  (func $er_ui_alert_packed_icon_tag (export "er_ui_alert_packed_icon_tag") (param $packed i32) (result i32)
+  (func $er_ui_alert_packed_icon_tag  (param $packed i32) (result i32)
     local.get $packed i32.const 1 i32.shr_u)
 
-  (func $er_ui_alert_text_width (export "er_ui_alert_text_width") (param $bounds i32) (result f32)
+  (func $er_ui_alert_text_width  (param $bounds i32) (result f32)
     local.get $bounds i32.eqz
     if f32.const 0 return end
     local.get $bounds i32.const 8 i32.add f32.load f32.const 60 f32.sub f32.const 1 call $max_f32)
 
-  (func $er_ui_alert_icon_bounds (export "er_ui_alert_icon_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_alert_icon_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22524,7 +22980,7 @@
     local.get $text_ptr local.get $text_len i32.const 121260 i32.const 121284 i32.const 121296 call $er_ui_text_component_measure_value drop
     i32.const 121308 f32.load)
 
-  (func $er_ui_alert_title_bounds (export "er_ui_alert_title_bounds") (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
+  (func $er_ui_alert_title_bounds  (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
     (local $text_w f32) (local $title_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22537,7 +22993,7 @@
     local.get $title_h
     call $rect_store)
 
-  (func $er_ui_alert_detail_bounds (export "er_ui_alert_detail_bounds") (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
+  (func $er_ui_alert_detail_bounds  (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
     (local $text_w f32) (local $title_h f32) (local $y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22551,7 +23007,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 24 f32.sub local.get $title_h f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_alert_measure (export "er_ui_alert_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_alert_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $title_w f32) (local $title_h f32) (local $detail_w f32) (local $detail_h f32) (local $raw_w f32) (local $raw_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22590,15 +23046,15 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_tabs_item_count (export "er_ui_tabs_item_count") (result i32) i32.const 2)
-  (func $er_ui_tabs_list_padding (export "er_ui_tabs_list_padding") (result f32) f32.const 3)
-  (func $er_ui_tabs_list_radius (export "er_ui_tabs_list_radius") (result f32) f32.const 8)
-  (func $er_ui_tabs_gap (export "er_ui_tabs_gap") (result f32) f32.const 8)
-  (func $er_ui_tabs_panel_padding (export "er_ui_tabs_panel_padding") (result f32) f32.const 10)
-  (func $er_ui_tabs_trigger_padding (export "er_ui_tabs_trigger_padding") (result f32) f32.const 8)
-  (func $er_ui_tabs_panel_max_lines (export "er_ui_tabs_panel_max_lines") (result i32) i32.const 2)
+  (func $er_ui_tabs_item_count  (result i32) i32.const 2)
+  (func $er_ui_tabs_list_padding  (result f32) f32.const 3)
+  (func $er_ui_tabs_list_radius  (result f32) f32.const 8)
+  (func $er_ui_tabs_gap  (result f32) f32.const 8)
+  (func $er_ui_tabs_panel_padding  (result f32) f32.const 10)
+  (func $er_ui_tabs_trigger_padding  (result f32) f32.const 8)
+  (func $er_ui_tabs_panel_max_lines  (result i32) i32.const 2)
 
-  (func $er_ui_tabs_active_index (export "er_ui_tabs_active_index") (param $active i32) (param $default_active i32) (result i32)
+  (func $er_ui_tabs_active_index  (param $active i32) (param $default_active i32) (result i32)
     local.get $active i32.const -1 i32.eq
     if (result i32)
       local.get $default_active
@@ -22608,12 +23064,12 @@
     i32.const 2
     call $er_ui_list_clamped_index)
 
-  (func $er_ui_tabs_indexed_id (export "er_ui_tabs_indexed_id") (param $id i32) (param $active i32) (param $default_active i32) (result i32)
+  (func $er_ui_tabs_indexed_id  (param $id i32) (param $active i32) (param $default_active i32) (result i32)
     local.get $id i32.const 2 i32.mul
     local.get $active local.get $default_active call $er_ui_tabs_active_index
     i32.add)
 
-  (func $er_ui_tabs_list_bounds (export "er_ui_tabs_list_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_tabs_list_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $height f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22625,7 +23081,7 @@
     local.get $height
     call $rect_store)
 
-  (func $er_ui_tabs_panel_bounds (export "er_ui_tabs_panel_bounds") (param $bounds i32) (param $list i32) (param $out i32) (result i32)
+  (func $er_ui_tabs_panel_bounds  (param $bounds i32) (param $list i32) (param $out i32) (result i32)
     (local $y f32)
     local.get $bounds i32.eqz local.get $list i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22637,7 +23093,7 @@
     local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add local.get $y f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_tabs_trigger_bounds (export "er_ui_tabs_trigger_bounds") (param $list i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_tabs_trigger_bounds  (param $list i32) (param $index i32) (param $out i32) (result i32)
     (local $content_x f32) (local $content_y f32) (local $content_w f32) (local $content_h f32) (local $segment_w f32)
     local.get $list i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22653,7 +23109,7 @@
     local.get $content_h
     call $rect_store)
 
-  (func $er_ui_tabs_trigger_text_bounds (export "er_ui_tabs_trigger_text_bounds") (param $list i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_tabs_trigger_text_bounds  (param $list i32) (param $index i32) (param $out i32) (result i32)
     local.get $list i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $list local.get $index i32.const 121432 call $er_ui_tabs_trigger_bounds drop
@@ -22669,10 +23125,10 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 20 f32.sub f32.const 0 call $max_f32
     call $rect_store)
 
-  (func $er_ui_tabs_panel_content_bounds (export "er_ui_tabs_panel_content_bounds") (param $panel i32) (param $out i32) (result i32)
+  (func $er_ui_tabs_panel_content_bounds  (param $panel i32) (param $out i32) (result i32)
     local.get $panel local.get $out call $er_ui_tabs_content_inset_10)
 
-  (func $er_ui_tabs_panel_text_bounds (export "er_ui_tabs_panel_text_bounds") (param $panel i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_tabs_panel_text_bounds  (param $panel i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $text_h f32)
     local.get $panel i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22712,7 +23168,7 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_tabs_measure (export "er_ui_tabs_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (param $default_active i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_tabs_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $active i32) (param $default_active i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32) (local $min_w f32) (local $min_h f32) (local $max_w f32) (local $max_h f32) (local $active_idx i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22742,28 +23198,28 @@
     local.get $pref_h i32.const 121500 f32.load f32.const 8 f32.add i32.const 121604 f32.load f32.add call $max_f32 local.set $max_h
     local.get $min_w local.get $min_h local.get $pref_w local.get $pref_h local.get $max_w local.get $max_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_radio_item_count (export "er_ui_radio_item_count") (result i32) i32.const 2)
-  (func $er_ui_radio_box_size (export "er_ui_radio_box_size") (result f32) f32.const 18)
-  (func $er_ui_radio_text_gap (export "er_ui_radio_text_gap") (result f32) f32.const 10)
-  (func $er_ui_radio_dot_size (export "er_ui_radio_dot_size") (result f32) f32.const 8)
-  (func $er_ui_radio_option_gap (export "er_ui_radio_option_gap") (result f32) f32.const 6)
-  (func $er_ui_radio_label_max_lines (export "er_ui_radio_label_max_lines") (result i32) i32.const 1)
-  (func $er_ui_radio_option_height (export "er_ui_radio_option_height") (result f32) f32.const 18)
+  (func $er_ui_radio_item_count  (result i32) i32.const 2)
+  (func $er_ui_radio_box_size  (result f32) f32.const 18)
+  (func $er_ui_radio_text_gap  (result f32) f32.const 10)
+  (func $er_ui_radio_dot_size  (result f32) f32.const 8)
+  (func $er_ui_radio_option_gap  (result f32) f32.const 6)
+  (func $er_ui_radio_label_max_lines  (result i32) i32.const 1)
+  (func $er_ui_radio_option_height  (result f32) f32.const 18)
 
-  (func $er_ui_radio_selected_index (export "er_ui_radio_selected_index") (param $selected i32) (result i32)
+  (func $er_ui_radio_selected_index  (param $selected i32) (result i32)
     local.get $selected i32.const 2 call $er_ui_list_clamped_index)
 
-  (func $er_ui_radio_indexed_id (export "er_ui_radio_indexed_id") (param $id i32) (param $selected i32) (result i32)
+  (func $er_ui_radio_indexed_id  (param $id i32) (param $selected i32) (result i32)
     local.get $id i32.const 2 i32.mul
     local.get $selected i32.const 2 call $er_ui_list_clamped_index
     i32.add)
 
-  (func $er_ui_radio_hit_id (export "er_ui_radio_hit_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_radio_hit_id  (param $id i32) (param $index i32) (result i32)
     local.get $id
-    local.get $index i32.const 1 call $layout_min_i32_u
+    local.get $index i32.const 1 call $min_i32_u
     i32.add)
 
-  (func $er_ui_radio_option_bounds (export "er_ui_radio_option_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_radio_option_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22773,7 +23229,7 @@
     f32.const 18
     call $rect_store)
 
-  (func $er_ui_radio_outer_bounds (export "er_ui_radio_outer_bounds") (param $option_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_radio_outer_bounds  (param $option_bounds i32) (param $out i32) (result i32)
     local.get $option_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22783,7 +23239,7 @@
     f32.const 18
     call $rect_store)
 
-  (func $er_ui_radio_dot_bounds (export "er_ui_radio_dot_bounds") (param $outer_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_radio_dot_bounds  (param $outer_bounds i32) (param $out i32) (result i32)
     local.get $outer_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22793,7 +23249,7 @@
     f32.const 8
     call $rect_store)
 
-  (func $er_ui_radio_label_bounds (export "er_ui_radio_label_bounds") (param $option_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_radio_label_bounds  (param $option_bounds i32) (param $out i32) (result i32)
     (local $label_x f32)
     local.get $option_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22805,7 +23261,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_radio_measure (export "er_ui_radio_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_radio_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $label_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22828,11 +23284,11 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_breadcrumb_icon_size (export "er_ui_breadcrumb_icon_size") (result f32) f32.const 12)
-  (func $er_ui_breadcrumb_separator_gap (export "er_ui_breadcrumb_separator_gap") (result f32) f32.const 6)
-  (func $er_ui_breadcrumb_vertical_padding (export "er_ui_breadcrumb_vertical_padding") (result f32) f32.const 8)
-  (func $er_ui_breadcrumb_label_max_lines (export "er_ui_breadcrumb_label_max_lines") (result i32) i32.const 1)
-  (func $er_ui_breadcrumb_middle_label_len (export "er_ui_breadcrumb_middle_label_len") (result i32) i32.const 4)
+  (func $er_ui_breadcrumb_icon_size  (result f32) f32.const 12)
+  (func $er_ui_breadcrumb_separator_gap  (result f32) f32.const 6)
+  (func $er_ui_breadcrumb_vertical_padding  (result f32) f32.const 8)
+  (func $er_ui_breadcrumb_label_max_lines  (result i32) i32.const 1)
+  (func $er_ui_breadcrumb_middle_label_len  (result i32) i32.const 4)
 
   (func $er_ui_breadcrumb_write_docs_label (result i32)
     i32.const 121680 i32.const 68 i32.store8
@@ -22841,11 +23297,11 @@
     i32.const 121683 i32.const 115 i32.store8
     i32.const 121680)
 
-  (func $er_ui_breadcrumb_separator_total_width (export "er_ui_breadcrumb_separator_total_width") (result f32)
+  (func $er_ui_breadcrumb_separator_total_width  (result f32)
     f32.const 36)
 
-  (func $er_ui_breadcrumb_hit_id (export "er_ui_breadcrumb_hit_id") (param $id i32) (param $index i32) (result i32)
-    local.get $id local.get $index i32.const 1 call $layout_min_i32_u i32.add)
+  (func $er_ui_breadcrumb_hit_id  (param $id i32) (param $index i32) (result i32)
+    local.get $id local.get $index i32.const 1 call $min_i32_u i32.add)
 
   (func $er_ui_breadcrumb_label_width (param $ptr i32) (param $len i32) (result f32)
     local.get $ptr local.get $len f32.const 16 call $er_ui_font_text_width)
@@ -22865,10 +23321,10 @@
     local.get $out i32.const 8 i32.add local.get $current_w local.get $scale f32.mul f32.const 1 call $max_f32 f32.store
     i32.const 1)
 
-  (func (export "er_ui_breadcrumb_allocated_widths") (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $bounds i32) (param $out i32) (result i32)
+  (func  (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $bounds i32) (param $out i32) (result i32)
     local.get $first_ptr local.get $first_len local.get $current_ptr local.get $current_len local.get $bounds local.get $out call $er_ui_breadcrumb_allocated_widths)
 
-  (func $er_ui_breadcrumb_item_bounds (export "er_ui_breadcrumb_item_bounds") (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_breadcrumb_item_bounds  (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     (local $first_w f32) (local $middle_w f32) (local $middle_x f32) (local $current_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22892,7 +23348,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_breadcrumb_separator_bounds (export "er_ui_breadcrumb_separator_bounds") (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_breadcrumb_separator_bounds  (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $first_ptr local.get $first_len local.get $current_ptr local.get $current_len local.get $bounds local.get $index i32.const 121704 call $er_ui_breadcrumb_item_bounds drop
@@ -22903,7 +23359,7 @@
     f32.const 12
     call $rect_store)
 
-  (func $er_ui_breadcrumb_label_bounds (export "er_ui_breadcrumb_label_bounds") (param $item_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_breadcrumb_label_bounds  (param $item_bounds i32) (param $out i32) (result i32)
     local.get $item_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22913,7 +23369,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_breadcrumb_measure (export "er_ui_breadcrumb_measure") (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_breadcrumb_measure  (param $first_ptr i32) (param $first_len i32) (param $current_ptr i32) (param $current_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $first_w f32) (local $middle_w f32) (local $current_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -22935,29 +23391,29 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_accordion_id_stride (export "er_ui_accordion_id_stride") (result i32) i32.const 2)
-  (func $er_ui_accordion_trigger_h (export "er_ui_accordion_trigger_h") (result f32) f32.const 36)
-  (func $er_ui_accordion_trigger_text_y (export "er_ui_accordion_trigger_text_y") (result f32) f32.const 10)
-  (func $er_ui_accordion_icon_space (export "er_ui_accordion_icon_space") (result f32) f32.const 22)
-  (func $er_ui_accordion_icon_size (export "er_ui_accordion_icon_size") (result f32) f32.const 14)
-  (func $er_ui_accordion_icon_y (export "er_ui_accordion_icon_y") (result f32) f32.const 11)
-  (func $er_ui_accordion_content_padding_top (export "er_ui_accordion_content_padding_top") (result f32) f32.const 8)
-  (func $er_ui_accordion_detail_height (export "er_ui_accordion_detail_height") (result f32) f32.const 16)
-  (func $er_ui_accordion_detail_average_w (export "er_ui_accordion_detail_average_w") (result f32) f32.const 7.5)
-  (func $er_ui_accordion_detail_max_lines (export "er_ui_accordion_detail_max_lines") (result i32) i32.const 2)
-  (func $er_ui_accordion_title_max_lines (export "er_ui_accordion_title_max_lines") (result i32) i32.const 1)
-  (func $er_ui_accordion_separator_height (export "er_ui_accordion_separator_height") (result f32) f32.const 1)
-  (func $er_ui_accordion_closed_height (export "er_ui_accordion_closed_height") (result f32) f32.const 37)
+  (func $er_ui_accordion_id_stride  (result i32) i32.const 2)
+  (func $er_ui_accordion_trigger_h  (result f32) f32.const 36)
+  (func $er_ui_accordion_trigger_text_y  (result f32) f32.const 10)
+  (func $er_ui_accordion_icon_space  (result f32) f32.const 22)
+  (func $er_ui_accordion_icon_size  (result f32) f32.const 14)
+  (func $er_ui_accordion_icon_y  (result f32) f32.const 11)
+  (func $er_ui_accordion_content_padding_top  (result f32) f32.const 8)
+  (func $er_ui_accordion_detail_height  (result f32) f32.const 16)
+  (func $er_ui_accordion_detail_average_w  (result f32) f32.const 7.5)
+  (func $er_ui_accordion_detail_max_lines  (result i32) i32.const 2)
+  (func $er_ui_accordion_title_max_lines  (result i32) i32.const 1)
+  (func $er_ui_accordion_separator_height  (result f32) f32.const 1)
+  (func $er_ui_accordion_closed_height  (result f32) f32.const 37)
 
-  (func $er_ui_accordion_open_height (export "er_ui_accordion_open_height") (param $detail_preferred_h f32) (result f32)
+  (func $er_ui_accordion_open_height  (param $detail_preferred_h f32) (result f32)
     f32.const 45 local.get $detail_preferred_h f32.add)
 
-  (func $er_ui_accordion_encoded_id (export "er_ui_accordion_encoded_id") (param $id i32) (param $open i32) (result i32)
+  (func $er_ui_accordion_encoded_id  (param $id i32) (param $open i32) (result i32)
     local.get $id i32.const 2 i32.mul
     local.get $open i32.const 0 i32.ne
     i32.add)
 
-  (func $er_ui_accordion_trigger_bounds (export "er_ui_accordion_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_accordion_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -22967,7 +23423,7 @@
     f32.const 36
     call $rect_store)
 
-  (func $er_ui_accordion_title_bounds (export "er_ui_accordion_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_accordion_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 121748 call $er_ui_accordion_trigger_bounds drop
@@ -22978,7 +23434,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_accordion_icon_bounds (export "er_ui_accordion_icon_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_accordion_icon_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 121748 call $er_ui_accordion_trigger_bounds drop
@@ -22989,7 +23445,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_accordion_separator_bounds (export "er_ui_accordion_separator_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_accordion_separator_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 121748 call $er_ui_accordion_trigger_bounds drop
@@ -23000,7 +23456,7 @@
     f32.const 1
     call $rect_store)
 
-  (func $er_ui_accordion_detail_bounds (export "er_ui_accordion_detail_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_accordion_detail_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 121748 call $er_ui_accordion_trigger_bounds drop
@@ -23017,7 +23473,7 @@
     i32.const 121772 i32.const 2 i32.store
     local.get $detail_ptr local.get $detail_len local.get $constraints i32.const 121764 local.get $out call $er_ui_text_component_measure_value)
 
-  (func $er_ui_accordion_measure (export "er_ui_accordion_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $open i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_accordion_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $open i32) (param $constraints i32) (param $out i32) (result i32)
     (local $title_w f32) (local $detail_h f32) (local $closed_h f32) (local $open_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23046,53 +23502,53 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_button_group_item_count (export "er_ui_button_group_item_count") (result i32) i32.const 2)
-  (func $er_ui_button_group_text_padding (export "er_ui_button_group_text_padding") (result f32) f32.const 8)
+  (func $er_ui_button_group_item_count  (result i32) i32.const 2)
+  (func $er_ui_button_group_text_padding  (result f32) f32.const 8)
 
-  (func $er_ui_button_group_active_index (export "er_ui_button_group_active_index") (param $active i32) (result i32)
+  (func $er_ui_button_group_active_index  (param $active i32) (result i32)
     local.get $active i32.const 2 call $er_ui_list_clamped_index)
 
-  (func $er_ui_button_group_indexed_id (export "er_ui_button_group_indexed_id") (param $id i32) (param $active i32) (result i32)
+  (func $er_ui_button_group_indexed_id  (param $id i32) (param $active i32) (result i32)
     local.get $id i32.const 2 i32.mul
     local.get $active i32.const 2 call $er_ui_list_clamped_index
     i32.add)
 
-  (func $er_ui_button_group_hit_id (export "er_ui_button_group_hit_id") (param $id i32) (param $index i32) (result i32)
-    local.get $id local.get $index i32.const 1 call $layout_min_i32_u i32.add)
+  (func $er_ui_button_group_hit_id  (param $id i32) (param $index i32) (result i32)
+    local.get $id local.get $index i32.const 1 call $min_i32_u i32.add)
 
-  (func $er_ui_button_group_segment_bounds (export "er_ui_button_group_segment_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_button_group_segment_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds local.get $index i32.const 2 f32.const 0 local.get $out call $er_ui_list_equal_segment_bounds_gap)
 
-  (func $er_ui_button_group_segment_text_bounds (export "er_ui_button_group_segment_text_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_button_group_segment_text_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $index i32.const 2 f32.const 0 i32.const 121824 call $er_ui_list_equal_segment_bounds_gap drop
     i32.const 121824 local.get $out call $er_ui_toggle_text_bounds)
 
-  (func $er_ui_button_group_measure (export "er_ui_button_group_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_button_group_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     local.get $first_ptr local.get $first_len local.get $second_ptr local.get $second_len local.get $constraints local.get $out call $er_ui_tabs_measure_two_segments)
-  (func $er_ui_field_label_h (export "er_ui_field_label_h") (result f32) f32.const 14)
-  (func $er_ui_field_label_max_lines (export "er_ui_field_label_max_lines") (result i32) i32.const 2)
-  (func $er_ui_field_gap (export "er_ui_field_gap") (result f32) f32.const 6)
-  (func $er_ui_field_input_h (export "er_ui_field_input_h") (result f32) f32.const 36)
-  (func $er_ui_field_placeholder_max_lines (export "er_ui_field_placeholder_max_lines") (result i32) i32.const 2)
-  (func $er_ui_field_validation_gap (export "er_ui_field_validation_gap") (result f32) f32.const 6)
-  (func $er_ui_field_validation_line_h (export "er_ui_field_validation_line_h") (result f32) f32.const 12)
-  (func $er_ui_field_validation_max_lines (export "er_ui_field_validation_max_lines") (result i32) i32.const 2)
-  (func $er_ui_field_min_width (export "er_ui_field_min_width") (result f32) f32.const 120)
-  (func $er_ui_field_min_height (export "er_ui_field_min_height") (result f32) f32.const 48)
+  (func $er_ui_field_label_h  (result f32) f32.const 14)
+  (func $er_ui_field_label_max_lines  (result i32) i32.const 2)
+  (func $er_ui_field_gap  (result f32) f32.const 6)
+  (func $er_ui_field_input_h  (result f32) f32.const 36)
+  (func $er_ui_field_placeholder_max_lines  (result i32) i32.const 2)
+  (func $er_ui_field_validation_gap  (result f32) f32.const 6)
+  (func $er_ui_field_validation_line_h  (result f32) f32.const 12)
+  (func $er_ui_field_validation_max_lines  (result i32) i32.const 2)
+  (func $er_ui_field_min_width  (result f32) f32.const 120)
+  (func $er_ui_field_min_height  (result f32) f32.const 48)
 
   (func $er_ui_field_measured_text_height (param $text_ptr i32) (param $text_len i32) (param $width f32) (param $line_height f32) (param $max_lines i32) (result f32)
     local.get $text_ptr local.get $text_len local.get $width local.get $line_height local.get $max_lines call $er_ui_alert_measured_text_height)
 
-  (func $er_ui_field_label_height (export "er_ui_field_label_height") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (result f32)
+  (func $er_ui_field_label_height  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (result f32)
     local.get $bounds i32.eqz
     if f32.const 0 return end
     local.get $bounds i32.const 12 i32.add f32.load
     local.get $label_ptr local.get $label_len local.get $bounds i32.const 8 i32.add f32.load f32.const 14 i32.const 2 call $er_ui_field_measured_text_height
     call $min_f32)
 
-  (func $er_ui_field_label_bounds (export "er_ui_field_label_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_field_label_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -23102,7 +23558,7 @@
     local.get $bounds local.get $label_ptr local.get $label_len call $er_ui_field_label_height
     call $rect_store)
 
-  (func $er_ui_field_input_bounds (export "er_ui_field_input_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_field_input_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -23112,7 +23568,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 20 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_field_input_bounds_for_label (export "er_ui_field_input_bounds_for_label") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_field_input_bounds_for_label  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $label_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23124,7 +23580,7 @@
     local.get $bounds i32.const 12 i32.add f32.load local.get $label_h f32.sub f32.const 6 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_field_input_bounds_with_validation (export "er_ui_field_input_bounds_with_validation") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_field_input_bounds_with_validation  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $label_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23136,7 +23592,7 @@
     f32.const 36 local.get $bounds i32.const 12 i32.add f32.load local.get $label_h f32.sub f32.const 6 f32.sub call $min_f32 f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_field_validation_bounds (export "er_ui_field_validation_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $message_ptr i32) (param $message_len i32) (param $out i32) (result i32)
+  (func $er_ui_field_validation_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $message_ptr i32) (param $message_len i32) (param $out i32) (result i32)
     (local $y f32) (local $measured_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23150,7 +23606,7 @@
     local.get $measured_h local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add local.get $y f32.sub f32.const 1 call $max_f32 call $min_f32
     call $rect_store)
 
-  (func $er_ui_field_input_text_bounds (export "er_ui_field_input_text_bounds") (param $input_bounds i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $out i32) (result i32)
+  (func $er_ui_field_input_text_bounds  (param $input_bounds i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $out i32) (result i32)
     (local $text_h f32)
     local.get $input_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23171,7 +23627,7 @@
     local.get $text_h
     call $rect_store)
 
-  (func $er_ui_field_input_measure (export "er_ui_field_input_measure") (param $placeholder_ptr i32) (param $placeholder_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_field_input_measure  (param $placeholder_ptr i32) (param $placeholder_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23200,7 +23656,7 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_field_measure (export "er_ui_field_measure") (param $label_ptr i32) (param $label_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $validation_ptr i32) (param $validation_len i32) (param $has_validation i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_field_measure  (param $label_ptr i32) (param $label_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $validation_ptr i32) (param $validation_len i32) (param $has_validation i32) (param $constraints i32) (param $out i32) (result i32)
     (local $label_w f32) (local $label_h f32) (local $input_w f32) (local $input_h f32) (local $validation_w f32) (local $validation_h f32) (local $raw_w f32) (local $raw_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23239,20 +23695,20 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_input_otp_slot_count (export "er_ui_input_otp_slot_count") (result i32) i32.const 6)
-  (func $er_ui_input_otp_slot_size (export "er_ui_input_otp_slot_size") (result f32) f32.const 36)
-  (func $er_ui_input_otp_slot_gap (export "er_ui_input_otp_slot_gap") (result f32) f32.const 0)
-  (func $er_ui_input_otp_text_padding (export "er_ui_input_otp_text_padding") (result f32) f32.const 8)
+  (func $er_ui_input_otp_slot_count  (result i32) i32.const 6)
+  (func $er_ui_input_otp_slot_size  (result f32) f32.const 36)
+  (func $er_ui_input_otp_slot_gap  (result f32) f32.const 0)
+  (func $er_ui_input_otp_text_padding  (result f32) f32.const 8)
 
-  (func $er_ui_input_otp_intrinsic_size (export "er_ui_input_otp_intrinsic_size") (param $out i32) (result i32)
+  (func $er_ui_input_otp_intrinsic_size  (param $out i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $out f32.const 216 f32.const 36 call $layout_store_size)
 
-  (func $er_ui_input_otp_hit_id (export "er_ui_input_otp_hit_id") (param $id i32) (param $index i32) (result i32)
-    local.get $id local.get $index i32.const 5 call $layout_min_i32_u i32.add)
+  (func $er_ui_input_otp_hit_id  (param $id i32) (param $index i32) (result i32)
+    local.get $id local.get $index i32.const 5 call $min_i32_u i32.add)
 
-  (func $er_ui_input_otp_slot_bounds (export "er_ui_input_otp_slot_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_input_otp_slot_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -23262,7 +23718,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 36 call $min_f32
     call $rect_store)
 
-  (func $er_ui_input_otp_slot_text_bounds (export "er_ui_input_otp_slot_text_bounds") (param $slot_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_input_otp_slot_text_bounds  (param $slot_bounds i32) (param $out i32) (result i32)
     (local $pad f32)
     local.get $slot_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23281,7 +23737,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_input_otp_measure (export "er_ui_input_otp_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_input_otp_measure  (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     f32.const 216 f32.const 36 local.get $constraints i32.const 121980 call $er_ui_primitives_constrain_preferred_size drop
@@ -23294,31 +23750,31 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_pagination_page_count (export "er_ui_pagination_page_count") (result i32) i32.const 3)
-  (func $er_ui_pagination_item_count (export "er_ui_pagination_item_count") (result i32) i32.const 5)
-  (func $er_ui_pagination_gap (export "er_ui_pagination_gap") (result f32) f32.const 4)
-  (func $er_ui_pagination_text_padding (export "er_ui_pagination_text_padding") (result f32) f32.const 2)
-  (func $er_ui_pagination_label_len (export "er_ui_pagination_label_len") (param $index i32) (result i32)
+  (func $er_ui_pagination_page_count  (result i32) i32.const 3)
+  (func $er_ui_pagination_item_count  (result i32) i32.const 5)
+  (func $er_ui_pagination_gap  (result f32) f32.const 4)
+  (func $er_ui_pagination_text_padding  (result f32) f32.const 2)
+  (func $er_ui_pagination_label_len  (param $index i32) (result i32)
     i32.const 1)
 
-  (func $er_ui_pagination_clamped_page (export "er_ui_pagination_clamped_page") (param $page i32) (result i32)
+  (func $er_ui_pagination_clamped_page  (param $page i32) (result i32)
     local.get $page i32.const 3 call $er_ui_list_clamped_index)
 
-  (func $er_ui_pagination_indexed_id (export "er_ui_pagination_indexed_id") (param $id i32) (param $page i32) (result i32)
+  (func $er_ui_pagination_indexed_id  (param $id i32) (param $page i32) (result i32)
     local.get $id i32.const 3 i32.mul
     local.get $page i32.const 3 call $er_ui_list_clamped_index
     i32.add)
 
-  (func $er_ui_pagination_hit_id (export "er_ui_pagination_hit_id") (param $id i32) (param $index i32) (result i32)
-    local.get $id local.get $index i32.const 4 call $layout_min_i32_u i32.add)
+  (func $er_ui_pagination_hit_id  (param $id i32) (param $index i32) (result i32)
+    local.get $id local.get $index i32.const 4 call $min_i32_u i32.add)
 
-  (func $er_ui_pagination_active_item_index (export "er_ui_pagination_active_item_index") (param $page i32) (result i32)
+  (func $er_ui_pagination_active_item_index  (param $page i32) (result i32)
     local.get $page i32.const 3 call $er_ui_list_clamped_index i32.const 1 i32.add)
 
-  (func $er_ui_pagination_item_bounds (export "er_ui_pagination_item_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_pagination_item_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds local.get $index i32.const 5 f32.const 4 local.get $out call $er_ui_list_equal_segment_bounds_gap)
 
-  (func $er_ui_pagination_item_text_bounds (export "er_ui_pagination_item_text_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_pagination_item_text_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     (local $inner_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23331,7 +23787,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_pagination_measure (export "er_ui_pagination_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_pagination_measure  (param $constraints i32) (param $out i32) (result i32)
     (local $item_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23362,13 +23818,13 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_select_arrow_w (export "er_ui_select_arrow_w") (result f32) f32.const 18)
-  (func $er_ui_select_icon_size (export "er_ui_select_icon_size") (result f32) f32.const 14)
-  (func $er_ui_select_label_max_lines (export "er_ui_select_label_max_lines") (result i32) i32.const 2)
-  (func $er_ui_select_min_width (export "er_ui_select_min_width") (result f32) f32.const 112)
-  (func $er_ui_select_min_height (export "er_ui_select_min_height") (result f32) f32.const 40)
+  (func $er_ui_select_arrow_w  (result f32) f32.const 18)
+  (func $er_ui_select_icon_size  (result f32) f32.const 14)
+  (func $er_ui_select_label_max_lines  (result i32) i32.const 2)
+  (func $er_ui_select_min_width  (result f32) f32.const 112)
+  (func $er_ui_select_min_height  (result f32) f32.const 40)
 
-  (func $er_ui_select_content_bounds (export "er_ui_select_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_select_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $pad f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23387,7 +23843,7 @@
     local.get $bounds i32.const 12 i32.add f32.load local.get $pad f32.const 2 f32.mul f32.sub f32.const 0 call $max_f32
     call $rect_store)
 
-  (func $er_ui_select_label_slot_bounds (export "er_ui_select_label_slot_bounds") (param $content_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_select_label_slot_bounds  (param $content_bounds i32) (param $out i32) (result i32)
     local.get $content_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -23397,7 +23853,7 @@
     local.get $content_bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_select_label_text_bounds (export "er_ui_select_label_text_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_select_label_text_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $text_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23414,7 +23870,7 @@
     local.get $text_h
     call $rect_store)
 
-  (func $er_ui_select_arrow_bounds (export "er_ui_select_arrow_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_select_arrow_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122060 call $er_ui_select_content_bounds drop
@@ -23425,7 +23881,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_select_measure (export "er_ui_select_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_select_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $label_w f32) (local $label_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23455,22 +23911,22 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_combobox_input_h (export "er_ui_combobox_input_h") (result f32) f32.const 36)
-  (func $er_ui_combobox_popup_gap (export "er_ui_combobox_popup_gap") (result f32) f32.const 6)
-  (func $er_ui_combobox_popup_radius (export "er_ui_combobox_popup_radius") (result f32) f32.const 8)
-  (func $er_ui_combobox_popup_padding (export "er_ui_combobox_popup_padding") (result f32) f32.const 4)
-  (func $er_ui_combobox_icon_size (export "er_ui_combobox_icon_size") (result f32) f32.const 14)
-  (func $er_ui_combobox_icon_space (export "er_ui_combobox_icon_space") (result f32) f32.const 22)
-  (func $er_ui_combobox_option_padding (export "er_ui_combobox_option_padding") (result f32) f32.const 8)
-  (func $er_ui_combobox_option_indicator_w (export "er_ui_combobox_option_indicator_w") (result f32) f32.const 28)
-  (func $er_ui_combobox_text_max_lines (export "er_ui_combobox_text_max_lines") (result i32) i32.const 1)
+  (func $er_ui_combobox_input_h  (result f32) f32.const 36)
+  (func $er_ui_combobox_popup_gap  (result f32) f32.const 6)
+  (func $er_ui_combobox_popup_radius  (result f32) f32.const 8)
+  (func $er_ui_combobox_popup_padding  (result f32) f32.const 4)
+  (func $er_ui_combobox_icon_size  (result f32) f32.const 14)
+  (func $er_ui_combobox_icon_space  (result f32) f32.const 22)
+  (func $er_ui_combobox_option_padding  (result f32) f32.const 8)
+  (func $er_ui_combobox_option_indicator_w  (result f32) f32.const 28)
+  (func $er_ui_combobox_text_max_lines  (result i32) i32.const 1)
 
-  (func $er_ui_combobox_hit_id (export "er_ui_combobox_hit_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_combobox_hit_id  (param $id i32) (param $index i32) (result i32)
     local.get $id
     local.get $index i32.const 0 i32.const 1 call $clamp_i32
     i32.add)
 
-  (func $er_ui_combobox_input_bounds (export "er_ui_combobox_input_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_input_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -23480,7 +23936,7 @@
     f32.const 36 local.get $bounds i32.const 12 i32.add f32.load call $min_f32
     call $rect_store)
 
-  (func $er_ui_combobox_popup_bounds (export "er_ui_combobox_popup_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_popup_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23492,7 +23948,7 @@
     local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add local.get $y f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_combobox_option_bounds (export "er_ui_combobox_option_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_option_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122200 call $er_ui_combobox_popup_bounds drop
@@ -23503,13 +23959,13 @@
     i32.const 122200 i32.const 12 i32.add f32.load f32.const 8 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_combobox_input_content_bounds (export "er_ui_combobox_input_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_input_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122216 call $er_ui_combobox_input_bounds drop
     i32.const 122216 local.get $out call $er_ui_select_content_bounds)
 
-  (func $er_ui_combobox_input_text_slot_bounds (export "er_ui_combobox_input_text_slot_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_input_text_slot_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122232 call $er_ui_combobox_input_content_bounds drop
@@ -23520,7 +23976,7 @@
     i32.const 122232 i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_combobox_input_text_bounds (export "er_ui_combobox_input_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_input_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23533,7 +23989,7 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_combobox_input_icon_bounds (export "er_ui_combobox_input_icon_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_input_icon_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122264 call $er_ui_combobox_input_content_bounds drop
@@ -23544,7 +24000,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_combobox_option_label_slot_bounds (export "er_ui_combobox_option_label_slot_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_option_label_slot_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122280 call $er_ui_combobox_option_bounds drop
@@ -23555,13 +24011,13 @@
     i32.const 122280 i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_combobox_option_text_bounds (export "er_ui_combobox_option_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_option_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122296 call $er_ui_combobox_option_label_slot_bounds drop
     i32.const 122296 local.get $out call $er_ui_toggle_text_bounds)
 
-  (func $er_ui_combobox_option_check_bounds (export "er_ui_combobox_option_check_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_option_check_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122312 call $er_ui_combobox_option_bounds drop
@@ -23572,7 +24028,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_combobox_measure (export "er_ui_combobox_measure") (param $placeholder_ptr i32) (param $placeholder_len i32) (param $selected_ptr i32) (param $selected_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_combobox_measure  (param $placeholder_ptr i32) (param $placeholder_len i32) (param $selected_ptr i32) (param $selected_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $input_w f32) (local $option_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23591,15 +24047,15 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_switch_knob_size (export "er_ui_switch_knob_size") (result f32) f32.const 14)
-  (func $er_ui_switch_knob_inset (export "er_ui_switch_knob_inset") (result f32) f32.const 3)
-  (func $er_ui_switch_label_gap (export "er_ui_switch_label_gap") (result f32) f32.const 10)
-  (func $er_ui_switch_label_height (export "er_ui_switch_label_height") (result f32) f32.const 16)
-  (func $er_ui_switch_label_max_lines (export "er_ui_switch_label_max_lines") (result i32) i32.const 2)
-  (func $er_ui_switch_shadow_inset (export "er_ui_switch_shadow_inset") (result f32) f32.const 1)
-  (func $er_ui_switch_shadow_size (export "er_ui_switch_shadow_size") (result f32) f32.const 2)
+  (func $er_ui_switch_knob_size  (result f32) f32.const 14)
+  (func $er_ui_switch_knob_inset  (result f32) f32.const 3)
+  (func $er_ui_switch_label_gap  (result f32) f32.const 10)
+  (func $er_ui_switch_label_height  (result f32) f32.const 16)
+  (func $er_ui_switch_label_max_lines  (result i32) i32.const 2)
+  (func $er_ui_switch_shadow_inset  (result f32) f32.const 1)
+  (func $er_ui_switch_shadow_size  (result f32) f32.const 2)
 
-  (func $er_ui_switch_pill_bounds (export "er_ui_switch_pill_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_switch_pill_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -23609,7 +24065,7 @@
     f32.const 20
     call $rect_store)
 
-  (func $er_ui_switch_pill_shadow_bounds (export "er_ui_switch_pill_shadow_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_switch_pill_shadow_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122344 call $er_ui_switch_pill_bounds drop
@@ -23620,7 +24076,7 @@
     i32.const 122344 i32.const 12 i32.add f32.load f32.const 2 f32.add
     call $rect_store)
 
-  (func $er_ui_switch_knob_bounds (export "er_ui_switch_knob_bounds") (param $bounds i32) (param $checked i32) (param $out i32) (result i32)
+  (func $er_ui_switch_knob_bounds  (param $bounds i32) (param $checked i32) (param $out i32) (result i32)
     (local $x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23638,7 +24094,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_switch_knob_shadow_bounds (export "er_ui_switch_knob_shadow_bounds") (param $bounds i32) (param $checked i32) (param $out i32) (result i32)
+  (func $er_ui_switch_knob_shadow_bounds  (param $bounds i32) (param $checked i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $checked i32.const 122376 call $er_ui_switch_knob_bounds drop
@@ -23649,7 +24105,7 @@
     i32.const 122376 i32.const 12 i32.add f32.load f32.const 2 f32.add
     call $rect_store)
 
-  (func $er_ui_switch_checked_marker_bounds (export "er_ui_switch_checked_marker_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_switch_checked_marker_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 1 i32.const 122392 call $er_ui_switch_knob_bounds drop
@@ -23660,7 +24116,7 @@
     i32.const 122392 i32.const 12 i32.add f32.load f32.const 10 f32.sub f32.const 0 call $max_f32
     call $rect_store)
 
-  (func $er_ui_switch_label_slot_bounds (export "er_ui_switch_label_slot_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_switch_label_slot_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122408 call $er_ui_switch_pill_bounds drop
@@ -23671,7 +24127,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_switch_label_text_bounds (export "er_ui_switch_label_text_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_switch_label_text_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $label_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23686,16 +24142,16 @@
     i32.const 122424 i32.const 8 i32.add f32.load
     local.get $label_h
     call $rect_store)
-  (func $er_ui_navigation_menu_item_count (export "er_ui_navigation_menu_item_count") (result i32) i32.const 3)
-  (func $er_ui_navigation_menu_id_stride (export "er_ui_navigation_menu_id_stride") (result i32) i32.const 3)
-  (func $er_ui_navigation_menu_gap (export "er_ui_navigation_menu_gap") (result f32) f32.const 4)
-  (func $er_ui_navigation_menu_item_h (export "er_ui_navigation_menu_item_h") (result f32) f32.const 36)
-  (func $er_ui_navigation_menu_text_padding (export "er_ui_navigation_menu_text_padding") (result f32) f32.const 10)
-  (func $er_ui_navigation_menu_icon_size (export "er_ui_navigation_menu_icon_size") (result f32) f32.const 12)
-  (func $er_ui_navigation_menu_icon_space (export "er_ui_navigation_menu_icon_space") (result f32) f32.const 16)
-  (func $er_ui_navigation_menu_icon_padding (export "er_ui_navigation_menu_icon_padding") (result f32) f32.const 8)
-  (func $er_ui_navigation_menu_label_max_lines (export "er_ui_navigation_menu_label_max_lines") (result i32) i32.const 1)
-  (func $er_ui_navigation_menu_third_label_len (export "er_ui_navigation_menu_third_label_len") (result i32) i32.const 6)
+  (func $er_ui_navigation_menu_item_count  (result i32) i32.const 3)
+  (func $er_ui_navigation_menu_id_stride  (result i32) i32.const 3)
+  (func $er_ui_navigation_menu_gap  (result f32) f32.const 4)
+  (func $er_ui_navigation_menu_item_h  (result f32) f32.const 36)
+  (func $er_ui_navigation_menu_text_padding  (result f32) f32.const 10)
+  (func $er_ui_navigation_menu_icon_size  (result f32) f32.const 12)
+  (func $er_ui_navigation_menu_icon_space  (result f32) f32.const 16)
+  (func $er_ui_navigation_menu_icon_padding  (result f32) f32.const 8)
+  (func $er_ui_navigation_menu_label_max_lines  (result i32) i32.const 1)
+  (func $er_ui_navigation_menu_third_label_len  (result i32) i32.const 6)
 
   (func $er_ui_navigation_menu_write_third_label (result i32)
     i32.const 122360 i32.const 66 i32.store8
@@ -23706,7 +24162,7 @@
     i32.const 122365 i32.const 115 i32.store8
     i32.const 122360)
 
-  (func $er_ui_navigation_menu_item_width (export "er_ui_navigation_menu_item_width") (param $label_ptr i32) (param $label_len i32) (param $show_chevron i32) (result f32)
+  (func $er_ui_navigation_menu_item_width  (param $label_ptr i32) (param $label_len i32) (param $show_chevron i32) (result f32)
     local.get $label_ptr
     local.get $label_len
     f32.const 16
@@ -23721,7 +24177,7 @@
     end
     f32.add)
 
-  (func $er_ui_navigation_menu_write_widths (export "er_ui_navigation_menu_write_widths") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $out i32) (result i32)
+  (func $er_ui_navigation_menu_write_widths  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $out i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $out
@@ -23735,16 +24191,16 @@
     f32.store
     i32.const 1)
 
-  (func $er_ui_navigation_menu_clamped_active (export "er_ui_navigation_menu_clamped_active") (param $active i32) (result i32)
+  (func $er_ui_navigation_menu_clamped_active  (param $active i32) (result i32)
     local.get $active i32.const 3 call $er_ui_list_clamped_index)
 
-  (func $er_ui_navigation_menu_indexed_id (export "er_ui_navigation_menu_indexed_id") (param $id i32) (param $active i32) (result i32)
+  (func $er_ui_navigation_menu_indexed_id  (param $id i32) (param $active i32) (result i32)
     local.get $id local.get $active i32.const 3 call $er_ui_list_encoded_indexed_id)
 
-  (func $er_ui_navigation_menu_hit_id (export "er_ui_navigation_menu_hit_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_navigation_menu_hit_id  (param $id i32) (param $index i32) (result i32)
     local.get $id local.get $index i32.const 3 call $er_ui_list_clamped_index i32.add)
 
-  (func $er_ui_navigation_menu_item_bounds (export "er_ui_navigation_menu_item_bounds") (param $bounds i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_navigation_menu_item_bounds  (param $bounds i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $first_ptr local.get $first_len local.get $second_ptr local.get $second_len i32.const 122368 call $er_ui_navigation_menu_write_widths drop
@@ -23758,7 +24214,7 @@
     local.get $out
     call $er_ui_list_item_strip_bounds)
 
-  (func $er_ui_navigation_menu_item_text_bounds (export "er_ui_navigation_menu_item_text_bounds") (param $item_bounds i32) (param $show_chevron i32) (param $out i32) (result i32)
+  (func $er_ui_navigation_menu_item_text_bounds  (param $item_bounds i32) (param $show_chevron i32) (param $out i32) (result i32)
     (local $icon_space f32)
     local.get $item_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23777,7 +24233,7 @@
     i32.const 122384 f32.const 10 i32.const 122400 call $er_ui_primitives_content_inset drop
     i32.const 122400 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_navigation_menu_item_icon_bounds (export "er_ui_navigation_menu_item_icon_bounds") (param $item_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_navigation_menu_item_icon_bounds  (param $item_bounds i32) (param $out i32) (result i32)
     local.get $item_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -23787,7 +24243,7 @@
     f32.const 12
     call $rect_store)
 
-  (func $er_ui_navigation_menu_measure (export "er_ui_navigation_menu_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_navigation_menu_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23812,23 +24268,23 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_menubar_item_count (export "er_ui_menubar_item_count") (result i32) i32.const 3)
-  (func $er_ui_menubar_id_stride (export "er_ui_menubar_id_stride") (result i32) i32.const 3)
-  (func $er_ui_menubar_padding (export "er_ui_menubar_padding") (result f32) f32.const 4)
-  (func $er_ui_menubar_item_h (export "er_ui_menubar_item_h") (result f32) f32.const 28)
-  (func $er_ui_menubar_item_padding_x (export "er_ui_menubar_item_padding_x") (result f32) f32.const 8)
-  (func $er_ui_menubar_label_max_lines (export "er_ui_menubar_label_max_lines") (result i32) i32.const 1)
-  (func $er_ui_menubar_third_label_len (export "er_ui_menubar_third_label_len") (result i32) i32.const 4)
+  (func $er_ui_menubar_item_count  (result i32) i32.const 3)
+  (func $er_ui_menubar_id_stride  (result i32) i32.const 3)
+  (func $er_ui_menubar_padding  (result f32) f32.const 4)
+  (func $er_ui_menubar_item_h  (result f32) f32.const 28)
+  (func $er_ui_menubar_item_padding_x  (result f32) f32.const 8)
+  (func $er_ui_menubar_label_max_lines  (result i32) i32.const 1)
+  (func $er_ui_menubar_third_label_len  (result i32) i32.const 4)
 
-  (func $er_ui_menubar_active_index (export "er_ui_menubar_active_index") (param $active i32) (result i32)
+  (func $er_ui_menubar_active_index  (param $active i32) (result i32)
     local.get $active i32.const 3 call $er_ui_list_clamped_index)
 
-  (func $er_ui_menubar_indexed_id (export "er_ui_menubar_indexed_id") (param $id i32) (param $active i32) (result i32)
+  (func $er_ui_menubar_indexed_id  (param $id i32) (param $active i32) (result i32)
     local.get $id i32.const 3 i32.mul
     local.get $active i32.const 3 call $er_ui_list_clamped_index
     i32.add)
 
-  (func $er_ui_menubar_hit_id (export "er_ui_menubar_hit_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_menubar_hit_id  (param $id i32) (param $index i32) (result i32)
     local.get $id
     local.get $index i32.const 0 i32.const 2 call $clamp_i32
     i32.add)
@@ -23853,7 +24309,7 @@
     local.get $out i32.const 8 i32.add call $er_ui_menubar_write_third_label i32.const 4 call $er_ui_menubar_item_width f32.store
     i32.const 1)
 
-  (func $er_ui_menubar_item_bounds (export "er_ui_menubar_item_bounds") (param $bounds i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_menubar_item_bounds  (param $bounds i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $first_ptr local.get $first_len local.get $second_ptr local.get $second_len i32.const 122348 call $er_ui_menubar_write_widths drop
@@ -23867,7 +24323,7 @@
     local.get $out
     call $er_ui_list_item_strip_bounds)
 
-  (func $er_ui_menubar_item_text_bounds (export "er_ui_menubar_item_text_bounds") (param $bounds i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_menubar_item_text_bounds  (param $bounds i32) (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $index i32) (param $out i32) (result i32)
     (local $pad f32) (local $inner_h f32) (local $text_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23889,7 +24345,7 @@
     local.get $text_h
     call $rect_store)
 
-  (func $er_ui_menubar_measure (export "er_ui_menubar_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_menubar_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23912,18 +24368,18 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_carousel_button_size (export "er_ui_carousel_button_size") (result f32) f32.const 28)
-  (func $er_ui_carousel_gap (export "er_ui_carousel_gap") (result f32) f32.const 8)
-  (func $er_ui_carousel_radius (export "er_ui_carousel_radius") (result f32) f32.const 8)
-  (func $er_ui_carousel_text_padding (export "er_ui_carousel_text_padding") (result f32) f32.const 8)
-  (func $er_ui_carousel_label_max_lines (export "er_ui_carousel_label_max_lines") (result i32) i32.const 1)
+  (func $er_ui_carousel_button_size  (result f32) f32.const 28)
+  (func $er_ui_carousel_gap  (result f32) f32.const 8)
+  (func $er_ui_carousel_radius  (result f32) f32.const 8)
+  (func $er_ui_carousel_text_padding  (result f32) f32.const 8)
+  (func $er_ui_carousel_label_max_lines  (result i32) i32.const 1)
 
-  (func $er_ui_carousel_hit_id (export "er_ui_carousel_hit_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_carousel_hit_id  (param $id i32) (param $index i32) (result i32)
     local.get $id
     local.get $index i32.const 0 i32.const 1 call $clamp_i32
     i32.add)
 
-  (func $er_ui_carousel_button_bounds (export "er_ui_carousel_button_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_carousel_button_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     (local $y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23948,7 +24404,7 @@
     f32.const 28
     call $rect_store)
 
-  (func $er_ui_carousel_content_bounds (export "er_ui_carousel_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_carousel_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23960,13 +24416,13 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_carousel_content_inner_bounds (export "er_ui_carousel_content_inner_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_carousel_content_inner_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122400 call $er_ui_carousel_content_bounds drop
     i32.const 122400 f32.const 8 local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_carousel_label_text_bounds (export "er_ui_carousel_label_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_carousel_label_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23979,7 +24435,7 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_carousel_measure (export "er_ui_carousel_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_carousel_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $label_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -23998,25 +24454,25 @@
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
 
-  (func $er_ui_direction_item_count (export "er_ui_direction_item_count") (result i32) i32.const 2)
-  (func $er_ui_direction_ltr_label_len (export "er_ui_direction_ltr_label_len") (result i32) i32.const 3)
-  (func $er_ui_direction_rtl_label_len (export "er_ui_direction_rtl_label_len") (result i32) i32.const 3)
-  (func $er_ui_direction_item_h (export "er_ui_direction_item_h") (result f32) f32.const 20)
-  (func $er_ui_direction_item_radius (export "er_ui_direction_item_radius") (result f32) f32.const 6)
-  (func $er_ui_direction_item_padding (export "er_ui_direction_item_padding") (result f32) f32.const 5)
-  (func $er_ui_direction_item_text_h (export "er_ui_direction_item_text_h") (result f32) f32.const 12)
-  (func $er_ui_direction_icon_size (export "er_ui_direction_icon_size") (result f32) f32.const 18)
-  (func $er_ui_direction_gap (export "er_ui_direction_gap") (result f32) f32.const 12)
-  (func $er_ui_direction_vertical_padding (export "er_ui_direction_vertical_padding") (result f32) f32.const 8)
-  (func $er_ui_direction_label_max_lines (export "er_ui_direction_label_max_lines") (result i32) i32.const 1)
+  (func $er_ui_direction_item_count  (result i32) i32.const 2)
+  (func $er_ui_direction_ltr_label_len  (result i32) i32.const 3)
+  (func $er_ui_direction_rtl_label_len  (result i32) i32.const 3)
+  (func $er_ui_direction_item_h  (result f32) f32.const 20)
+  (func $er_ui_direction_item_radius  (result f32) f32.const 6)
+  (func $er_ui_direction_item_padding  (result f32) f32.const 5)
+  (func $er_ui_direction_item_text_h  (result f32) f32.const 12)
+  (func $er_ui_direction_icon_size  (result f32) f32.const 18)
+  (func $er_ui_direction_gap  (result f32) f32.const 12)
+  (func $er_ui_direction_vertical_padding  (result f32) f32.const 8)
+  (func $er_ui_direction_label_max_lines  (result i32) i32.const 1)
 
-  (func $er_ui_direction_active_index (export "er_ui_direction_active_index") (param $active i32) (result i32)
+  (func $er_ui_direction_active_index  (param $active i32) (result i32)
     local.get $active i32.const 2 call $er_ui_list_clamped_index)
 
-  (func $er_ui_direction_indexed_id (export "er_ui_direction_indexed_id") (param $id i32) (param $active i32) (result i32)
+  (func $er_ui_direction_indexed_id  (param $id i32) (param $active i32) (result i32)
     local.get $id local.get $active i32.const 2 call $er_ui_list_encoded_indexed_id)
 
-  (func $er_ui_direction_hit_id (export "er_ui_direction_hit_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_direction_hit_id  (param $id i32) (param $index i32) (result i32)
     local.get $id
     local.get $index i32.const 0 i32.const 1 call $clamp_i32
     i32.add)
@@ -24033,10 +24489,10 @@
     i32.const 122526 i32.const 76 i32.store8
     i32.const 122524)
 
-  (func $er_ui_direction_item_width (export "er_ui_direction_item_width") (param $label_ptr i32) (param $label_len i32) (result f32)
+  (func $er_ui_direction_item_width  (param $label_ptr i32) (param $label_len i32) (result f32)
     local.get $label_ptr local.get $label_len f32.const 12 i32.const 1 f32.const 5 call $er_ui_primitives_measured_label_width)
 
-  (func $er_ui_direction_write_widths (export "er_ui_direction_write_widths") (param $out i32) (result i32)
+  (func $er_ui_direction_write_widths  (param $out i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $out call $er_ui_direction_write_ltr_label i32.const 3 call $er_ui_direction_item_width f32.store
@@ -24047,7 +24503,7 @@
     i32.const 122528 call $er_ui_direction_write_widths drop
     i32.const 122528 f32.load)
 
-  (func $er_ui_direction_item_bounds (export "er_ui_direction_item_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_direction_item_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     (local $y f32) (local $first_w f32) (local $second_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24072,13 +24528,13 @@
     f32.const 20
     call $rect_store)
 
-  (func $er_ui_direction_item_text_bounds (export "er_ui_direction_item_text_bounds") (param $item_bounds i32) (param $out i32) (result i32)
+  (func $er_ui_direction_item_text_bounds  (param $item_bounds i32) (param $out i32) (result i32)
     local.get $item_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $item_bounds f32.const 5 i32.const 122536 call $er_ui_primitives_content_inset drop
     i32.const 122536 local.get $out f32.const 12 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_direction_icon_bounds (export "er_ui_direction_icon_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_direction_icon_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $first_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24090,7 +24546,7 @@
     f32.const 18
     call $rect_store)
 
-  (func $er_ui_direction_measure (export "er_ui_direction_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_direction_measure  (param $constraints i32) (param $out i32) (result i32)
     (local $first_w f32) (local $second_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24110,17 +24566,17 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_input_group_separator_height (export "er_ui_input_group_separator_height") (result f32) f32.const 1)
-  (func $er_ui_input_group_addon_min_w (export "er_ui_input_group_addon_min_w") (result f32) f32.const 42)
-  (func $er_ui_input_group_addon_max_w (export "er_ui_input_group_addon_max_w") (result f32) f32.const 96)
-  (func $er_ui_input_group_addon_padding (export "er_ui_input_group_addon_padding") (result f32) f32.const 10)
-  (func $er_ui_input_group_control_gap (export "er_ui_input_group_control_gap") (result f32) f32.const 8)
-  (func $er_ui_input_group_separator_inset (export "er_ui_input_group_separator_inset") (result f32) f32.const 8)
-  (func $er_ui_input_group_text_max_lines (export "er_ui_input_group_text_max_lines") (result i32) i32.const 2)
-  (func $er_ui_input_group_min_width (export "er_ui_input_group_min_width") (result f32) f32.const 140)
-  (func $er_ui_input_group_min_height (export "er_ui_input_group_min_height") (result f32) f32.const 36)
+  (func $er_ui_input_group_separator_height  (result f32) f32.const 1)
+  (func $er_ui_input_group_addon_min_w  (result f32) f32.const 42)
+  (func $er_ui_input_group_addon_max_w  (result f32) f32.const 96)
+  (func $er_ui_input_group_addon_padding  (result f32) f32.const 10)
+  (func $er_ui_input_group_control_gap  (result f32) f32.const 8)
+  (func $er_ui_input_group_separator_inset  (result f32) f32.const 8)
+  (func $er_ui_input_group_text_max_lines  (result i32) i32.const 2)
+  (func $er_ui_input_group_min_width  (result f32) f32.const 140)
+  (func $er_ui_input_group_min_height  (result f32) f32.const 36)
 
-  (func $er_ui_input_group_addon_width (export "er_ui_input_group_addon_width") (param $addon_ptr i32) (param $addon_len i32) (result f32)
+  (func $er_ui_input_group_addon_width  (param $addon_ptr i32) (param $addon_len i32) (result f32)
     local.get $addon_ptr local.get $addon_len f32.const 16 call $er_ui_font_text_width
     f32.const 20
     f32.add
@@ -24129,7 +24585,7 @@
     f32.const 96
     call $min_f32)
 
-  (func $er_ui_input_group_addon_bounds (export "er_ui_input_group_addon_bounds") (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
+  (func $er_ui_input_group_addon_bounds  (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -24139,7 +24595,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_input_group_control_bounds (export "er_ui_input_group_control_bounds") (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
+  (func $er_ui_input_group_control_bounds  (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
     (local $addon_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24151,7 +24607,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_input_group_separator_bounds (export "er_ui_input_group_separator_bounds") (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
+  (func $er_ui_input_group_separator_bounds  (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
     (local $addon_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24163,7 +24619,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 16 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_input_group_addon_text_bounds (export "er_ui_input_group_addon_text_bounds") (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
+  (func $er_ui_input_group_addon_text_bounds  (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $out i32) (result i32)
     (local $text_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24175,7 +24631,7 @@
     local.set $text_h
     i32.const 122616 local.get $out local.get $text_h call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_input_group_placeholder_text_bounds (export "er_ui_input_group_placeholder_text_bounds") (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $out i32) (result i32)
+  (func $er_ui_input_group_placeholder_text_bounds  (param $bounds i32) (param $addon_ptr i32) (param $addon_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $out i32) (result i32)
     (local $text_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24187,7 +24643,7 @@
     local.set $text_h
     i32.const 122648 local.get $out local.get $text_h call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_input_group_measure (export "er_ui_input_group_measure") (param $addon_ptr i32) (param $addon_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_input_group_measure  (param $addon_ptr i32) (param $addon_len i32) (param $placeholder_ptr i32) (param $placeholder_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $addon_w f32) (local $addon_h f32) (local $placeholder_w f32) (local $placeholder_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24217,50 +24673,50 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_popover_trigger_y (export "er_ui_popover_trigger_y") (result f32) f32.const 6)
-  (func $er_ui_popover_trigger_w (export "er_ui_popover_trigger_w") (result f32) f32.const 64)
-  (func $er_ui_popover_trigger_h (export "er_ui_popover_trigger_h") (result f32) f32.const 30)
-  (func $er_ui_popover_gap (export "er_ui_popover_gap") (result f32) f32.const 10)
-  (func $er_ui_popover_radius (export "er_ui_popover_radius") (result f32) f32.const 8)
-  (func $er_ui_popover_padding (export "er_ui_popover_padding") (result f32) f32.const 10)
-  (func $er_ui_popover_label_max_lines (export "er_ui_popover_label_max_lines") (result i32) i32.const 1)
+  (func $er_ui_popover_trigger_y  (result f32) f32.const 6)
+  (func $er_ui_popover_trigger_w  (result f32) f32.const 64)
+  (func $er_ui_popover_trigger_h  (result f32) f32.const 30)
+  (func $er_ui_popover_gap  (result f32) f32.const 10)
+  (func $er_ui_popover_radius  (result f32) f32.const 8)
+  (func $er_ui_popover_padding  (result f32) f32.const 10)
+  (func $er_ui_popover_label_max_lines  (result i32) i32.const 1)
 
   (func $er_ui_popover_layout (param $out i32) (result i32)
     local.get $out f32.const 6 f32.const 64 f32.const 30 f32.const 10 call $er_ui_primitives_side_panel_layout)
 
-  (func $er_ui_popover_trigger_id (export "er_ui_popover_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_popover_trigger_id  (param $id i32) (result i32)
     local.get $id)
 
-  (func $er_ui_popover_content_id (export "er_ui_popover_content_id") (param $id i32) (result i32)
+  (func $er_ui_popover_content_id  (param $id i32) (result i32)
     local.get $id i32.const 1 i32.add)
 
-  (func $er_ui_popover_trigger_bounds (export "er_ui_popover_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_popover_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122760 call $er_ui_popover_layout drop
     local.get $bounds i32.const 122760 local.get $out call $er_ui_primitives_side_panel_trigger_bounds)
 
-  (func $er_ui_popover_content_bounds (export "er_ui_popover_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_popover_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122760 call $er_ui_popover_layout drop
     local.get $bounds i32.const 122760 local.get $out call $er_ui_primitives_side_panel_content_bounds)
 
-  (func $er_ui_popover_trigger_text_bounds (export "er_ui_popover_trigger_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_popover_trigger_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122776 call $er_ui_popover_trigger_bounds drop
     i32.const 122776 f32.const 12 i32.const 122792 call $er_ui_primitives_content_inset drop
     i32.const 122792 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_popover_content_text_bounds (export "er_ui_popover_content_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_popover_content_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122808 call $er_ui_popover_content_bounds drop
     i32.const 122808 f32.const 10 i32.const 122824 call $er_ui_primitives_content_inset drop
     i32.const 122824 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_popover_measure (export "er_ui_popover_measure") (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_popover_measure  (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $trigger_w f32) (local $content_w f32) (local $content_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24289,21 +24745,21 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_context_menu_trigger_label_len (export "er_ui_context_menu_trigger_label_len") (result i32) i32.const 7)
-  (func $er_ui_context_menu_item_count (export "er_ui_context_menu_item_count") (result i32) i32.const 2)
-  (func $er_ui_context_menu_trigger_y (export "er_ui_context_menu_trigger_y") (result f32) f32.const 4)
-  (func $er_ui_context_menu_trigger_w (export "er_ui_context_menu_trigger_w") (result f32) f32.const 64)
-  (func $er_ui_context_menu_trigger_h (export "er_ui_context_menu_trigger_h") (result f32) f32.const 30)
-  (func $er_ui_context_menu_gap (export "er_ui_context_menu_gap") (result f32) f32.const 8)
-  (func $er_ui_context_menu_radius (export "er_ui_context_menu_radius") (result f32) f32.const 8)
-  (func $er_ui_context_menu_trigger_padding (export "er_ui_context_menu_trigger_padding") (result f32) f32.const 8)
-  (func $er_ui_context_menu_list_padding (export "er_ui_context_menu_list_padding") (result f32) f32.const 5)
-  (func $er_ui_context_menu_item_h (export "er_ui_context_menu_item_h") (result f32) f32.const 14)
-  (func $er_ui_context_menu_item_pitch (export "er_ui_context_menu_item_pitch") (result f32) f32.const 16)
-  (func $er_ui_context_menu_item_radius (export "er_ui_context_menu_item_radius") (result f32) f32.const 4)
-  (func $er_ui_context_menu_item_padding (export "er_ui_context_menu_item_padding") (result f32) f32.const 5)
-  (func $er_ui_context_menu_item_text_h (export "er_ui_context_menu_item_text_h") (result f32) f32.const 12)
-  (func $er_ui_context_menu_label_max_lines (export "er_ui_context_menu_label_max_lines") (result i32) i32.const 1)
+  (func $er_ui_context_menu_trigger_label_len  (result i32) i32.const 7)
+  (func $er_ui_context_menu_item_count  (result i32) i32.const 2)
+  (func $er_ui_context_menu_trigger_y  (result f32) f32.const 4)
+  (func $er_ui_context_menu_trigger_w  (result f32) f32.const 64)
+  (func $er_ui_context_menu_trigger_h  (result f32) f32.const 30)
+  (func $er_ui_context_menu_gap  (result f32) f32.const 8)
+  (func $er_ui_context_menu_radius  (result f32) f32.const 8)
+  (func $er_ui_context_menu_trigger_padding  (result f32) f32.const 8)
+  (func $er_ui_context_menu_list_padding  (result f32) f32.const 5)
+  (func $er_ui_context_menu_item_h  (result f32) f32.const 14)
+  (func $er_ui_context_menu_item_pitch  (result f32) f32.const 16)
+  (func $er_ui_context_menu_item_radius  (result f32) f32.const 4)
+  (func $er_ui_context_menu_item_padding  (result f32) f32.const 5)
+  (func $er_ui_context_menu_item_text_h  (result f32) f32.const 12)
+  (func $er_ui_context_menu_label_max_lines  (result i32) i32.const 1)
 
   (func $er_ui_context_menu_write_trigger_label (result i32)
     i32.const 122936 i32.const 67 i32.store8
@@ -24323,25 +24779,25 @@
     local.get $out f32.const 5 f32.const 14 f32.const 16 f32.const 4 f32.const 5 f32.const 12
     call $er_ui_primitives_menu_list_layout)
 
-  (func $er_ui_context_menu_trigger_id (export "er_ui_context_menu_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_context_menu_trigger_id  (param $id i32) (result i32)
     local.get $id call $er_ui_primitives_overlay_trigger_id)
 
-  (func $er_ui_context_menu_item_id (export "er_ui_context_menu_item_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_context_menu_item_id  (param $id i32) (param $index i32) (result i32)
     local.get $id local.get $index i32.const 0 i32.const 1 call $clamp_i32 call $er_ui_primitives_overlay_indexed_id)
 
-  (func $er_ui_context_menu_trigger_bounds (export "er_ui_context_menu_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_context_menu_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122948 call $er_ui_context_menu_panel_layout drop
     local.get $bounds i32.const 122948 local.get $out call $er_ui_primitives_side_panel_trigger_bounds)
 
-  (func $er_ui_context_menu_content_bounds (export "er_ui_context_menu_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_context_menu_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122948 call $er_ui_context_menu_panel_layout drop
     local.get $bounds i32.const 122948 local.get $out call $er_ui_primitives_side_panel_content_bounds)
 
-  (func $er_ui_context_menu_item_bounds (export "er_ui_context_menu_item_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_context_menu_item_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122964 call $er_ui_context_menu_content_bounds drop
@@ -24349,28 +24805,28 @@
     i32.const 122964 local.get $index i32.const 0 i32.const 1 call $clamp_i32 i32.const 122980 local.get $out
     call $er_ui_primitives_menu_item_bounds)
 
-  (func $er_ui_context_menu_trigger_text_bounds (export "er_ui_context_menu_trigger_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_context_menu_trigger_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123004 call $er_ui_context_menu_trigger_bounds drop
     i32.const 123004 f32.const 8 i32.const 123020 call $er_ui_primitives_content_inset drop
     i32.const 123020 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_context_menu_item_text_bounds (export "er_ui_context_menu_item_text_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_context_menu_item_text_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $index i32.const 123036 call $er_ui_context_menu_item_bounds drop
     i32.const 123036 f32.const 5 i32.const 123052 call $er_ui_primitives_content_inset drop
     i32.const 123052 local.get $out f32.const 12 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_context_menu_measure_two_item_panel (export "er_ui_context_menu_measure_two_item_panel") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_context_menu_measure_two_item_panel  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122980 call $er_ui_context_menu_list_layout drop
     local.get $first_ptr local.get $first_len local.get $second_ptr local.get $second_len local.get $constraints i32.const 122980 local.get $out
     call $er_ui_primitives_measure_two_item_menu_panel)
 
-  (func $er_ui_context_menu_measure (export "er_ui_context_menu_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_context_menu_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122948 call $er_ui_context_menu_panel_layout drop
@@ -24384,18 +24840,18 @@
     i32.const 122980
     local.get $out
     call $er_ui_primitives_measure_side_panel_menu)
-  (func $er_ui_hover_card_trigger_y (export "er_ui_hover_card_trigger_y") (result f32) f32.const 6)
-  (func $er_ui_hover_card_trigger_w (export "er_ui_hover_card_trigger_w") (result f32) f32.const 66)
-  (func $er_ui_hover_card_trigger_h (export "er_ui_hover_card_trigger_h") (result f32) f32.const 30)
-  (func $er_ui_hover_card_gap (export "er_ui_hover_card_gap") (result f32) f32.const 10)
-  (func $er_ui_hover_card_radius (export "er_ui_hover_card_radius") (result f32) f32.const 8)
-  (func $er_ui_hover_card_padding (export "er_ui_hover_card_padding") (result f32) f32.const 10)
-  (func $er_ui_hover_card_panel_title_y (export "er_ui_hover_card_panel_title_y") (result f32) f32.const 8)
-  (func $er_ui_hover_card_panel_title_h (export "er_ui_hover_card_panel_title_h") (result f32) f32.const 14)
-  (func $er_ui_hover_card_panel_detail_y (export "er_ui_hover_card_panel_detail_y") (result f32) f32.const 25)
-  (func $er_ui_hover_card_panel_detail_h (export "er_ui_hover_card_panel_detail_h") (result f32) f32.const 12)
-  (func $er_ui_hover_card_detail_label_len (export "er_ui_hover_card_detail_label_len") (result i32) i32.const 13)
-  (func $er_ui_hover_card_text_max_lines (export "er_ui_hover_card_text_max_lines") (result i32) i32.const 2)
+  (func $er_ui_hover_card_trigger_y  (result f32) f32.const 6)
+  (func $er_ui_hover_card_trigger_w  (result f32) f32.const 66)
+  (func $er_ui_hover_card_trigger_h  (result f32) f32.const 30)
+  (func $er_ui_hover_card_gap  (result f32) f32.const 10)
+  (func $er_ui_hover_card_radius  (result f32) f32.const 8)
+  (func $er_ui_hover_card_padding  (result f32) f32.const 10)
+  (func $er_ui_hover_card_panel_title_y  (result f32) f32.const 8)
+  (func $er_ui_hover_card_panel_title_h  (result f32) f32.const 14)
+  (func $er_ui_hover_card_panel_detail_y  (result f32) f32.const 25)
+  (func $er_ui_hover_card_panel_detail_h  (result f32) f32.const 12)
+  (func $er_ui_hover_card_detail_label_len  (result i32) i32.const 13)
+  (func $er_ui_hover_card_text_max_lines  (result i32) i32.const 2)
 
   (func $er_ui_hover_card_layout (param $out i32) (result i32)
     local.get $out f32.const 6 f32.const 66 f32.const 30 f32.const 10 call $er_ui_primitives_side_panel_layout)
@@ -24416,32 +24872,32 @@
     i32.const 122952 i32.const 116 i32.store8
     i32.const 122940)
 
-  (func $er_ui_hover_card_trigger_id (export "er_ui_hover_card_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_hover_card_trigger_id  (param $id i32) (result i32)
     local.get $id)
 
-  (func $er_ui_hover_card_content_id (export "er_ui_hover_card_content_id") (param $id i32) (result i32)
+  (func $er_ui_hover_card_content_id  (param $id i32) (result i32)
     local.get $id i32.const 1 i32.add)
 
-  (func $er_ui_hover_card_trigger_bounds (export "er_ui_hover_card_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_hover_card_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122956 call $er_ui_hover_card_layout drop
     local.get $bounds i32.const 122956 local.get $out call $er_ui_primitives_side_panel_trigger_bounds)
 
-  (func $er_ui_hover_card_content_bounds (export "er_ui_hover_card_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_hover_card_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 122956 call $er_ui_hover_card_layout drop
     local.get $bounds i32.const 122956 local.get $out call $er_ui_primitives_side_panel_content_bounds)
 
-  (func $er_ui_hover_card_trigger_text_bounds (export "er_ui_hover_card_trigger_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_hover_card_trigger_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 122972 call $er_ui_hover_card_trigger_bounds drop
     i32.const 122972 f32.const 12 i32.const 122988 call $er_ui_primitives_content_inset drop
     i32.const 122988 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_hover_card_title_bounds (export "er_ui_hover_card_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_hover_card_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123004 call $er_ui_hover_card_content_bounds drop
@@ -24452,7 +24908,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_hover_card_detail_bounds (export "er_ui_hover_card_detail_bounds") (param $bounds i32) (param $detail_ptr i32) (param $detail_len i32) (param $out i32) (result i32)
+  (func $er_ui_hover_card_detail_bounds  (param $bounds i32) (param $detail_ptr i32) (param $detail_len i32) (param $out i32) (result i32)
     (local $detail_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24468,7 +24924,7 @@
     local.get $detail_h
     call $rect_store)
 
-  (func $er_ui_hover_card_measure (export "er_ui_hover_card_measure") (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_hover_card_measure  (param $trigger_ptr i32) (param $trigger_len i32) (param $content_ptr i32) (param $content_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $trigger_w f32) (local $title_w f32) (local $detail_w f32) (local $panel_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24489,16 +24945,16 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_resizable_handle_w (export "er_ui_resizable_handle_w") (result f32) f32.const 6)
-  (func $er_ui_resizable_handle_radius (export "er_ui_resizable_handle_radius") (result f32) f32.const 3)
-  (func $er_ui_resizable_handle_hit_outset (export "er_ui_resizable_handle_hit_outset") (result f32) f32.const 6)
-  (func $er_ui_resizable_min_width (export "er_ui_resizable_min_width") (result f32) f32.const 96)
-  (func $er_ui_resizable_min_height (export "er_ui_resizable_min_height") (result f32) f32.const 36)
+  (func $er_ui_resizable_handle_w  (result f32) f32.const 6)
+  (func $er_ui_resizable_handle_radius  (result f32) f32.const 3)
+  (func $er_ui_resizable_handle_hit_outset  (result f32) f32.const 6)
+  (func $er_ui_resizable_min_width  (result f32) f32.const 96)
+  (func $er_ui_resizable_min_height  (result f32) f32.const 36)
 
-  (func $er_ui_resizable_clamped_ratio (export "er_ui_resizable_clamped_ratio") (param $ratio f32) (result f32)
+  (func $er_ui_resizable_clamped_ratio  (param $ratio f32) (result f32)
     local.get $ratio f32.const 0 call $max_f32 f32.const 1 call $min_f32)
 
-  (func $er_ui_resizable_handle_bounds (export "er_ui_resizable_handle_bounds") (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
+  (func $er_ui_resizable_handle_bounds  (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
     (local $center_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24515,13 +24971,13 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_resizable_handle_hit_bounds (export "er_ui_resizable_handle_hit_bounds") (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
+  (func $er_ui_resizable_handle_hit_bounds  (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $ratio i32.const 123060 call $er_ui_resizable_handle_bounds drop
     i32.const 123060 local.get $out f32.const -6 call $er_ui_rect_inset_uniform)
 
-  (func $er_ui_resizable_left_bounds (export "er_ui_resizable_left_bounds") (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
+  (func $er_ui_resizable_left_bounds  (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $ratio i32.const 123076 call $er_ui_resizable_handle_bounds drop
@@ -24532,7 +24988,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_resizable_right_bounds (export "er_ui_resizable_right_bounds") (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
+  (func $er_ui_resizable_right_bounds  (param $bounds i32) (param $ratio f32) (param $out i32) (result i32)
     (local $right_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24545,7 +25001,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_resizable_measure (export "er_ui_resizable_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_resizable_measure  (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24560,19 +25016,19 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_scroll_area_radius (export "er_ui_scroll_area_radius") (result f32) f32.const 7)
-  (func $er_ui_scroll_area_padding (export "er_ui_scroll_area_padding") (result f32) f32.const 8)
-  (func $er_ui_scroll_area_content_y (export "er_ui_scroll_area_content_y") (result f32) f32.const 6)
-  (func $er_ui_scroll_area_text_h (export "er_ui_scroll_area_text_h") (result f32) f32.const 14)
-  (func $er_ui_scroll_area_scrollbar_w (export "er_ui_scroll_area_scrollbar_w") (result f32) f32.const 10)
-  (func $er_ui_scroll_area_track_inset_x (export "er_ui_scroll_area_track_inset_x") (result f32) f32.const 6)
-  (func $er_ui_scroll_area_track_inset_y (export "er_ui_scroll_area_track_inset_y") (result f32) f32.const 5)
-  (func $er_ui_scroll_area_track_w (export "er_ui_scroll_area_track_w") (result f32) f32.const 3)
-  (func $er_ui_scroll_area_track_radius (export "er_ui_scroll_area_track_radius") (result f32) f32.const 2)
-  (func $er_ui_scroll_area_thumb_min_h (export "er_ui_scroll_area_thumb_min_h") (result f32) f32.const 12)
-  (func $er_ui_scroll_area_thumb_ratio (export "er_ui_scroll_area_thumb_ratio") (result f32) f32.const 0.45)
-  (func $er_ui_scroll_area_label_len (export "er_ui_scroll_area_label_len") (result i32) i32.const 18)
-  (func $er_ui_scroll_area_label_max_lines (export "er_ui_scroll_area_label_max_lines") (result i32) i32.const 1)
+  (func $er_ui_scroll_area_radius  (result f32) f32.const 7)
+  (func $er_ui_scroll_area_padding  (result f32) f32.const 8)
+  (func $er_ui_scroll_area_content_y  (result f32) f32.const 6)
+  (func $er_ui_scroll_area_text_h  (result f32) f32.const 14)
+  (func $er_ui_scroll_area_scrollbar_w  (result f32) f32.const 10)
+  (func $er_ui_scroll_area_track_inset_x  (result f32) f32.const 6)
+  (func $er_ui_scroll_area_track_inset_y  (result f32) f32.const 5)
+  (func $er_ui_scroll_area_track_w  (result f32) f32.const 3)
+  (func $er_ui_scroll_area_track_radius  (result f32) f32.const 2)
+  (func $er_ui_scroll_area_thumb_min_h  (result f32) f32.const 12)
+  (func $er_ui_scroll_area_thumb_ratio  (result f32) f32.const 0.45)
+  (func $er_ui_scroll_area_label_len  (result i32) i32.const 18)
+  (func $er_ui_scroll_area_label_max_lines  (result i32) i32.const 1)
 
   (func $er_ui_scroll_area_write_label (result i32)
     i32.const 123140 i32.const 83 i32.store8
@@ -24595,7 +25051,7 @@
     i32.const 123157 i32.const 116 i32.store8
     i32.const 123140)
 
-  (func $er_ui_scroll_area_viewport_bounds (export "er_ui_scroll_area_viewport_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_scroll_area_viewport_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -24605,7 +25061,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 10 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_scroll_area_track_bounds (export "er_ui_scroll_area_track_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_scroll_area_track_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -24615,7 +25071,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 10 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_scroll_area_default_metrics (export "er_ui_scroll_area_default_metrics") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_scroll_area_default_metrics  (param $bounds i32) (param $out i32) (result i32)
     (local $viewport_h f32) (local $content_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24626,7 +25082,7 @@
     local.get $out i32.const 8 i32.add f32.const 0 f32.store
     i32.const 1)
 
-  (func $er_ui_scroll_area_metrics (export "er_ui_scroll_area_metrics") (param $viewport_h f32) (param $content_h f32) (param $offset_y f32) (param $out i32) (result i32)
+  (func $er_ui_scroll_area_metrics  (param $viewport_h f32) (param $content_h f32) (param $offset_y f32) (param $out i32) (result i32)
     (local $vp f32) (local $content f32) (local $max_offset f32) (local $offset f32)
     local.get $out i32.eqz
     if i32.const 0 return end
@@ -24639,12 +25095,12 @@
     local.get $out i32.const 8 i32.add local.get $offset f32.store
     i32.const 1)
 
-  (func $er_ui_scroll_area_metrics_max_offset (export "er_ui_scroll_area_metrics_max_offset") (param $metrics i32) (result f32)
+  (func $er_ui_scroll_area_metrics_max_offset  (param $metrics i32) (result f32)
     local.get $metrics i32.eqz
     if f32.const 0 return end
     local.get $metrics i32.const 4 i32.add f32.load local.get $metrics f32.load f32.sub f32.const 0 call $max_f32)
 
-  (func $er_ui_scroll_area_thumb_bounds (export "er_ui_scroll_area_thumb_bounds") (param $track i32) (param $metrics i32) (param $out i32) (result i32)
+  (func $er_ui_scroll_area_thumb_bounds  (param $track i32) (param $metrics i32) (param $out i32) (result i32)
     (local $ratio f32) (local $thumb_h f32) (local $travel f32) (local $max_offset f32) (local $offset_ratio f32)
     local.get $track i32.eqz local.get $metrics i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24671,7 +25127,7 @@
     local.get $thumb_h
     call $rect_store)
 
-  (func $er_ui_scroll_area_measure (export "er_ui_scroll_area_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_scroll_area_measure  (param $constraints i32) (param $out i32) (result i32)
     (local $label_w f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24689,22 +25145,22 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_chart_separator_height (export "er_ui_chart_separator_height") (result f32) f32.const 1)
-  (func $er_ui_chart_bar_count (export "er_ui_chart_bar_count") (result i32) i32.const 5)
-  (func $er_ui_chart_grid_count (export "er_ui_chart_grid_count") (result i32) i32.const 3)
-  (func $er_ui_chart_radius (export "er_ui_chart_radius") (result f32) f32.const 8)
-  (func $er_ui_chart_padding (export "er_ui_chart_padding") (result f32) f32.const 8)
-  (func $er_ui_chart_label_h (export "er_ui_chart_label_h") (result f32) f32.const 14)
-  (func $er_ui_chart_label_max_lines (export "er_ui_chart_label_max_lines") (result i32) i32.const 2)
-  (func $er_ui_chart_label_gap (export "er_ui_chart_label_gap") (result f32) f32.const 4)
-  (func $er_ui_chart_bar_gap (export "er_ui_chart_bar_gap") (result f32) f32.const 5)
-  (func $er_ui_chart_bar_radius (export "er_ui_chart_bar_radius") (result f32) f32.const 5)
-  (func $er_ui_chart_plot_min_h (export "er_ui_chart_plot_min_h") (result f32) f32.const 64)
-  (func $er_ui_chart_min_width (export "er_ui_chart_min_width") (result f32) f32.const 120)
-  (func $er_ui_chart_min_height (export "er_ui_chart_min_height") (result f32) f32.const 72)
-  (func $er_ui_chart_grid_height (export "er_ui_chart_grid_height") (result f32) f32.const 1)
+  (func $er_ui_chart_separator_height  (result f32) f32.const 1)
+  (func $er_ui_chart_bar_count  (result i32) i32.const 5)
+  (func $er_ui_chart_grid_count  (result i32) i32.const 3)
+  (func $er_ui_chart_radius  (result f32) f32.const 8)
+  (func $er_ui_chart_padding  (result f32) f32.const 8)
+  (func $er_ui_chart_label_h  (result f32) f32.const 14)
+  (func $er_ui_chart_label_max_lines  (result i32) i32.const 2)
+  (func $er_ui_chart_label_gap  (result f32) f32.const 4)
+  (func $er_ui_chart_bar_gap  (result f32) f32.const 5)
+  (func $er_ui_chart_bar_radius  (result f32) f32.const 5)
+  (func $er_ui_chart_plot_min_h  (result f32) f32.const 64)
+  (func $er_ui_chart_min_width  (result f32) f32.const 120)
+  (func $er_ui_chart_min_height  (result f32) f32.const 72)
+  (func $er_ui_chart_grid_height  (result f32) f32.const 1)
 
-  (func $er_ui_chart_bar_value (export "er_ui_chart_bar_value") (param $index i32) (result f32)
+  (func $er_ui_chart_bar_value  (param $index i32) (result f32)
     local.get $index i32.const 0 i32.const 4 call $clamp_i32
     if (result f32)
       local.get $index i32.const 1 i32.eq
@@ -24742,7 +25198,7 @@
     local.get $bounds_h f32.const 16 f32.sub f32.const 1 call $max_f32
     call $min_f32)
 
-  (func $er_ui_chart_label_bounds (export "er_ui_chart_label_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_chart_label_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $w f32) (local $h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24755,7 +25211,7 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_chart_plot_bounds (export "er_ui_chart_plot_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_chart_plot_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $label_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24768,7 +25224,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 20 f32.sub local.get $label_h f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_chart_grid_line_bounds (export "er_ui_chart_grid_line_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_chart_grid_line_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $index i32) (param $out i32) (result i32)
     (local $grid_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24788,7 +25244,7 @@
     f32.const 1
     call $rect_store)
 
-  (func $er_ui_chart_baseline_bounds (export "er_ui_chart_baseline_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_chart_baseline_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $label_ptr local.get $label_len i32.const 123232 call $er_ui_chart_plot_bounds drop
@@ -24799,7 +25255,7 @@
     f32.const 1
     call $rect_store)
 
-  (func $er_ui_chart_bar_bounds (export "er_ui_chart_bar_bounds") (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_chart_bar_bounds  (param $bounds i32) (param $label_ptr i32) (param $label_len i32) (param $index i32) (param $out i32) (result i32)
     (local $bar_w f32) (local $h f32) (local $idx i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24814,7 +25270,7 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_chart_measure (export "er_ui_chart_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_chart_measure  (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $label_w f32) (local $label_h f32) (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24842,35 +25298,35 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_calendar_day_count (export "er_ui_calendar_day_count") (result i32) i32.const 28)
-  (func $er_ui_calendar_day_id_offset (export "er_ui_calendar_day_id_offset") (result i32) i32.const 2)
-  (func $er_ui_calendar_column_count (export "er_ui_calendar_column_count") (result i32) i32.const 7)
-  (func $er_ui_calendar_row_count (export "er_ui_calendar_row_count") (result f32) f32.const 4)
-  (func $er_ui_calendar_radius (export "er_ui_calendar_radius") (result f32) f32.const 8)
-  (func $er_ui_calendar_padding (export "er_ui_calendar_padding") (result f32) f32.const 8)
-  (func $er_ui_calendar_nav_size (export "er_ui_calendar_nav_size") (result f32) f32.const 24)
-  (func $er_ui_calendar_caption_h (export "er_ui_calendar_caption_h") (result f32) f32.const 24)
-  (func $er_ui_calendar_weekday_y (export "er_ui_calendar_weekday_y") (result f32) f32.const 36)
-  (func $er_ui_calendar_weekday_h (export "er_ui_calendar_weekday_h") (result f32) f32.const 16)
-  (func $er_ui_calendar_grid_y (export "er_ui_calendar_grid_y") (result f32) f32.const 56)
-  (func $er_ui_calendar_cell_size (export "er_ui_calendar_cell_size") (result f32) f32.const 22)
-  (func $er_ui_calendar_cell_gap (export "er_ui_calendar_cell_gap") (result f32) f32.const 2)
-  (func $er_ui_calendar_day_text_h (export "er_ui_calendar_day_text_h") (result f32) f32.const 12)
-  (func $er_ui_calendar_day_text_padding (export "er_ui_calendar_day_text_padding") (result f32) f32.const 2)
+  (func $er_ui_calendar_day_count  (result i32) i32.const 28)
+  (func $er_ui_calendar_day_id_offset  (result i32) i32.const 2)
+  (func $er_ui_calendar_column_count  (result i32) i32.const 7)
+  (func $er_ui_calendar_row_count  (result f32) f32.const 4)
+  (func $er_ui_calendar_radius  (result f32) f32.const 8)
+  (func $er_ui_calendar_padding  (result f32) f32.const 8)
+  (func $er_ui_calendar_nav_size  (result f32) f32.const 24)
+  (func $er_ui_calendar_caption_h  (result f32) f32.const 24)
+  (func $er_ui_calendar_weekday_y  (result f32) f32.const 36)
+  (func $er_ui_calendar_weekday_h  (result f32) f32.const 16)
+  (func $er_ui_calendar_grid_y  (result f32) f32.const 56)
+  (func $er_ui_calendar_cell_size  (result f32) f32.const 22)
+  (func $er_ui_calendar_cell_gap  (result f32) f32.const 2)
+  (func $er_ui_calendar_day_text_h  (result f32) f32.const 12)
+  (func $er_ui_calendar_day_text_padding  (result f32) f32.const 2)
 
-  (func $er_ui_calendar_intrinsic_width (export "er_ui_calendar_intrinsic_width") (result f32)
+  (func $er_ui_calendar_intrinsic_width  (result f32)
     f32.const 170)
 
-  (func $er_ui_calendar_intrinsic_height (export "er_ui_calendar_intrinsic_height") (result f32)
+  (func $er_ui_calendar_intrinsic_height  (result f32)
     f32.const 152)
 
-  (func $er_ui_calendar_nav_id (export "er_ui_calendar_nav_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_calendar_nav_id  (param $id i32) (param $index i32) (result i32)
     local.get $id local.get $index i32.const 0 i32.const 1 call $clamp_i32 i32.add)
 
-  (func $er_ui_calendar_day_id (export "er_ui_calendar_day_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_calendar_day_id  (param $id i32) (param $index i32) (result i32)
     local.get $id i32.const 2 i32.add local.get $index i32.const 0 i32.const 27 call $clamp_i32 i32.add)
 
-  (func $er_ui_calendar_nav_bounds (export "er_ui_calendar_nav_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_calendar_nav_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $index i32.const 0 i32.eq
@@ -24890,7 +25346,7 @@
     f32.const 24
     call $rect_store)
 
-  (func $er_ui_calendar_caption_bounds (export "er_ui_calendar_caption_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_calendar_caption_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -24900,7 +25356,7 @@
     f32.const 24
     call $rect_store)
 
-  (func $er_ui_calendar_grid_bounds (export "er_ui_calendar_grid_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_calendar_grid_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $grid_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24912,7 +25368,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 64 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_calendar_weekday_bounds (export "er_ui_calendar_weekday_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_calendar_weekday_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123360 call $er_ui_calendar_grid_bounds drop
@@ -24923,7 +25379,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_calendar_day_bounds (export "er_ui_calendar_day_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_calendar_day_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     (local $idx i32) (local $col i32) (local $row i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24938,14 +25394,14 @@
     f32.const 22
     call $rect_store)
 
-  (func $er_ui_calendar_day_text_bounds (export "er_ui_calendar_day_text_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_calendar_day_text_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $index i32.const 123392 call $er_ui_calendar_day_bounds drop
     i32.const 123392 f32.const 2 i32.const 123408 call $er_ui_primitives_content_inset drop
     i32.const 123408 local.get $out f32.const 12 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_calendar_measure (export "er_ui_calendar_measure") (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_calendar_measure  (param $constraints i32) (param $out i32) (result i32)
     (local $pref_w f32) (local $pref_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -24954,20 +25410,20 @@
     i32.const 123428 f32.load local.set $pref_h
     local.get $pref_w local.get $pref_h local.get $pref_w local.get $pref_h local.get $pref_w local.get $pref_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_dialog_trigger_y (export "er_ui_dialog_trigger_y") (result f32) f32.const 6)
-  (func $er_ui_dialog_trigger_w (export "er_ui_dialog_trigger_w") (result f32) f32.const 66)
-  (func $er_ui_dialog_trigger_h (export "er_ui_dialog_trigger_h") (result f32) f32.const 30)
-  (func $er_ui_dialog_gap (export "er_ui_dialog_gap") (result f32) f32.const 12)
-  (func $er_ui_dialog_trigger_padding (export "er_ui_dialog_trigger_padding") (result f32) f32.const 8)
-  (func $er_ui_dialog_panel_radius (export "er_ui_dialog_panel_radius") (result f32) f32.const 10)
-  (func $er_ui_dialog_panel_padding (export "er_ui_dialog_panel_padding") (result f32) f32.const 10)
-  (func $er_ui_dialog_panel_title_y (export "er_ui_dialog_panel_title_y") (result f32) f32.const 6)
-  (func $er_ui_dialog_panel_title_h (export "er_ui_dialog_panel_title_h") (result f32) f32.const 14)
-  (func $er_ui_dialog_panel_detail_y (export "er_ui_dialog_panel_detail_y") (result f32) f32.const 22)
-  (func $er_ui_dialog_panel_detail_h (export "er_ui_dialog_panel_detail_h") (result f32) f32.const 12)
-  (func $er_ui_dialog_open_label_len (export "er_ui_dialog_open_label_len") (result i32) i32.const 4)
+  (func $er_ui_dialog_trigger_y  (result f32) f32.const 6)
+  (func $er_ui_dialog_trigger_w  (result f32) f32.const 66)
+  (func $er_ui_dialog_trigger_h  (result f32) f32.const 30)
+  (func $er_ui_dialog_gap  (result f32) f32.const 12)
+  (func $er_ui_dialog_trigger_padding  (result f32) f32.const 8)
+  (func $er_ui_dialog_panel_radius  (result f32) f32.const 10)
+  (func $er_ui_dialog_panel_padding  (result f32) f32.const 10)
+  (func $er_ui_dialog_panel_title_y  (result f32) f32.const 6)
+  (func $er_ui_dialog_panel_title_h  (result f32) f32.const 14)
+  (func $er_ui_dialog_panel_detail_y  (result f32) f32.const 22)
+  (func $er_ui_dialog_panel_detail_h  (result f32) f32.const 12)
+  (func $er_ui_dialog_open_label_len  (result i32) i32.const 4)
 
-  (func $er_ui_dialog_open_label_ptr (export "er_ui_dialog_open_label_ptr") (result i32)
+  (func $er_ui_dialog_open_label_ptr  (result i32)
     i32.const 123440 i32.const 79 i32.store8
     i32.const 123441 i32.const 112 i32.store8
     i32.const 123442 i32.const 101 i32.store8
@@ -24980,32 +25436,32 @@
   (func $er_ui_dialog_panel (param $out i32) (result i32)
     local.get $out f32.const 10 f32.const 10 f32.const 6 f32.const 14 f32.const 22 f32.const 12 f32.const 0 i32.const 1 i32.const 1 call $er_ui_primitives_title_detail_panel)
 
-  (func $er_ui_dialog_trigger_id (export "er_ui_dialog_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_dialog_trigger_id  (param $id i32) (result i32)
     local.get $id call $er_ui_primitives_overlay_trigger_id)
 
-  (func $er_ui_dialog_content_id (export "er_ui_dialog_content_id") (param $id i32) (result i32)
+  (func $er_ui_dialog_content_id  (param $id i32) (result i32)
     local.get $id i32.const 1 call $er_ui_primitives_overlay_indexed_id)
 
-  (func $er_ui_dialog_trigger_bounds (export "er_ui_dialog_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dialog_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 123448 call $er_ui_dialog_layout drop
     local.get $bounds i32.const 123448 local.get $out call $er_ui_primitives_side_panel_trigger_bounds)
 
-  (func $er_ui_dialog_content_bounds (export "er_ui_dialog_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dialog_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 123448 call $er_ui_dialog_layout drop
     local.get $bounds i32.const 123448 local.get $out call $er_ui_primitives_side_panel_content_bounds)
 
-  (func $er_ui_dialog_trigger_text_bounds (export "er_ui_dialog_trigger_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dialog_trigger_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123464 call $er_ui_dialog_trigger_bounds drop
     i32.const 123464 f32.const 8 i32.const 123480 call $er_ui_primitives_content_inset drop
     i32.const 123480 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_dialog_title_bounds (export "er_ui_dialog_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dialog_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123496 call $er_ui_dialog_content_bounds drop
@@ -25016,7 +25472,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_dialog_detail_bounds (export "er_ui_dialog_detail_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dialog_detail_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123512 call $er_ui_dialog_content_bounds drop
@@ -25027,7 +25483,7 @@
     f32.const 12
     call $rect_store)
 
-  (func $er_ui_dialog_measure (export "er_ui_dialog_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_dialog_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $trigger_w f32) (local $pref_w f32) (local $pref_h f32) (local $min_h f32) (local $max_w f32) (local $max_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25046,27 +25502,27 @@
     local.get $pref_h i32.const 123620 f32.load call $max_f32 local.set $max_h
     f32.const 14 local.get $min_h local.get $pref_w local.get $pref_h local.get $max_w local.get $max_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_toast_radius (export "er_ui_toast_radius") (result f32) f32.const 8)
-  (func $er_ui_toast_padding (export "er_ui_toast_padding") (result f32) f32.const 10)
-  (func $er_ui_toast_icon_x (export "er_ui_toast_icon_x") (result f32) f32.const 12)
-  (func $er_ui_toast_icon_size (export "er_ui_toast_icon_size") (result f32) f32.const 16)
-  (func $er_ui_toast_text_x (export "er_ui_toast_text_x") (result f32) f32.const 38)
-  (func $er_ui_toast_text_gap (export "er_ui_toast_text_gap") (result f32) f32.const 3)
-  (func $er_ui_toast_min_width (export "er_ui_toast_min_width") (result f32) f32.const 160)
-  (func $er_ui_toast_min_height (export "er_ui_toast_min_height") (result f32) f32.const 40)
-  (func $er_ui_toast_title_line_height (export "er_ui_toast_title_line_height") (result f32) f32.const 14)
-  (func $er_ui_toast_detail_line_height (export "er_ui_toast_detail_line_height") (result f32) f32.const 12)
-  (func $er_ui_toast_text_max_lines (export "er_ui_toast_text_max_lines") (result i32) i32.const 2)
+  (func $er_ui_toast_radius  (result f32) f32.const 8)
+  (func $er_ui_toast_padding  (result f32) f32.const 10)
+  (func $er_ui_toast_icon_x  (result f32) f32.const 12)
+  (func $er_ui_toast_icon_size  (result f32) f32.const 16)
+  (func $er_ui_toast_text_x  (result f32) f32.const 38)
+  (func $er_ui_toast_text_gap  (result f32) f32.const 3)
+  (func $er_ui_toast_min_width  (result f32) f32.const 160)
+  (func $er_ui_toast_min_height  (result f32) f32.const 40)
+  (func $er_ui_toast_title_line_height  (result f32) f32.const 14)
+  (func $er_ui_toast_detail_line_height  (result f32) f32.const 12)
+  (func $er_ui_toast_text_max_lines  (result i32) i32.const 2)
 
-  (func $er_ui_toast_id (export "er_ui_toast_id") (param $id i32) (result i32)
+  (func $er_ui_toast_id  (param $id i32) (result i32)
     local.get $id)
 
-  (func $er_ui_toast_text_width (export "er_ui_toast_text_width") (param $bounds i32) (result f32)
+  (func $er_ui_toast_text_width  (param $bounds i32) (result f32)
     local.get $bounds i32.eqz
     if f32.const 0 return end
     local.get $bounds i32.const 8 i32.add f32.load f32.const 48 f32.sub f32.const 1 call $max_f32)
 
-  (func $er_ui_toast_bounds (export "er_ui_toast_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_toast_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -25076,7 +25532,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_toast_icon_bounds (export "er_ui_toast_icon_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_toast_icon_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -25086,7 +25542,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_toast_title_bounds (export "er_ui_toast_title_bounds") (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
+  (func $er_ui_toast_title_bounds  (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
     (local $text_w f32) (local $title_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25099,7 +25555,7 @@
     local.get $title_h
     call $rect_store)
 
-  (func $er_ui_toast_detail_bounds (export "er_ui_toast_detail_bounds") (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $out i32) (result i32)
+  (func $er_ui_toast_detail_bounds  (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $out i32) (result i32)
     (local $text_w f32) (local $title_h f32) (local $detail_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25115,7 +25571,7 @@
     local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add local.get $detail_y f32.sub f32.const 10 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_toast_measure (export "er_ui_toast_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_toast_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $title_w f32) (local $title_h f32) (local $detail_w f32) (local $detail_h f32) (local $gap f32) (local $pref_w f32) (local $pref_h f32) (local $max_w f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25148,33 +25604,33 @@
     f32.const 40 local.get $pref_h call $min_f32
     local.get $pref_w local.get $pref_h local.get $max_w local.get $pref_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_drawer_trigger_y (export "er_ui_drawer_trigger_y") (result f32) f32.const 4)
-  (func $er_ui_drawer_trigger_w (export "er_ui_drawer_trigger_w") (result f32) f32.const 62)
-  (func $er_ui_drawer_trigger_h (export "er_ui_drawer_trigger_h") (result f32) f32.const 30)
-  (func $er_ui_drawer_trigger_padding (export "er_ui_drawer_trigger_padding") (result f32) f32.const 8)
-  (func $er_ui_drawer_content_y (export "er_ui_drawer_content_y") (result f32) f32.const 38)
-  (func $er_ui_drawer_content_inset_x (export "er_ui_drawer_content_inset_x") (result f32) f32.const 10)
-  (func $er_ui_drawer_radius (export "er_ui_drawer_radius") (result f32) f32.const 10)
-  (func $er_ui_drawer_padding (export "er_ui_drawer_padding") (result f32) f32.const 12)
-  (func $er_ui_drawer_handle_w (export "er_ui_drawer_handle_w") (result f32) f32.const 58)
-  (func $er_ui_drawer_handle_h (export "er_ui_drawer_handle_h") (result f32) f32.const 4)
-  (func $er_ui_drawer_handle_y (export "er_ui_drawer_handle_y") (result f32) f32.const 5)
-  (func $er_ui_drawer_handle_radius (export "er_ui_drawer_handle_radius") (result f32) f32.const 2)
-  (func $er_ui_drawer_panel_title_y (export "er_ui_drawer_panel_title_y") (result f32) f32.const 14)
-  (func $er_ui_drawer_panel_title_h (export "er_ui_drawer_panel_title_h") (result f32) f32.const 14)
-  (func $er_ui_drawer_panel_detail_y (export "er_ui_drawer_panel_detail_y") (result f32) f32.const 31)
-  (func $er_ui_drawer_panel_detail_h (export "er_ui_drawer_panel_detail_h") (result f32) f32.const 12)
+  (func $er_ui_drawer_trigger_y  (result f32) f32.const 4)
+  (func $er_ui_drawer_trigger_w  (result f32) f32.const 62)
+  (func $er_ui_drawer_trigger_h  (result f32) f32.const 30)
+  (func $er_ui_drawer_trigger_padding  (result f32) f32.const 8)
+  (func $er_ui_drawer_content_y  (result f32) f32.const 38)
+  (func $er_ui_drawer_content_inset_x  (result f32) f32.const 10)
+  (func $er_ui_drawer_radius  (result f32) f32.const 10)
+  (func $er_ui_drawer_padding  (result f32) f32.const 12)
+  (func $er_ui_drawer_handle_w  (result f32) f32.const 58)
+  (func $er_ui_drawer_handle_h  (result f32) f32.const 4)
+  (func $er_ui_drawer_handle_y  (result f32) f32.const 5)
+  (func $er_ui_drawer_handle_radius  (result f32) f32.const 2)
+  (func $er_ui_drawer_panel_title_y  (result f32) f32.const 14)
+  (func $er_ui_drawer_panel_title_h  (result f32) f32.const 14)
+  (func $er_ui_drawer_panel_detail_y  (result f32) f32.const 31)
+  (func $er_ui_drawer_panel_detail_h  (result f32) f32.const 12)
 
   (func $er_ui_drawer_panel (param $out i32) (result i32)
     local.get $out f32.const 10 f32.const 12 f32.const 14 f32.const 14 f32.const 31 f32.const 12 f32.const 0 i32.const 1 i32.const 1 call $er_ui_primitives_title_detail_panel)
 
-  (func $er_ui_drawer_trigger_id (export "er_ui_drawer_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_drawer_trigger_id  (param $id i32) (result i32)
     local.get $id call $er_ui_primitives_overlay_trigger_id)
 
-  (func $er_ui_drawer_content_id (export "er_ui_drawer_content_id") (param $id i32) (result i32)
+  (func $er_ui_drawer_content_id  (param $id i32) (result i32)
     local.get $id i32.const 1 call $er_ui_primitives_overlay_indexed_id)
 
-  (func $er_ui_drawer_trigger_bounds (export "er_ui_drawer_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_drawer_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -25184,7 +25640,7 @@
     f32.const 30
     call $rect_store)
 
-  (func $er_ui_drawer_content_bounds (export "er_ui_drawer_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_drawer_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25196,7 +25652,7 @@
     local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add local.get $y f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_drawer_handle_bounds (export "er_ui_drawer_handle_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_drawer_handle_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123760 call $er_ui_drawer_content_bounds drop
@@ -25207,14 +25663,14 @@
     f32.const 4
     call $rect_store)
 
-  (func $er_ui_drawer_trigger_text_bounds (export "er_ui_drawer_trigger_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_drawer_trigger_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123776 call $er_ui_drawer_trigger_bounds drop
     i32.const 123776 f32.const 8 i32.const 123792 call $er_ui_primitives_content_inset drop
     i32.const 123792 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_drawer_title_bounds (export "er_ui_drawer_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_drawer_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123808 call $er_ui_drawer_content_bounds drop
@@ -25225,7 +25681,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_drawer_detail_bounds (export "er_ui_drawer_detail_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_drawer_detail_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123824 call $er_ui_drawer_content_bounds drop
@@ -25236,7 +25692,7 @@
     f32.const 12
     call $rect_store)
 
-  (func $er_ui_drawer_measure (export "er_ui_drawer_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_drawer_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $trigger_w f32) (local $pref_w f32) (local $pref_h f32) (local $max_w f32) (local $max_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25254,35 +25710,35 @@
     local.get $pref_h i32.const 123932 f32.load f32.const 38 f32.add call $max_f32 local.set $max_h
     f32.const 21 f32.const 93 local.get $pref_w local.get $pref_h local.get $max_w local.get $max_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_sheet_trigger_y (export "er_ui_sheet_trigger_y") (result f32) f32.const 4)
-  (func $er_ui_sheet_trigger_w (export "er_ui_sheet_trigger_w") (result f32) f32.const 62)
-  (func $er_ui_sheet_trigger_h (export "er_ui_sheet_trigger_h") (result f32) f32.const 30)
-  (func $er_ui_sheet_trigger_padding (export "er_ui_sheet_trigger_padding") (result f32) f32.const 8)
-  (func $er_ui_sheet_content_w (export "er_ui_sheet_content_w") (result f32) f32.const 96)
-  (func $er_ui_sheet_content_min_left (export "er_ui_sheet_content_min_left") (result f32) f32.const 82)
-  (func $er_ui_sheet_radius (export "er_ui_sheet_radius") (result f32) f32.const 8)
-  (func $er_ui_sheet_padding (export "er_ui_sheet_padding") (result f32) f32.const 10)
-  (func $er_ui_sheet_close_size (export "er_ui_sheet_close_size") (result f32) f32.const 28)
-  (func $er_ui_sheet_close_inset (export "er_ui_sheet_close_inset") (result f32) f32.const 8)
-  (func $er_ui_sheet_close_space (export "er_ui_sheet_close_space") (result f32) f32.const 34)
-  (func $er_ui_sheet_panel_title_y (export "er_ui_sheet_panel_title_y") (result f32) f32.const 10)
-  (func $er_ui_sheet_panel_title_h (export "er_ui_sheet_panel_title_h") (result f32) f32.const 14)
-  (func $er_ui_sheet_panel_detail_y (export "er_ui_sheet_panel_detail_y") (result f32) f32.const 29)
-  (func $er_ui_sheet_panel_detail_h (export "er_ui_sheet_panel_detail_h") (result f32) f32.const 12)
+  (func $er_ui_sheet_trigger_y  (result f32) f32.const 4)
+  (func $er_ui_sheet_trigger_w  (result f32) f32.const 62)
+  (func $er_ui_sheet_trigger_h  (result f32) f32.const 30)
+  (func $er_ui_sheet_trigger_padding  (result f32) f32.const 8)
+  (func $er_ui_sheet_content_w  (result f32) f32.const 96)
+  (func $er_ui_sheet_content_min_left  (result f32) f32.const 82)
+  (func $er_ui_sheet_radius  (result f32) f32.const 8)
+  (func $er_ui_sheet_padding  (result f32) f32.const 10)
+  (func $er_ui_sheet_close_size  (result f32) f32.const 28)
+  (func $er_ui_sheet_close_inset  (result f32) f32.const 8)
+  (func $er_ui_sheet_close_space  (result f32) f32.const 34)
+  (func $er_ui_sheet_panel_title_y  (result f32) f32.const 10)
+  (func $er_ui_sheet_panel_title_h  (result f32) f32.const 14)
+  (func $er_ui_sheet_panel_detail_y  (result f32) f32.const 29)
+  (func $er_ui_sheet_panel_detail_h  (result f32) f32.const 12)
 
   (func $er_ui_sheet_panel (param $out i32) (result i32)
     local.get $out f32.const 8 f32.const 10 f32.const 10 f32.const 14 f32.const 29 f32.const 12 f32.const 34 i32.const 1 i32.const 1 call $er_ui_primitives_title_detail_panel)
 
-  (func $er_ui_sheet_trigger_id (export "er_ui_sheet_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_sheet_trigger_id  (param $id i32) (result i32)
     local.get $id call $er_ui_primitives_overlay_trigger_id)
 
-  (func $er_ui_sheet_content_id (export "er_ui_sheet_content_id") (param $id i32) (result i32)
+  (func $er_ui_sheet_content_id  (param $id i32) (result i32)
     local.get $id i32.const 1 call $er_ui_primitives_overlay_indexed_id)
 
-  (func $er_ui_sheet_close_id (export "er_ui_sheet_close_id") (param $id i32) (result i32)
+  (func $er_ui_sheet_close_id  (param $id i32) (result i32)
     local.get $id call $er_ui_primitives_overlay_secondary_id)
 
-  (func $er_ui_sheet_trigger_bounds (export "er_ui_sheet_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sheet_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -25292,14 +25748,14 @@
     f32.const 30
     call $rect_store)
 
-  (func $er_ui_sheet_content_width_for_bounds (export "er_ui_sheet_content_width_for_bounds") (param $bounds i32) (result f32)
+  (func $er_ui_sheet_content_width_for_bounds  (param $bounds i32) (result f32)
     local.get $bounds i32.eqz
     if f32.const 1 return end
     f32.const 96
     local.get $bounds i32.const 8 i32.add f32.load f32.const 82 f32.sub f32.const 1 call $max_f32
     call $min_f32)
 
-  (func $er_ui_sheet_content_bounds (export "er_ui_sheet_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sheet_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $w f32) (local $x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25312,7 +25768,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_sheet_close_bounds (export "er_ui_sheet_close_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sheet_close_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123960 call $er_ui_sheet_content_bounds drop
@@ -25323,14 +25779,14 @@
     f32.const 28
     call $rect_store)
 
-  (func $er_ui_sheet_trigger_text_bounds (export "er_ui_sheet_trigger_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sheet_trigger_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 123976 call $er_ui_sheet_trigger_bounds drop
     i32.const 123976 f32.const 8 i32.const 123992 call $er_ui_primitives_content_inset drop
     i32.const 123992 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_sheet_title_bounds (export "er_ui_sheet_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sheet_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124008 call $er_ui_sheet_content_bounds drop
@@ -25341,7 +25797,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_sheet_detail_bounds (export "er_ui_sheet_detail_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sheet_detail_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124024 call $er_ui_sheet_content_bounds drop
@@ -25352,7 +25808,7 @@
     f32.const 12
     call $rect_store)
 
-  (func $er_ui_sheet_measure (export "er_ui_sheet_measure") (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_sheet_measure  (param $title_ptr i32) (param $title_len i32) (param $detail_ptr i32) (param $detail_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $trigger_w f32) (local $pref_w f32) (local $pref_h f32) (local $max_w f32) (local $max_h f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25365,40 +25821,40 @@
     local.get $pref_h i32.const 124092 f32.load call $max_f32 local.set $max_h
     f32.const 83 f32.const 51 local.get $pref_w local.get $pref_h local.get $max_w local.get $max_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_sidebar_rail_w (export "er_ui_sidebar_rail_w") (result f32) f32.const 62)
-  (func $er_ui_sidebar_content_gap (export "er_ui_sidebar_content_gap") (result f32) f32.const 10)
-  (func $er_ui_sidebar_radius (export "er_ui_sidebar_radius") (result f32) f32.const 8)
-  (func $er_ui_sidebar_trigger_x (export "er_ui_sidebar_trigger_x") (result f32) f32.const 17)
-  (func $er_ui_sidebar_trigger_y (export "er_ui_sidebar_trigger_y") (result f32) f32.const 8)
-  (func $er_ui_sidebar_trigger_size (export "er_ui_sidebar_trigger_size") (result f32) f32.const 28)
-  (func $er_ui_sidebar_title_y (export "er_ui_sidebar_title_y") (result f32) f32.const 42)
-  (func $er_ui_sidebar_title_h (export "er_ui_sidebar_title_h") (result f32) f32.const 12)
-  (func $er_ui_sidebar_title_max_lines (export "er_ui_sidebar_title_max_lines") (result i32) i32.const 2)
-  (func $er_ui_sidebar_item_x (export "er_ui_sidebar_item_x") (result f32) f32.const 6)
-  (func $er_ui_sidebar_item_y (export "er_ui_sidebar_item_y") (result f32) f32.const 66)
-  (func $er_ui_sidebar_item_h (export "er_ui_sidebar_item_h") (result f32) f32.const 20)
-  (func $er_ui_sidebar_item_bottom_padding (export "er_ui_sidebar_item_bottom_padding") (result f32) f32.const 10)
-  (func $er_ui_sidebar_item_radius (export "er_ui_sidebar_item_radius") (result f32) f32.const 4)
-  (func $er_ui_sidebar_item_padding (export "er_ui_sidebar_item_padding") (result f32) f32.const 5)
-  (func $er_ui_sidebar_item_text_h (export "er_ui_sidebar_item_text_h") (result f32) f32.const 12)
-  (func $er_ui_sidebar_item_max_lines (export "er_ui_sidebar_item_max_lines") (result i32) i32.const 2)
-  (func $er_ui_sidebar_content_min_w (export "er_ui_sidebar_content_min_w") (result f32) f32.const 120)
-  (func $er_ui_sidebar_min_width (export "er_ui_sidebar_min_width") (result f32) f32.const 160)
-  (func $er_ui_sidebar_min_height (export "er_ui_sidebar_min_height") (result f32) f32.const 48)
+  (func $er_ui_sidebar_rail_w  (result f32) f32.const 62)
+  (func $er_ui_sidebar_content_gap  (result f32) f32.const 10)
+  (func $er_ui_sidebar_radius  (result f32) f32.const 8)
+  (func $er_ui_sidebar_trigger_x  (result f32) f32.const 17)
+  (func $er_ui_sidebar_trigger_y  (result f32) f32.const 8)
+  (func $er_ui_sidebar_trigger_size  (result f32) f32.const 28)
+  (func $er_ui_sidebar_title_y  (result f32) f32.const 42)
+  (func $er_ui_sidebar_title_h  (result f32) f32.const 12)
+  (func $er_ui_sidebar_title_max_lines  (result i32) i32.const 2)
+  (func $er_ui_sidebar_item_x  (result f32) f32.const 6)
+  (func $er_ui_sidebar_item_y  (result f32) f32.const 66)
+  (func $er_ui_sidebar_item_h  (result f32) f32.const 20)
+  (func $er_ui_sidebar_item_bottom_padding  (result f32) f32.const 10)
+  (func $er_ui_sidebar_item_radius  (result f32) f32.const 4)
+  (func $er_ui_sidebar_item_padding  (result f32) f32.const 5)
+  (func $er_ui_sidebar_item_text_h  (result f32) f32.const 12)
+  (func $er_ui_sidebar_item_max_lines  (result i32) i32.const 2)
+  (func $er_ui_sidebar_content_min_w  (result f32) f32.const 120)
+  (func $er_ui_sidebar_min_width  (result f32) f32.const 160)
+  (func $er_ui_sidebar_min_height  (result f32) f32.const 48)
 
-  (func $er_ui_sidebar_trigger_id (export "er_ui_sidebar_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_sidebar_trigger_id  (param $id i32) (result i32)
     local.get $id call $er_ui_primitives_overlay_trigger_id)
 
-  (func $er_ui_sidebar_item_id (export "er_ui_sidebar_item_id") (param $id i32) (result i32)
+  (func $er_ui_sidebar_item_id  (param $id i32) (result i32)
     local.get $id i32.const 1 call $er_ui_primitives_overlay_indexed_id)
 
-  (func $er_ui_sidebar_title_inner_width (export "er_ui_sidebar_title_inner_width") (result f32)
+  (func $er_ui_sidebar_title_inner_width  (result f32)
     f32.const 50)
 
-  (func $er_ui_sidebar_item_inner_width (export "er_ui_sidebar_item_inner_width") (result f32)
+  (func $er_ui_sidebar_item_inner_width  (result f32)
     f32.const 40)
 
-  (func $er_ui_sidebar_rail_bounds (export "er_ui_sidebar_rail_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sidebar_rail_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -25408,7 +25864,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_sidebar_trigger_bounds (export "er_ui_sidebar_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sidebar_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -25418,13 +25874,13 @@
     f32.const 28
     call $rect_store)
 
-  (func $er_ui_sidebar_title_height (export "er_ui_sidebar_title_height") (param $title_ptr i32) (param $title_len i32) (result f32)
+  (func $er_ui_sidebar_title_height  (param $title_ptr i32) (param $title_len i32) (result f32)
     local.get $title_ptr local.get $title_len f32.const 50 f32.const 12 i32.const 2 call $er_ui_alert_measured_text_height)
 
-  (func $er_ui_sidebar_item_text_height (export "er_ui_sidebar_item_text_height") (param $item_ptr i32) (param $item_len i32) (result f32)
+  (func $er_ui_sidebar_item_text_height  (param $item_ptr i32) (param $item_len i32) (result f32)
     local.get $item_ptr local.get $item_len f32.const 40 f32.const 12 i32.const 2 call $er_ui_alert_measured_text_height)
 
-  (func $er_ui_sidebar_title_bounds (export "er_ui_sidebar_title_bounds") (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
+  (func $er_ui_sidebar_title_bounds  (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -25434,7 +25890,7 @@
     local.get $title_ptr local.get $title_len call $er_ui_sidebar_title_height
     call $rect_store)
 
-  (func $er_ui_sidebar_item_bounds (export "er_ui_sidebar_item_bounds") (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $item_ptr i32) (param $item_len i32) (param $out i32) (result i32)
+  (func $er_ui_sidebar_item_bounds  (param $bounds i32) (param $title_ptr i32) (param $title_len i32) (param $item_ptr i32) (param $item_len i32) (param $out i32) (result i32)
     (local $title_h f32) (local $text_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25447,7 +25903,7 @@
     f32.const 20 local.get $text_h f32.const 10 f32.add call $max_f32
     call $rect_store)
 
-  (func $er_ui_sidebar_item_text_bounds (export "er_ui_sidebar_item_text_bounds") (param $item_bounds i32) (param $item_ptr i32) (param $item_len i32) (param $out i32) (result i32)
+  (func $er_ui_sidebar_item_text_bounds  (param $item_bounds i32) (param $item_ptr i32) (param $item_len i32) (param $out i32) (result i32)
     (local $w f32) (local $h f32)
     local.get $item_bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25463,7 +25919,7 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_sidebar_content_bounds (export "er_ui_sidebar_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_sidebar_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25475,7 +25931,7 @@
     local.get $bounds i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_sidebar_measure (export "er_ui_sidebar_measure") (param $title_ptr i32) (param $title_len i32) (param $item_ptr i32) (param $item_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_sidebar_measure  (param $title_ptr i32) (param $title_len i32) (param $item_ptr i32) (param $item_len i32) (param $constraints i32) (param $out i32) (result i32)
     (local $title_h f32) (local $item_h f32) (local $rail_h f32) (local $pref_w f32) (local $pref_h f32) (local $max_w f32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25490,21 +25946,21 @@
     f32.const 48 local.get $pref_h call $min_f32
     local.get $pref_w local.get $pref_h local.get $max_w local.get $pref_h local.get $out call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-  (func $er_ui_dropdown_menu_trigger_label_len (export "er_ui_dropdown_menu_trigger_label_len") (result i32) i32.const 4)
-  (func $er_ui_dropdown_menu_item_count (export "er_ui_dropdown_menu_item_count") (result i32) i32.const 2)
-  (func $er_ui_dropdown_menu_trigger_y (export "er_ui_dropdown_menu_trigger_y") (result f32) f32.const 4)
-  (func $er_ui_dropdown_menu_trigger_w (export "er_ui_dropdown_menu_trigger_w") (result f32) f32.const 64)
-  (func $er_ui_dropdown_menu_trigger_h (export "er_ui_dropdown_menu_trigger_h") (result f32) f32.const 30)
-  (func $er_ui_dropdown_menu_gap (export "er_ui_dropdown_menu_gap") (result f32) f32.const 8)
-  (func $er_ui_dropdown_menu_radius (export "er_ui_dropdown_menu_radius") (result f32) f32.const 8)
-  (func $er_ui_dropdown_menu_trigger_padding (export "er_ui_dropdown_menu_trigger_padding") (result f32) f32.const 8)
-  (func $er_ui_dropdown_menu_list_padding (export "er_ui_dropdown_menu_list_padding") (result f32) f32.const 5)
-  (func $er_ui_dropdown_menu_item_h (export "er_ui_dropdown_menu_item_h") (result f32) f32.const 14)
-  (func $er_ui_dropdown_menu_item_pitch (export "er_ui_dropdown_menu_item_pitch") (result f32) f32.const 16)
-  (func $er_ui_dropdown_menu_item_radius (export "er_ui_dropdown_menu_item_radius") (result f32) f32.const 4)
-  (func $er_ui_dropdown_menu_item_padding (export "er_ui_dropdown_menu_item_padding") (result f32) f32.const 5)
-  (func $er_ui_dropdown_menu_item_text_h (export "er_ui_dropdown_menu_item_text_h") (result f32) f32.const 12)
-  (func $er_ui_dropdown_menu_label_max_lines (export "er_ui_dropdown_menu_label_max_lines") (result i32) i32.const 1)
+  (func $er_ui_dropdown_menu_trigger_label_len  (result i32) i32.const 4)
+  (func $er_ui_dropdown_menu_item_count  (result i32) i32.const 2)
+  (func $er_ui_dropdown_menu_trigger_y  (result f32) f32.const 4)
+  (func $er_ui_dropdown_menu_trigger_w  (result f32) f32.const 64)
+  (func $er_ui_dropdown_menu_trigger_h  (result f32) f32.const 30)
+  (func $er_ui_dropdown_menu_gap  (result f32) f32.const 8)
+  (func $er_ui_dropdown_menu_radius  (result f32) f32.const 8)
+  (func $er_ui_dropdown_menu_trigger_padding  (result f32) f32.const 8)
+  (func $er_ui_dropdown_menu_list_padding  (result f32) f32.const 5)
+  (func $er_ui_dropdown_menu_item_h  (result f32) f32.const 14)
+  (func $er_ui_dropdown_menu_item_pitch  (result f32) f32.const 16)
+  (func $er_ui_dropdown_menu_item_radius  (result f32) f32.const 4)
+  (func $er_ui_dropdown_menu_item_padding  (result f32) f32.const 5)
+  (func $er_ui_dropdown_menu_item_text_h  (result f32) f32.const 12)
+  (func $er_ui_dropdown_menu_label_max_lines  (result i32) i32.const 1)
 
   (func $er_ui_dropdown_menu_panel_layout (param $out i32) (result i32)
     local.get $out f32.const 4 f32.const 64 f32.const 30 f32.const 8
@@ -25514,25 +25970,25 @@
     local.get $out f32.const 5 f32.const 14 f32.const 16 f32.const 4 f32.const 5 f32.const 12
     call $er_ui_primitives_menu_list_layout)
 
-  (func $er_ui_dropdown_menu_trigger_id (export "er_ui_dropdown_menu_trigger_id") (param $id i32) (result i32)
+  (func $er_ui_dropdown_menu_trigger_id  (param $id i32) (result i32)
     local.get $id call $er_ui_primitives_overlay_trigger_id)
 
-  (func $er_ui_dropdown_menu_item_id (export "er_ui_dropdown_menu_item_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_dropdown_menu_item_id  (param $id i32) (param $index i32) (result i32)
     local.get $id local.get $index i32.const 0 i32.const 1 call $clamp_i32 call $er_ui_primitives_overlay_indexed_id)
 
-  (func $er_ui_dropdown_menu_trigger_bounds (export "er_ui_dropdown_menu_trigger_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dropdown_menu_trigger_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 124160 call $er_ui_dropdown_menu_panel_layout drop
     local.get $bounds i32.const 124160 local.get $out call $er_ui_primitives_side_panel_trigger_bounds)
 
-  (func $er_ui_dropdown_menu_content_bounds (export "er_ui_dropdown_menu_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dropdown_menu_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 124160 call $er_ui_dropdown_menu_panel_layout drop
     local.get $bounds i32.const 124160 local.get $out call $er_ui_primitives_side_panel_content_bounds)
 
-  (func $er_ui_dropdown_menu_item_bounds (export "er_ui_dropdown_menu_item_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_dropdown_menu_item_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124176 call $er_ui_dropdown_menu_content_bounds drop
@@ -25540,28 +25996,28 @@
     i32.const 124176 local.get $index i32.const 0 i32.const 1 call $clamp_i32 i32.const 124192 local.get $out
     call $er_ui_primitives_menu_item_bounds)
 
-  (func $er_ui_dropdown_menu_trigger_text_bounds (export "er_ui_dropdown_menu_trigger_text_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_dropdown_menu_trigger_text_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124216 call $er_ui_dropdown_menu_trigger_bounds drop
     i32.const 124216 f32.const 8 i32.const 124232 call $er_ui_primitives_content_inset drop
     i32.const 124232 local.get $out f32.const 16 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_dropdown_menu_item_text_bounds (export "er_ui_dropdown_menu_item_text_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_dropdown_menu_item_text_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $index i32.const 124248 call $er_ui_dropdown_menu_item_bounds drop
     i32.const 124248 f32.const 5 i32.const 124264 call $er_ui_primitives_content_inset drop
     i32.const 124264 local.get $out f32.const 12 call $er_ui_rect_with_height_centered)
 
-  (func $er_ui_dropdown_menu_measure_two_item_panel (export "er_ui_dropdown_menu_measure_two_item_panel") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_dropdown_menu_measure_two_item_panel  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 124192 call $er_ui_dropdown_menu_list_layout drop
     local.get $first_ptr local.get $first_len local.get $second_ptr local.get $second_len local.get $constraints i32.const 124192 local.get $out
     call $er_ui_primitives_measure_two_item_menu_panel)
 
-  (func $er_ui_dropdown_menu_measure (export "er_ui_dropdown_menu_measure") (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_dropdown_menu_measure  (param $first_ptr i32) (param $first_len i32) (param $second_ptr i32) (param $second_len i32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     i32.const 124160 call $er_ui_dropdown_menu_panel_layout drop
@@ -25575,43 +26031,43 @@
     i32.const 124192
     local.get $out
     call $er_ui_primitives_measure_side_panel_menu)
-  (func $er_ui_timeline_min_scale (export "er_ui_timeline_min_scale") (result f32) f32.const 0.05)
-  (func $er_ui_timeline_min_window_w (export "er_ui_timeline_min_window_w") (result f32) f32.const 0.01)
-  (func $er_ui_timeline_pan_factor (export "er_ui_timeline_pan_factor") (result f32) f32.const 0.25)
-  (func $er_ui_timeline_min_zoom (export "er_ui_timeline_min_zoom") (result f32) f32.const 1)
-  (func $er_ui_timeline_max_zoom (export "er_ui_timeline_max_zoom") (result f32) f32.const 6)
-  (func $er_ui_timeline_zoom_out_factor (export "er_ui_timeline_zoom_out_factor") (result f32) f32.const 0.75)
-  (func $er_ui_timeline_zoom_in_factor (export "er_ui_timeline_zoom_in_factor") (result f32) f32.const 1.35)
-  (func $er_ui_timeline_default_label_w (export "er_ui_timeline_default_label_w") (result f32) f32.const 82)
-  (func $er_ui_timeline_default_inset (export "er_ui_timeline_default_inset") (result f32) f32.const 14)
-  (func $er_ui_timeline_default_radius (export "er_ui_timeline_default_radius") (result f32) f32.const 8)
-  (func $er_ui_timeline_header_h (export "er_ui_timeline_header_h") (result f32) f32.const 24)
-  (func $er_ui_timeline_controls_max_w (export "er_ui_timeline_controls_max_w") (result f32) f32.const 194)
-  (func $er_ui_timeline_controls_gap (export "er_ui_timeline_controls_gap") (result f32) f32.const 10)
-  (func $er_ui_timeline_axis_top_gap (export "er_ui_timeline_axis_top_gap") (result f32) f32.const 12)
-  (func $er_ui_timeline_axis_y_offset (export "er_ui_timeline_axis_y_offset") (result f32) f32.const 14)
-  (func $er_ui_timeline_axis_bottom_gap (export "er_ui_timeline_axis_bottom_gap") (result f32) f32.const 18)
-  (func $er_ui_timeline_lane_top (export "er_ui_timeline_lane_top") (result f32) f32.const 18)
-  (func $er_ui_timeline_lane_reserved_h (export "er_ui_timeline_lane_reserved_h") (result f32) f32.const 16)
-  (func $er_ui_timeline_lane_label_x_offset (export "er_ui_timeline_lane_label_x_offset") (result f32) f32.const 78)
-  (func $er_ui_timeline_lane_label_w (export "er_ui_timeline_lane_label_w") (result f32) f32.const 68)
-  (func $er_ui_timeline_lane_label_h (export "er_ui_timeline_lane_label_h") (result f32) f32.const 16)
-  (func $er_ui_timeline_lane_separator_bottom (export "er_ui_timeline_lane_separator_bottom") (result f32) f32.const 6)
-  (func $er_ui_timeline_block_min_w (export "er_ui_timeline_block_min_w") (result f32) f32.const 4)
-  (func $er_ui_timeline_block_min_h (export "er_ui_timeline_block_min_h") (result f32) f32.const 5)
-  (func $er_ui_timeline_block_bottom (export "er_ui_timeline_block_bottom") (result f32) f32.const 8)
-  (func $er_ui_timeline_axis_line_y (export "er_ui_timeline_axis_line_y") (result f32) f32.const 12)
-  (func $er_ui_timeline_mark_tick_y (export "er_ui_timeline_mark_tick_y") (result f32) f32.const 7)
-  (func $er_ui_timeline_mark_tick_h (export "er_ui_timeline_mark_tick_h") (result f32) f32.const 11)
-  (func $er_ui_timeline_mark_label_x_offset (export "er_ui_timeline_mark_label_x_offset") (result f32) f32.const 22)
-  (func $er_ui_timeline_mark_label_y_offset (export "er_ui_timeline_mark_label_y_offset") (result f32) f32.const 7)
-  (func $er_ui_timeline_mark_label_w (export "er_ui_timeline_mark_label_w") (result f32) f32.const 64)
-  (func $er_ui_timeline_mark_label_h (export "er_ui_timeline_mark_label_h") (result f32) f32.const 14)
+  (func $er_ui_timeline_min_scale  (result f32) f32.const 0.05)
+  (func $er_ui_timeline_min_window_w  (result f32) f32.const 0.01)
+  (func $er_ui_timeline_pan_factor  (result f32) f32.const 0.25)
+  (func $er_ui_timeline_min_zoom  (result f32) f32.const 1)
+  (func $er_ui_timeline_max_zoom  (result f32) f32.const 6)
+  (func $er_ui_timeline_zoom_out_factor  (result f32) f32.const 0.75)
+  (func $er_ui_timeline_zoom_in_factor  (result f32) f32.const 1.35)
+  (func $er_ui_timeline_default_label_w  (result f32) f32.const 82)
+  (func $er_ui_timeline_default_inset  (result f32) f32.const 14)
+  (func $er_ui_timeline_default_radius  (result f32) f32.const 8)
+  (func $er_ui_timeline_header_h  (result f32) f32.const 24)
+  (func $er_ui_timeline_controls_max_w  (result f32) f32.const 194)
+  (func $er_ui_timeline_controls_gap  (result f32) f32.const 10)
+  (func $er_ui_timeline_axis_top_gap  (result f32) f32.const 12)
+  (func $er_ui_timeline_axis_y_offset  (result f32) f32.const 14)
+  (func $er_ui_timeline_axis_bottom_gap  (result f32) f32.const 18)
+  (func $er_ui_timeline_lane_top  (result f32) f32.const 18)
+  (func $er_ui_timeline_lane_reserved_h  (result f32) f32.const 16)
+  (func $er_ui_timeline_lane_label_x_offset  (result f32) f32.const 78)
+  (func $er_ui_timeline_lane_label_w  (result f32) f32.const 68)
+  (func $er_ui_timeline_lane_label_h  (result f32) f32.const 16)
+  (func $er_ui_timeline_lane_separator_bottom  (result f32) f32.const 6)
+  (func $er_ui_timeline_block_min_w  (result f32) f32.const 4)
+  (func $er_ui_timeline_block_min_h  (result f32) f32.const 5)
+  (func $er_ui_timeline_block_bottom  (result f32) f32.const 8)
+  (func $er_ui_timeline_axis_line_y  (result f32) f32.const 12)
+  (func $er_ui_timeline_mark_tick_y  (result f32) f32.const 7)
+  (func $er_ui_timeline_mark_tick_h  (result f32) f32.const 11)
+  (func $er_ui_timeline_mark_label_x_offset  (result f32) f32.const 22)
+  (func $er_ui_timeline_mark_label_y_offset  (result f32) f32.const 7)
+  (func $er_ui_timeline_mark_label_w  (result f32) f32.const 64)
+  (func $er_ui_timeline_mark_label_h  (result f32) f32.const 14)
 
-  (func $er_ui_timeline_clamp_unit (export "er_ui_timeline_clamp_unit") (param $value f32) (result f32)
+  (func $er_ui_timeline_clamp_unit  (param $value f32) (result f32)
     local.get $value f32.const 0 call $max_f32 f32.const 1 call $min_f32)
 
-  (func $er_ui_timeline_window (export "er_ui_timeline_window") (param $offset f32) (param $scale f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_window  (param $offset f32) (param $scale f32) (param $out i32) (result i32)
     (local $start f32) (local $width f32)
     local.get $out i32.eqz
     if i32.const 0 return end
@@ -25621,7 +26077,7 @@
     local.get $out i32.const 4 i32.add local.get $start f32.const 0.01 f32.add local.get $start local.get $width f32.add call $max_f32 f32.store
     i32.const 1)
 
-  (func $er_ui_timeline_pan_offset (export "er_ui_timeline_pan_offset") (param $offset f32) (param $scale f32) (param $direction f32) (result f32)
+  (func $er_ui_timeline_pan_offset  (param $offset f32) (param $scale f32) (param $direction f32) (result f32)
     (local $window_w f32) (local $max_offset f32)
     f32.const 1 local.get $scale f32.const 0.05 call $max_f32 f32.div local.set $window_w
     f32.const 0 f32.const 1 local.get $window_w f32.sub call $max_f32 local.set $max_offset
@@ -25629,7 +26085,7 @@
     f32.const 0 call $max_f32
     local.get $max_offset call $min_f32)
 
-  (func $er_ui_timeline_zoom_state (export "er_ui_timeline_zoom_state") (param $offset f32) (param $scale f32) (param $factor f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_zoom_state  (param $offset f32) (param $scale f32) (param $factor f32) (param $out i32) (result i32)
     (local $previous_scale f32) (local $previous_w f32) (local $center f32) (local $next_scale f32) (local $next_w f32) (local $max_offset f32)
     local.get $out i32.eqz
     if i32.const 0 return end
@@ -25643,7 +26099,7 @@
     local.get $out i32.const 4 i32.add local.get $next_scale f32.store
     i32.const 1)
 
-  (func $er_ui_timeline_unit_in_window (export "er_ui_timeline_unit_in_window") (param $value f32) (param $start f32) (param $end f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_unit_in_window  (param $value f32) (param $start f32) (param $end f32) (param $out i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $end local.get $start f32.le
@@ -25655,7 +26111,7 @@
     local.get $out local.get $value local.get $start f32.sub local.get $end local.get $start f32.sub f32.div call $er_ui_timeline_clamp_unit f32.store
     i32.const 1)
 
-  (func $er_ui_timeline_block_in_window (export "er_ui_timeline_block_in_window") (param $block_start f32) (param $block_end f32) (param $block_value f32) (param $start f32) (param $end f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_block_in_window  (param $block_start f32) (param $block_end f32) (param $block_value f32) (param $start f32) (param $end f32) (param $out i32) (result i32)
     (local $mapped_start f32) (local $mapped_end f32) (local $denom f32)
     local.get $out i32.eqz
     if i32.const 0 return end
@@ -25671,12 +26127,12 @@
     local.get $out i32.const 8 i32.add local.get $block_value f32.store
     i32.const 1)
 
-  (func $er_ui_timeline_lane_h (export "er_ui_timeline_lane_h") (param $axis i32) (param $lane_count i32) (result f32)
+  (func $er_ui_timeline_lane_h  (param $axis i32) (param $lane_count i32) (result f32)
     local.get $axis i32.eqz local.get $lane_count i32.eqz i32.or
     if f32.const 0 return end
     local.get $axis i32.const 12 i32.add f32.load f32.const 16 f32.sub local.get $lane_count f32.convert_i32_u f32.div f32.const 1 call $max_f32)
 
-  (func $er_ui_timeline_lane_label_bounds (export "er_ui_timeline_lane_label_bounds") (param $axis i32) (param $lane_index i32) (param $lane_count i32) (param $out i32) (result i32)
+  (func $er_ui_timeline_lane_label_bounds  (param $axis i32) (param $lane_index i32) (param $lane_count i32) (param $out i32) (result i32)
     (local $lane_h f32) (local $y f32)
     local.get $axis i32.eqz local.get $out i32.eqz i32.or local.get $lane_count i32.eqz i32.or
     if i32.const 0 return end
@@ -25689,7 +26145,7 @@
     f32.const 16
     call $rect_store)
 
-  (func $er_ui_timeline_lane_separator_bounds (export "er_ui_timeline_lane_separator_bounds") (param $axis i32) (param $lane_index i32) (param $lane_count i32) (param $out i32) (result i32)
+  (func $er_ui_timeline_lane_separator_bounds  (param $axis i32) (param $lane_index i32) (param $lane_count i32) (param $out i32) (result i32)
     (local $lane_h f32) (local $y f32)
     local.get $axis i32.eqz local.get $out i32.eqz i32.or local.get $lane_count i32.eqz i32.or
     if i32.const 0 return end
@@ -25702,7 +26158,7 @@
     f32.const 1
     call $rect_store)
 
-  (func $er_ui_timeline_lane_block_bounds (export "er_ui_timeline_lane_block_bounds") (param $axis i32) (param $lane_index i32) (param $lane_count i32) (param $block_start f32) (param $block_end f32) (param $block_value f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_lane_block_bounds  (param $axis i32) (param $lane_index i32) (param $lane_count i32) (param $block_start f32) (param $block_end f32) (param $block_value f32) (param $out i32) (result i32)
     (local $lane_h f32) (local $y f32) (local $start_x f32) (local $end_x f32) (local $w f32) (local $h f32)
     local.get $axis i32.eqz local.get $out i32.eqz i32.or local.get $lane_count i32.eqz i32.or
     if i32.const 0 return end
@@ -25714,29 +26170,29 @@
     f32.const 5 local.get $lane_h f32.const 18 f32.sub local.get $block_value call $er_ui_timeline_clamp_unit f32.mul call $max_f32 local.set $h
     local.get $out local.get $start_x local.get $y local.get $lane_h f32.add f32.const 8 f32.sub local.get $h f32.sub local.get $w local.get $h call $rect_store)
 
-  (func $er_ui_timeline_axis_line_bounds (export "er_ui_timeline_axis_line_bounds") (param $axis i32) (param $out i32) (result i32)
+  (func $er_ui_timeline_axis_line_bounds  (param $axis i32) (param $out i32) (result i32)
     local.get $axis i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $axis f32.load local.get $axis i32.const 4 i32.add f32.load f32.const 12 f32.add local.get $axis i32.const 8 i32.add f32.load f32.const 1 call $rect_store)
 
-  (func $er_ui_timeline_mark_tick_bounds (export "er_ui_timeline_mark_tick_bounds") (param $axis i32) (param $x_unit f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_mark_tick_bounds  (param $axis i32) (param $x_unit f32) (param $out i32) (result i32)
     (local $x f32)
     local.get $axis i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $axis f32.load local.get $axis i32.const 8 i32.add f32.load local.get $x_unit call $er_ui_timeline_clamp_unit f32.mul f32.add local.set $x
     local.get $out local.get $x local.get $axis i32.const 4 i32.add f32.load f32.const 7 f32.add f32.const 1 f32.const 11 call $rect_store)
 
-  (func $er_ui_timeline_mark_label_bounds (export "er_ui_timeline_mark_label_bounds") (param $axis i32) (param $x_unit f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_mark_label_bounds  (param $axis i32) (param $x_unit f32) (param $out i32) (result i32)
     (local $x f32)
     local.get $axis i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $axis f32.load local.get $axis i32.const 8 i32.add f32.load local.get $x_unit call $er_ui_timeline_clamp_unit f32.mul f32.add local.set $x
     local.get $out local.get $x f32.const 22 f32.sub local.get $axis i32.const 4 i32.add f32.load f32.const 7 f32.sub f32.const 64 f32.const 14 call $rect_store)
 
-  (func $er_ui_timeline_inner_bounds (export "er_ui_timeline_inner_bounds") (param $bounds i32) (param $inset f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_inner_bounds  (param $bounds i32) (param $inset f32) (param $out i32) (result i32)
     local.get $bounds local.get $inset local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_timeline_header_text_bounds (export "er_ui_timeline_header_text_bounds") (param $bounds i32) (param $has_header i32) (param $has_controls i32) (param $label_w f32) (param $inset f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_header_text_bounds  (param $bounds i32) (param $has_header i32) (param $has_controls i32) (param $label_w f32) (param $inset f32) (param $out i32) (result i32)
     (local $controls_w f32) (local $controls_gap f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25751,7 +26207,7 @@
     end
     local.get $out i32.const 124300 f32.load i32.const 124304 f32.load i32.const 124308 f32.load local.get $controls_w f32.sub local.get $controls_gap f32.sub f32.const 1 call $max_f32 local.get $has_header if (result f32) f32.const 24 else f32.const 0 end call $rect_store)
 
-  (func $er_ui_timeline_controls_bounds (export "er_ui_timeline_controls_bounds") (param $bounds i32) (param $has_controls i32) (param $inset f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_controls_bounds  (param $bounds i32) (param $has_controls i32) (param $inset f32) (param $out i32) (result i32)
     (local $controls_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25761,7 +26217,7 @@
     i32.const 124328 f32.load f32.const 194 call $min_f32 local.set $controls_w
     local.get $out i32.const 124320 f32.load i32.const 124328 f32.load f32.add local.get $controls_w f32.sub i32.const 124324 f32.load f32.const 2 f32.sub local.get $controls_w f32.const 28 call $rect_store)
 
-  (func $er_ui_timeline_axis_bounds (export "er_ui_timeline_axis_bounds") (param $bounds i32) (param $has_header i32) (param $label_w f32) (param $inset f32) (param $out i32) (result i32)
+  (func $er_ui_timeline_axis_bounds  (param $bounds i32) (param $has_header i32) (param $label_w f32) (param $inset f32) (param $out i32) (result i32)
     (local $header_h f32) (local $resolved_label_w f32) (local $axis_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25775,24 +26231,24 @@
     i32.const 124348 f32.load local.get $resolved_label_w f32.sub f32.const 1 call $max_f32
     i32.const 124344 f32.load i32.const 124352 f32.load f32.add local.get $axis_y f32.sub f32.const 18 f32.sub f32.const 1 call $max_f32
     call $rect_store)
-  (func $er_ui_workspace_default_rail_w (export "er_ui_workspace_default_rail_w") (result f32) f32.const 48)
-  (func $er_ui_workspace_default_sidebar_w (export "er_ui_workspace_default_sidebar_w") (result f32) f32.const 260)
-  (func $er_ui_workspace_default_top_h (export "er_ui_workspace_default_top_h") (result f32) f32.const 56)
-  (func $er_ui_workspace_default_status_h (export "er_ui_workspace_default_status_h") (result f32) f32.const 24)
-  (func $er_ui_workspace_top_trailing_default_w (export "er_ui_workspace_top_trailing_default_w") (result f32) f32.const 210)
-  (func $er_ui_workspace_top_inset_x (export "er_ui_workspace_top_inset_x") (result f32) f32.const 16)
-  (func $er_ui_workspace_top_title_y (export "er_ui_workspace_top_title_y") (result f32) f32.const 13)
-  (func $er_ui_workspace_top_title_h (export "er_ui_workspace_top_title_h") (result f32) f32.const 18)
-  (func $er_ui_workspace_top_detail_y (export "er_ui_workspace_top_detail_y") (result f32) f32.const 34)
-  (func $er_ui_workspace_top_detail_h (export "er_ui_workspace_top_detail_h") (result f32) f32.const 14)
-  (func $er_ui_workspace_top_trailing_gap (export "er_ui_workspace_top_trailing_gap") (result f32) f32.const 20)
-  (func $er_ui_workspace_top_trailing_top_y (export "er_ui_workspace_top_trailing_top_y") (result f32) f32.const 13)
-  (func $er_ui_workspace_top_trailing_bottom_y (export "er_ui_workspace_top_trailing_bottom_y") (result f32) f32.const 32)
-  (func $er_ui_workspace_status_inset_x (export "er_ui_workspace_status_inset_x") (result f32) f32.const 12)
-  (func $er_ui_workspace_status_text_y (export "er_ui_workspace_status_text_y") (result f32) f32.const 5)
-  (func $er_ui_workspace_status_text_h (export "er_ui_workspace_status_text_h") (result f32) f32.const 14)
-  (func $er_ui_workspace_responsive_default_breakpoint (export "er_ui_workspace_responsive_default_breakpoint") (result f32) f32.const 980)
-  (func $er_ui_workspace_responsive_default_gap (export "er_ui_workspace_responsive_default_gap") (result f32) f32.const 14)
+  (func $er_ui_workspace_default_rail_w  (result f32) f32.const 48)
+  (func $er_ui_workspace_default_sidebar_w  (result f32) f32.const 260)
+  (func $er_ui_workspace_default_top_h  (result f32) f32.const 56)
+  (func $er_ui_workspace_default_status_h  (result f32) f32.const 24)
+  (func $er_ui_workspace_top_trailing_default_w  (result f32) f32.const 210)
+  (func $er_ui_workspace_top_inset_x  (result f32) f32.const 16)
+  (func $er_ui_workspace_top_title_y  (result f32) f32.const 13)
+  (func $er_ui_workspace_top_title_h  (result f32) f32.const 18)
+  (func $er_ui_workspace_top_detail_y  (result f32) f32.const 34)
+  (func $er_ui_workspace_top_detail_h  (result f32) f32.const 14)
+  (func $er_ui_workspace_top_trailing_gap  (result f32) f32.const 20)
+  (func $er_ui_workspace_top_trailing_top_y  (result f32) f32.const 13)
+  (func $er_ui_workspace_top_trailing_bottom_y  (result f32) f32.const 32)
+  (func $er_ui_workspace_status_inset_x  (result f32) f32.const 12)
+  (func $er_ui_workspace_status_text_y  (result f32) f32.const 5)
+  (func $er_ui_workspace_status_text_h  (result f32) f32.const 14)
+  (func $er_ui_workspace_responsive_default_breakpoint  (result f32) f32.const 980)
+  (func $er_ui_workspace_responsive_default_gap  (result f32) f32.const 14)
 
   (func $er_ui_workspace_shell_metrics (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
     (local $rail_w_res f32) (local $status_h_res f32) (local $top_h_res f32) (local $body_h f32) (local $body_y f32) (local $rail_h f32) (local $content_x f32) (local $content_w f32) (local $sidebar_w_res f32)
@@ -25818,42 +26274,42 @@
     local.get $out i32.const 32 i32.add local.get $sidebar_w_res f32.store
     i32.const 1)
 
-  (func $er_ui_workspace_shell_rail_bounds (export "er_ui_workspace_shell_rail_bounds") (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_shell_rail_bounds  (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $rail_w local.get $sidebar_w local.get $top_h local.get $status_h i32.const 124380 call $er_ui_workspace_shell_metrics drop
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load i32.const 124380 f32.load i32.const 124400 f32.load call $rect_store)
 
-  (func $er_ui_workspace_shell_top_bounds (export "er_ui_workspace_shell_top_bounds") (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_shell_top_bounds  (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $rail_w local.get $sidebar_w local.get $top_h local.get $status_h i32.const 124380 call $er_ui_workspace_shell_metrics drop
     local.get $out i32.const 124404 f32.load local.get $bounds i32.const 4 i32.add f32.load i32.const 124408 f32.load i32.const 124388 f32.load call $rect_store)
 
-  (func $er_ui_workspace_shell_sidebar_bounds (export "er_ui_workspace_shell_sidebar_bounds") (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_shell_sidebar_bounds  (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $rail_w local.get $sidebar_w local.get $top_h local.get $status_h i32.const 124380 call $er_ui_workspace_shell_metrics drop
     local.get $out i32.const 124404 f32.load i32.const 124396 f32.load i32.const 124412 f32.load i32.const 124392 f32.load call $rect_store)
 
-  (func $er_ui_workspace_shell_main_bounds (export "er_ui_workspace_shell_main_bounds") (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_shell_main_bounds  (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $rail_w local.get $sidebar_w local.get $top_h local.get $status_h i32.const 124380 call $er_ui_workspace_shell_metrics drop
     local.get $out i32.const 124404 f32.load i32.const 124412 f32.load f32.add i32.const 124396 f32.load i32.const 124408 f32.load i32.const 124412 f32.load f32.sub f32.const 1 call $max_f32 i32.const 124392 f32.load call $rect_store)
 
-  (func $er_ui_workspace_shell_status_bounds (export "er_ui_workspace_shell_status_bounds") (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_shell_status_bounds  (param $bounds i32) (param $rail_w f32) (param $sidebar_w f32) (param $top_h f32) (param $status_h f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $rail_w local.get $sidebar_w local.get $top_h local.get $status_h i32.const 124380 call $er_ui_workspace_shell_metrics drop
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add i32.const 124384 f32.load f32.sub local.get $bounds i32.const 8 i32.add f32.load i32.const 124384 f32.load call $rect_store)
 
-  (func $er_ui_workspace_top_trailing_width (export "er_ui_workspace_top_trailing_width") (param $bounds i32) (param $has_trailing i32) (param $trailing_w f32) (result f32)
+  (func $er_ui_workspace_top_trailing_width  (param $bounds i32) (param $has_trailing i32) (param $trailing_w f32) (result f32)
     local.get $bounds i32.eqz local.get $has_trailing i32.eqz i32.or
     if f32.const 0 return end
     local.get $bounds i32.const 8 i32.add f32.load local.get $trailing_w f32.const 1 call $max_f32 call $min_f32)
 
-  (func $er_ui_workspace_top_title_bounds (export "er_ui_workspace_top_title_bounds") (param $bounds i32) (param $has_trailing i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_top_title_bounds  (param $bounds i32) (param $has_trailing i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
     (local $tw f32) (local $gap f32) (local $text_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25863,7 +26319,7 @@
     local.get $bounds i32.const 8 i32.add f32.load local.get $tw f32.sub local.get $inset_x f32.const 2 f32.mul f32.sub local.get $gap f32.sub f32.const 1 call $max_f32 local.set $text_w
     local.get $out local.get $bounds f32.load local.get $inset_x f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 13 f32.add local.get $text_w f32.const 18 call $rect_store)
 
-  (func $er_ui_workspace_top_detail_bounds (export "er_ui_workspace_top_detail_bounds") (param $bounds i32) (param $has_trailing i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_top_detail_bounds  (param $bounds i32) (param $has_trailing i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
     local.get $bounds local.get $has_trailing local.get $trailing_w local.get $inset_x local.get $out call $er_ui_workspace_top_title_bounds drop
     local.get $out i32.eqz
     if i32.const 0 return end
@@ -25871,7 +26327,7 @@
     local.get $out i32.const 12 i32.add f32.const 14 f32.store
     i32.const 1)
 
-  (func $er_ui_workspace_top_trailing_top_bounds (export "er_ui_workspace_top_trailing_top_bounds") (param $bounds i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_top_trailing_top_bounds  (param $bounds i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
     (local $tw f32) (local $x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25879,24 +26335,24 @@
     local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add local.get $tw f32.sub local.get $inset_x f32.sub local.set $x
     local.get $out local.get $x local.get $bounds i32.const 4 i32.add f32.load f32.const 13 f32.add local.get $tw f32.const 14 call $rect_store)
 
-  (func $er_ui_workspace_top_trailing_bottom_bounds (export "er_ui_workspace_top_trailing_bottom_bounds") (param $bounds i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_top_trailing_bottom_bounds  (param $bounds i32) (param $trailing_w f32) (param $inset_x f32) (param $out i32) (result i32)
     local.get $bounds local.get $trailing_w local.get $inset_x local.get $out call $er_ui_workspace_top_trailing_top_bounds drop
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $out i32.const 4 i32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 32 f32.add f32.store
     i32.const 1)
 
-  (func $er_ui_workspace_status_text_bounds (export "er_ui_workspace_status_text_bounds") (param $bounds i32) (param $inset_x f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_status_text_bounds  (param $bounds i32) (param $inset_x f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $inset_x f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 5 f32.add local.get $bounds i32.const 8 i32.add f32.load local.get $inset_x f32.const 2 f32.mul f32.sub f32.const 1 call $max_f32 f32.const 14 call $rect_store)
 
-  (func $er_ui_workspace_responsive_stacked (export "er_ui_workspace_responsive_stacked") (param $bounds i32) (param $breakpoint f32) (result i32)
+  (func $er_ui_workspace_responsive_stacked  (param $bounds i32) (param $breakpoint f32) (result i32)
     local.get $bounds i32.eqz
     if i32.const 0 return end
     local.get $bounds i32.const 8 i32.add f32.load local.get $breakpoint f32.lt)
 
-  (func $er_ui_workspace_responsive_panes (export "er_ui_workspace_responsive_panes") (param $bounds i32) (param $breakpoint f32) (param $gap f32) (param $first_w f32) (param $third_w f32) (param $first_stack_h f32) (param $second_stack_h f32) (param $out i32) (result i32)
+  (func $er_ui_workspace_responsive_panes  (param $bounds i32) (param $breakpoint f32) (param $gap f32) (param $first_w f32) (param $third_w f32) (param $first_stack_h f32) (param $second_stack_h f32) (param $out i32) (result i32)
     (local $g f32) (local $fw f32) (local $tw f32) (local $second_x f32) (local $third_x f32) (local $fh f32) (local $second_y f32) (local $sh f32) (local $third_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25923,22 +26379,22 @@
     local.get $out i32.const 32 i32.add local.get $bounds f32.load local.get $third_y local.get $bounds i32.const 8 i32.add f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add local.get $third_y f32.sub f32.const 1 call $max_f32 call $rect_store drop
     local.get $out i32.const 48 i32.add i32.const 1 i32.store
     i32.const 1)
-  (func $er_ui_graph_min_thickness (export "er_ui_graph_min_thickness") (result f32) f32.const 1)
-  (func $er_ui_graph_elbow_min_mid_gap (export "er_ui_graph_elbow_min_mid_gap") (result f32) f32.const 10)
-  (func $er_ui_graph_arrow_w (export "er_ui_graph_arrow_w") (result f32) f32.const 8)
-  (func $er_ui_graph_arrow_h (export "er_ui_graph_arrow_h") (result f32) f32.const 8)
-  (func $er_ui_graph_arrow_x_offset (export "er_ui_graph_arrow_x_offset") (result f32) f32.const 5)
-  (func $er_ui_graph_arrow_y_offset (export "er_ui_graph_arrow_y_offset") (result f32) f32.const 4)
+  (func $er_ui_graph_min_thickness  (result f32) f32.const 1)
+  (func $er_ui_graph_elbow_min_mid_gap  (result f32) f32.const 10)
+  (func $er_ui_graph_arrow_w  (result f32) f32.const 8)
+  (func $er_ui_graph_arrow_h  (result f32) f32.const 8)
+  (func $er_ui_graph_arrow_x_offset  (result f32) f32.const 5)
+  (func $er_ui_graph_arrow_y_offset  (result f32) f32.const 4)
 
-  (func $er_ui_graph_resolved_thickness (export "er_ui_graph_resolved_thickness") (param $thickness f32) (result f32)
+  (func $er_ui_graph_resolved_thickness  (param $thickness f32) (result f32)
     f32.const 1 local.get $thickness call $max_f32)
 
-  (func $er_ui_graph_line_is_horizontal (export "er_ui_graph_line_is_horizontal") (param $x0 f32) (param $y0 f32) (param $x1 f32) (param $y1 f32) (result i32)
+  (func $er_ui_graph_line_is_horizontal  (param $x0 f32) (param $y0 f32) (param $x1 f32) (param $y1 f32) (result i32)
     local.get $x1 local.get $x0 f32.sub f32.abs
     local.get $y1 local.get $y0 f32.sub f32.abs
     f32.ge)
 
-  (func $er_ui_graph_line_rect (export "er_ui_graph_line_rect") (param $x0 f32) (param $y0 f32) (param $x1 f32) (param $y1 f32) (param $thickness f32) (param $out i32) (result i32)
+  (func $er_ui_graph_line_rect  (param $x0 f32) (param $y0 f32) (param $x1 f32) (param $y1 f32) (param $thickness f32) (param $out i32) (result i32)
     (local $resolved f32)
     local.get $out i32.eqz
     if i32.const 0 return end
@@ -25960,7 +26416,7 @@
     local.get $resolved local.get $y1 local.get $y0 f32.sub f32.abs call $max_f32
     call $rect_store)
 
-  (func $er_ui_graph_elbow_points (export "er_ui_graph_elbow_points") (param $from i32) (param $to i32) (param $out i32) (result i32)
+  (func $er_ui_graph_elbow_points  (param $from i32) (param $to i32) (param $out i32) (result i32)
     (local $x0 f32) (local $y0 f32) (local $x1 f32) (local $y1 f32) (local $mid_x f32)
     local.get $from i32.eqz local.get $to i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -25976,7 +26432,7 @@
     local.get $out i32.const 16 i32.add local.get $x1 f32.store
     i32.const 1)
 
-  (func $er_ui_graph_elbow_segment_bounds (export "er_ui_graph_elbow_segment_bounds") (param $from i32) (param $to i32) (param $segment i32) (param $thickness f32) (param $out i32) (result i32)
+  (func $er_ui_graph_elbow_segment_bounds  (param $from i32) (param $to i32) (param $segment i32) (param $thickness f32) (param $out i32) (result i32)
     local.get $from i32.eqz local.get $to i32.eqz i32.or local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $from local.get $to i32.const 124440 call $er_ui_graph_elbow_points drop
@@ -25992,7 +26448,7 @@
     end
     i32.const 124448 f32.load i32.const 124452 f32.load i32.const 124456 f32.load i32.const 124452 f32.load local.get $thickness local.get $out call $er_ui_graph_line_rect)
 
-  (func $er_ui_graph_elbow_arrow_bounds (export "er_ui_graph_elbow_arrow_bounds") (param $to i32) (param $out i32) (result i32)
+  (func $er_ui_graph_elbow_arrow_bounds  (param $to i32) (param $out i32) (result i32)
     local.get $to i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26001,41 +26457,41 @@
     f32.const 8
     f32.const 8
     call $rect_store)
-  (func $er_ui_app_panel_scaffold_default_inset (export "er_ui_app_panel_scaffold_default_inset") (result f32) f32.const 16)
-  (func $er_ui_app_panel_scaffold_default_header_h (export "er_ui_app_panel_scaffold_default_header_h") (result f32) f32.const 42)
-  (func $er_ui_app_panel_scaffold_default_header_gap (export "er_ui_app_panel_scaffold_default_header_gap") (result f32) f32.const 16)
-  (func $er_ui_app_panel_list_default_row_h (export "er_ui_app_panel_list_default_row_h") (result f32) f32.const 42)
-  (func $er_ui_app_panel_list_default_gap (export "er_ui_app_panel_list_default_gap") (result f32) f32.const 4)
-  (func $er_ui_app_action_toolbar_button_w (export "er_ui_app_action_toolbar_button_w") (result f32) f32.const 34)
-  (func $er_ui_app_action_toolbar_button_h (export "er_ui_app_action_toolbar_button_h") (result f32) f32.const 36)
-  (func $er_ui_app_action_toolbar_gap (export "er_ui_app_action_toolbar_gap") (result f32) f32.const 8)
-  (func $er_ui_app_workspace_rail_pad_x (export "er_ui_app_workspace_rail_pad_x") (result f32) f32.const 6)
-  (func $er_ui_app_workspace_rail_pad_top (export "er_ui_app_workspace_rail_pad_top") (result f32) f32.const 12)
-  (func $er_ui_app_workspace_sidebar_inset_x (export "er_ui_app_workspace_sidebar_inset_x") (result f32) f32.const 16)
-  (func $er_ui_app_workspace_sidebar_title_y (export "er_ui_app_workspace_sidebar_title_y") (result f32) f32.const 14)
-  (func $er_ui_app_workspace_sidebar_detail_y (export "er_ui_app_workspace_sidebar_detail_y") (result f32) f32.const 36)
-  (func $er_ui_app_workspace_sidebar_body_y (export "er_ui_app_workspace_sidebar_body_y") (result f32) f32.const 68)
-  (func $er_ui_app_workspace_sidebar_right_border_w (export "er_ui_app_workspace_sidebar_right_border_w") (result f32) f32.const 1)
-  (func $er_ui_app_compose_bar_height (export "er_ui_app_compose_bar_height") (result f32) f32.const 74)
-  (func $er_ui_app_compose_bar_inset_x (export "er_ui_app_compose_bar_inset_x") (result f32) f32.const 18)
-  (func $er_ui_app_compose_bar_toolbar_w (export "er_ui_app_compose_bar_toolbar_w") (result f32) f32.const 120)
-  (func $er_ui_app_compose_bar_toolbar_button_w (export "er_ui_app_compose_bar_toolbar_button_w") (result f32) f32.const 34)
-  (func $er_ui_app_compose_bar_toolbar_gap (export "er_ui_app_compose_bar_toolbar_gap") (result f32) f32.const 6)
-  (func $er_ui_app_compose_bar_textarea_gap (export "er_ui_app_compose_bar_textarea_gap") (result f32) f32.const 6)
-  (func $er_ui_app_compose_bar_send_w (export "er_ui_app_compose_bar_send_w") (result f32) f32.const 44)
-  (func $er_ui_app_floating_panel_radius (export "er_ui_app_floating_panel_radius") (result f32) f32.const 12)
-  (func $er_ui_app_floating_panel_shadow_size (export "er_ui_app_floating_panel_shadow_size") (result f32) f32.const 8)
-  (func $er_ui_app_floating_panel_shadow_outset (export "er_ui_app_floating_panel_shadow_outset") (result f32) f32.const 2)
-  (func $er_ui_app_floating_panel_inset (export "er_ui_app_floating_panel_inset") (result f32) f32.const 16)
-  (func $er_ui_app_segment_map_gap (export "er_ui_app_segment_map_gap") (result f32) f32.const 5)
-  (func $er_ui_app_segment_map_radius (export "er_ui_app_segment_map_radius") (result f32) f32.const 8)
+  (func $er_ui_app_panel_scaffold_default_inset  (result f32) f32.const 16)
+  (func $er_ui_app_panel_scaffold_default_header_h  (result f32) f32.const 42)
+  (func $er_ui_app_panel_scaffold_default_header_gap  (result f32) f32.const 16)
+  (func $er_ui_app_panel_list_default_row_h  (result f32) f32.const 42)
+  (func $er_ui_app_panel_list_default_gap  (result f32) f32.const 4)
+  (func $er_ui_app_action_toolbar_button_w  (result f32) f32.const 34)
+  (func $er_ui_app_action_toolbar_button_h  (result f32) f32.const 36)
+  (func $er_ui_app_action_toolbar_gap  (result f32) f32.const 8)
+  (func $er_ui_app_workspace_rail_pad_x  (result f32) f32.const 6)
+  (func $er_ui_app_workspace_rail_pad_top  (result f32) f32.const 12)
+  (func $er_ui_app_workspace_sidebar_inset_x  (result f32) f32.const 16)
+  (func $er_ui_app_workspace_sidebar_title_y  (result f32) f32.const 14)
+  (func $er_ui_app_workspace_sidebar_detail_y  (result f32) f32.const 36)
+  (func $er_ui_app_workspace_sidebar_body_y  (result f32) f32.const 68)
+  (func $er_ui_app_workspace_sidebar_right_border_w  (result f32) f32.const 1)
+  (func $er_ui_app_compose_bar_height  (result f32) f32.const 74)
+  (func $er_ui_app_compose_bar_inset_x  (result f32) f32.const 18)
+  (func $er_ui_app_compose_bar_toolbar_w  (result f32) f32.const 120)
+  (func $er_ui_app_compose_bar_toolbar_button_w  (result f32) f32.const 34)
+  (func $er_ui_app_compose_bar_toolbar_gap  (result f32) f32.const 6)
+  (func $er_ui_app_compose_bar_textarea_gap  (result f32) f32.const 6)
+  (func $er_ui_app_compose_bar_send_w  (result f32) f32.const 44)
+  (func $er_ui_app_floating_panel_radius  (result f32) f32.const 12)
+  (func $er_ui_app_floating_panel_shadow_size  (result f32) f32.const 8)
+  (func $er_ui_app_floating_panel_shadow_outset  (result f32) f32.const 2)
+  (func $er_ui_app_floating_panel_inset  (result f32) f32.const 16)
+  (func $er_ui_app_segment_map_gap  (result f32) f32.const 5)
+  (func $er_ui_app_segment_map_radius  (result f32) f32.const 8)
 
-  (func $er_ui_app_header_badges_width (export "er_ui_app_header_badges_width") (param $count i32) (param $badge_w f32) (result f32)
+  (func $er_ui_app_header_badges_width  (param $count i32) (param $badge_w f32) (result f32)
     local.get $count i32.eqz
     if f32.const 0 return end
     local.get $count f32.convert_i32_u local.get $badge_w f32.const 10 f32.add f32.mul)
 
-  (func $er_ui_app_panel_scaffold_header_bounds (export "er_ui_app_panel_scaffold_header_bounds") (param $bounds i32) (param $inset f32) (param $header_h f32) (param $out i32) (result i32)
+  (func $er_ui_app_panel_scaffold_header_bounds  (param $bounds i32) (param $inset f32) (param $header_h f32) (param $out i32) (result i32)
     (local $header f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26043,7 +26499,7 @@
     local.get $bounds local.get $inset i32.const 124500 call $er_ui_primitives_content_inset drop
     local.get $out i32.const 124500 f32.load i32.const 124504 f32.load i32.const 124508 f32.load local.get $header call $rect_store)
 
-  (func $er_ui_app_panel_scaffold_body_bounds (export "er_ui_app_panel_scaffold_body_bounds") (param $bounds i32) (param $inset f32) (param $header_h f32) (param $header_gap f32) (param $out i32) (result i32)
+  (func $er_ui_app_panel_scaffold_body_bounds  (param $bounds i32) (param $inset f32) (param $header_h f32) (param $header_gap f32) (param $out i32) (result i32)
     (local $header f32) (local $gap f32) (local $body_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26058,7 +26514,7 @@
     i32.const 124520 f32.load i32.const 124528 f32.load f32.add local.get $body_y f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_app_action_toolbar_item_bounds (export "er_ui_app_action_toolbar_item_bounds") (param $bounds i32) (param $index i32) (param $direction i32) (param $button_w f32) (param $button_h f32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_app_action_toolbar_item_bounds  (param $bounds i32) (param $index i32) (param $direction i32) (param $button_w f32) (param $button_h f32) (param $gap f32) (param $out i32) (result i32)
     (local $idx f32) (local $g f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26086,7 +26542,7 @@
     local.get $button_h f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_app_workspace_rail_toolbar_bounds (export "er_ui_app_workspace_rail_toolbar_bounds") (param $bounds i32) (param $pad_x f32) (param $pad_top f32) (param $out i32) (result i32)
+  (func $er_ui_app_workspace_rail_toolbar_bounds  (param $bounds i32) (param $pad_x f32) (param $pad_top f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26096,24 +26552,24 @@
     local.get $bounds i32.const 12 i32.add f32.load local.get $pad_top f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_app_workspace_sidebar_right_border_bounds (export "er_ui_app_workspace_sidebar_right_border_bounds") (param $bounds i32) (param $right_border_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_workspace_sidebar_right_border_bounds  (param $bounds i32) (param $right_border_w f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $right_border_w f32.const 0 f32.le
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add local.get $right_border_w f32.sub local.get $bounds i32.const 4 i32.add f32.load local.get $right_border_w local.get $bounds i32.const 12 i32.add f32.load call $rect_store)
 
-  (func $er_ui_app_workspace_sidebar_title_bounds (export "er_ui_app_workspace_sidebar_title_bounds") (param $bounds i32) (param $inset_x f32) (param $title_y f32) (param $out i32) (result i32)
+  (func $er_ui_app_workspace_sidebar_title_bounds  (param $bounds i32) (param $inset_x f32) (param $title_y f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $inset_x f32.add local.get $bounds i32.const 4 i32.add f32.load local.get $title_y f32.add local.get $bounds i32.const 8 i32.add f32.load local.get $inset_x f32.const 2 f32.mul f32.sub f32.const 1 call $max_f32 f32.const 16 call $rect_store)
 
-  (func $er_ui_app_workspace_sidebar_detail_bounds (export "er_ui_app_workspace_sidebar_detail_bounds") (param $bounds i32) (param $inset_x f32) (param $detail_y f32) (param $out i32) (result i32)
+  (func $er_ui_app_workspace_sidebar_detail_bounds  (param $bounds i32) (param $inset_x f32) (param $detail_y f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $inset_x f32.add local.get $bounds i32.const 4 i32.add f32.load local.get $detail_y f32.add local.get $bounds i32.const 8 i32.add f32.load local.get $inset_x f32.const 2 f32.mul f32.sub f32.const 1 call $max_f32 f32.const 14 call $rect_store)
 
-  (func $er_ui_app_workspace_sidebar_body_bounds (export "er_ui_app_workspace_sidebar_body_bounds") (param $bounds i32) (param $inset_x f32) (param $body_y f32) (param $out i32) (result i32)
+  (func $er_ui_app_workspace_sidebar_body_bounds  (param $bounds i32) (param $inset_x f32) (param $body_y f32) (param $out i32) (result i32)
     (local $x_pad f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26125,14 +26581,14 @@
     local.get $bounds i32.const 12 i32.add f32.load local.get $body_y f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_app_compose_toolbar_bounds (export "er_ui_app_compose_toolbar_bounds") (param $bounds i32) (param $inset_x f32) (param $toolbar_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_compose_toolbar_bounds  (param $bounds i32) (param $inset_x f32) (param $toolbar_w f32) (param $out i32) (result i32)
     (local $tool_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.const 38 f32.sub f32.const 0 call $max_f32 f32.const 0.5 f32.mul f32.add local.set $tool_y
     local.get $out local.get $bounds f32.load local.get $inset_x f32.add local.get $tool_y local.get $toolbar_w f32.const 38 call $rect_store)
 
-  (func $er_ui_app_compose_textarea_bounds (export "er_ui_app_compose_textarea_bounds") (param $bounds i32) (param $inset_x f32) (param $toolbar_w f32) (param $textarea_gap f32) (param $send_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_compose_textarea_bounds  (param $bounds i32) (param $inset_x f32) (param $toolbar_w f32) (param $textarea_gap f32) (param $send_w f32) (param $out i32) (result i32)
     (local $textarea_x f32) (local $send_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26140,7 +26596,7 @@
     local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add local.get $inset_x f32.sub local.get $send_w f32.sub local.set $send_x
     local.get $out local.get $textarea_x local.get $bounds i32.const 4 i32.add f32.load f32.const 15 f32.add local.get $send_x local.get $textarea_x f32.sub local.get $textarea_gap f32.sub f32.const 1 call $max_f32 f32.const 44 call $rect_store)
 
-  (func $er_ui_app_compose_send_bounds (export "er_ui_app_compose_send_bounds") (param $bounds i32) (param $inset_x f32) (param $send_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_compose_send_bounds  (param $bounds i32) (param $inset_x f32) (param $send_w f32) (param $out i32) (result i32)
     (local $tool_y f32) (local $send_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26148,43 +26604,43 @@
     local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add local.get $inset_x f32.sub local.get $send_w f32.sub local.set $send_x
     local.get $out local.get $send_x local.get $tool_y local.get $send_w f32.const 38 call $rect_store)
 
-  (func $er_ui_app_compose_footer_bounds (export "er_ui_app_compose_footer_bounds") (param $bounds i32) (param $inset_x f32) (param $toolbar_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_compose_footer_bounds  (param $bounds i32) (param $inset_x f32) (param $toolbar_w f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $inset_x f32.add local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add f32.const 18 f32.sub local.get $toolbar_w f32.const 40 f32.add f32.const 1 call $max_f32 f32.const 14 call $rect_store)
 
-  (func $er_ui_app_floating_panel_inner_bounds (export "er_ui_app_floating_panel_inner_bounds") (param $bounds i32) (param $inset f32) (param $out i32) (result i32)
+  (func $er_ui_app_floating_panel_inner_bounds  (param $bounds i32) (param $inset f32) (param $out i32) (result i32)
     local.get $bounds local.get $inset local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_app_floating_panel_shadow_bounds (export "er_ui_app_floating_panel_shadow_bounds") (param $bounds i32) (param $shadow_outset f32) (param $out i32) (result i32)
+  (func $er_ui_app_floating_panel_shadow_bounds  (param $bounds i32) (param $shadow_outset f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $out local.get $shadow_outset f32.neg call $er_ui_rect_inset_uniform)
 
-  (func $er_ui_app_floating_panel_scrim_bounds (export "er_ui_app_floating_panel_scrim_bounds") (param $bounds i32) (param $scrim_h f32) (param $out i32) (result i32)
+  (func $er_ui_app_floating_panel_scrim_bounds  (param $bounds i32) (param $scrim_h f32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $scrim_h f32.const 0 f32.le
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 8 i32.add f32.load local.get $scrim_h call $rect_store)
 
-  (func $er_ui_app_message_bubble_body_bounds (export "er_ui_app_message_bubble_body_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_message_bubble_body_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds f32.const 11 local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_app_message_bubble_media_bounds (export "er_ui_app_message_bubble_media_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_message_bubble_media_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 10 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 42 f32.add local.get $bounds i32.const 8 i32.add f32.load f32.const 20 f32.sub f32.const 1 call $max_f32 f32.const 66 call $rect_store)
 
-  (func $er_ui_app_message_bubble_media_icon_bounds (export "er_ui_app_message_bubble_media_icon_bounds") (param $media i32) (param $out i32) (result i32)
+  (func $er_ui_app_message_bubble_media_icon_bounds  (param $media i32) (param $out i32) (result i32)
     local.get $media i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $media f32.load local.get $media i32.const 8 i32.add f32.load f32.add f32.const 28 f32.sub local.get $media i32.const 4 i32.add f32.load f32.const 10 f32.add f32.const 18 f32.const 18 call $rect_store)
 
-  (func $er_ui_app_segment_map_inner_bounds (export "er_ui_app_segment_map_inner_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_segment_map_inner_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds f32.const 8 local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_app_segment_map_block_bounds (export "er_ui_app_segment_map_block_bounds") (param $bounds i32) (param $segment_index i32) (param $segment_count i32) (param $cursor_x f32) (param $total_weight f32) (param $weight f32) (param $height_unit f32) (param $out i32) (result i32)
+  (func $er_ui_app_segment_map_block_bounds  (param $bounds i32) (param $segment_index i32) (param $segment_count i32) (param $cursor_x f32) (param $total_weight f32) (param $weight f32) (param $height_unit f32) (param $out i32) (result i32)
     (local $remaining f32) (local $normalized f32) (local $width f32) (local $block_w f32) (local $block_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or local.get $segment_count i32.eqz i32.or
     if i32.const 0 return end
@@ -26203,7 +26659,7 @@
     f32.const 18 i32.const 124544 f32.load local.get $height_unit f32.const 0.05 f32.const 1 call $clamp_f32 f32.mul call $max_f32 local.set $block_h
     local.get $out local.get $cursor_x i32.const 124536 f32.load i32.const 124544 f32.load f32.add local.get $block_h f32.sub local.get $block_w local.get $block_h call $rect_store)
 
-  (func $er_ui_app_context_panel_bounds (export "er_ui_app_context_panel_bounds") (param $container i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $out i32) (result i32)
+  (func $er_ui_app_context_panel_bounds  (param $container i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $out i32) (result i32)
     local.get $container i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26213,38 +26669,38 @@
     local.get $h
     call $rect_store)
 
-  (func $er_ui_app_context_panel_title_bounds (export "er_ui_app_context_panel_title_bounds") (param $panel i32) (param $out i32) (result i32)
+  (func $er_ui_app_context_panel_title_bounds  (param $panel i32) (param $out i32) (result i32)
     local.get $panel i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $panel f32.load f32.const 14 f32.add local.get $panel i32.const 4 i32.add f32.load f32.const 12 f32.add local.get $panel i32.const 8 i32.add f32.load f32.const 28 f32.sub f32.const 18 call $rect_store)
 
-  (func $er_ui_app_context_panel_detail_bounds (export "er_ui_app_context_panel_detail_bounds") (param $panel i32) (param $out i32) (result i32)
+  (func $er_ui_app_context_panel_detail_bounds  (param $panel i32) (param $out i32) (result i32)
     local.get $panel i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $panel f32.load f32.const 14 f32.add local.get $panel i32.const 4 i32.add f32.load f32.const 36 f32.add local.get $panel i32.const 8 i32.add f32.load f32.const 28 f32.sub f32.const 16 call $rect_store)
 
-  (func $er_ui_app_context_panel_primary_bounds (export "er_ui_app_context_panel_primary_bounds") (param $panel i32) (param $out i32) (result i32)
+  (func $er_ui_app_context_panel_primary_bounds  (param $panel i32) (param $out i32) (result i32)
     local.get $panel i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $panel f32.load f32.const 12 f32.add local.get $panel i32.const 4 i32.add f32.load f32.const 66 f32.add f32.const 118 f32.const 34 call $rect_store)
 
-  (func $er_ui_app_context_panel_secondary_bounds (export "er_ui_app_context_panel_secondary_bounds") (param $panel i32) (param $out i32) (result i32)
+  (func $er_ui_app_context_panel_secondary_bounds  (param $panel i32) (param $out i32) (result i32)
     local.get $panel i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $panel f32.load f32.const 138 f32.add local.get $panel i32.const 4 i32.add f32.load f32.const 66 f32.add f32.const 70 f32.const 34 call $rect_store)
 
-  (func $er_ui_app_overlay_motion_dy (export "er_ui_app_overlay_motion_dy") (param $progress f32) (result f32)
+  (func $er_ui_app_overlay_motion_dy  (param $progress f32) (result f32)
     f32.const 1 local.get $progress f32.sub f32.const 8 f32.mul)
 
-  (func $er_ui_app_overlay_motion_dx (export "er_ui_app_overlay_motion_dx") (param $progress f32) (result f32)
+  (func $er_ui_app_overlay_motion_dx  (param $progress f32) (result f32)
     f32.const 1 local.get $progress f32.sub f32.const 18 f32.mul)
 
-  (func $er_ui_app_property_editor_panel_width (export "er_ui_app_property_editor_panel_width") (param $container i32) (param $panel_w f32) (result f32)
+  (func $er_ui_app_property_editor_panel_width  (param $container i32) (param $panel_w f32) (result f32)
     local.get $container i32.eqz
     if f32.const 0 return end
     local.get $panel_w local.get $container i32.const 8 i32.add f32.load f32.const 0.24 f32.mul f32.const 300 call $max_f32 call $min_f32)
 
-  (func $er_ui_app_property_editor_panel_bounds (export "er_ui_app_property_editor_panel_bounds") (param $container i32) (param $panel_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_panel_bounds  (param $container i32) (param $panel_w f32) (param $out i32) (result i32)
     (local $w f32)
     local.get $container i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26256,33 +26712,33 @@
     f32.const 398 local.get $container i32.const 12 i32.add f32.load f32.const 36 f32.sub call $min_f32
     call $rect_store)
 
-  (func $er_ui_app_property_editor_inner_bounds (export "er_ui_app_property_editor_inner_bounds") (param $container i32) (param $panel_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_inner_bounds  (param $container i32) (param $panel_w f32) (param $out i32) (result i32)
     local.get $container i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $container local.get $panel_w i32.const 124560 call $er_ui_app_property_editor_panel_bounds drop
     i32.const 124560 f32.const 16 local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_app_property_editor_title_bounds (export "er_ui_app_property_editor_title_bounds") (param $inner i32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_title_bounds  (param $inner i32) (param $out i32) (result i32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $inner f32.load local.get $inner i32.const 4 i32.add f32.load local.get $inner i32.const 8 i32.add f32.load f32.const 42 f32.sub f32.const 24 call $rect_store)
 
-  (func $er_ui_app_property_editor_close_bounds (export "er_ui_app_property_editor_close_bounds") (param $inner i32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_close_bounds  (param $inner i32) (param $out i32) (result i32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $inner f32.load local.get $inner i32.const 8 i32.add f32.load f32.add f32.const 34 f32.sub local.get $inner i32.const 4 i32.add f32.load f32.const 2 f32.sub f32.const 32 f32.const 32 call $rect_store)
 
-  (func $er_ui_app_property_editor_preview_bounds (export "er_ui_app_property_editor_preview_bounds") (param $inner i32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_preview_bounds  (param $inner i32) (param $out i32) (result i32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $inner f32.load local.get $inner i32.const 4 i32.add f32.load f32.const 86 f32.add local.get $inner i32.const 8 i32.add f32.load f32.const 74 call $rect_store)
 
-  (func $er_ui_app_property_editor_section_title_bounds (export "er_ui_app_property_editor_section_title_bounds") (param $inner i32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_section_title_bounds  (param $inner i32) (param $out i32) (result i32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $inner f32.load local.get $inner i32.const 4 i32.add f32.load f32.const 184 f32.add local.get $inner i32.const 8 i32.add f32.load f32.const 20 call $rect_store)
 
-  (func $er_ui_app_property_editor_button_bounds (export "er_ui_app_property_editor_button_bounds") (param $inner i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_button_bounds  (param $inner i32) (param $index i32) (param $out i32) (result i32)
     (local $button_w f32) (local $x f32) (local $y f32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26293,7 +26749,7 @@
     local.get $inner i32.const 4 i32.add f32.load f32.const 236 f32.add local.set $y
     local.get $out local.get $x local.get $y local.get $button_w f32.const 34 call $rect_store)
 
-  (func $er_ui_app_property_editor_switch_bounds (export "er_ui_app_property_editor_switch_bounds") (param $inner i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_app_property_editor_switch_bounds  (param $inner i32) (param $index i32) (param $out i32) (result i32)
     (local $idx f32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26310,7 +26766,7 @@
     f32.const 32
     call $rect_store)
 
-  (func $er_ui_app_section_text_bounds (export "er_ui_app_section_text_bounds") (param $bounds i32) (param $has_icon i32) (param $detail i32) (param $out i32) (result i32)
+  (func $er_ui_app_section_text_bounds  (param $bounds i32) (param $has_icon i32) (param $detail i32) (param $out i32) (result i32)
     (local $text_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26319,19 +26775,19 @@
     if local.get $bounds f32.load f32.const 42 f32.add local.set $text_x end
     local.get $out local.get $text_x local.get $bounds i32.const 4 i32.add f32.load local.get $detail if (result f32) f32.const 23 else f32.const 0 end f32.add local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add local.get $text_x f32.sub f32.const 1 call $max_f32 local.get $detail if (result f32) f32.const 15 else f32.const 18 end call $rect_store)
 
-  (func $er_ui_app_section_icon_chip_bounds (export "er_ui_app_section_icon_chip_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_section_icon_chip_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load f32.const 2 f32.add f32.const 28 f32.const 28 call $rect_store)
 
-  (func $er_ui_app_label_value_label_bounds (export "er_ui_app_label_value_label_bounds") (param $bounds i32) (param $label_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_label_value_label_bounds  (param $bounds i32) (param $label_w f32) (param $out i32) (result i32)
     (local $lw f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 8 i32.add f32.load local.get $label_w f32.const 1 call $max_f32 call $min_f32 local.set $lw
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $lw local.get $bounds i32.const 12 i32.add f32.load call $rect_store)
 
-  (func $er_ui_app_label_value_value_bounds (export "er_ui_app_label_value_value_bounds") (param $bounds i32) (param $label_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_label_value_value_bounds  (param $bounds i32) (param $label_w f32) (param $out i32) (result i32)
     (local $lw f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26340,10 +26796,10 @@
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $lw f32.add local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 8 i32.add f32.load local.get $lw f32.sub f32.const 1 call $max_f32 local.get $bounds i32.const 12 i32.add f32.load call $rect_store)
 
-  (func $er_ui_app_metric_card_inner_bounds (export "er_ui_app_metric_card_inner_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_metric_card_inner_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds f32.const 14 local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_app_metric_card_title_bounds (export "er_ui_app_metric_card_title_bounds") (param $bounds i32) (param $has_icon i32) (param $out i32) (result i32)
+  (func $er_ui_app_metric_card_title_bounds  (param $bounds i32) (param $has_icon i32) (param $out i32) (result i32)
     (local $text_x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26353,59 +26809,59 @@
     if i32.const 124576 f32.load f32.const 40 f32.add local.set $text_x end
     local.get $out local.get $text_x i32.const 124580 f32.load f32.const 1 f32.sub i32.const 124576 f32.load i32.const 124584 f32.load f32.add local.get $text_x f32.sub f32.const 1 call $max_f32 f32.const 17 call $rect_store)
 
-  (func $er_ui_app_metric_card_value_bounds (export "er_ui_app_metric_card_value_bounds") (param $bounds i32) (param $has_detail i32) (param $out i32) (result i32)
+  (func $er_ui_app_metric_card_value_bounds  (param $bounds i32) (param $has_detail i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124592 call $er_ui_app_metric_card_inner_bounds drop
     local.get $out i32.const 124592 f32.load i32.const 124596 f32.load local.get $has_detail if (result f32) f32.const 58 else f32.const 36 end f32.add i32.const 124600 f32.load f32.const 20 call $rect_store)
 
-  (func $er_ui_app_metric_card_progress_bounds (export "er_ui_app_metric_card_progress_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_metric_card_progress_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124608 call $er_ui_app_metric_card_inner_bounds drop
     local.get $out i32.const 124608 f32.load i32.const 124612 f32.load i32.const 124620 f32.load f32.add f32.const 24 f32.sub i32.const 124616 f32.load f32.const 18 call $rect_store)
 
-  (func $er_ui_app_path_row_marker_bounds (export "er_ui_app_path_row_marker_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_path_row_marker_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 9 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 9 f32.add f32.const 7 local.get $bounds i32.const 12 i32.add f32.load f32.const 18 f32.sub f32.const 1 call $max_f32 call $rect_store)
 
-  (func $er_ui_app_path_row_title_bounds (export "er_ui_app_path_row_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_path_row_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 24 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 7 f32.add local.get $bounds i32.const 8 i32.add f32.load f32.const 92 f32.sub f32.const 1 call $max_f32 f32.const 16 call $rect_store)
 
-  (func $er_ui_app_path_row_detail_bounds (export "er_ui_app_path_row_detail_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_path_row_detail_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 24 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 27 f32.add local.get $bounds i32.const 8 i32.add f32.load f32.const 92 f32.sub f32.const 1 call $max_f32 f32.const 14 call $rect_store)
 
-  (func $er_ui_app_path_row_trailing_bounds (export "er_ui_app_path_row_trailing_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_path_row_trailing_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add f32.const 62 f32.sub local.get $bounds i32.const 4 i32.add f32.load f32.const 8 f32.add f32.const 56 f32.const 14 call $rect_store)
 
-  (func $er_ui_app_path_row_progress_bounds (export "er_ui_app_path_row_progress_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_path_row_progress_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add f32.const 62 f32.sub local.get $bounds i32.const 4 i32.add f32.load local.get $bounds i32.const 12 i32.add f32.load f32.add f32.const 16 f32.sub f32.const 50 f32.const 6 call $rect_store)
 
-  (func $er_ui_app_pipeline_node_marker_bounds (export "er_ui_app_pipeline_node_marker_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_pipeline_node_marker_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 10 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 10 f32.add f32.const 8 local.get $bounds i32.const 12 i32.add f32.load f32.const 20 f32.sub f32.const 1 call $max_f32 call $rect_store)
 
-  (func $er_ui_app_pipeline_node_title_bounds (export "er_ui_app_pipeline_node_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_pipeline_node_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 28 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 10 f32.add local.get $bounds i32.const 8 i32.add f32.load f32.const 36 f32.sub f32.const 1 call $max_f32 f32.const 18 call $rect_store)
 
-  (func $er_ui_app_pipeline_node_detail_bounds (export "er_ui_app_pipeline_node_detail_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_pipeline_node_detail_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 28 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 32 f32.add local.get $bounds i32.const 8 i32.add f32.load f32.const 36 f32.sub f32.const 1 call $max_f32 f32.const 16 call $rect_store)
 
-  (func $er_ui_app_panel_list_body_bounds (export "er_ui_app_panel_list_body_bounds") (param $bounds i32) (param $inset f32) (param $header_h f32) (param $header_gap f32) (param $out i32) (result i32)
+  (func $er_ui_app_panel_list_body_bounds  (param $bounds i32) (param $inset f32) (param $header_h f32) (param $header_gap f32) (param $out i32) (result i32)
     (local $inner_y f32) (local $inner_h f32) (local $body_y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26420,7 +26876,7 @@
     local.get $inner_y local.get $inner_h f32.add local.get $body_y f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_app_panel_list_row_bounds (export "er_ui_app_panel_list_row_bounds") (param $body i32) (param $index i32) (param $row_h f32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_app_panel_list_row_bounds  (param $body i32) (param $index i32) (param $row_h f32) (param $gap f32) (param $out i32) (result i32)
     (local $idx f32) (local $y f32)
     local.get $body i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26431,15 +26887,15 @@
     if i32.const 0 return end
     local.get $out local.get $body f32.load local.get $y local.get $body i32.const 8 i32.add f32.load local.get $row_h call $rect_store)
 
-  (func $er_ui_app_page_header_inner_bounds (export "er_ui_app_page_header_inner_bounds") (param $bounds i32) (param $inset f32) (param $out i32) (result i32)
+  (func $er_ui_app_page_header_inner_bounds  (param $bounds i32) (param $inset f32) (param $out i32) (result i32)
     local.get $bounds local.get $inset local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_app_page_header_icon_chip_bounds (export "er_ui_app_page_header_icon_chip_bounds") (param $inner i32) (param $out i32) (result i32)
+  (func $er_ui_app_page_header_icon_chip_bounds  (param $inner i32) (param $out i32) (result i32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $inner f32.load local.get $inner i32.const 4 i32.add f32.load f32.const 36 f32.const 36 call $rect_store)
 
-  (func $er_ui_app_page_header_text_bounds (export "er_ui_app_page_header_text_bounds") (param $inner i32) (param $has_icon i32) (param $badges_w f32) (param $has_action i32) (param $detail i32) (param $out i32) (result i32)
+  (func $er_ui_app_page_header_text_bounds  (param $inner i32) (param $has_icon i32) (param $badges_w f32) (param $has_action i32) (param $detail i32) (param $out i32) (result i32)
     (local $text_x f32) (local $action_w f32) (local $reserved f32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26458,12 +26914,12 @@
     local.get $detail if (result f32) f32.const 18 else f32.const 24 end
     call $rect_store)
 
-  (func $er_ui_app_page_header_action_bounds (export "er_ui_app_page_header_action_bounds") (param $inner i32) (param $out i32) (result i32)
+  (func $er_ui_app_page_header_action_bounds  (param $inner i32) (param $out i32) (result i32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $inner f32.load local.get $inner i32.const 8 i32.add f32.load f32.add f32.const 44 f32.sub local.get $inner i32.const 4 i32.add f32.load f32.const 1 f32.add f32.const 34 f32.const 34 call $rect_store)
 
-  (func $er_ui_app_page_header_badge_cursor_start (export "er_ui_app_page_header_badge_cursor_start") (param $inner i32) (param $has_action i32) (result f32)
+  (func $er_ui_app_page_header_badge_cursor_start  (param $inner i32) (param $has_action i32) (result f32)
     (local $x f32)
     local.get $inner i32.eqz
     if f32.const 0 return end
@@ -26472,12 +26928,12 @@
     if local.get $x f32.const 44 f32.sub f32.const 10 f32.sub local.set $x end
     local.get $x)
 
-  (func $er_ui_app_page_header_badge_bounds (export "er_ui_app_page_header_badge_bounds") (param $inner i32) (param $cursor_x f32) (param $badge_w f32) (param $out i32) (result i32)
+  (func $er_ui_app_page_header_badge_bounds  (param $inner i32) (param $cursor_x f32) (param $badge_w f32) (param $out i32) (result i32)
     local.get $inner i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $cursor_x local.get $badge_w f32.sub local.get $inner i32.const 4 i32.add f32.load f32.const 4 f32.add local.get $badge_w f32.const 28 call $rect_store)
 
-  (func $er_ui_app_workspace_rail_value_item_bounds (export "er_ui_app_workspace_rail_value_item_bounds") (param $bounds i32) (param $index i32) (param $pad_x f32) (param $pad_top f32) (param $button_h f32) (param $gap f32) (param $out i32) (result i32)
+  (func $er_ui_app_workspace_rail_value_item_bounds  (param $bounds i32) (param $index i32) (param $pad_x f32) (param $pad_top f32) (param $button_h f32) (param $gap f32) (param $out i32) (result i32)
     (local $idx f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26490,28 +26946,28 @@
     local.get $button_h
     call $rect_store)
 
-  (func $er_ui_app_control_group_inner_bounds (export "er_ui_app_control_group_inner_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_control_group_inner_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds f32.const 14 local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_app_control_group_title_bounds (export "er_ui_app_control_group_title_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_control_group_title_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124640 call $er_ui_app_control_group_inner_bounds drop
     local.get $out i32.const 124640 f32.load i32.const 124644 f32.load i32.const 124648 f32.load f32.const 0.55 f32.mul f32.const 18 call $rect_store)
 
-  (func $er_ui_app_control_group_value_bounds (export "er_ui_app_control_group_value_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_control_group_value_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124656 call $er_ui_app_control_group_inner_bounds drop
     local.get $out i32.const 124656 f32.load i32.const 124664 f32.load f32.const 0.55 f32.mul f32.add i32.const 124660 f32.load f32.const 1 f32.add i32.const 124664 f32.load f32.const 0.45 f32.mul f32.const 15 call $rect_store)
 
-  (func $er_ui_app_control_group_slider_bounds (export "er_ui_app_control_group_slider_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_app_control_group_slider_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124672 call $er_ui_app_control_group_inner_bounds drop
     local.get $out i32.const 124672 f32.load i32.const 124676 f32.load f32.const 27 f32.add i32.const 124680 f32.load f32.const 26 call $rect_store)
 
-  (func $er_ui_app_control_group_button_bounds (export "er_ui_app_control_group_button_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_app_control_group_button_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     (local $half_w f32) (local $x f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26521,24 +26977,24 @@
     local.get $index i32.const 0 i32.ne
     if local.get $x local.get $half_w f32.add f32.const 10 f32.add local.set $x end
     local.get $out local.get $x i32.const 124692 f32.load f32.const 66 f32.add local.get $half_w f32.const 32 call $rect_store)
-  (func $er_ui_command_radius (export "er_ui_command_radius") (result f32) f32.const 8)
-  (func $er_ui_command_input_h (export "er_ui_command_input_h") (result f32) f32.const 36)
-  (func $er_ui_command_icon_x (export "er_ui_command_icon_x") (result f32) f32.const 8)
-  (func $er_ui_command_icon_size (export "er_ui_command_icon_size") (result f32) f32.const 14)
-  (func $er_ui_command_text_x (export "er_ui_command_text_x") (result f32) f32.const 28)
-  (func $er_ui_command_padding_x (export "er_ui_command_padding_x") (result f32) f32.const 8)
-  (func $er_ui_command_text_h (export "er_ui_command_text_h") (result f32) f32.const 13)
-  (func $er_ui_command_item_id_offset (export "er_ui_command_item_id_offset") (result i32) i32.const 1)
-  (func $er_ui_command_list_gap (export "er_ui_command_list_gap") (result f32) f32.const 6)
-  (func $er_ui_command_list_padding (export "er_ui_command_list_padding") (result f32) f32.const 4)
-  (func $er_ui_command_item_h (export "er_ui_command_item_h") (result f32) f32.const 24)
-  (func $er_ui_command_item_gap (export "er_ui_command_item_gap") (result f32) f32.const 4)
-  (func $er_ui_command_item_padding_x (export "er_ui_command_item_padding_x") (result f32) f32.const 8)
-  (func $er_ui_command_shortcut_gap (export "er_ui_command_shortcut_gap") (result f32) f32.const 12)
-  (func $er_ui_command_max_visible_items (export "er_ui_command_max_visible_items") (result i32) i32.const 3)
-  (func $er_ui_command_empty_text_h (export "er_ui_command_empty_text_h") (result f32) f32.const 14)
+  (func $er_ui_command_radius  (result f32) f32.const 8)
+  (func $er_ui_command_input_h  (result f32) f32.const 36)
+  (func $er_ui_command_icon_x  (result f32) f32.const 8)
+  (func $er_ui_command_icon_size  (result f32) f32.const 14)
+  (func $er_ui_command_text_x  (result f32) f32.const 28)
+  (func $er_ui_command_padding_x  (result f32) f32.const 8)
+  (func $er_ui_command_text_h  (result f32) f32.const 13)
+  (func $er_ui_command_item_id_offset  (result i32) i32.const 1)
+  (func $er_ui_command_list_gap  (result f32) f32.const 6)
+  (func $er_ui_command_list_padding  (result f32) f32.const 4)
+  (func $er_ui_command_item_h  (result f32) f32.const 24)
+  (func $er_ui_command_item_gap  (result f32) f32.const 4)
+  (func $er_ui_command_item_padding_x  (result f32) f32.const 8)
+  (func $er_ui_command_shortcut_gap  (result f32) f32.const 12)
+  (func $er_ui_command_max_visible_items  (result i32) i32.const 3)
+  (func $er_ui_command_empty_text_h  (result f32) f32.const 14)
 
-  (func $er_ui_command_input_bounds (export "er_ui_command_input_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_command_input_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26548,7 +27004,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 36 call $min_f32
     call $rect_store)
 
-  (func $er_ui_command_list_bounds (export "er_ui_command_list_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_command_list_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 12 i32.add f32.load f32.const 42 f32.le
@@ -26560,7 +27016,7 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 42 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_command_icon_bounds (export "er_ui_command_icon_bounds") (param $input i32) (param $out i32) (result i32)
+  (func $er_ui_command_icon_bounds  (param $input i32) (param $out i32) (result i32)
     local.get $input i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26570,7 +27026,7 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_command_input_text_bounds (export "er_ui_command_input_text_bounds") (param $input i32) (param $out i32) (result i32)
+  (func $er_ui_command_input_text_bounds  (param $input i32) (param $out i32) (result i32)
     local.get $input i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26580,7 +27036,7 @@
     f32.const 13
     call $rect_store)
 
-  (func $er_ui_command_visible_item_capacity (export "er_ui_command_visible_item_capacity") (param $bounds i32) (result i32)
+  (func $er_ui_command_visible_item_capacity  (param $bounds i32) (result i32)
     (local $available f32) (local $raw i32)
     local.get $bounds i32.eqz
     if i32.const 0 return end
@@ -26593,7 +27049,7 @@
     if i32.const 3 return end
     local.get $raw)
 
-  (func $er_ui_command_item_bounds (export "er_ui_command_item_bounds") (param $bounds i32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_command_item_bounds  (param $bounds i32) (param $index i32) (param $out i32) (result i32)
     (local $idx f32) (local $y f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26613,10 +27069,10 @@
     f32.const 24
     call $rect_store)
 
-  (func $er_ui_command_item_id (export "er_ui_command_item_id") (param $id i32) (param $index i32) (result i32)
+  (func $er_ui_command_item_id  (param $id i32) (param $index i32) (result i32)
     local.get $id local.get $index i32.add i32.const 1 i32.add)
 
-  (func $er_ui_command_empty_text_bounds (export "er_ui_command_empty_text_bounds") (param $list i32) (param $out i32) (result i32)
+  (func $er_ui_command_empty_text_bounds  (param $list i32) (param $out i32) (result i32)
     local.get $list i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26626,12 +27082,12 @@
     f32.const 14
     call $rect_store)
 
-  (func $er_ui_command_item_detail_width (export "er_ui_command_item_detail_width") (param $shortcut_ptr i32) (param $shortcut_len i32) (result f32)
+  (func $er_ui_command_item_detail_width  (param $shortcut_ptr i32) (param $shortcut_len i32) (result f32)
     local.get $shortcut_ptr i32.eqz local.get $shortcut_len i32.eqz i32.or
     if f32.const 0 return end
     local.get $shortcut_ptr local.get $shortcut_len f32.const 16 call $er_ui_font_text_width f32.const 16 f32.add)
 
-  (func $er_ui_command_item_label_bounds (export "er_ui_command_item_label_bounds") (param $item i32) (param $detail_w f32) (param $out i32) (result i32)
+  (func $er_ui_command_item_label_bounds  (param $item i32) (param $detail_w f32) (param $out i32) (result i32)
     local.get $item i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26641,7 +27097,7 @@
     local.get $item i32.const 12 i32.add f32.load
     call $rect_store)
 
-  (func $er_ui_command_item_shortcut_bounds (export "er_ui_command_item_shortcut_bounds") (param $item i32) (param $detail_w f32) (param $out i32) (result i32)
+  (func $er_ui_command_item_shortcut_bounds  (param $item i32) (param $detail_w f32) (param $out i32) (result i32)
     local.get $item i32.eqz local.get $out i32.eqz i32.or local.get $detail_w f32.const 0 f32.le i32.or
     if i32.const 0 return end
     local.get $out
@@ -26650,35 +27106,35 @@
     local.get $detail_w
     local.get $item i32.const 12 i32.add f32.load
     call $rect_store)
-  (func $er_ui_table_radius (export "er_ui_table_radius") (result f32) f32.const 6)
-  (func $er_ui_table_padding_x (export "er_ui_table_padding_x") (result f32) f32.const 8)
-  (func $er_ui_table_header_h (export "er_ui_table_header_h") (result f32) f32.const 24)
-  (func $er_ui_table_header_y (export "er_ui_table_header_y") (result f32) f32.const 5)
-  (func $er_ui_table_header_text_h (export "er_ui_table_header_text_h") (result f32) f32.const 14)
-  (func $er_ui_table_body_y (export "er_ui_table_body_y") (result f32) f32.const 35)
-  (func $er_ui_table_body_text_h (export "er_ui_table_body_text_h") (result f32) f32.const 14)
-  (func $er_ui_table_name_column_ratio (export "er_ui_table_name_column_ratio") (result f32) f32.const 0.55)
-  (func $er_ui_table_row_inset (export "er_ui_table_row_inset") (result f32) f32.const 4)
-  (func $er_ui_table_row_radius (export "er_ui_table_row_radius") (result f32) f32.const 4)
-  (func $er_ui_table_min_width (export "er_ui_table_min_width") (result f32) f32.const 160)
-  (func $er_ui_table_min_height (export "er_ui_table_min_height") (result f32) f32.const 48)
-  (func $er_ui_table_separator_height (export "er_ui_table_separator_height") (result f32) f32.const 1)
+  (func $er_ui_table_radius  (result f32) f32.const 6)
+  (func $er_ui_table_padding_x  (result f32) f32.const 8)
+  (func $er_ui_table_header_h  (result f32) f32.const 24)
+  (func $er_ui_table_header_y  (result f32) f32.const 5)
+  (func $er_ui_table_header_text_h  (result f32) f32.const 14)
+  (func $er_ui_table_body_y  (result f32) f32.const 35)
+  (func $er_ui_table_body_text_h  (result f32) f32.const 14)
+  (func $er_ui_table_name_column_ratio  (result f32) f32.const 0.55)
+  (func $er_ui_table_row_inset  (result f32) f32.const 4)
+  (func $er_ui_table_row_radius  (result f32) f32.const 4)
+  (func $er_ui_table_min_width  (result f32) f32.const 160)
+  (func $er_ui_table_min_height  (result f32) f32.const 48)
+  (func $er_ui_table_separator_height  (result f32) f32.const 1)
 
-  (func $er_ui_table_row_id (export "er_ui_table_row_id") (param $id i32) (result i32)
+  (func $er_ui_table_row_id  (param $id i32) (result i32)
     local.get $id)
 
-  (func $er_ui_table_name_header_id (export "er_ui_table_name_header_id") (param $id i32) (result i32)
+  (func $er_ui_table_name_header_id  (param $id i32) (result i32)
     local.get $id i32.const 1 i32.add)
 
-  (func $er_ui_table_role_header_id (export "er_ui_table_role_header_id") (param $id i32) (result i32)
+  (func $er_ui_table_role_header_id  (param $id i32) (result i32)
     local.get $id i32.const 2 i32.add)
 
-  (func $er_ui_table_column_index (export "er_ui_table_column_index") (param $column i32) (result i32)
+  (func $er_ui_table_column_index  (param $column i32) (result i32)
     local.get $column i32.eqz
     if i32.const 0 return end
     i32.const 1)
 
-  (func $er_ui_table_cell_bounds (export "er_ui_table_cell_bounds") (param $bounds i32) (param $column i32) (param $y_offset f32) (param $height f32) (param $out i32) (result i32)
+  (func $er_ui_table_cell_bounds  (param $bounds i32) (param $column i32) (param $y_offset f32) (param $height f32) (param $out i32) (result i32)
     (local $left_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -26700,7 +27156,7 @@
     local.get $height
     call $rect_store)
 
-  (func $er_ui_table_row_bounds (export "er_ui_table_row_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_table_row_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out
@@ -26710,13 +27166,13 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 25 f32.sub f32.const 1 call $max_f32
     call $rect_store)
 
-  (func $er_ui_table_row_fill_bounds (export "er_ui_table_row_fill_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_table_row_fill_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds i32.const 124736 call $er_ui_table_row_bounds drop
     i32.const 124736 f32.const 4 local.get $out call $er_ui_primitives_content_inset)
 
-  (func $er_ui_table_text_height (export "er_ui_table_text_height") (param $bounds i32) (param $column i32) (param $ptr i32) (param $len i32) (param $line_h f32) (param $max_lines i32) (result f32)
+  (func $er_ui_table_text_height  (param $bounds i32) (param $column i32) (param $ptr i32) (param $len i32) (param $line_h f32) (param $max_lines i32) (result f32)
     (local $text_w f32) (local $avg f32) (local $lines i32)
     local.get $bounds i32.eqz local.get $ptr i32.eqz i32.or local.get $len i32.eqz i32.or local.get $max_lines i32.eqz i32.or
     if f32.const 0 return end
@@ -26731,21 +27187,21 @@
     local.get $lines i32.const 1 call $layout_max_i32_u f32.convert_i32_u local.get $line_h f32.mul
     call $min_f32)
 
-  (func $er_ui_table_header_bounds (export "er_ui_table_header_bounds") (param $bounds i32) (param $column i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_table_header_bounds  (param $bounds i32) (param $column i32) (param $label_ptr i32) (param $label_len i32) (param $out i32) (result i32)
     (local $h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $column local.get $label_ptr local.get $label_len f32.const 14 i32.const 1 call $er_ui_table_text_height local.set $h
     local.get $bounds local.get $column f32.const 5 local.get $h local.get $out call $er_ui_table_cell_bounds)
 
-  (func $er_ui_table_body_cell_bounds (export "er_ui_table_body_cell_bounds") (param $bounds i32) (param $column i32) (param $value_ptr i32) (param $value_len i32) (param $out i32) (result i32)
+  (func $er_ui_table_body_cell_bounds  (param $bounds i32) (param $column i32) (param $value_ptr i32) (param $value_len i32) (param $out i32) (result i32)
     (local $h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $bounds local.get $column local.get $value_ptr local.get $value_len f32.const 14 i32.const 2 call $er_ui_table_text_height local.set $h
     local.get $bounds local.get $column f32.const 35 local.get $h local.get $out call $er_ui_table_cell_bounds)
 
-  (func $er_ui_table_measure_preferred (export "er_ui_table_measure_preferred") (param $name_ptr i32) (param $name_len i32) (param $role_ptr i32) (param $role_len i32) (param $width f32) (param $out i32) (result i32)
+  (func $er_ui_table_measure_preferred  (param $name_ptr i32) (param $name_len i32) (param $role_ptr i32) (param $role_len i32) (param $width f32) (param $out i32) (result i32)
     (local $w f32) (local $name_w f32) (local $role_w f32) (local $name_h f32) (local $role_h f32) (local $row_h f32) (local $pref_w f32)
     local.get $out i32.eqz
     if i32.const 0 return end
@@ -26767,10 +27223,10 @@
     local.get $out local.get $pref_w f32.store
     local.get $out i32.const 4 i32.add f32.const 25 local.get $row_h f32.add f32.store
     i32.const 1)
-  (func $er_ui_tree_codec_tree_layout_size (export "er_ui_tree_codec_tree_layout_size") (result i32) i32.const 16)
-  (func $er_ui_tree_codec_slot_layout_size (export "er_ui_tree_codec_slot_layout_size") (result i32) i32.const 16)
-  (func $er_ui_tree_codec_max_children (export "er_ui_tree_codec_max_children") (result i32) i32.const 64)
-  (func $er_ui_tree_codec_id_size (export "er_ui_tree_codec_id_size") (result i32) i32.const 32)
+  (func $er_ui_tree_codec_tree_layout_size  (result i32) i32.const 16)
+  (func $er_ui_tree_codec_slot_layout_size  (result i32) i32.const 16)
+  (func $er_ui_tree_codec_max_children  (result i32) i32.const 64)
+  (func $er_ui_tree_codec_id_size  (result i32) i32.const 32)
 
   (func $tree_codec_magic_tree (param $ptr i32)
     local.get $ptr i32.const 0x4c555245 i32.store
@@ -26794,7 +27250,7 @@
     local.get $ptr i32.const 4 i32.add i32.load i32.const 0x00313030 i32.eq
     i32.and)
 
-  (func $er_ui_tree_codec_encode_tree_layout (export "er_ui_tree_codec_encode_tree_layout") (param $out i32) (param $cap i32) (param $axis i32) (param $gap i32) (param $padding i32) (param $child_count i32) (result i32)
+  (func $er_ui_tree_codec_encode_tree_layout  (param $out i32) (param $cap i32) (param $axis i32) (param $gap i32) (param $padding i32) (param $child_count i32) (result i32)
     local.get $out i32.eqz local.get $cap i32.const 16 i32.lt_u i32.or
     if i32.const 0 return end
     local.get $axis i32.const 0 i32.ne local.get $axis i32.const 1 i32.ne i32.and
@@ -26809,38 +27265,38 @@
     local.get $out i32.const 14 i32.add local.get $child_count call $store16
     i32.const 16)
 
-  (func $er_ui_tree_codec_is_tree_layout_body (export "er_ui_tree_codec_is_tree_layout_body") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_tree_codec_is_tree_layout_body  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr local.get $len call $tree_codec_has_tree_magic
     local.get $ptr i32.const 9 i32.add i32.load8_u i32.eqz
     i32.and
     local.get $ptr i32.const 8 i32.add i32.load8_u i32.const 1 i32.le_u
     i32.and)
 
-  (func $er_ui_tree_codec_tree_axis (export "er_ui_tree_codec_tree_axis") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_tree_codec_tree_axis  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr local.get $len call $er_ui_tree_codec_is_tree_layout_body
     i32.eqz
     if i32.const -1 return end
     local.get $ptr i32.const 8 i32.add i32.load8_u)
 
-  (func $er_ui_tree_codec_tree_gap (export "er_ui_tree_codec_tree_gap") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_tree_codec_tree_gap  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr local.get $len call $er_ui_tree_codec_is_tree_layout_body
     i32.eqz
     if i32.const -1 return end
     local.get $ptr i32.const 10 i32.add call $load16)
 
-  (func $er_ui_tree_codec_tree_padding (export "er_ui_tree_codec_tree_padding") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_tree_codec_tree_padding  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr local.get $len call $er_ui_tree_codec_is_tree_layout_body
     i32.eqz
     if i32.const -1 return end
     local.get $ptr i32.const 12 i32.add call $load16)
 
-  (func $er_ui_tree_codec_tree_child_count (export "er_ui_tree_codec_tree_child_count") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_tree_codec_tree_child_count  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr local.get $len call $er_ui_tree_codec_is_tree_layout_body
     i32.eqz
     if i32.const -1 return end
     local.get $ptr i32.const 14 i32.add call $load16)
 
-  (func $er_ui_tree_codec_decode_tree_layout (export "er_ui_tree_codec_decode_tree_layout") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $er_ui_tree_codec_decode_tree_layout  (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $ptr local.get $len call $er_ui_tree_codec_is_tree_layout_body
@@ -26852,7 +27308,7 @@
     local.get $out i32.const 12 i32.add local.get $ptr i32.const 14 i32.add call $load16 i32.store
     i32.const 1)
 
-  (func $er_ui_tree_codec_encode_slot_layout (export "er_ui_tree_codec_encode_slot_layout") (param $out i32) (param $cap i32) (param $id i32) (result i32)
+  (func $er_ui_tree_codec_encode_slot_layout  (param $out i32) (param $cap i32) (param $id i32) (result i32)
     local.get $out i32.eqz local.get $cap i32.const 16 i32.lt_u i32.or
     if i32.const 0 return end
     local.get $out i32.const 0 i32.const 16 memory.fill
@@ -26860,16 +27316,16 @@
     local.get $out i32.const 8 i32.add local.get $id call $store32
     i32.const 16)
 
-  (func $er_ui_tree_codec_is_slot_layout_body (export "er_ui_tree_codec_is_slot_layout_body") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_tree_codec_is_slot_layout_body  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr local.get $len call $tree_codec_has_slot_magic)
 
-  (func $er_ui_tree_codec_decode_slot_layout (export "er_ui_tree_codec_decode_slot_layout") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_tree_codec_decode_slot_layout  (param $ptr i32) (param $len i32) (result i32)
     local.get $ptr local.get $len call $er_ui_tree_codec_is_slot_layout_body
     i32.eqz
     if i32.const -1 return end
     local.get $ptr i32.const 8 i32.add i32.load)
 
-  (func $er_ui_tree_codec_same_id (export "er_ui_tree_codec_same_id") (param $left i32) (param $right i32) (result i32)
+  (func $er_ui_tree_codec_same_id  (param $left i32) (param $right i32) (result i32)
     (local $i i32)
     local.get $left i32.eqz local.get $right i32.eqz i32.or
     if i32.const 0 return end
@@ -26887,11 +27343,11 @@
     end
     i32.const 1)
 
-  (func $er_ui_object_id_size (export "er_ui_object_id_size") (result i32) i32.const 32)
-  (func $er_ui_object_child_size (export "er_ui_object_child_size") (result i32) i32.const 84)
-  (func $er_ui_object_kind_bytes (export "er_ui_object_kind_bytes") (result i32) i32.const 1)
-  (func $er_ui_object_kind_tree (export "er_ui_object_kind_tree") (result i32) i32.const 2)
-  (func $er_ui_object_kind_receipt (export "er_ui_object_kind_receipt") (result i32) i32.const 4)
+  (func $er_ui_object_id_size  (result i32) i32.const 32)
+  (func $er_ui_object_child_size  (result i32) i32.const 84)
+  (func $er_ui_object_kind_bytes  (result i32) i32.const 1)
+  (func $er_ui_object_kind_tree  (result i32) i32.const 2)
+  (func $er_ui_object_kind_receipt  (result i32) i32.const 4)
 
   (func $er_ui_object_id_nonzero (param $ptr i32) (result i32)
     (local $i i32)
@@ -26918,7 +27374,7 @@
     local.get $kind i32.const 4 i32.eq
     i32.or)
 
-  (func $er_ui_object_child_encode (export "er_ui_object_child_encode") (param $out i32) (param $cap i32) (param $object_id i32) (param $logical_offset i64) (param $logical_len i64) (param $kind i32) (param $requirements_hash i32) (result i32)
+  (func $er_ui_object_child_encode  (param $out i32) (param $cap i32) (param $object_id i32) (param $logical_offset i64) (param $logical_len i64) (param $kind i32) (param $requirements_hash i32) (result i32)
     local.get $out i32.eqz
     local.get $cap i32.const 84 i32.lt_u i32.or
     local.get $object_id call $er_ui_object_id_nonzero i32.eqz i32.or
@@ -26934,27 +27390,27 @@
     local.get $out i32.const 52 i32.add local.get $requirements_hash i32.const 32 memory.copy
     i32.const 84)
 
-  (func $er_ui_object_child_logical_offset (export "er_ui_object_child_logical_offset") (param $child i32) (result i64)
+  (func $er_ui_object_child_logical_offset  (param $child i32) (result i64)
     local.get $child i32.eqz
     if i64.const -1 return end
     local.get $child i32.const 32 i32.add i64.load)
 
-  (func $er_ui_object_child_logical_len (export "er_ui_object_child_logical_len") (param $child i32) (result i64)
+  (func $er_ui_object_child_logical_len  (param $child i32) (result i64)
     local.get $child i32.eqz
     if i64.const -1 return end
     local.get $child i32.const 40 i32.add i64.load)
 
-  (func $er_ui_object_child_kind (export "er_ui_object_child_kind") (param $child i32) (result i32)
+  (func $er_ui_object_child_kind  (param $child i32) (result i32)
     local.get $child i32.eqz
     if i32.const -1 return end
     local.get $child i32.const 48 i32.add call $load16)
 
-  (func $er_ui_object_child_reserved (export "er_ui_object_child_reserved") (param $child i32) (result i32)
+  (func $er_ui_object_child_reserved  (param $child i32) (result i32)
     local.get $child i32.eqz
     if i32.const -1 return end
     local.get $child i32.const 50 i32.add call $load16)
 
-  (func $er_ui_object_child_valid (export "er_ui_object_child_valid") (param $child i32) (param $expected_offset i64) (result i32)
+  (func $er_ui_object_child_valid  (param $child i32) (param $expected_offset i64) (result i32)
     local.get $child i32.eqz
     if i32.const 0 return end
     local.get $child call $er_ui_object_id_nonzero
@@ -26969,15 +27425,15 @@
     local.get $child i32.const 48 i32.add call $load16 call $er_ui_object_kind_valid
     i32.and)
 
-  (func $er_ui_object_header_size (export "er_ui_object_header_size") (result i32) i32.const 148)
-  (func $er_ui_object_requirements_size (export "er_ui_object_requirements_size") (result i32) i32.const 28)
-  (func $er_ui_object_owner_size (export "er_ui_object_owner_size") (result i32) i32.const 36)
-  (func $er_ui_object_envelope_size (export "er_ui_object_envelope_size") (result i32) i32.const 76)
-  (func $er_ui_object_max_owners (export "er_ui_object_max_owners") (result i32) i32.const 16)
-  (func $er_ui_object_max_envelopes (export "er_ui_object_max_envelopes") (result i32) i32.const 16)
-  (func $er_ui_object_max_children (export "er_ui_object_max_children") (result i32) i32.const 65536)
-  (func $er_ui_object_header_reserved_start (export "er_ui_object_header_reserved_start") (result i32) i32.const 132)
-  (func $er_ui_object_header_reserved_size (export "er_ui_object_header_reserved_size") (result i32) i32.const 16)
+  (func $er_ui_object_header_size  (result i32) i32.const 148)
+  (func $er_ui_object_requirements_size  (result i32) i32.const 28)
+  (func $er_ui_object_owner_size  (result i32) i32.const 36)
+  (func $er_ui_object_envelope_size  (result i32) i32.const 76)
+  (func $er_ui_object_max_owners  (result i32) i32.const 16)
+  (func $er_ui_object_max_envelopes  (result i32) i32.const 16)
+  (func $er_ui_object_max_children  (result i32) i32.const 65536)
+  (func $er_ui_object_header_reserved_start  (result i32) i32.const 132)
+  (func $er_ui_object_header_reserved_size  (result i32) i32.const 16)
 
   (func $er_ui_object_has_magic (param $ptr i32) (result i32)
     local.get $ptr i32.eqz
@@ -27002,7 +27458,7 @@
     end
     i32.const 1)
 
-  (func $er_ui_object_canonical_size (export "er_ui_object_canonical_size") (param $kind i32) (param $body_len i32) (param $owners i32) (param $envelopes i32) (param $children i32) (result i32)
+  (func $er_ui_object_canonical_size  (param $kind i32) (param $body_len i32) (param $owners i32) (param $envelopes i32) (param $children i32) (result i32)
     local.get $kind call $er_ui_object_kind_valid i32.eqz
     local.get $owners i32.const 16 i32.gt_u i32.or
     local.get $envelopes i32.const 16 i32.gt_u i32.or
@@ -27018,53 +27474,53 @@
     local.get $children i32.const 84 i32.mul i32.add
     local.get $body_len i32.add)
 
-  (func $er_ui_object_header_kind (export "er_ui_object_header_kind") (param $header i32) (result i32)
+  (func $er_ui_object_header_kind  (param $header i32) (result i32)
     local.get $header i32.eqz
     if i32.const -1 return end
     local.get $header i32.const 10 i32.add call $load16)
 
-  (func $er_ui_object_header_logical_len (export "er_ui_object_header_logical_len") (param $header i32) (result i64)
+  (func $er_ui_object_header_logical_len  (param $header i32) (result i64)
     local.get $header i32.eqz
     if i64.const -1 return end
     local.get $header i32.const 16 i32.add i64.load)
 
-  (func $er_ui_object_header_owner_count (export "er_ui_object_header_owner_count") (param $header i32) (result i32)
+  (func $er_ui_object_header_owner_count  (param $header i32) (result i32)
     local.get $header i32.eqz
     if i32.const -1 return end
     local.get $header i32.const 24 i32.add call $load16)
 
-  (func $er_ui_object_header_envelope_count (export "er_ui_object_header_envelope_count") (param $header i32) (result i32)
+  (func $er_ui_object_header_envelope_count  (param $header i32) (result i32)
     local.get $header i32.eqz
     if i32.const -1 return end
     local.get $header i32.const 26 i32.add call $load16)
 
-  (func $er_ui_object_header_child_count (export "er_ui_object_header_child_count") (param $header i32) (result i32)
+  (func $er_ui_object_header_child_count  (param $header i32) (result i32)
     local.get $header i32.eqz
     if i32.const -1 return end
     local.get $header i32.const 28 i32.add i32.load)
 
-  (func $er_ui_object_header_body_len (export "er_ui_object_header_body_len") (param $header i32) (result i64)
+  (func $er_ui_object_header_body_len  (param $header i32) (result i64)
     local.get $header i32.eqz
     if i64.const -1 return end
     local.get $header i32.const 32 i32.add i64.load)
 
-  (func $er_ui_object_owners_offset (export "er_ui_object_owners_offset") (result i32) i32.const 148)
+  (func $er_ui_object_owners_offset  (result i32) i32.const 148)
 
-  (func $er_ui_object_envelopes_offset (export "er_ui_object_envelopes_offset") (param $owner_count i32) (result i32)
+  (func $er_ui_object_envelopes_offset  (param $owner_count i32) (result i32)
     i32.const 148 local.get $owner_count i32.const 36 i32.mul i32.add)
 
-  (func $er_ui_object_children_offset (export "er_ui_object_children_offset") (param $owner_count i32) (param $envelope_count i32) (result i32)
+  (func $er_ui_object_children_offset  (param $owner_count i32) (param $envelope_count i32) (result i32)
     i32.const 148
     local.get $owner_count i32.const 36 i32.mul i32.add
     local.get $envelope_count i32.const 76 i32.mul i32.add)
 
-  (func $er_ui_object_body_offset (export "er_ui_object_body_offset") (param $owner_count i32) (param $envelope_count i32) (param $child_count i32) (result i32)
+  (func $er_ui_object_body_offset  (param $owner_count i32) (param $envelope_count i32) (param $child_count i32) (result i32)
     i32.const 148
     local.get $owner_count i32.const 36 i32.mul i32.add
     local.get $envelope_count i32.const 76 i32.mul i32.add
     local.get $child_count i32.const 84 i32.mul i32.add)
 
-  (func $er_ui_object_header_lite_valid (export "er_ui_object_header_lite_valid") (param $canonical i32) (param $len i32) (result i32)
+  (func $er_ui_object_header_lite_valid  (param $canonical i32) (param $len i32) (result i32)
     (local $kind i32) (local $body_len_i32 i32) (local $total i32)
     local.get $canonical i32.eqz local.get $len i32.const 148 i32.lt_u i32.or
     if i32.const 0 return end
@@ -27083,7 +27539,7 @@
     local.get $total i32.const 0 i32.ge_s
     i32.and)
 
-  (func $er_ui_object_body_ptr (export "er_ui_object_body_ptr") (param $canonical i32) (param $len i32) (result i32)
+  (func $er_ui_object_body_ptr  (param $canonical i32) (param $len i32) (result i32)
     (local $off i32)
     local.get $canonical local.get $len call $er_ui_object_header_lite_valid
     i32.eqz
@@ -27094,7 +27550,7 @@
     call $er_ui_object_body_offset local.set $off
     local.get $canonical local.get $off i32.add)
 
-  (func $er_ui_object_children_ptr (export "er_ui_object_children_ptr") (param $canonical i32) (param $len i32) (result i32)
+  (func $er_ui_object_children_ptr  (param $canonical i32) (param $len i32) (result i32)
     local.get $canonical local.get $len call $er_ui_object_header_lite_valid
     i32.eqz
     if i32.const 0 return end
@@ -27104,7 +27560,7 @@
     call $er_ui_object_children_offset
     i32.add)
 
-  (func $er_ui_object_child_ptr (export "er_ui_object_child_ptr") (param $canonical i32) (param $len i32) (param $index i32) (result i32)
+  (func $er_ui_object_child_ptr  (param $canonical i32) (param $len i32) (param $index i32) (result i32)
     (local $children i32) (local $count i32) (local $i i32) (local $expected i64) (local $child i32)
     local.get $canonical local.get $len call $er_ui_object_header_lite_valid
     i32.eqz
@@ -27127,12 +27583,12 @@
     local.get $children local.get $index i32.const 84 i32.mul i32.add local.tee $child local.get $expected call $er_ui_object_child_valid
     if local.get $child return end
     i32.const 0)
-  (func $er_ui_stack_default_gap (export "er_ui_stack_default_gap") (result i32) i32.const 8)
-  (func $er_ui_stack_default_padding (export "er_ui_stack_default_padding") (result i32) i32.const 0)
-  (func $er_ui_stack_axis_column (export "er_ui_stack_axis_column") (result i32) i32.const 0)
-  (func $er_ui_stack_axis_row (export "er_ui_stack_axis_row") (result i32) i32.const 1)
+  (func $er_ui_stack_default_gap  (result i32) i32.const 8)
+  (func $er_ui_stack_default_padding  (result i32) i32.const 0)
+  (func $er_ui_stack_axis_column  (result i32) i32.const 0)
+  (func $er_ui_stack_axis_row  (result i32) i32.const 1)
 
-  (func $er_ui_stack_layout_axis (export "er_ui_stack_layout_axis") (param $axis i32) (result i32)
+  (func $er_ui_stack_layout_axis  (param $axis i32) (result i32)
     local.get $axis i32.const 1 i32.eq
     if (result i32)
       i32.const 0
@@ -27140,7 +27596,7 @@
       i32.const 1
     end)
 
-  (func $er_ui_stack_constraints_from_bounds (export "er_ui_stack_constraints_from_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_stack_constraints_from_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out i32.const 2 i32.store
@@ -27150,7 +27606,7 @@
     local.get $out i32.const 16 i32.add i32.const 1 i32.store
     i32.const 1)
 
-  (func $er_ui_stack_child_constraints_for (export "er_ui_stack_child_constraints_for") (param $axis i32) (param $padding f32) (param $constraints i32) (param $out i32) (result i32)
+  (func $er_ui_stack_child_constraints_for  (param $axis i32) (param $padding f32) (param $constraints i32) (param $out i32) (result i32)
     local.get $constraints i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $padding i32.const 124900 call $er_ui_layout_insets_uniform drop
@@ -27172,7 +27628,7 @@
     local.get $out i32.const 16 i32.add local.get $constraints i32.const 16 i32.add i32.load i32.store
     i32.const 1)
 
-  (func $er_ui_stack_layout_options_for (export "er_ui_stack_layout_options_for") (param $axis i32) (param $gap f32) (param $padding f32) (param $cross_align i32) (param $out i32) (result i32)
+  (func $er_ui_stack_layout_options_for  (param $axis i32) (param $gap f32) (param $padding f32) (param $cross_align i32) (param $out i32) (result i32)
     local.get $out i32.eqz
     if i32.const 0 return end
     local.get $padding i32.const 124960 call $er_ui_layout_insets_uniform drop
@@ -27184,18 +27640,18 @@
     local.get $out i32.const 20 i32.add i32.const 124972 f32.load f32.store
     local.get $out i32.const 24 i32.add local.get $cross_align i32.store
     i32.const 1)
-  (func $er_ui_tree_descriptor_unknown (export "er_ui_tree_descriptor_unknown") (result i32) i32.const 0)
-  (func $er_ui_tree_descriptor_stack (export "er_ui_tree_descriptor_stack") (result i32) i32.const 1)
-  (func $er_ui_tree_descriptor_slot (export "er_ui_tree_descriptor_slot") (result i32) i32.const 2)
+  (func $er_ui_tree_descriptor_unknown  (result i32) i32.const 0)
+  (func $er_ui_tree_descriptor_stack  (result i32) i32.const 1)
+  (func $er_ui_tree_descriptor_slot  (result i32) i32.const 2)
 
-  (func $er_ui_tree_descriptor_kind (export "er_ui_tree_descriptor_kind") (param $body i32) (param $body_len i32) (result i32)
+  (func $er_ui_tree_descriptor_kind  (param $body i32) (param $body_len i32) (result i32)
     local.get $body local.get $body_len call $er_ui_tree_codec_is_tree_layout_body
     if i32.const 1 return end
     local.get $body local.get $body_len call $er_ui_tree_codec_is_slot_layout_body
     if i32.const 2 return end
     i32.const 0)
 
-  (func $er_ui_tree_resolved_count_valid (export "er_ui_tree_resolved_count_valid") (param $descriptor_body i32) (param $descriptor_len i32) (param $resolved_count i32) (result i32)
+  (func $er_ui_tree_resolved_count_valid  (param $descriptor_body i32) (param $descriptor_len i32) (param $resolved_count i32) (result i32)
     (local $kind i32)
     local.get $descriptor_body local.get $descriptor_len call $er_ui_tree_descriptor_kind
     local.tee $kind
@@ -27211,7 +27667,7 @@
     end
     i32.const 0)
 
-  (func $er_ui_slot_tree_validate_shape (export "er_ui_slot_tree_validate_shape") (param $tree i32) (param $tree_len i32) (param $descriptor_id i32) (param $child_id i32) (result i32)
+  (func $er_ui_slot_tree_validate_shape  (param $tree i32) (param $tree_len i32) (param $descriptor_id i32) (param $child_id i32) (result i32)
     (local $child0 i32) (local $child1 i32)
     local.get $tree local.get $tree_len call $er_ui_object_header_lite_valid
     i32.eqz
@@ -27227,7 +27683,7 @@
     local.get $child1 local.get $child_id call $er_ui_tree_codec_same_id
     i32.and)
 
-  (func $er_ui_stack_tree_validate_shape (export "er_ui_stack_tree_validate_shape") (param $tree i32) (param $tree_len i32) (param $descriptor_body i32) (param $descriptor_len i32) (param $descriptor_id i32) (result i32)
+  (func $er_ui_stack_tree_validate_shape  (param $tree i32) (param $tree_len i32) (param $descriptor_body i32) (param $descriptor_len i32) (param $descriptor_id i32) (result i32)
     (local $expected_count i32) (local $child0 i32)
     local.get $descriptor_body local.get $descriptor_len call $er_ui_tree_codec_is_tree_layout_body
     i32.eqz
@@ -27242,46 +27698,46 @@
     local.get $tree local.get $tree_len i32.const 0 call $er_ui_object_child_ptr local.tee $child0 i32.eqz
     if i32.const 0 return end
     local.get $child0 local.get $descriptor_id call $er_ui_tree_codec_same_id)
-  (func $er_ui_semantic_kind_identity (export "er_ui_semantic_kind_identity") (result i32) i32.const 0)
-  (func $er_ui_semantic_kind_metric (export "er_ui_semantic_kind_metric") (result i32) i32.const 1)
-  (func $er_ui_semantic_kind_resource (export "er_ui_semantic_kind_resource") (result i32) i32.const 2)
-  (func $er_ui_semantic_kind_path (export "er_ui_semantic_kind_path") (result i32) i32.const 3)
-  (func $er_ui_semantic_kind_event (export "er_ui_semantic_kind_event") (result i32) i32.const 4)
-  (func $er_ui_semantic_kind_action (export "er_ui_semantic_kind_action") (result i32) i32.const 5)
-  (func $er_ui_semantic_kind_artifact (export "er_ui_semantic_kind_artifact") (result i32) i32.const 6)
-  (func $er_ui_semantic_kind_warning (export "er_ui_semantic_kind_warning") (result i32) i32.const 7)
-  (func $er_ui_semantic_kind_dependency (export "er_ui_semantic_kind_dependency") (result i32) i32.const 8)
-  (func $er_ui_semantic_kind_timeline (export "er_ui_semantic_kind_timeline") (result i32) i32.const 9)
-  (func $er_ui_semantic_importance_primary (export "er_ui_semantic_importance_primary") (result i32) i32.const 0)
-  (func $er_ui_semantic_importance_normal (export "er_ui_semantic_importance_normal") (result i32) i32.const 1)
-  (func $er_ui_semantic_importance_support (export "er_ui_semantic_importance_support") (result i32) i32.const 2)
-  (func $er_ui_semantic_importance_background (export "er_ui_semantic_importance_background") (result i32) i32.const 3)
-  (func $er_ui_semantic_state_neutral (export "er_ui_semantic_state_neutral") (result i32) i32.const 0)
-  (func $er_ui_semantic_state_active (export "er_ui_semantic_state_active") (result i32) i32.const 1)
-  (func $er_ui_semantic_state_good (export "er_ui_semantic_state_good") (result i32) i32.const 2)
-  (func $er_ui_semantic_state_warning (export "er_ui_semantic_state_warning") (result i32) i32.const 3)
-  (func $er_ui_semantic_state_bad (export "er_ui_semantic_state_bad") (result i32) i32.const 4)
-  (func $er_ui_semantic_state_blocked (export "er_ui_semantic_state_blocked") (result i32) i32.const 5)
-  (func $er_ui_semantic_state_private (export "er_ui_semantic_state_private") (result i32) i32.const 6)
-  (func $er_ui_semantic_state_pending (export "er_ui_semantic_state_pending") (result i32) i32.const 7)
-  (func $er_ui_semantic_mode_overview (export "er_ui_semantic_mode_overview") (result i32) i32.const 0)
-  (func $er_ui_semantic_mode_schedule (export "er_ui_semantic_mode_schedule") (result i32) i32.const 3)
-  (func $er_ui_semantic_focus_general (export "er_ui_semantic_focus_general") (result i32) i32.const 0)
-  (func $er_ui_semantic_focus_resources (export "er_ui_semantic_focus_resources") (result i32) i32.const 1)
-  (func $er_ui_semantic_focus_paths (export "er_ui_semantic_focus_paths") (result i32) i32.const 2)
-  (func $er_ui_semantic_focus_dependencies (export "er_ui_semantic_focus_dependencies") (result i32) i32.const 3)
-  (func $er_ui_semantic_focus_privacy (export "er_ui_semantic_focus_privacy") (result i32) i32.const 4)
-  (func $er_ui_semantic_focus_errors (export "er_ui_semantic_focus_errors") (result i32) i32.const 5)
-  (func $er_ui_semantic_density_compact (export "er_ui_semantic_density_compact") (result i32) i32.const 0)
-  (func $er_ui_semantic_density_normal (export "er_ui_semantic_density_normal") (result i32) i32.const 1)
-  (func $er_ui_semantic_density_expanded (export "er_ui_semantic_density_expanded") (result i32) i32.const 2)
+  (func $er_ui_semantic_kind_identity  (result i32) i32.const 0)
+  (func $er_ui_semantic_kind_metric  (result i32) i32.const 1)
+  (func $er_ui_semantic_kind_resource  (result i32) i32.const 2)
+  (func $er_ui_semantic_kind_path  (result i32) i32.const 3)
+  (func $er_ui_semantic_kind_event  (result i32) i32.const 4)
+  (func $er_ui_semantic_kind_action  (result i32) i32.const 5)
+  (func $er_ui_semantic_kind_artifact  (result i32) i32.const 6)
+  (func $er_ui_semantic_kind_warning  (result i32) i32.const 7)
+  (func $er_ui_semantic_kind_dependency  (result i32) i32.const 8)
+  (func $er_ui_semantic_kind_timeline  (result i32) i32.const 9)
+  (func $er_ui_semantic_importance_primary  (result i32) i32.const 0)
+  (func $er_ui_semantic_importance_normal  (result i32) i32.const 1)
+  (func $er_ui_semantic_importance_support  (result i32) i32.const 2)
+  (func $er_ui_semantic_importance_background  (result i32) i32.const 3)
+  (func $er_ui_semantic_state_neutral  (result i32) i32.const 0)
+  (func $er_ui_semantic_state_active  (result i32) i32.const 1)
+  (func $er_ui_semantic_state_good  (result i32) i32.const 2)
+  (func $er_ui_semantic_state_warning  (result i32) i32.const 3)
+  (func $er_ui_semantic_state_bad  (result i32) i32.const 4)
+  (func $er_ui_semantic_state_blocked  (result i32) i32.const 5)
+  (func $er_ui_semantic_state_private  (result i32) i32.const 6)
+  (func $er_ui_semantic_state_pending  (result i32) i32.const 7)
+  (func $er_ui_semantic_mode_overview  (result i32) i32.const 0)
+  (func $er_ui_semantic_mode_schedule  (result i32) i32.const 3)
+  (func $er_ui_semantic_focus_general  (result i32) i32.const 0)
+  (func $er_ui_semantic_focus_resources  (result i32) i32.const 1)
+  (func $er_ui_semantic_focus_paths  (result i32) i32.const 2)
+  (func $er_ui_semantic_focus_dependencies  (result i32) i32.const 3)
+  (func $er_ui_semantic_focus_privacy  (result i32) i32.const 4)
+  (func $er_ui_semantic_focus_errors  (result i32) i32.const 5)
+  (func $er_ui_semantic_density_compact  (result i32) i32.const 0)
+  (func $er_ui_semantic_density_normal  (result i32) i32.const 1)
+  (func $er_ui_semantic_density_expanded  (result i32) i32.const 2)
 
-  (func $er_ui_semantic_control_id (export "er_ui_semantic_control_id") (param $id i32) (result i32)
+  (func $er_ui_semantic_control_id  (param $id i32) (result i32)
     local.get $id i32.eqz
     if i32.const -1 return end
     local.get $id)
 
-  (func $er_ui_semantic_promotes (export "er_ui_semantic_promotes") (param $kind i32) (param $importance i32) (param $state i32) (param $focus i32) (result i32)
+  (func $er_ui_semantic_promotes  (param $kind i32) (param $importance i32) (param $state i32) (param $focus i32) (result i32)
     local.get $importance i32.eqz
     if i32.const 1 return end
     local.get $importance i32.const 3 i32.eq
@@ -27292,42 +27748,42 @@
     local.get $focus i32.const 4 i32.eq local.get $state i32.const 6 i32.eq i32.and i32.or
     local.get $focus i32.const 5 i32.eq local.get $state i32.const 4 i32.eq local.get $state i32.const 5 i32.eq i32.or local.get $kind i32.const 7 i32.eq i32.or i32.and i32.or)
 
-  (func $er_ui_semantic_primary_height (export "er_ui_semantic_primary_height") (param $density i32) (result f32)
+  (func $er_ui_semantic_primary_height  (param $density i32) (result f32)
     local.get $density i32.eqz
     if f32.const 88 return end
     local.get $density i32.const 2 i32.eq
     if f32.const 122 return end
     f32.const 104)
 
-  (func $er_ui_semantic_row_height (export "er_ui_semantic_row_height") (param $density i32) (result f32)
+  (func $er_ui_semantic_row_height  (param $density i32) (result f32)
     local.get $density i32.eqz
     if f32.const 36 return end
     local.get $density i32.const 2 i32.eq
     if f32.const 54 return end
     f32.const 44)
 
-  (func $er_ui_semantic_gap (export "er_ui_semantic_gap") (param $density i32) (result f32)
+  (func $er_ui_semantic_gap  (param $density i32) (result f32)
     local.get $density i32.eqz
     if f32.const 6 return end
     local.get $density i32.const 2 i32.eq
     if f32.const 14 return end
     f32.const 10)
 
-  (func $er_ui_semantic_header_gap (export "er_ui_semantic_header_gap") (param $density i32) (result f32)
+  (func $er_ui_semantic_header_gap  (param $density i32) (result f32)
     local.get $density i32.eqz
     if f32.const 8 return end
     local.get $density i32.const 2 i32.eq
     if f32.const 16 return end
     f32.const 12)
 
-  (func $er_ui_semantic_badge_variant (export "er_ui_semantic_badge_variant") (param $state i32) (result i32)
+  (func $er_ui_semantic_badge_variant  (param $state i32) (result i32)
     local.get $state i32.const 1 i32.eq local.get $state i32.const 2 i32.eq i32.or
     if i32.const 1 return end
     local.get $state i32.const 3 i32.eq local.get $state i32.const 4 i32.eq i32.or local.get $state i32.const 5 i32.eq i32.or
     if i32.const 0 return end
     i32.const 3)
 
-  (func $er_ui_semantic_badge_bounds (export "er_ui_semantic_badge_bounds") (param $bounds i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_semantic_badge_bounds  (param $bounds i32) (param $label_len i32) (param $out i32) (result i32)
     (local $desired f32) (local $width f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27340,7 +27796,7 @@
     f32.const 22
     call $rect_store)
 
-  (func $er_ui_semantic_row_progress_bounds (export "er_ui_semantic_row_progress_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_semantic_row_progress_bounds  (param $bounds i32) (param $out i32) (result i32)
     (local $bar_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27352,10 +27808,10 @@
     f32.const 6
     call $rect_store)
 
-  (func $er_ui_semantic_action_button_row (export "er_ui_semantic_action_button_row") (param $kind i32) (param $id i32) (param $mode i32) (result i32)
+  (func $er_ui_semantic_action_button_row  (param $kind i32) (param $id i32) (param $mode i32) (result i32)
     local.get $kind i32.const 5 i32.eq local.get $id i32.const 0 i32.ne i32.and local.get $mode i32.const 3 i32.eq i32.and)
 
-  (func $er_ui_semantic_primary_slots_for_count (export "er_ui_semantic_primary_slots_for_count") (param $bounds i32) (param $promoted_count i32) (result i32)
+  (func $er_ui_semantic_primary_slots_for_count  (param $bounds i32) (param $promoted_count i32) (result i32)
     (local $max_slots i32)
     local.get $bounds i32.eqz local.get $promoted_count i32.eqz i32.or
     if i32.const 0 return end
@@ -27370,38 +27826,38 @@
     end
     local.get $promoted_count local.get $max_slots i32.lt_u
     if (result i32) local.get $promoted_count else local.get $max_slots end)
-  (func $er_ui_gallery_preview_base_id (export "er_ui_gallery_preview_base_id") (result i32) i32.const 18000)
-  (func $er_ui_gallery_first_catalog_card_id (export "er_ui_gallery_first_catalog_card_id") (result i32) i32.const 20000)
-  (func $er_ui_gallery_catalog_preview_id_base (export "er_ui_gallery_catalog_preview_id_base") (result i32) i32.const 23000)
-  (func $er_ui_gallery_selected_preview_id_base (export "er_ui_gallery_selected_preview_id_base") (result i32) i32.const 25000)
-  (func $er_ui_gallery_preview_id_stride (export "er_ui_gallery_preview_id_stride") (result i32) i32.const 32)
-  (func $er_ui_gallery_component_count (export "er_ui_gallery_component_count") (result i32) i32.const 60)
-  (func $er_ui_gallery_header_h (export "er_ui_gallery_header_h") (result f32) f32.const 56)
-  (func $er_ui_gallery_page_top_pad (export "er_ui_gallery_page_top_pad") (result f32) f32.const 48)
-  (func $er_ui_gallery_page_bottom_pad (export "er_ui_gallery_page_bottom_pad") (result f32) f32.const 120)
-  (func $er_ui_gallery_card_content_x (export "er_ui_gallery_card_content_x") (result f32) f32.const 18)
-  (func $er_ui_gallery_min_column_width (export "er_ui_gallery_min_column_width") (result f32) f32.const 300)
-  (func $er_ui_gallery_max_columns (export "er_ui_gallery_max_columns") (result i32) i32.const 5)
-  (func $er_ui_gallery_catalog_intro_h (export "er_ui_gallery_catalog_intro_h") (result f32) f32.const 86)
-  (func $er_ui_gallery_catalog_card_h (export "er_ui_gallery_catalog_card_h") (result f32) f32.const 148)
-  (func $er_ui_gallery_catalog_source_min_w (export "er_ui_gallery_catalog_source_min_w") (result f32) f32.const 82)
-  (func $er_ui_gallery_selected_component_h (export "er_ui_gallery_selected_component_h") (result f32) f32.const 500)
-  (func $er_ui_gallery_selected_component_compact_h (export "er_ui_gallery_selected_component_compact_h") (result f32) f32.const 820)
-  (func $er_ui_gallery_selected_component_gap (export "er_ui_gallery_selected_component_gap") (result f32) f32.const 32)
-  (func $er_ui_gallery_grid_gap_compact (export "er_ui_gallery_grid_gap_compact") (result f32) f32.const 28)
-  (func $er_ui_gallery_grid_gap_default (export "er_ui_gallery_grid_gap_default") (result f32) f32.const 40)
-  (func $er_ui_gallery_grid_gap_wide (export "er_ui_gallery_grid_gap_wide") (result f32) f32.const 56)
+  (func $er_ui_gallery_preview_base_id  (result i32) i32.const 18000)
+  (func $er_ui_gallery_first_catalog_card_id  (result i32) i32.const 20000)
+  (func $er_ui_gallery_catalog_preview_id_base  (result i32) i32.const 23000)
+  (func $er_ui_gallery_selected_preview_id_base  (result i32) i32.const 25000)
+  (func $er_ui_gallery_preview_id_stride  (result i32) i32.const 32)
+  (func $er_ui_gallery_component_count  (result i32) i32.const 60)
+  (func $er_ui_gallery_header_h  (result f32) f32.const 56)
+  (func $er_ui_gallery_page_top_pad  (result f32) f32.const 48)
+  (func $er_ui_gallery_page_bottom_pad  (result f32) f32.const 120)
+  (func $er_ui_gallery_card_content_x  (result f32) f32.const 18)
+  (func $er_ui_gallery_min_column_width  (result f32) f32.const 300)
+  (func $er_ui_gallery_max_columns  (result i32) i32.const 5)
+  (func $er_ui_gallery_catalog_intro_h  (result f32) f32.const 86)
+  (func $er_ui_gallery_catalog_card_h  (result f32) f32.const 148)
+  (func $er_ui_gallery_catalog_source_min_w  (result f32) f32.const 82)
+  (func $er_ui_gallery_selected_component_h  (result f32) f32.const 500)
+  (func $er_ui_gallery_selected_component_compact_h  (result f32) f32.const 820)
+  (func $er_ui_gallery_selected_component_gap  (result f32) f32.const 32)
+  (func $er_ui_gallery_grid_gap_compact  (result f32) f32.const 28)
+  (func $er_ui_gallery_grid_gap_default  (result f32) f32.const 40)
+  (func $er_ui_gallery_grid_gap_wide  (result f32) f32.const 56)
 
-  (func $er_ui_gallery_category_foundation (export "er_ui_gallery_category_foundation") (result i32) i32.const 0)
-  (func $er_ui_gallery_category_form (export "er_ui_gallery_category_form") (result i32) i32.const 1)
-  (func $er_ui_gallery_category_overlay (export "er_ui_gallery_category_overlay") (result i32) i32.const 2)
-  (func $er_ui_gallery_category_navigation (export "er_ui_gallery_category_navigation") (result i32) i32.const 3)
-  (func $er_ui_gallery_category_data_display (export "er_ui_gallery_category_data_display") (result i32) i32.const 4)
-  (func $er_ui_gallery_category_feedback (export "er_ui_gallery_category_feedback") (result i32) i32.const 5)
-  (func $er_ui_gallery_category_layout (export "er_ui_gallery_category_layout") (result i32) i32.const 6)
-  (func $er_ui_gallery_category_media (export "er_ui_gallery_category_media") (result i32) i32.const 7)
+  (func $er_ui_gallery_category_foundation  (result i32) i32.const 0)
+  (func $er_ui_gallery_category_form  (result i32) i32.const 1)
+  (func $er_ui_gallery_category_overlay  (result i32) i32.const 2)
+  (func $er_ui_gallery_category_navigation  (result i32) i32.const 3)
+  (func $er_ui_gallery_category_data_display  (result i32) i32.const 4)
+  (func $er_ui_gallery_category_feedback  (result i32) i32.const 5)
+  (func $er_ui_gallery_category_layout  (result i32) i32.const 6)
+  (func $er_ui_gallery_category_media  (result i32) i32.const 7)
 
-  (func $er_ui_gallery_count_by_category (export "er_ui_gallery_count_by_category") (param $category i32) (result i32)
+  (func $er_ui_gallery_count_by_category  (param $category i32) (result i32)
     local.get $category
     if (result i32)
       local.get $category i32.const 1 i32.eq
@@ -27428,14 +27884,14 @@
       i32.const 9
     end)
 
-  (func $er_ui_gallery_normalized_grid_gap (export "er_ui_gallery_normalized_grid_gap") (param $value f32) (result f32)
+  (func $er_ui_gallery_normalized_grid_gap  (param $value f32) (result f32)
     local.get $value f32.const 34 f32.le
     if f32.const 28 return end
     local.get $value f32.const 48 f32.ge
     if f32.const 56 return end
     f32.const 40)
 
-  (func $er_ui_gallery_column_count (export "er_ui_gallery_column_count") (param $width f32) (param $gap f32) (result i32)
+  (func $er_ui_gallery_column_count  (param $width f32) (param $gap f32) (result i32)
     (local $columns i32) (local $next i32) (local $required f32)
     i32.const 1 local.set $columns
     block $done
@@ -27450,18 +27906,18 @@
     end
     local.get $columns)
 
-  (func $er_ui_gallery_catalog_section_height (export "er_ui_gallery_catalog_section_height") (param $columns i32) (param $gap f32) (result f32)
+  (func $er_ui_gallery_catalog_section_height  (param $columns i32) (param $gap f32) (result f32)
     (local $cols i32) (local $rows i32)
     local.get $columns i32.const 1 call $layout_max_i32_u local.set $cols
     i32.const 60 local.get $cols i32.add i32.const 1 i32.sub local.get $cols i32.div_u local.set $rows
     f32.const 86 local.get $rows f32.convert_i32_u f32.const 148 f32.mul f32.add local.get $rows i32.const 1 i32.sub f32.convert_i32_u local.get $gap f32.mul f32.add)
 
-  (func $er_ui_gallery_selected_component_height (export "er_ui_gallery_selected_component_height") (param $width f32) (result f32)
+  (func $er_ui_gallery_selected_component_height  (param $width f32) (result f32)
     local.get $width f32.const 760 f32.lt
     if f32.const 820 return end
     f32.const 500)
 
-  (func $er_ui_gallery_body_height (export "er_ui_gallery_body_height") (param $width f32) (param $columns i32) (param $gap f32) (param $has_selected i32) (result f32)
+  (func $er_ui_gallery_body_height  (param $width f32) (param $columns i32) (param $gap f32) (param $has_selected i32) (result f32)
     local.get $has_selected
     if (result f32)
       local.get $width call $er_ui_gallery_selected_component_height f32.const 32 f32.add
@@ -27470,33 +27926,33 @@
     end
     local.get $columns local.get $gap call $er_ui_gallery_catalog_section_height f32.add)
 
-  (func $er_ui_gallery_docs_content_height (export "er_ui_gallery_docs_content_height") (param $width f32) (param $has_selected i32) (result f32)
+  (func $er_ui_gallery_docs_content_height  (param $width f32) (param $has_selected i32) (result f32)
     local.get $width local.get $width f32.const 40 call $er_ui_gallery_column_count f32.const 40 local.get $has_selected call $er_ui_gallery_body_height)
 
-  (func $er_ui_gallery_content_height (export "er_ui_gallery_content_height") (param $width f32) (param $scroll_y f32) (param $grid_gap f32) (param $has_selected i32) (result f32)
+  (func $er_ui_gallery_content_height  (param $width f32) (param $scroll_y f32) (param $grid_gap f32) (param $has_selected i32) (result f32)
     (local $board_w f32) (local $gap f32) (local $columns i32)
     f32.const 1180 local.get $width f32.const 40 f32.sub f32.const 1 call $max_f32 call $min_f32 local.set $board_w
     local.get $grid_gap call $er_ui_gallery_normalized_grid_gap local.set $gap
     local.get $board_w local.get $gap call $er_ui_gallery_column_count local.set $columns
     f32.const 56 f32.const 48 f32.add local.get $board_w local.get $columns local.get $gap local.get $has_selected call $er_ui_gallery_body_height f32.add f32.const 120 f32.add)
 
-  (func $er_ui_gallery_catalog_card_id (export "er_ui_gallery_catalog_card_id") (param $index i32) (result i32)
+  (func $er_ui_gallery_catalog_card_id  (param $index i32) (result i32)
     i32.const 20000 local.get $index i32.add)
 
-  (func $er_ui_gallery_preview_hit_for_index (export "er_ui_gallery_preview_hit_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_preview_hit_for_index  (param $index i32) (result i32)
     i32.const 23000 local.get $index i32.const 32 i32.mul i32.add)
 
-  (func $er_ui_gallery_selected_preview_hit_for_index (export "er_ui_gallery_selected_preview_hit_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_selected_preview_hit_for_index  (param $index i32) (result i32)
     i32.const 25000 local.get $index i32.const 32 i32.mul i32.add)
 
-  (func $er_ui_gallery_index_by_catalog_hit (export "er_ui_gallery_index_by_catalog_hit") (param $hit_id i32) (result i32)
+  (func $er_ui_gallery_index_by_catalog_hit  (param $hit_id i32) (result i32)
     local.get $hit_id i32.const 20000 i32.lt_u
     if i32.const -1 return end
     local.get $hit_id i32.const 20000 i32.sub local.tee $hit_id i32.const 60 i32.ge_u
     if i32.const -1 return end
     local.get $hit_id)
 
-  (func $er_ui_gallery_index_by_preview_hit (export "er_ui_gallery_index_by_preview_hit") (param $hit_id i32) (result i32)
+  (func $er_ui_gallery_index_by_preview_hit  (param $hit_id i32) (result i32)
     (local $relative i32) (local $index i32)
     local.get $hit_id i32.const 23000 i32.ge_u
     if
@@ -27511,7 +27967,7 @@
     end
     i32.const -1)
 
-  (func $er_ui_gallery_layout_board_bounds (export "er_ui_gallery_layout_board_bounds") (param $bounds i32) (param $scroll_y f32) (param $out i32) (result i32)
+  (func $er_ui_gallery_layout_board_bounds  (param $bounds i32) (param $scroll_y f32) (param $out i32) (result i32)
     (local $content_w f32) (local $content_x f32) (local $scroll f32) (local $board_y f32) (local $board_h f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27522,14 +27978,14 @@
     local.get $bounds i32.const 12 i32.add f32.load f32.const 104 f32.sub local.get $scroll f32.add f32.const 240 call $max_f32 local.set $board_h
     local.get $out local.get $content_x local.get $board_y local.get $content_w local.get $board_h call $rect_store)
 
-  (func $er_ui_gallery_source_badge_bounds (export "er_ui_gallery_source_badge_bounds") (param $inset i32) (param $selected i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_source_badge_bounds  (param $inset i32) (param $selected i32) (param $out i32) (result i32)
     (local $desired f32)
     local.get $inset i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $selected if (result f32) f32.const 94 else f32.const 86.5 end local.set $desired
     local.get $out local.get $inset f32.load local.get $inset i32.const 4 i32.add f32.load local.get $inset i32.const 8 i32.add f32.load f32.const 82 local.get $desired call $max_f32 call $min_f32 f32.const 24 call $rect_store)
 
-  (func $er_ui_gallery_contract_badge_bounds (export "er_ui_gallery_contract_badge_bounds") (param $bounds i32) (param $label_len i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_contract_badge_bounds  (param $bounds i32) (param $label_len i32) (param $out i32) (result i32)
     (local $desired f32) (local $width f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27606,11 +28062,11 @@
     end
     i32.const -1)
 
-  (func $er_ui_gallery_category_count (export "er_ui_gallery_category_count") (result i32) i32.const 8)
-  (func $er_ui_gallery_preview_kind_count (export "er_ui_gallery_preview_kind_count") (result i32) i32.const 59)
-  (func $er_ui_gallery_component_path_count (export "er_ui_gallery_component_path_count") (result i32) i32.const 58)
+  (func $er_ui_gallery_category_count  (result i32) i32.const 8)
+  (func $er_ui_gallery_preview_kind_count  (result i32) i32.const 59)
+  (func $er_ui_gallery_component_path_count  (result i32) i32.const 58)
 
-  (func $er_ui_gallery_category_label_len (export "er_ui_gallery_category_label_len") (param $category i32) (result i32)
+  (func $er_ui_gallery_category_label_len  (param $category i32) (result i32)
     local.get $category i32.const 0 i32.eq
     if i32.const 10 return end
     local.get $category i32.const 1 i32.eq
@@ -27629,76 +28085,76 @@
     if i32.const 5 return end
     i32.const -1)
 
-  (func $er_ui_gallery_category_for_index (export "er_ui_gallery_category_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_category_for_index  (param $index i32) (result i32)
     i32.const 66000 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_category_at (export "er_ui_gallery_category_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_category_at  (param $index i32) (result i32)
     i32.const 66000 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_preview_kind_for_index (export "er_ui_gallery_preview_kind_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_preview_kind_for_index  (param $index i32) (result i32)
     i32.const 66100 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_preview_kind_at (export "er_ui_gallery_preview_kind_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_preview_kind_at  (param $index i32) (result i32)
     i32.const 66100 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_name_len_for_index (export "er_ui_gallery_name_len_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_name_len_for_index  (param $index i32) (result i32)
     i32.const 66200 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_name_len_at (export "er_ui_gallery_name_len_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_name_len_at  (param $index i32) (result i32)
     i32.const 66200 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_slug_len_for_index (export "er_ui_gallery_slug_len_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_slug_len_for_index  (param $index i32) (result i32)
     i32.const 66300 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_slug_len_at (export "er_ui_gallery_slug_len_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_slug_len_at  (param $index i32) (result i32)
     i32.const 66300 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_source_component_len_for_index (export "er_ui_gallery_source_component_len_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_source_component_len_for_index  (param $index i32) (result i32)
     i32.const 66400 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_source_component_len_at (export "er_ui_gallery_source_component_len_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_source_component_len_at  (param $index i32) (result i32)
     i32.const 66400 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_edge_builder_len_for_index (export "er_ui_gallery_edge_builder_len_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_edge_builder_len_for_index  (param $index i32) (result i32)
     i32.const 66500 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_edge_builder_len_at (export "er_ui_gallery_edge_builder_len_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_edge_builder_len_at  (param $index i32) (result i32)
     i32.const 66500 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_component_path_len_for_index (export "er_ui_gallery_component_path_len_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_component_path_len_for_index  (param $index i32) (result i32)
     i32.const 66600 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_component_path_len_at (export "er_ui_gallery_component_path_len_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_component_path_len_at  (param $index i32) (result i32)
     i32.const 66600 local.get $index call $er_ui_gallery_table_u8)
 
-  (func $er_ui_gallery_source_path_len_for_index (export "er_ui_gallery_source_path_len_for_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_source_path_len_for_index  (param $index i32) (result i32)
     (local $source_len i32)
     i32.const 66400 local.get $index call $er_ui_gallery_table_u8 local.tee $source_len i32.const 0 i32.lt_s
     if i32.const -1 return end
     i32.const 22 local.get $source_len i32.add)
 
-  (func $er_ui_gallery_source_path_len_at (export "er_ui_gallery_source_path_len_at") (param $index i32) (result i32)
+  (func $er_ui_gallery_source_path_len_at  (param $index i32) (result i32)
     (local $source_len i32)
     i32.const 66400 local.get $index call $er_ui_gallery_table_u8 local.tee $source_len i32.const 0 i32.lt_s
     if i32.const -1 return end
     i32.const 22 local.get $source_len i32.add)
 
-  (func $er_ui_gallery_name_copy (export "er_ui_gallery_name_copy") (param $index i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_gallery_name_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
     i32.const 66700 i32.const 67200 i32.const 66200 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
-  (func $er_ui_gallery_slug_copy (export "er_ui_gallery_slug_copy") (param $index i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_gallery_slug_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
     i32.const 67400 i32.const 67900 i32.const 66300 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
-  (func $er_ui_gallery_source_component_copy (export "er_ui_gallery_source_component_copy") (param $index i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_gallery_source_component_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
     i32.const 68100 i32.const 68600 i32.const 66400 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
-  (func $er_ui_gallery_edge_builder_copy (export "er_ui_gallery_edge_builder_copy") (param $index i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_gallery_edge_builder_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
     i32.const 68800 i32.const 69600 i32.const 66500 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
-  (func $er_ui_gallery_component_path_copy (export "er_ui_gallery_component_path_copy") (param $index i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_gallery_component_path_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
     i32.const 69800 i32.const 71300 i32.const 66600 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
-  (func $er_ui_gallery_source_path_copy (export "er_ui_gallery_source_path_copy") (param $index i32) (param $out i32) (param $cap i32) (result i32)
+  (func $er_ui_gallery_source_path_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
     (local $source_len i32) (local $total i32) (local $source_off i32)
     local.get $index i32.const 60 i32.ge_u local.get $out i32.eqz i32.or
     if i32.const -1 return end
@@ -27711,21 +28167,21 @@
     local.get $out i32.const 18 i32.add local.get $source_len i32.add i32.const 71532 i32.const 4 memory.copy
     local.get $total)
 
-  (func $er_ui_gallery_index_by_slug_bytes (export "er_ui_gallery_index_by_slug_bytes") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_gallery_index_by_slug_bytes  (param $ptr i32) (param $len i32) (result i32)
     i32.const 67400 i32.const 67900 i32.const 66300 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
 
-  (func $er_ui_gallery_index_by_slug (export "er_ui_gallery_index_by_slug") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_gallery_index_by_slug  (param $ptr i32) (param $len i32) (result i32)
     i32.const 67400 i32.const 67900 i32.const 66300 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
 
-  (func $er_ui_gallery_index_by_source_component_bytes (export "er_ui_gallery_index_by_source_component_bytes") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_gallery_index_by_source_component_bytes  (param $ptr i32) (param $len i32) (result i32)
     i32.const 68100 i32.const 68600 i32.const 66400 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
 
-  (func $er_ui_gallery_index_by_source_component (export "er_ui_gallery_index_by_source_component") (param $ptr i32) (param $len i32) (result i32)
+  (func $er_ui_gallery_index_by_source_component  (param $ptr i32) (param $len i32) (result i32)
     i32.const 68100 i32.const 68600 i32.const 66400 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
-  (func $er_ui_gallery_selected_preview_surface_h (export "er_ui_gallery_selected_preview_surface_h") (result f32) f32.const 266)
-  (func $er_ui_gallery_selected_preview_compact_surface_h (export "er_ui_gallery_selected_preview_compact_surface_h") (result f32) f32.const 320)
-  (func $er_ui_gallery_catalog_preview_h (export "er_ui_gallery_catalog_preview_h") (result f32) f32.const 38)
-  (func $er_ui_gallery_catalog_card_pad (export "er_ui_gallery_catalog_card_pad") (result f32) f32.const 14)
+  (func $er_ui_gallery_selected_preview_surface_h  (result f32) f32.const 266)
+  (func $er_ui_gallery_selected_preview_compact_surface_h  (result f32) f32.const 320)
+  (func $er_ui_gallery_catalog_preview_h  (result f32) f32.const 38)
+  (func $er_ui_gallery_catalog_card_pad  (result f32) f32.const 14)
 
   (func $er_ui_gallery_split_left_rects (param $bounds i32) (param $width f32) (param $gap f32) (param $out i32) (result i32)
     (local $first_w f32) (local $rest_x f32)
@@ -27736,15 +28192,15 @@
     local.get $out local.get $bounds f32.load local.get $bounds i32.const 4 i32.add f32.load local.get $first_w local.get $bounds i32.const 12 i32.add f32.load call $rect_store drop
     local.get $out i32.const 16 i32.add local.get $rest_x local.get $bounds i32.const 4 i32.add f32.load local.get $bounds f32.load local.get $bounds i32.const 8 i32.add f32.load f32.add local.get $rest_x f32.sub f32.const 1 call $max_f32 local.get $bounds i32.const 12 i32.add f32.load call $rect_store)
 
-  (func $er_ui_gallery_selected_is_compact (export "er_ui_gallery_selected_is_compact") (param $bounds i32) (result i32)
+  (func $er_ui_gallery_selected_is_compact  (param $bounds i32) (result i32)
     local.get $bounds i32.eqz
     if i32.const 0 return end
     local.get $bounds i32.const 8 i32.add f32.load f32.const 36 f32.sub f32.const 720 f32.lt)
 
-  (func $er_ui_gallery_selected_inset_bounds (export "er_ui_gallery_selected_inset_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_selected_inset_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds local.get $out f32.const 18 call $er_ui_rect_inset_uniform)
 
-  (func $er_ui_gallery_selected_part_bounds (export "er_ui_gallery_selected_part_bounds") (param $bounds i32) (param $part i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_selected_part_bounds  (param $bounds i32) (param $part i32) (param $out i32) (result i32)
     (local $in_x f32) (local $in_y f32) (local $in_w f32) (local $in_h f32)
     (local $first_w f32) (local $gap f32) (local $second_x f32) (local $second_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
@@ -27783,12 +28239,12 @@
     if local.get $out local.get $second_x local.get $in_y f32.const 298 f32.add local.get $second_w local.get $in_h f32.const 298 f32.sub call $rect_store return end
     i32.const 0)
 
-  (func $er_ui_gallery_opened_preview_inner_bounds (export "er_ui_gallery_opened_preview_inner_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_opened_preview_inner_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 18 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 72 f32.add local.get $bounds i32.const 8 i32.add f32.load f32.const 36 f32.sub local.get $bounds i32.const 12 i32.add f32.load f32.const 92 f32.sub call $rect_store)
 
-  (func $er_ui_gallery_opened_preview_slot_bounds (export "er_ui_gallery_opened_preview_slot_bounds") (param $bounds i32) (param $slot i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_opened_preview_slot_bounds  (param $bounds i32) (param $slot i32) (param $out i32) (result i32)
     (local $x f32) (local $y f32) (local $w f32) (local $h f32)
     (local $main_h f32) (local $second_h f32) (local $first_w f32) (local $rest_x f32) (local $rest_w f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or local.get $slot i32.const 2 i32.gt_u i32.or
@@ -27817,13 +28273,13 @@
     if local.get $out local.get $rest_x local.get $y local.get $rest_w local.get $second_h call $rect_store return end
     local.get $out local.get $rest_x local.get $y local.get $second_h f32.add f32.const 14 f32.add local.get $rest_w local.get $second_h call $rect_store)
 
-  (func $er_ui_gallery_preview_slot_content_bounds (export "er_ui_gallery_preview_slot_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_preview_slot_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds local.get $out f32.const 12 f32.const 32 f32.const 12 f32.const 12 call $er_ui_rect_inset_ltrb)
 
-  (func $er_ui_gallery_api_label_h (export "er_ui_gallery_api_label_h") (result f32) f32.const 14)
-  (func $er_ui_gallery_api_value_line_h (export "er_ui_gallery_api_value_line_h") (result f32) f32.const 16)
-  (func $er_ui_gallery_api_value_avg_w (export "er_ui_gallery_api_value_avg_w") (result f32) f32.const 7.8)
-  (func $er_ui_gallery_api_value_max_lines (export "er_ui_gallery_api_value_max_lines") (result i32) i32.const 2)
+  (func $er_ui_gallery_api_label_h  (result f32) f32.const 14)
+  (func $er_ui_gallery_api_value_line_h  (result f32) f32.const 16)
+  (func $er_ui_gallery_api_value_avg_w  (result f32) f32.const 7.8)
+  (func $er_ui_gallery_api_value_max_lines  (result i32) i32.const 2)
 
   (func $er_ui_gallery_api_len_for_field (param $index i32) (param $field i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
@@ -27836,7 +28292,7 @@
     if i32.const 66500 local.get $index i32.add i32.load8_u return end
     i32.const -1)
 
-  (func $er_ui_gallery_api_wrapped_line_count_for_len (export "er_ui_gallery_api_wrapped_line_count_for_len") (param $value_len i32) (param $width f32) (result i32)
+  (func $er_ui_gallery_api_wrapped_line_count_for_len  (param $value_len i32) (param $width f32) (result i32)
     (local $cap i32) (local $lines i32)
     local.get $value_len i32.eqz
     if i32.const 0 return end
@@ -27846,24 +28302,24 @@
     if i32.const 2 return end
     local.get $lines)
 
-  (func $er_ui_gallery_api_value_height_for_len (export "er_ui_gallery_api_value_height_for_len") (param $value_len i32) (param $width f32) (result f32)
+  (func $er_ui_gallery_api_value_height_for_len  (param $value_len i32) (param $width f32) (result f32)
     local.get $value_len local.get $width call $er_ui_gallery_api_wrapped_line_count_for_len f32.convert_i32_u f32.const 16 f32.mul f32.const 16 call $max_f32)
 
-  (func $er_ui_gallery_api_field_height_for_len (export "er_ui_gallery_api_field_height_for_len") (param $value_len i32) (param $width f32) (result f32)
+  (func $er_ui_gallery_api_field_height_for_len  (param $value_len i32) (param $width f32) (result f32)
     f32.const 20 local.get $value_len local.get $width call $er_ui_gallery_api_value_height_for_len f32.add)
 
-  (func $er_ui_gallery_api_field_height_for_index (export "er_ui_gallery_api_field_height_for_index") (param $index i32) (param $field i32) (param $width f32) (result f32)
+  (func $er_ui_gallery_api_field_height_for_index  (param $index i32) (param $field i32) (param $width f32) (result f32)
     (local $value_len i32)
     local.get $index local.get $field call $er_ui_gallery_api_len_for_field local.tee $value_len i32.const 0 i32.lt_s
     if f32.const -1 return end
     local.get $value_len local.get $width call $er_ui_gallery_api_field_height_for_len)
 
-  (func $er_ui_gallery_api_content_bounds (export "er_ui_gallery_api_content_bounds") (param $bounds i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_api_content_bounds  (param $bounds i32) (param $out i32) (result i32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $bounds f32.load f32.const 18 f32.add local.get $bounds i32.const 4 i32.add f32.load f32.const 50 f32.add local.get $bounds i32.const 8 i32.add f32.load f32.const 36 f32.sub f32.const 1 call $max_f32 local.get $bounds i32.const 12 i32.add f32.load f32.const 50 f32.sub f32.const 1 call $max_f32 call $rect_store)
 
-  (func $er_ui_gallery_api_field_bounds (export "er_ui_gallery_api_field_bounds") (param $bounds i32) (param $index i32) (param $field i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_api_field_bounds  (param $bounds i32) (param $index i32) (param $field i32) (param $out i32) (result i32)
     (local $x f32) (local $y f32) (local $w f32) (local $h f32)
     (local $h0 f32) (local $h1 f32)
     local.get $bounds i32.eqz local.get $out i32.eqz i32.or local.get $field i32.const 2 i32.gt_u i32.or
@@ -27884,24 +28340,24 @@
       local.get $y local.get $h1 f32.add f32.const 12 f32.add local.set $y
     end
     local.get $out local.get $x local.get $y local.get $w local.get $h call $rect_store)
-  (func $er_ui_gallery_catalog_intro_title_bounds (export "er_ui_gallery_catalog_intro_title_bounds") (param $intro i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_intro_title_bounds  (param $intro i32) (param $out i32) (result i32)
     local.get $intro i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $intro f32.load local.get $intro i32.const 4 i32.add f32.load local.get $intro i32.const 8 i32.add f32.load f32.const 22 call $rect_store)
 
-  (func $er_ui_gallery_catalog_intro_detail_bounds (export "er_ui_gallery_catalog_intro_detail_bounds") (param $intro i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_intro_detail_bounds  (param $intro i32) (param $out i32) (result i32)
     local.get $intro i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $intro f32.load local.get $intro i32.const 4 i32.add f32.load f32.const 32 f32.add local.get $intro i32.const 8 i32.add f32.load f32.const 42 call $rect_store)
 
-  (func $er_ui_gallery_catalog_selected_bounds (export "er_ui_gallery_catalog_selected_bounds") (param $section i32) (param $has_selected i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_selected_bounds  (param $section i32) (param $has_selected i32) (param $out i32) (result i32)
     (local $selected_h f32)
     local.get $section i32.eqz local.get $out i32.eqz i32.or local.get $has_selected i32.eqz i32.or
     if i32.const 0 return end
     local.get $section i32.const 8 i32.add f32.load call $er_ui_gallery_selected_component_height local.set $selected_h
     local.get $out local.get $section f32.load local.get $section i32.const 4 i32.add f32.load local.get $section i32.const 8 i32.add f32.load local.get $selected_h call $rect_store)
 
-  (func $er_ui_gallery_catalog_intro_bounds (export "er_ui_gallery_catalog_intro_bounds") (param $section i32) (param $has_selected i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_intro_bounds  (param $section i32) (param $has_selected i32) (param $out i32) (result i32)
     (local $y f32)
     local.get $section i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27912,7 +28368,7 @@
     end
     local.get $out local.get $section f32.load local.get $y local.get $section i32.const 8 i32.add f32.load f32.const 86 call $rect_store)
 
-  (func $er_ui_gallery_catalog_grid_bounds (export "er_ui_gallery_catalog_grid_bounds") (param $section i32) (param $has_selected i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_grid_bounds  (param $section i32) (param $has_selected i32) (param $out i32) (result i32)
     (local $y f32)
     local.get $section i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27923,7 +28379,7 @@
     end
     local.get $out local.get $section f32.load local.get $y local.get $section i32.const 8 i32.add f32.load local.get $section i32.const 12 i32.add f32.load local.get $y local.get $section i32.const 4 i32.add f32.load f32.sub f32.sub f32.const 1 call $max_f32 call $rect_store)
 
-  (func $er_ui_gallery_catalog_grid_item_bounds (export "er_ui_gallery_catalog_grid_item_bounds") (param $grid i32) (param $columns i32) (param $gap f32) (param $index i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_grid_item_bounds  (param $grid i32) (param $columns i32) (param $gap f32) (param $index i32) (param $out i32) (result i32)
     (local $cols i32) (local $col i32) (local $row i32) (local $item_w f32)
     local.get $grid i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27938,10 +28394,10 @@
     f32.const 148
     call $rect_store)
 
-  (func $er_ui_gallery_catalog_card_inset_bounds (export "er_ui_gallery_catalog_card_inset_bounds") (param $card i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_card_inset_bounds  (param $card i32) (param $out i32) (result i32)
     local.get $card local.get $out f32.const 14 call $er_ui_rect_inset_uniform)
 
-  (func $er_ui_gallery_catalog_card_source_bounds (export "er_ui_gallery_catalog_card_source_bounds") (param $card i32) (param $selected i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_card_source_bounds  (param $card i32) (param $selected i32) (param $out i32) (result i32)
     (local $in_x f32) (local $in_y f32) (local $in_w f32) (local $source_w f32)
     local.get $card i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
@@ -27951,18 +28407,18 @@
     local.get $selected if (result f32) f32.const 94 else f32.const 86.5 end f32.const 82 call $max_f32 local.get $in_w call $min_f32 local.set $source_w
     local.get $out local.get $in_x local.get $in_w f32.add local.get $source_w f32.sub local.get $in_y f32.const 1 f32.sub local.get $source_w f32.const 24 call $rect_store)
 
-  (func $er_ui_gallery_catalog_card_builder_bounds (export "er_ui_gallery_catalog_card_builder_bounds") (param $card i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_card_builder_bounds  (param $card i32) (param $out i32) (result i32)
     local.get $card i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $card f32.load f32.const 14 f32.add local.get $card i32.const 4 i32.add f32.load f32.const 62 f32.add local.get $card i32.const 8 i32.add f32.load f32.const 28 f32.sub f32.const 16 call $rect_store)
 
-  (func $er_ui_gallery_catalog_card_preview_bounds (export "er_ui_gallery_catalog_card_preview_bounds") (param $card i32) (param $out i32) (result i32)
+  (func $er_ui_gallery_catalog_card_preview_bounds  (param $card i32) (param $out i32) (result i32)
     local.get $card i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $card f32.load f32.const 14 f32.add local.get $card i32.const 4 i32.add f32.load f32.const 90 f32.add local.get $card i32.const 8 i32.add f32.load f32.const 28 f32.sub f32.const 38 call $rect_store)
 
-  (func $er_ui_gallery_surface_variant_panel (export "er_ui_gallery_surface_variant_panel") (result i32) i32.const 0)
-  (func $er_ui_gallery_surface_variant_elevated (export "er_ui_gallery_surface_variant_elevated") (result i32) i32.const 1)
+  (func $er_ui_gallery_surface_variant_panel  (result i32) i32.const 0)
+  (func $er_ui_gallery_surface_variant_elevated  (result i32) i32.const 1)
 
   (func $er_ui_gallery_rect_contains_exclusive_local (param $rect i32) (param $x f32) (param $y f32) (result i32)
     local.get $rect i32.eqz if i32.const 0 return end
@@ -27971,15 +28427,15 @@
     local.get $x local.get $rect f32.load local.get $rect i32.const 8 i32.add f32.load f32.add f32.lt i32.and
     local.get $y local.get $rect i32.const 4 i32.add f32.load local.get $rect i32.const 12 i32.add f32.load f32.add f32.lt i32.and)
 
-  (func $er_ui_gallery_hover_enabled (export "er_ui_gallery_hover_enabled") (param $hover_x f32) (param $hover_y f32) (result i32)
+  (func $er_ui_gallery_hover_enabled  (param $hover_x f32) (param $hover_y f32) (result i32)
     local.get $hover_x f32.const 0 f32.ge local.get $hover_y f32.const 0 f32.ge i32.and)
 
-  (func $er_ui_gallery_card_hovered (export "er_ui_gallery_card_hovered") (param $card i32) (param $hover_x f32) (param $hover_y f32) (result i32)
+  (func $er_ui_gallery_card_hovered  (param $card i32) (param $hover_x f32) (param $hover_y f32) (result i32)
     local.get $hover_x local.get $hover_y call $er_ui_gallery_hover_enabled i32.eqz
     if i32.const 0 return end
     local.get $card local.get $hover_x local.get $hover_y call $er_ui_gallery_rect_contains_exclusive_local)
 
-  (func $er_ui_gallery_catalog_card_surface_variant (export "er_ui_gallery_catalog_card_surface_variant") (param $card i32) (param $selected i32) (param $hover_x f32) (param $hover_y f32) (result i32)
+  (func $er_ui_gallery_catalog_card_surface_variant  (param $card i32) (param $selected i32) (param $hover_x f32) (param $hover_y f32) (result i32)
     local.get $selected
     if i32.const 1 return end
     local.get $card local.get $hover_x local.get $hover_y call $er_ui_gallery_card_hovered
@@ -28055,47 +28511,47 @@
   (data (i32.const 73448) "sparkles")
   (data (i32.const 73472) "Yes. It follows the pattern.")
 
-  (func $er_ui_gallery_preview_strategy_primitive (export "er_ui_gallery_preview_strategy_primitive") (result i32) i32.const 0)
-  (func $er_ui_gallery_preview_strategy_badge_variants (export "er_ui_gallery_preview_strategy_badge_variants") (result i32) i32.const 1)
-  (func $er_ui_gallery_preview_strategy_button_variants (export "er_ui_gallery_preview_strategy_button_variants") (result i32) i32.const 2)
+  (func $er_ui_gallery_preview_strategy_primitive  (result i32) i32.const 0)
+  (func $er_ui_gallery_preview_strategy_badge_variants  (result i32) i32.const 1)
+  (func $er_ui_gallery_preview_strategy_button_variants  (result i32) i32.const 2)
 
-  (func $er_ui_gallery_preview_kind_badge (export "er_ui_gallery_preview_kind_badge") (result i32) i32.const 5)
-  (func $er_ui_gallery_preview_kind_button (export "er_ui_gallery_preview_kind_button") (result i32) i32.const 7)
-  (func $er_ui_gallery_preview_kind_data_table (export "er_ui_gallery_preview_kind_data_table") (result i32) i32.const 17)
-  (func $er_ui_gallery_preview_kind_table (export "er_ui_gallery_preview_kind_table") (result i32) i32.const 52)
-  (func $er_ui_gallery_preview_kind_sonner (export "er_ui_gallery_preview_kind_sonner") (result i32) i32.const 50)
-  (func $er_ui_gallery_preview_kind_native_select (export "er_ui_gallery_preview_kind_native_select") (result i32) i32.const 35)
+  (func $er_ui_gallery_preview_kind_badge  (result i32) i32.const 5)
+  (func $er_ui_gallery_preview_kind_button  (result i32) i32.const 7)
+  (func $er_ui_gallery_preview_kind_data_table  (result i32) i32.const 17)
+  (func $er_ui_gallery_preview_kind_table  (result i32) i32.const 52)
+  (func $er_ui_gallery_preview_kind_sonner  (result i32) i32.const 50)
+  (func $er_ui_gallery_preview_kind_native_select  (result i32) i32.const 35)
 
   (func $er_ui_gallery_preview_table_u8 (param $base i32) (param $kind i32) (result i32)
     local.get $kind i32.const 59 i32.ge_u
     if i32.const -1 return end
     local.get $base local.get $kind i32.add i32.load8_u)
 
-  (func $er_ui_gallery_preview_strategy_for_kind (export "er_ui_gallery_preview_strategy_for_kind") (param $kind i32) (result i32)
+  (func $er_ui_gallery_preview_strategy_for_kind  (param $kind i32) (result i32)
     i32.const 71700 local.get $kind call $er_ui_gallery_preview_table_u8)
 
-  (func $er_ui_gallery_preview_strategy_for_catalog_index (export "er_ui_gallery_preview_strategy_for_catalog_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_preview_strategy_for_catalog_index  (param $index i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
     i32.const 71700 i32.const 66100 local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
 
-  (func $er_ui_gallery_preview_component_kind_for_kind (export "er_ui_gallery_preview_component_kind_for_kind") (param $kind i32) (result i32)
+  (func $er_ui_gallery_preview_component_kind_for_kind  (param $kind i32) (result i32)
     i32.const 71600 local.get $kind call $er_ui_gallery_preview_table_u8)
 
-  (func $er_ui_gallery_preview_component_kind_for_catalog_index (export "er_ui_gallery_preview_component_kind_for_catalog_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_preview_component_kind_for_catalog_index  (param $index i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
     i32.const 71600 i32.const 66100 local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
 
-  (func $er_ui_gallery_preview_uses_control_id_for_kind (export "er_ui_gallery_preview_uses_control_id_for_kind") (param $kind i32) (result i32)
+  (func $er_ui_gallery_preview_uses_control_id_for_kind  (param $kind i32) (result i32)
     i32.const 71800 local.get $kind call $er_ui_gallery_preview_table_u8)
 
-  (func $er_ui_gallery_preview_uses_control_id_for_catalog_index (export "er_ui_gallery_preview_uses_control_id_for_catalog_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_preview_uses_control_id_for_catalog_index  (param $index i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
     i32.const 71800 i32.const 66100 local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
 
-  (func $er_ui_gallery_preview_variant_count_for_kind (export "er_ui_gallery_preview_variant_count_for_kind") (param $kind i32) (result i32)
+  (func $er_ui_gallery_preview_variant_count_for_kind  (param $kind i32) (result i32)
     (local $strategy i32)
     local.get $kind call $er_ui_gallery_preview_strategy_for_kind local.tee $strategy i32.const 0 i32.lt_s
     if i32.const -1 return end
@@ -28103,15 +28559,15 @@
     if i32.const 1 return end
     i32.const 3)
 
-  (func $er_ui_gallery_preview_variant_count_for_catalog_index (export "er_ui_gallery_preview_variant_count_for_catalog_index") (param $index i32) (result i32)
+  (func $er_ui_gallery_preview_variant_count_for_catalog_index  (param $index i32) (result i32)
     (local $kind i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
     i32.const 66100 local.get $index i32.add i32.load8_u local.tee $kind call $er_ui_gallery_preview_variant_count_for_kind)
 
-  (func $er_ui_gallery_preview_variant_gap (export "er_ui_gallery_preview_variant_gap") (result f32) f32.const 6)
+  (func $er_ui_gallery_preview_variant_gap  (result f32) f32.const 6)
 
-  (func $er_ui_gallery_preview_variant_slot_width (export "er_ui_gallery_preview_variant_slot_width") (param $kind i32) (param $variant i32) (result f32)
+  (func $er_ui_gallery_preview_variant_slot_width  (param $kind i32) (param $variant i32) (result f32)
     local.get $kind i32.const 5 i32.eq
     if
       local.get $variant i32.eqz
@@ -28134,7 +28590,7 @@
     end
     f32.const -1)
 
-  (func $er_ui_gallery_preview_variant_id (export "er_ui_gallery_preview_variant_id") (param $kind i32) (param $base_id i32) (param $variant i32) (result i32)
+  (func $er_ui_gallery_preview_variant_id  (param $kind i32) (param $base_id i32) (param $variant i32) (result i32)
     local.get $kind i32.const 7 i32.eq
     if
       local.get $variant i32.const 3 i32.ge_u
@@ -28145,7 +28601,7 @@
     if local.get $base_id return end
     i32.const -1)
 
-  (func $er_ui_gallery_preview_variant_tag (export "er_ui_gallery_preview_variant_tag") (param $kind i32) (param $variant i32) (result i32)
+  (func $er_ui_gallery_preview_variant_tag  (param $kind i32) (param $variant i32) (result i32)
     local.get $kind i32.const 5 i32.eq
     if
       local.get $variant i32.eqz
@@ -28168,49 +28624,49 @@
     end
     i32.const -1)
 
-  (func $er_ui_gallery_preview_strategy (export "er_ui_gallery_preview_strategy") (param $kind i32) (result i32)
+  (func $er_ui_gallery_preview_strategy  (param $kind i32) (result i32)
     local.get $kind call $er_ui_gallery_preview_strategy_for_kind)
 
-  (func $er_ui_gallery_preview_component_kind (export "er_ui_gallery_preview_component_kind") (param $kind i32) (result i32)
+  (func $er_ui_gallery_preview_component_kind  (param $kind i32) (result i32)
     local.get $kind call $er_ui_gallery_preview_component_kind_for_kind)
 
-  (func $er_ui_gallery_badge_variant_count (export "er_ui_gallery_badge_variant_count") (result i32) i32.const 3)
-  (func $er_ui_gallery_button_variant_count (export "er_ui_gallery_button_variant_count") (result i32) i32.const 3)
+  (func $er_ui_gallery_badge_variant_count  (result i32) i32.const 3)
+  (func $er_ui_gallery_button_variant_count  (result i32) i32.const 3)
 
-  (func $er_ui_gallery_badge_variant_slot_w (export "er_ui_gallery_badge_variant_slot_w") (param $variant i32) (result f32)
+  (func $er_ui_gallery_badge_variant_slot_w  (param $variant i32) (result f32)
     i32.const 5 local.get $variant call $er_ui_gallery_preview_variant_slot_width)
 
-  (func $er_ui_gallery_button_variant_slot_w (export "er_ui_gallery_button_variant_slot_w") (param $variant i32) (result f32)
+  (func $er_ui_gallery_button_variant_slot_w  (param $variant i32) (result f32)
     i32.const 7 local.get $variant call $er_ui_gallery_preview_variant_slot_width)
 
-  (func $er_ui_gallery_badge_variant_tag (export "er_ui_gallery_badge_variant_tag") (param $variant i32) (result i32)
+  (func $er_ui_gallery_badge_variant_tag  (param $variant i32) (result i32)
     i32.const 5 local.get $variant call $er_ui_gallery_preview_variant_tag)
 
-  (func $er_ui_gallery_button_variant_tag (export "er_ui_gallery_button_variant_tag") (param $variant i32) (result i32)
+  (func $er_ui_gallery_button_variant_tag  (param $variant i32) (result i32)
     i32.const 7 local.get $variant call $er_ui_gallery_preview_variant_tag)
 
-  (func $er_ui_gallery_button_variant_id (export "er_ui_gallery_button_variant_id") (param $base_id i32) (param $variant i32) (result i32)
+  (func $er_ui_gallery_button_variant_id  (param $base_id i32) (param $variant i32) (result i32)
     i32.const 7 local.get $base_id local.get $variant call $er_ui_gallery_preview_variant_id)
 
-  (func $er_ui_gallery_catalog_preview_slot_id (export "er_ui_gallery_catalog_preview_slot_id") (param $index i32) (param $slot i32) (result i32)
+  (func $er_ui_gallery_catalog_preview_slot_id  (param $index i32) (param $slot i32) (result i32)
     local.get $index i32.const 60 i32.ge_u local.get $slot i32.const 32 i32.ge_u i32.or
     if i32.const -1 return end
     i32.const 23000 local.get $index i32.const 32 i32.mul i32.add local.get $slot i32.add)
 
-  (func $er_ui_gallery_selected_preview_slot_id (export "er_ui_gallery_selected_preview_slot_id") (param $index i32) (param $slot i32) (result i32)
+  (func $er_ui_gallery_selected_preview_slot_id  (param $index i32) (param $slot i32) (result i32)
     local.get $index i32.const 60 i32.ge_u local.get $slot i32.const 32 i32.ge_u i32.or
     if i32.const -1 return end
     i32.const 25000 local.get $index i32.const 32 i32.mul i32.add local.get $slot i32.add)
 
-  (func $er_ui_gallery_preview_default_aspect_ratio_w (export "er_ui_gallery_preview_default_aspect_ratio_w") (result i32) i32.const 16)
-  (func $er_ui_gallery_preview_default_aspect_ratio_h (export "er_ui_gallery_preview_default_aspect_ratio_h") (result i32) i32.const 9)
-  (func $er_ui_gallery_preview_default_calendar_day (export "er_ui_gallery_preview_default_calendar_day") (result i32) i32.const 25)
-  (func $er_ui_gallery_preview_default_pagination_page (export "er_ui_gallery_preview_default_pagination_page") (result i32) i32.const 1)
-  (func $er_ui_gallery_preview_default_progress_value (export "er_ui_gallery_preview_default_progress_value") (result f32) f32.const 0.62)
-  (func $er_ui_gallery_preview_default_slider_value (export "er_ui_gallery_preview_default_slider_value") (result f32) f32.const 0.68)
-  (func $er_ui_gallery_preview_default_resizable_ratio (export "er_ui_gallery_preview_default_resizable_ratio") (result f32) f32.const 0.58)
+  (func $er_ui_gallery_preview_default_aspect_ratio_w  (result i32) i32.const 16)
+  (func $er_ui_gallery_preview_default_aspect_ratio_h  (result i32) i32.const 9)
+  (func $er_ui_gallery_preview_default_calendar_day  (result i32) i32.const 25)
+  (func $er_ui_gallery_preview_default_pagination_page  (result i32) i32.const 1)
+  (func $er_ui_gallery_preview_default_progress_value  (result f32) f32.const 0.62)
+  (func $er_ui_gallery_preview_default_slider_value  (result f32) f32.const 0.68)
+  (func $er_ui_gallery_preview_default_resizable_ratio  (result f32) f32.const 0.58)
 
-  (func $er_ui_gallery_preview_build_basic (export "er_ui_gallery_preview_build_basic") (param $kind i32) (param $base i32) (param $cap i32) (param $id i32) (result i32)
+  (func $er_ui_gallery_preview_build_basic  (param $kind i32) (param $base i32) (param $cap i32) (param $id i32) (result i32)
     local.get $kind i32.const 0 i32.eq
     if local.get $base local.get $cap local.get $id i32.const 71900 i32.const 17 i32.const 73472 i32.const 28 i32.const 1 call $er_ui_wasm_new_accordion_full return end
     local.get $kind i32.const 1 i32.eq
@@ -28332,7 +28788,7 @@
     if local.get $base local.get $cap local.get $id i32.const 73352 i32.const 8 i32.const 73376 i32.const 14 call $er_ui_wasm_new_tooltip_full return end
     i32.const 0)
 
-  (func $er_ui_gallery_preview_build_basic_for_catalog_index (export "er_ui_gallery_preview_build_basic_for_catalog_index") (param $index i32) (param $base i32) (param $cap i32) (result i32)
+  (func $er_ui_gallery_preview_build_basic_for_catalog_index  (param $index i32) (param $base i32) (param $cap i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const 0 return end
     i32.const 66100 local.get $index i32.add i32.load8_u local.get $base local.get $cap i32.const 23000 local.get $index i32.const 32 i32.mul i32.add call $er_ui_gallery_preview_build_basic)

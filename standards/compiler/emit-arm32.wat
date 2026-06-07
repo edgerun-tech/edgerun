@@ -2,9 +2,9 @@
 
   (func $emit_arm32_byte (param $b i32)
     (local $p i32)
-    (local.set $p (i32.add (global.get $JIT_CACHE) (i32.load (global.get $JS_CODE_PTR))))
+    (local.set $p (i32.add (global.get $JIT_CACHE) (i32.load (global.get $JS_CODE_PTR_arm32))))
     (i32.store8 (local.get $p) (local.get $b))
-    (i32.store (global.get $JS_CODE_PTR) (i32.add (i32.load (global.get $JS_CODE_PTR)) (i32.const 1)))
+    (i32.store (global.get $JS_CODE_PTR_arm32) (i32.add (i32.load (global.get $JS_CODE_PTR_arm32)) (i32.const 1)))
   )
 
   (func $emit_arm32_dword (param $v i32)
@@ -731,12 +731,12 @@
   ;; BL with target VA: compute relative offset and emit BL
   (func $emit_arm32_bl_rel (param $target_va i32)
     (local $saved i32)
-    (local.set $saved (i32.load (global.get $JS_CODE_PTR)))
+    (local.set $saved (i32.load (global.get $JS_CODE_PTR_arm32)))
     (call $emit_arm32_bl
       (i32.sub
         (local.get $target_va)
         (i32.add
-          (i32.add (global.get $TEXT_VA) (i32.sub (local.get $saved) (global.get $ELF_OUT_OFF)))
+          (i32.add (global.get $TEXT_VA_arm32) (i32.sub (local.get $saved) (global.get $ELF_OUT_OFF_arm32)))
           (i32.const 8))))
   )
 
@@ -813,7 +813,7 @@
     (call $emit_arm32_instr_movi (i32.const 0) (i32.const 1))
     (call $emit_arm32_instr_str_off (global.get $REG_R0) (global.get $REG_R8) (i32.const 16))
 
-    (call $emit_arm32_bl_rel (i32.add (global.get $TEXT_VA) (global.get $ELF_CODE_OFF)))
+    (call $emit_arm32_bl_rel (i32.add (global.get $TEXT_VA_arm32) (global.get $ELF_CODE_OFF_arm32)))
 
     (call $emit_arm32_instr_movi (i32.const 7) (global.get $LINUX_SYS_ARM32_EXIT))  ;; MOV R7, #1 (SYS_exit)
     (call $emit_arm32_instr (i32.const 0xEF000000))            ;; SVC #0
@@ -821,9 +821,9 @@
 
   ;; ── Copy compiled code from JIT cache to output ────────────────
 
-  (func $copy_compiled_code (param $src i32) (param $size i32) (param $dst_off i32)
+  (func $copy_compiled_code_arm32 (param $src i32) (param $size i32) (param $dst_off i32)
     (local $i i32) (local $dst i32)
-    (local.set $dst (i32.add (global.get $ELF_OUT_BUF) (local.get $dst_off)))
+    (local.set $dst (i32.add (global.get $ELF_OUT_BUF_arm32) (local.get $dst_off)))
     (local.set $i (i32.const 0))
     (block $done
       (loop $copy
@@ -854,23 +854,23 @@
   ;; Emit bare-metal stub (no headers). Returns stub size.
   (func $emit_arm32_bare_metal_stub (result i32)
     (local $stub_size i32) (local $current_off i32)
-    (call $emit_arm32_instr_movz_64 (i32.const 8) (i32.const 0) (i32.and (global.get $BSS_JITGLOBALS) (i32.const 0xFFFF)))
-    (call $emit_arm32_instr_movk_64 (i32.const 8) (i32.const 0) (i32.shr_u (global.get $BSS_JITGLOBALS) (i32.const 16)))
-    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_MEM) (i32.const 0xFFFF)))
-    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_MEM) (i32.const 16)))
+    (call $emit_arm32_instr_movz_64 (i32.const 8) (i32.const 0) (i32.and (global.get $BSS_JITGLOBALS_arm32) (i32.const 0xFFFF)))
+    (call $emit_arm32_instr_movk_64 (i32.const 8) (i32.const 0) (i32.shr_u (global.get $BSS_JITGLOBALS_arm32) (i32.const 16)))
+    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_MEM_arm32) (i32.const 0xFFFF)))
+    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_MEM_arm32) (i32.const 16)))
     (call $emit_arm32_instr_str_off (global.get $REG_R0) (i32.const 8) (i32.const 4))
-    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_LOCALS) (i32.const 0xFFFF)))
-    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_LOCALS) (i32.const 16)))
+    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_LOCALS_arm32) (i32.const 0xFFFF)))
+    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_LOCALS_arm32) (i32.const 16)))
     (call $emit_arm32_instr_str_off (global.get $REG_R0) (i32.const 8) (i32.const 0))
-    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_GLOBALS) (i32.const 0xFFFF)))
-    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_GLOBALS) (i32.const 16)))
+    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_GLOBALS_arm32) (i32.const 0xFFFF)))
+    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_GLOBALS_arm32) (i32.const 16)))
     (call $emit_arm32_instr_str_off (global.get $REG_R0) (i32.const 8) (i32.const 8))
-    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_TABLE) (i32.const 0xFFFF)))
-    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_TABLE) (i32.const 16)))
+    (call $emit_arm32_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_TABLE_arm32) (i32.const 0xFFFF)))
+    (call $emit_arm32_instr_movk_64 (i32.const 0) (i32.const 0) (i32.shr_u (global.get $BSS_TABLE_arm32) (i32.const 16)))
     (call $emit_arm32_instr_str_off (global.get $REG_R0) (i32.const 8) (i32.const 12))
     (call $emit_arm32_instr_movi (i32.const 0) (i32.const 1))
     (call $emit_arm32_instr_str_off (global.get $REG_R0) (i32.const 8) (i32.const 16))
-    (local.set $current_off (i32.sub (i32.load (global.get $JS_CODE_PTR)) (global.get $BIN_OUT_OFF)))
+    (local.set $current_off (i32.sub (i32.load (global.get $JS_CODE_PTR_arm32)) (global.get $BIN_OUT_OFF_arm32)))
     (local.set $stub_size (i32.add (local.get $current_off) (i32.const 20)))
     (call $emit_arm32_bl
       (i32.sub (local.get $stub_size) (i32.add (local.get $current_off) (i32.const 8))))
@@ -880,7 +880,7 @@
 
   ;; ── Copy code to binary output buffer ──────────────────────────
 
-  (func $copy_code_to (param $dst_buf i32) (param $code_size i32) (param $code_off i32)
+  (func $copy_code_to_arm32 (param $dst_buf i32) (param $code_size i32) (param $code_off i32)
     (local $i i32) (local $dst i32)
     (local.set $dst (i32.add (local.get $dst_buf) (local.get $code_off)))
     (local.set $i (i32.const 0))
@@ -924,24 +924,24 @@
   ;; ── JIT state helpers ─────────────────────────────────────────────
 
   (func $emit_arm32_jit_reset_state
-    (i32.store (global.get $JS_CODE_PTR) (i32.const 0))
-    (i32.store (global.get $JS_LABEL_DEPTH) (i32.const 0))
-    (i32.store (global.get $JS_FIXUP_COUNT) (i32.const 0))
-    (i32.store (global.get $JS_RETURN_EMITTED) (i32.const 0))
-    (i32.store (global.get $JS_STACK_DEPTH) (i32.const 0))
-    (i32.store (global.get $JS_MAX_STACK) (i32.const 0))
+    (i32.store (global.get $JS_CODE_PTR_arm32) (i32.const 0))
+    (i32.store (global.get $JS_LABEL_DEPTH_arm32) (i32.const 0))
+    (i32.store (global.get $JS_FIXUP_COUNT_arm32) (i32.const 0))
+    (i32.store (global.get $JS_RETURN_EMITTED_arm32) (i32.const 0))
+    (i32.store (global.get $JS_STACK_DEPTH_arm32) (i32.const 0))
+    (i32.store (global.get $JS_MAX_STACK_arm32) (i32.const 0))
   )
 
   (func $get_arm32_decoded_imm (param $dec_ptr i32) (param $offset i32) (result i32)
     (i32.load (i32.add (local.get $dec_ptr) (local.get $offset)))
   )
 
-  (func $get_arm32_compiled_code (export "get_compiled_code") (param $func_idx i32) (result i32 i32)
+  (func $get_arm32_compiled_code (export "get_compiled_code_arm32") (param $func_idx i32) (result i32 i32)
     (local $slot i32) (local $base i32)
     (local.set $slot (i32.and (local.get $func_idx) (i32.const 3)))
-    (local.set $base (i32.add (global.get $JIT_CACHE) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE))))
+    (local.set $base (i32.add (global.get $JIT_CACHE) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE_arm32))))
     (local.get $base)
-    (i32.sub (i32.load (global.get $JS_CODE_PTR)) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE)))
+    (i32.sub (i32.load (global.get $JS_CODE_PTR_arm32)) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE_arm32)))
   )
 
   ;; ── Convenience arithmetic/stack helpers ──────────────────────────
@@ -1337,14 +1337,14 @@
   (func $emit_arm32_maybe_push_x0
     (local $next_op i32)
     (local $next_imm0 i32)
-    (if (i32.eqz (global.get $RESULT_IN_X0))
+    (if (i32.eqz (global.get $RESULT_IN_X0_arm32))
       (then
-        (local.set $next_op (i32.load8_u (i32.add (global.get $CURRENT_DEC_PTR) (global.get $DEC_SZ))))
-        (local.set $next_imm0 (i32.load (i32.add (i32.add (global.get $CURRENT_DEC_PTR) (global.get $DEC_SZ)) (i32.const 4))))
+        (local.set $next_op (i32.load8_u (i32.add (global.get $CURRENT_DEC_PTR_arm32) (global.get $DEC_SZ))))
+        (local.set $next_imm0 (i32.load (i32.add (i32.add (global.get $CURRENT_DEC_PTR_arm32) (global.get $DEC_SZ)) (i32.const 4))))
         (if (i32.and (i32.or (i32.eq (local.get $next_op) (i32.const 0x21)) (i32.eq (local.get $next_op) (i32.const 0x22)))
                       (i32.le_u (local.get $next_imm0) (i32.const 1)))
           (then
-            (global.set $RESULT_IN_X0 (i32.const 1))
+            (global.set $RESULT_IN_X0_arm32 (i32.const 1))
           )
           (else
             (call $emit_arm32_push_r0)

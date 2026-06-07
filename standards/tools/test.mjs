@@ -387,6 +387,179 @@ const u32 = new Uint32Array(mem.buffer);
   check(emitSize > 0, `emit_wasm from WAT size=${emitSize}`);
 }
 
+// ── Test 11: Multi-function JIT compilation with local calls ──
+{
+  // Test setup: 2 functions, func0 calls func1, func1 returns 42
+  // Manually write decoded ops, type table, function table
+
+  // Type table at OFF_TYPES_BUF (0x00104): 1 type entry
+  // Type 0: param_count=0 (u16 at +128), result_count=1 (u16 at +136)
+  const TYPES_BUF = 0x00104;
+  const SZ_TYPE = 140;
+  u8[TYPES_BUF + 128] = 0;  u8[TYPES_BUF + 129] = 0;  // param_count = 0
+  u8[TYPES_BUF + 136] = 1;  u8[TYPES_BUF + 137] = 0;  // result_count = 1
+
+  // Function table at OFF_FUNCTIONS_BUF (0x04514): 2 entries
+  const FUNCS_BUF = 0x04514;
+  const SZ_FUNC = 16;
+  u32[FUNCS_BUF / 4 + 0] = 0;                // func 0: type_idx = 0
+  u32[FUNCS_BUF / 4 + 4] = 0;                // func 1: type_idx = 0
+
+  // Import count = 0 (no imported functions)
+  u32[0x4108 / 4] = 0;
+
+  // ── Decoded ops for func 0: call 1, return ──
+  const DECODED_OPS = 0xA0000;
+  const DEC_SZ = 32;
+  const u32_dops = new Uint32Array(mem.buffer, DECODED_OPS, 8);
+  u32_dops[0] = 0x00000010;  // opcode 0x10 (call) at byte 0
+  u32_dops[1] = 1;            // imm0 = func_idx 1
+  u32_dops[2] = 0;            // imm1 = 0
+  u32_dops[3] = 0;            // ...rest
+  u32_dops[4] = 0x0000000F;  // opcode 0x0F (return)
+  u32_dops[5] = 0;
+  u32_dops[6] = 0;
+  u32_dops[7] = 0;
+
+  // Reset code ptr to 0 (= start of JIT_CACHE at 0x100000)
+  u32[0] = 0;
+  // Reset fixup count (at address 2368 = 0x940)
+  u32[0x940 / 4] = 0;
+
+  // Compile func 0
+  const codeSize0 = wasm.jit_compile_x86_64(0);
+  check(codeSize0 > 0, `multi-jit: func0 compiled, codeSize=${codeSize0}`);
+  // Verify fixup was recorded
+  const fixCount = new Uint32Array(wasm.memory.buffer, 0x940, 1)[0];
+  check(fixCount === 1, `multi-jit: fixup count after func0 = ${fixCount} (expected 1)`);
+  const fixEntry = new Uint32Array(wasm.memory.buffer, 0x80800, 2);
+  check(fixEntry[1] === 1, `multi-jit: fixup target = ${fixEntry[1]} (expected 1)`);
+
+  // ── Decoded ops for func 1: i32.const 42, return ──
+  u32_dops[0] = 0x00000041;  // opcode 0x41 (i32.const)
+  u32_dops[1] = 42;           // imm0 = 42
+  u32_dops[2] = 0;            // imm1 = 0
+  u32_dops[3] = 0;
+  u32_dops[4] = 0x0000000F;  // opcode 0x0F (return)
+  u32_dops[5] = 0;
+  u32_dops[6] = 0;
+  u32_dops[7] = 0;
+
+  // Compile func 1 (code continues after func0)
+  const codeSize1 = wasm.jit_compile_x86_64(1);
+  check(codeSize1 > 0, `multi-jit: func1 compiled, codeSize=${codeSize1}`);
+
+  // Fix up local calls
+  wasm.fixup_calls_x86_64();
+
+  // Read the JIT cache to verify the call was patched
+  const JIT_CACHE = 0x100000;
+  const jitBytes = new Uint8Array(wasm.memory.buffer, JIT_CACHE, 64);
+  // func0 call rel32 is at offset 17 (prologue=4, push rbx/r12/r13=5,
+  // xor eax/mov r12/mov r13=8). After fixup, bytes 18-21 = rel32=13.
+  const rel32 = (jitBytes[18] | (jitBytes[19] << 8) | (jitBytes[20] << 16) | (jitBytes[21] << 24)) >>> 0;
+  const relSigned = rel32 > 0x7FFFFFFF ? rel32 - 0x100000000 : rel32;
+  check(jitBytes[17] === 0xE8, `multi-jit: call rel32 prefix = 0x${jitBytes[17].toString(16)}`);
+  check(relSigned > 0, `multi-jit: call rel32 = ${relSigned} (positive, forward call)`);
+
+  // Verify func_offset table has both entries
+  // After prologue (4 bytes), func0 offset = 4
+  const offTable = new Uint32Array(mem.buffer, 0x80000, 2);
+  check(offTable[0] === 4, `multi-jit: func0 offset table = ${offTable[0]} (expected 4)`);
+  check(offTable[1] === 35, `multi-jit: func1 offset table = ${offTable[1]} (expected 35)`);
+}
+
+// ── Test 12: Functional UI layout + render + hit-test ──
+{
+  // Construct a 3-node tree (1 root, 2 children) and test layout/render/hit
+  const TREE = 0x600000;
+  const LAYOUT_BUF = 0x610000;
+  const CMD_BUF = 0x620000;
+  const CMD_CAP = 65536;
+
+  // ── Build tree header ──
+  // Ensure memory has room up to 0x700000
+  while (mem.buffer.byteLength < 0x700000) {
+    // page-align growth request
+    const need = Math.ceil((0x700000 - mem.buffer.byteLength) / 65536);
+    wasm.memory.grow(need);
+  }
+  const u16 = new Uint16Array(mem.buffer);
+  const u8 = new Uint8Array(mem.buffer);
+
+  // Header (20 bytes)
+  u32[TREE / 4 + 0] = 0x49755245;          // magic "ERUI"
+  u32[TREE / 4 + 1] = 68;                   // used_len = 20 + 3*16
+  u16[TREE / 2 + 4] = 1;                    // version
+  u16[TREE / 2 + 5] = 0;                    // axis (column)
+  u16[TREE / 2 + 6] = 0;                    // gap
+  u16[TREE / 2 + 7] = 8;                    // padding
+  u16[TREE / 2 + 8] = 3;                    // node_count
+  u16[TREE / 2 + 9] = 1;                    // root_count
+
+  // Record 0 (root, container kind=0)
+  const R0 = TREE + 20;
+  u16[R0 / 2 + 0] = 0;   // kind (container)
+  u16[R0 / 2 + 1] = 0;   // ancestor_ref (0 = root)
+  u32[R0 / 4 + 1] = 1;   // id
+  u16[R0 / 2 + 4] = 0;   // first_ref
+  u16[R0 / 2 + 5] = 0;   // first_len
+  u16[R0 / 2 + 6] = 0;   // second_ref
+  u16[R0 / 2 + 7] = 0;   // second_len
+
+  // Record 1 (child of root)
+  const R1 = TREE + 36;
+  u16[R1 / 2 + 0] = 7;   // kind (label — has text, shows something)
+  u16[R1 / 2 + 1] = 1;   // ancestor_ref (parent = node 0)
+  u32[R1 / 4 + 1] = 2;   // id
+  u16[R1 / 2 + 4] = 0;   // first_ref (no string)
+  u16[R1 / 2 + 5] = 0;
+  u16[R1 / 2 + 6] = 0;
+  u16[R1 / 2 + 7] = 0;
+
+  // Record 2 (child of root)
+  const R2 = TREE + 52;
+  u16[R2 / 2 + 0] = 0;   // kind (container)
+  u16[R2 / 2 + 1] = 1;   // ancestor_ref (parent = node 0)
+  u32[R2 / 4 + 1] = 3;   // id
+  u16[R2 / 2 + 4] = 0;
+  u16[R2 / 2 + 5] = 0;
+  u16[R2 / 2 + 6] = 0;
+  u16[R2 / 2 + 7] = 0;
+
+  // ── Test layout ──
+  const layoutOk = wasm.er_ui_layout_set_buf(LAYOUT_BUF);
+  check(layoutOk === undefined, 'er_ui_layout_set_buf returned void');
+
+  const layoutResult = wasm.er_ui_layout(TREE, 68, 800, 600);
+  check(layoutResult === 3, `er_ui_layout returned ${layoutResult} (expected 3 nodes)`);
+
+  // Verify layout buffer data: each node gets 16 bytes [x, y, w, h]
+  const lb = new Float32Array(mem.buffer, LAYOUT_BUF, 12);
+  check(lb[0] >= 0 && lb[1] >= 0, `root position (${lb[0]}, ${lb[1]})`);
+  check(lb[2] > 0 && lb[3] > 0, `root size (${lb[2]}, ${lb[3]})`);
+
+  // ── Test render ──
+  const cmdCount = wasm.er_ui_render(TREE, 68, CMD_BUF, CMD_CAP, 0, 0, 800, 600);
+  check(cmdCount > 0, `er_ui_render returned ${cmdCount} commands`);
+
+  // Verify command format: each command is 48 bytes
+  // First command: kind at offset 0 (0=rect, 2=text)
+  const cmdKind = u32[CMD_BUF / 4];
+  check(cmdKind === 1 || cmdKind === 2, `first cmd kind=${cmdKind} (1=rect, 2=text)`);
+
+  // Verify total command bytes
+  const cmdBytes = cmdCount * 48;
+  check(cmdBytes > 0 && cmdBytes < CMD_CAP, `cmd bytes=${cmdBytes} within cap`);
+
+  // ── Test hit-test ──
+  const hitRoot = wasm.er_ui_layout_hit_test(10, 10, 3);
+  check(hitRoot >= 0, `hit-test (10,10) returned ${hitRoot} (>=0 = hit)`);
+
+  const hitMiss = wasm.er_ui_layout_hit_test(9999, 9999, 3);
+  check(hitMiss === -1, `hit-test (9999,9999) returned ${hitMiss} (-1 = miss)`);
+}
+
 // ── Summary ──
 const total = passed + failed;
 console.log(`\n  ${failed === 0 ? PASS + 'All' : FAIL + failed + '/' + total}${RST} ${failed === 0 ? 'passed' : 'failed'}\n`);

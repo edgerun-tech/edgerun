@@ -1528,8 +1528,65 @@
         (call $emit_x86_byte (i32.const 0x50))  ;; push rax
       )
       (else
-        ;; Local function — not yet supported (would need multi-function JIT)
-        (call $template_x86_unsupported (i32.const 0))
+        ;; ── Local function → emit call rel32 with fixup ─────────────
+        ;; Calling convention: r12 = param0, r13 = param1
+        ;; Caller saves/restores rbx, r12, r13 on x86-64 stack
+        (call $emit_x86_byte (i32.const 0x53))       ;; push rbx
+        (call $emit_x86_byte (i32.const 0x41))       ;; REX.B
+        (call $emit_x86_byte (i32.const 0x54))       ;; push r12
+        (call $emit_x86_byte (i32.const 0x41))       ;; REX.B
+        (call $emit_x86_byte (i32.const 0x55))       ;; push r13
+
+        ;; Read param count from type entry
+        (local.set $type_off
+          (i32.shl
+            (i32.load (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.shl (local.get $func_idx) (i32.const 4))))
+            (i32.const 8)
+          )
+        )
+        (local.set $param_count
+          (i32.load16_u
+            (i32.add (i32.add (global.get $OFF_TYPES_BUF) (local.get $type_off)) (i32.const 128))
+          )
+        )
+
+        ;; Pop params from WASM stack into r12/r13
+        (if (i32.eqz (local.get $param_count))
+          (then
+            (call $emit_x86_xor_eax_eax)   ;; xor eax,eax
+            (call $emit_x86_mov_r12_rax)    ;; r12 = 0
+            (call $emit_x86_mov_r13_rax)    ;; r13 = 0
+          )
+        )
+        (if (i32.eq (local.get $param_count) (i32.const 1))
+          (then
+            (call $emit_x86_pop_rax)        ;; pop param0
+            (call $emit_x86_mov_r12_rax)    ;; r12 = param0
+            (call $emit_x86_xor_eax_eax)
+            (call $emit_x86_mov_r13_rax)    ;; r13 = 0
+          )
+        )
+        (if (i32.eq (local.get $param_count) (i32.const 2))
+          (then
+            (call $emit_x86_pop_rax)        ;; pop param1
+            (call $emit_x86_mov_r13_rax)    ;; r13 = param1
+            (call $emit_x86_pop_rax)        ;; pop param0
+            (call $emit_x86_mov_r12_rax)    ;; r12 = param0
+          )
+        )
+
+        ;; Emit call rel32 placeholder with fixup record
+        (call $emit_call_rel32_fixup (local.get $func_idx))
+
+        ;; Push return value onto WASM stack (rax from callee)
+        (call $emit_x86_byte (i32.const 0x50))  ;; push rax
+
+        ;; Restore caller's r13, r12, rbx
+        (call $emit_x86_byte (i32.const 0x41))  ;; REX.B
+        (call $emit_x86_byte (i32.const 0x5D))  ;; pop r13
+        (call $emit_x86_byte (i32.const 0x41))  ;; REX.B
+        (call $emit_x86_byte (i32.const 0x5C))  ;; pop r12
+        (call $emit_x86_byte (i32.const 0x5B))  ;; pop rbx
       )
     )
   )
@@ -1916,63 +1973,63 @@
 
   (func $push_label (param $kind i32)
     (local $depth i32)
-    (local.set $depth (i32.load (global.get $JS_LABEL_DEPTH)))
-    (i32.store8 (i32.add (global.get $JS_LABEL_KINDS) (local.get $depth)) (local.get $kind))
-    (i32.store (i32.add (global.get $JS_LABEL_IF_JZ) (i32.shl (local.get $depth) (i32.const 2))) (i32.const 0))
-    (i32.store (global.get $JS_LABEL_DEPTH) (i32.add (local.get $depth) (i32.const 1)))
+    (local.set $depth (i32.load (global.get $JS_LABEL_DEPTH_x86_64)))
+    (i32.store8 (i32.add (global.get $JS_LABEL_KINDS_x86_64) (local.get $depth)) (local.get $kind))
+    (i32.store (i32.add (global.get $JS_LABEL_IF_JZ_x86_64) (i32.shl (local.get $depth) (i32.const 2))) (i32.const 0))
+    (i32.store (global.get $JS_LABEL_DEPTH_x86_64) (i32.add (local.get $depth) (i32.const 1)))
   )
 
   (func $pop_label (result i32)
     (local $depth i32)
-    (local.set $depth (i32.sub (i32.load (global.get $JS_LABEL_DEPTH)) (i32.const 1)))
-    (i32.store (global.get $JS_LABEL_DEPTH) (local.get $depth))
+    (local.set $depth (i32.sub (i32.load (global.get $JS_LABEL_DEPTH_x86_64)) (i32.const 1)))
+    (i32.store (global.get $JS_LABEL_DEPTH_x86_64) (local.get $depth))
     (local.get $depth)
   )
 
   (func $get_label_offset (param $depth i32) (result i32)
-    (i32.load (i32.add (global.get $JS_LABEL_OFFSETS) (i32.shl (local.get $depth) (i32.const 2))))
+    (i32.load (i32.add (global.get $JS_LABEL_OFFSETS_x86_64) (i32.shl (local.get $depth) (i32.const 2))))
   )
 
   (func $set_label_offset (param $depth i32) (param $off i32)
-    (i32.store (i32.add (global.get $JS_LABEL_OFFSETS) (i32.shl (local.get $depth) (i32.const 2))) (local.get $off))
+    (i32.store (i32.add (global.get $JS_LABEL_OFFSETS_x86_64) (i32.shl (local.get $depth) (i32.const 2))) (local.get $off))
   )
 
   (func $get_label_kind (param $depth i32) (result i32)
-    (i32.load8_u (i32.add (global.get $JS_LABEL_KINDS) (local.get $depth)))
+    (i32.load8_u (i32.add (global.get $JS_LABEL_KINDS_x86_64) (local.get $depth)))
   )
 
   (func $get_label_if_jz (param $depth i32) (result i32)
-    (i32.load (i32.add (global.get $JS_LABEL_IF_JZ) (i32.shl (local.get $depth) (i32.const 2))))
+    (i32.load (i32.add (global.get $JS_LABEL_IF_JZ_x86_64) (i32.shl (local.get $depth) (i32.const 2))))
   )
 
   (func $set_label_if_jz (param $depth i32) (param $off i32)
-    (i32.store (i32.add (global.get $JS_LABEL_IF_JZ) (i32.shl (local.get $depth) (i32.const 2))) (local.get $off))
+    (i32.store (i32.add (global.get $JS_LABEL_IF_JZ_x86_64) (i32.shl (local.get $depth) (i32.const 2))) (local.get $off))
   )
 
   ;; ── Fixup helpers ─────────────────────────────────────────────────
 
   (func $push_fixup (param $label_depth i32)
     (local $count i32) (local $off i32)
-    (local.set $count (i32.load (global.get $JS_FIXUP_COUNT)))
-    (local.set $off (i32.load (global.get $JS_CODE_PTR)))
-    (i32.store (i32.add (global.get $JS_FIXUP_LABEL) (i32.shl (local.get $count) (i32.const 2))) (local.get $label_depth))
-    (i32.store (i32.add (global.get $JS_FIXUP_OFFSET) (i32.shl (local.get $count) (i32.const 2))) (local.get $off))
-    (i32.store (global.get $JS_FIXUP_COUNT) (i32.add (local.get $count) (i32.const 1)))
+    (local.set $count (i32.load (global.get $JS_FIXUP_COUNT_x86_64)))
+    (local.set $off (i32.load (global.get $JS_CODE_PTR_x86_64)))
+    (i32.store (i32.add (global.get $JS_FIXUP_LABEL_x86_64) (i32.shl (local.get $count) (i32.const 2))) (local.get $label_depth))
+    (i32.store (i32.add (global.get $JS_FIXUP_OFFSET_x86_64) (i32.shl (local.get $count) (i32.const 2))) (local.get $off))
+    (i32.store (global.get $JS_FIXUP_COUNT_x86_64) (i32.add (local.get $count) (i32.const 1)))
   )
 
   ;; Patch fixups at given label depth: compute forward jump displacement
   ;; and write it at each fixup offset
   (func $patch_fixups (param $depth i32)
     (local $count i32) (local $i i32) (local $cur i32) (local $fix_off i32)
-    (local.set $count (i32.load (global.get $JS_FIXUP_COUNT)))
-    (local.set $cur (i32.load (global.get $JS_CODE_PTR)))
+    (local.set $count (i32.load (global.get $JS_FIXUP_COUNT_x86_64)))
+    (local.set $cur (i32.load (global.get $JS_CODE_PTR_x86_64)))
     (local.set $i (i32.const 0))
     (block $pfx_end
       (loop $pfx_loop
         (if (i32.ge_u (local.get $i) (local.get $count)) (then (br $pfx_end)))
-        (if (i32.eq (i32.load (i32.add (global.get $JS_FIXUP_LABEL) (i32.shl (local.get $i) (i32.const 2)))) (local.get $depth))
+        (if (i32.eq (i32.load (i32.add (global.get $JS_FIXUP_LABEL_x86_64) (i32.shl (local.get $i) (i32.const 2)))) (local.get $depth))
           (then
-            (local.set $fix_off (i32.load (i32.add (global.get $JS_FIXUP_OFFSET) (i32.shl (local.get $i) (i32.const 2)))))
+            (local.set $fix_off (i32.load (i32.add (global.get $JS_FIXUP_OFFSET_x86_64) (i32.shl (local.get $i) (i32.const 2)))))
             ;; displacement = cur - (fix_off + 4)
             ;; fix_off is an offset from JIT_CACHE, so write to JIT_CACHE + fix_off
             (i32.store
@@ -1981,11 +2038,11 @@
             )
             ;; Remove fixup by swapping with last
             (local.set $count (i32.sub (local.get $count) (i32.const 1)))
-            (i32.store (i32.add (global.get $JS_FIXUP_LABEL) (i32.shl (local.get $i) (i32.const 2)))
-              (i32.load (i32.add (global.get $JS_FIXUP_LABEL) (i32.shl (local.get $count) (i32.const 2)))))
-            (i32.store (i32.add (global.get $JS_FIXUP_OFFSET) (i32.shl (local.get $i) (i32.const 2)))
-              (i32.load (i32.add (global.get $JS_FIXUP_OFFSET) (i32.shl (local.get $count) (i32.const 2)))))
-            (i32.store (global.get $JS_FIXUP_COUNT) (local.get $count))
+            (i32.store (i32.add (global.get $JS_FIXUP_LABEL_x86_64) (i32.shl (local.get $i) (i32.const 2)))
+              (i32.load (i32.add (global.get $JS_FIXUP_LABEL_x86_64) (i32.shl (local.get $count) (i32.const 2)))))
+            (i32.store (i32.add (global.get $JS_FIXUP_OFFSET_x86_64) (i32.shl (local.get $i) (i32.const 2)))
+              (i32.load (i32.add (global.get $JS_FIXUP_OFFSET_x86_64) (i32.shl (local.get $count) (i32.const 2)))))
+            (i32.store (global.get $JS_FIXUP_COUNT_x86_64) (local.get $count))
           )
         )
         (local.set $i (i32.add (local.get $i) (i32.const 1)))

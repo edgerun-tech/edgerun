@@ -21,8 +21,7 @@
   (elem (i32.const 12) $process_ws_decode)
   ;; Slot 13: exec (from pipeline/wasm-exec-stage.wat)
   (elem (i32.const 13) $process_exec)
-  ;; Slot 14: dashboard
-  (elem (i32.const 14) $process_dashboard)
+  ;; Slots 14: (removed — old dashboard deleted)
   ;; Slot 15: frame pacer (from frame-pacer.wat)
   (elem (i32.const 15) $process_frame_pacer)
   ;; Slots 16-20: hash stages
@@ -243,3 +242,8 @@
   (elem (i32.const 48) $process_queue)
   (elem (i32.const 49) $process_buffer)
   (elem (i32.const 50) $process_cdc)
+
+  ;; Slots 141-143: UI stages
+  (elem (i32.const 141) $process_ui_layout)
+  (elem (i32.const 142) $process_ui_paint)
+  (elem (i32.const 143) $process_ui_event)

@@ -2,9 +2,9 @@
 
   (func $emit_aarch64_byte (param $b i32)
     (local $p i32)
-    (local.set $p (i32.add (global.get $JIT_CACHE) (i32.load (global.get $JS_CODE_PTR))))
+    (local.set $p (i32.add (global.get $JIT_CACHE) (i32.load (global.get $JS_CODE_PTR_aarch64))))
     (i32.store8 (local.get $p) (local.get $b))
-    (i32.store (global.get $JS_CODE_PTR) (i32.add (i32.load (global.get $JS_CODE_PTR)) (i32.const 1)))
+    (i32.store (global.get $JS_CODE_PTR_aarch64) (i32.add (i32.load (global.get $JS_CODE_PTR_aarch64)) (i32.const 1)))
   )
 
   (func $emit_aarch64_dword (param $v i32)
@@ -418,32 +418,32 @@
   ;; ── AArch64 Stack push/pop (value stack for WASM) ─────────────────
   ;; Push X0: STR X0, [SP, #-8]!
   (func $emit_aarch64_push_x0
-    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X0) (global.get $REG_SP) (i32.const -8))
+    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X0_aarch64) (global.get $REG_SP_aarch64) (i32.const -8))
   )
 
   ;; Pop X0: LDR X0, [SP], #8
   (func $emit_aarch64_pop_x0
-    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X0) (global.get $REG_SP) (i32.const 8))
+    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X0_aarch64) (global.get $REG_SP_aarch64) (i32.const 8))
   )
 
   ;; Push X1: STR X1, [SP, #-8]!
   (func $emit_aarch64_push_x1
-    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X1) (global.get $REG_SP) (i32.const -8))
+    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X1_aarch64) (global.get $REG_SP_aarch64) (i32.const -8))
   )
 
   ;; Pop X1: LDR X1, [SP], #8
   (func $emit_aarch64_pop_x1
-    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X1) (global.get $REG_SP) (i32.const 8))
+    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X1_aarch64) (global.get $REG_SP_aarch64) (i32.const 8))
   )
 
   ;; Push X2: STR X2, [SP, #-8]!
   (func $emit_aarch64_push_x2
-    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X2) (global.get $REG_SP) (i32.const -8))
+    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X2_aarch64) (global.get $REG_SP_aarch64) (i32.const -8))
   )
 
   ;; Pop X2: LDR X2, [SP], #8
   (func $emit_aarch64_pop_x2
-    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X2) (global.get $REG_SP) (i32.const 8))
+    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X2_aarch64) (global.get $REG_SP_aarch64) (i32.const 8))
   )
 
   ;; Pop into X1: LDR X1, [SP], #8 (alias)
@@ -457,16 +457,16 @@
   ;; Wait, LDP post-index: opc=10, 1010 1000 1 11 imm7 Xn Rt2 Rt1
   ;; Let me just use two separate pops
   (func $emit_aarch64_pop2_x1_x0
-    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X1) (global.get $REG_SP) (i32.const 8))
-    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X0) (global.get $REG_SP) (i32.const 8))
+    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X1_aarch64) (global.get $REG_SP_aarch64) (i32.const 8))
+    (call $emit_aarch64_instr_ldr_post_64 (global.get $REG_X0_aarch64) (global.get $REG_SP_aarch64) (i32.const 8))
   )
 
   ;; STP Xt1, Xt2, [SP, #-16]! (pre-index pair)
   ;; STP Xt1, Xt2, [Xn, #-imm]!: 10101000 10 0 imm7 Xn Xt2 Xt1
   ;; Actually: for 64-bit STP pre-index: opc=10, 1010 1000 1 00 imm7 Xn Rt2 Rt1
   (func $emit_aarch64_push2_x1_x0
-    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X1) (global.get $REG_SP) (i32.const -8))
-    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X0) (global.get $REG_SP) (i32.const -8))
+    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X1_aarch64) (global.get $REG_SP_aarch64) (i32.const -8))
+    (call $emit_aarch64_instr_str_pre_64 (global.get $REG_X0_aarch64) (global.get $REG_SP_aarch64) (i32.const -8))
   )
 
   ;; ── Standard push/pop names (matching x86 compiler convention) ────
@@ -807,52 +807,52 @@
   
   ;; Load mem_ptr into X2: LDR X2, [X19, #8]
   (func $emit_aarch64_ldr_mem_ptr
-    (call $emit_aarch64_instr_ldr_64_off (global.get $REG_X2) (global.get $REG_X19) (i32.const 1))  ;; #8 = imm12=1 (8/8)
+    (call $emit_aarch64_instr_ldr_64_off (global.get $REG_X2_aarch64) (global.get $REG_X19_aarch64) (i32.const 1))  ;; #8 = imm12=1 (8/8)
   )
 
   ;; LDR X0, [X19, #offset] — load JitGlobals field
   (func $emit_aarch64_ldr_x0_x19 (param $off12 i32)
-    (call $emit_aarch64_instr_ldr_64_off (global.get $REG_X0) (global.get $REG_X19) (local.get $off12))
+    (call $emit_aarch64_instr_ldr_64_off (global.get $REG_X0_aarch64) (global.get $REG_X19_aarch64) (local.get $off12))
   )
 
   ;; STR X0, [X19, #offset] — store to JitGlobals field
   (func $emit_aarch64_str_x0_x19 (param $off12 i32)
-    (call $emit_aarch64_instr_str_64_off (global.get $REG_X0) (global.get $REG_X19) (local.get $off12))
+    (call $emit_aarch64_instr_str_64_off (global.get $REG_X0_aarch64) (global.get $REG_X19_aarch64) (local.get $off12))
   )
 
   ;; LDR X0, [X20, #offset] — load local via cached base ptr
   (func $emit_aarch64_ldr_x0_x20 (param $off12 i32)
-    (call $emit_aarch64_instr_ldr_64_off (global.get $REG_X0) (global.get $REG_X20) (local.get $off12))
+    (call $emit_aarch64_instr_ldr_64_off (global.get $REG_X0_aarch64) (global.get $REG_X20_aarch64) (local.get $off12))
   )
 
   ;; STR X0, [X20, #offset] — store local
   (func $emit_aarch64_str_x0_x20 (param $off12 i32)
-    (call $emit_aarch64_instr_str_64_off (global.get $REG_X0) (global.get $REG_X20) (local.get $off12))
+    (call $emit_aarch64_instr_str_64_off (global.get $REG_X0_aarch64) (global.get $REG_X20_aarch64) (local.get $off12))
   )
 
   ;; ── AArch64 memory load (i32.load): address in X1, result in X0 ──
   ;; load mem_ptr into X2, then LDR W0, [X2, X1]
   (func $emit_aarch64_mem_load32
     (call $emit_aarch64_ldr_mem_ptr)
-    (call $emit_aarch64_ldr_reg_32 (global.get $REG_X0) (global.get $REG_X2) (global.get $REG_X1))
+    (call $emit_aarch64_ldr_reg_32 (global.get $REG_X0_aarch64) (global.get $REG_X2_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; i64.load: LDR X0, [X2, X1]
   (func $emit_aarch64_mem_load64
     (call $emit_aarch64_ldr_mem_ptr)
-    (call $emit_aarch64_ldr_reg_64 (global.get $REG_X0) (global.get $REG_X2) (global.get $REG_X1))
+    (call $emit_aarch64_ldr_reg_64 (global.get $REG_X0_aarch64) (global.get $REG_X2_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; i32.store: address in X1, value in X0, store W0 to [X2, X1]
   (func $emit_aarch64_mem_store32
     (call $emit_aarch64_ldr_mem_ptr)
-    (call $emit_aarch64_str_reg_32 (global.get $REG_X0) (global.get $REG_X2) (global.get $REG_X1))
+    (call $emit_aarch64_str_reg_32 (global.get $REG_X0_aarch64) (global.get $REG_X2_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; i64.store: STR X0, [X2, X1]
   (func $emit_aarch64_mem_store64
     (call $emit_aarch64_ldr_mem_ptr)
-    (call $emit_aarch64_str_reg_64 (global.get $REG_X0) (global.get $REG_X2) (global.get $REG_X1))
+    (call $emit_aarch64_str_reg_64 (global.get $REG_X0_aarch64) (global.get $REG_X2_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ── AArch64 Unary arithmetic helpers (X0←op(X0)) ──────────────────
@@ -1353,147 +1353,147 @@
 
   ;; ── JIT state helpers ─────────────────────────────────────────────
 
-  (func $jit_reset_state
-    (i32.store (global.get $JS_CODE_PTR) (i32.const 0))
-    (i32.store (global.get $JS_LABEL_DEPTH) (i32.const 0))
-    (i32.store (global.get $JS_FIXUP_COUNT) (i32.const 0))
-    (i32.store (global.get $JS_RETURN_EMITTED) (i32.const 0))
-    (i32.store (global.get $JS_STACK_DEPTH) (i32.const 0))
-    (i32.store (global.get $JS_MAX_STACK) (i32.const 0))
+  (func $jit_reset_state_aarch64
+    (i32.store (global.get $JS_CODE_PTR_aarch64) (i32.const 0))
+    (i32.store (global.get $JS_LABEL_DEPTH_aarch64) (i32.const 0))
+    (i32.store (global.get $JS_FIXUP_COUNT_aarch64) (i32.const 0))
+    (i32.store (global.get $JS_RETURN_EMITTED_aarch64) (i32.const 0))
+    (i32.store (global.get $JS_STACK_DEPTH_aarch64) (i32.const 0))
+    (i32.store (global.get $JS_MAX_STACK_aarch64) (i32.const 0))
   )
 
   (func $get_aarch64_decoded_imm (param $dec_ptr i32) (param $offset i32) (result i32)
     (i32.load (i32.add (local.get $dec_ptr) (local.get $offset)))
   )
 
-  (func $get_aarch64_compiled_code (export "get_compiled_code") (param $func_idx i32) (result i32 i32)
+  (func $get_aarch64_compiled_code (export "get_compiled_code_aarch64") (param $func_idx i32) (result i32 i32)
     (local $slot i32) (local $base i32)
     (local.set $slot (i32.and (local.get $func_idx) (i32.const 3)))
-    (local.set $base (i32.add (global.get $JIT_CACHE) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE))))
+    (local.set $base (i32.add (global.get $JIT_CACHE) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE_aarch64))))
     (local.get $base)
-    (i32.sub (i32.load (global.get $JS_CODE_PTR)) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE)))
+    (i32.sub (i32.load (global.get $JS_CODE_PTR_aarch64)) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE_aarch64)))
   )
 
   ;; ── Convenience arithmetic/stack helpers ──────────────────────────
 
   ;; ADD X0, X0, X1 (64-bit)
   (func $emit_aarch64_add_x0_x1
-    (call $emit_aarch64_instr_add_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_add_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; SUB X0, X0, X1 (64-bit)
   (func $emit_aarch64_sub_x0_x1
-    (call $emit_aarch64_instr_sub_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_sub_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ADD W0, W0, W1 (32-bit)
   (func $emit_aarch64_add_w0_w1
-    (call $emit_aarch64_instr_add_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_add_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; SUB W0, W0, W1 (32-bit)
   (func $emit_aarch64_sub_w0_w1
-    (call $emit_aarch64_instr_sub_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_sub_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; MUL X0, X0, X1 (64-bit)
   (func $emit_aarch64_mul_x0_x1
-    (call $emit_aarch64_instr_mul_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_mul_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; MUL W0, W0, W1 (32-bit)
   (func $emit_aarch64_mul_w0_w1
-    (call $emit_aarch64_instr_mul_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_mul_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; SDIV X0, X0, X1 (64-bit signed)
   (func $emit_aarch64_sdiv_x0_x1
-    (call $emit_aarch64_instr_sdiv_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_sdiv_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; UDIV X0, X0, X1 (64-bit unsigned)
   (func $emit_aarch64_udiv_x0_x1
-    (call $emit_aarch64_instr_udiv_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_udiv_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; SDIV W0, W0, W1 (32-bit signed)
   (func $emit_aarch64_sdiv_w0_w1
-    (call $emit_aarch64_instr_sdiv_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_sdiv_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; UDIV W0, W0, W1 (32-bit unsigned)
   (func $emit_aarch64_udiv_w0_w1
-    (call $emit_aarch64_instr_udiv_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_udiv_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; AND X0, X0, X1 (64-bit)
   (func $emit_aarch64_and_x0_x1
-    (call $emit_aarch64_instr_and_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_and_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ORR X0, X0, X1 (64-bit)
   (func $emit_aarch64_orr_x0_x1
-    (call $emit_aarch64_instr_orr_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_orr_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; EOR X0, X0, X1 (64-bit)
   (func $emit_aarch64_eor_x0_x1
-    (call $emit_aarch64_instr_eor_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_eor_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; AND W0, W0, W1 (32-bit)
   (func $emit_aarch64_and_w0_w1
-    (call $emit_aarch64_instr_and_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_and_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ORR W0, W0, W1 (32-bit)
   (func $emit_aarch64_orr_w0_w1
-    (call $emit_aarch64_instr_orr_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_orr_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; EOR W0, W0, W1 (32-bit)
   (func $emit_aarch64_eor_w0_w1
-    (call $emit_aarch64_instr_eor_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_eor_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; LSL X0, X0, X1 (64-bit variable)
   (func $emit_aarch64_lslv_x0_x1
-    (call $emit_aarch64_instr_lslv_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_lslv_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; LSR X0, X0, X1 (64-bit variable)
   (func $emit_aarch64_lsrv_x0_x1
-    (call $emit_aarch64_instr_lsrv_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_lsrv_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ASR X0, X0, X1 (64-bit variable)
   (func $emit_aarch64_asrv_x0_x1
-    (call $emit_aarch64_instr_asrv_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_asrv_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ROR X0, X0, X1 (64-bit variable)
   (func $emit_aarch64_rorv_x0_x1
-    (call $emit_aarch64_instr_rorv_64 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_rorv_64 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; LSL W0, W0, W1 (32-bit variable)
   (func $emit_aarch64_lslv_w0_w1
-    (call $emit_aarch64_instr_lslv_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_lslv_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; LSR W0, W0, W1 (32-bit variable)
   (func $emit_aarch64_lsrv_w0_w1
-    (call $emit_aarch64_instr_lsrv_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_lsrv_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ASR W0, W0, W1 (32-bit variable)
   (func $emit_aarch64_asrv_w0_w1
-    (call $emit_aarch64_instr_asrv_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_asrv_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ROR W0, W0, W1 (32-bit variable)
   (func $emit_aarch64_rorv_w0_w1
-    (call $emit_aarch64_instr_rorv_32 (global.get $REG_X0) (global.get $REG_X0) (global.get $REG_X1))
+    (call $emit_aarch64_instr_rorv_32 (global.get $REG_X0_aarch64) (global.get $REG_X0_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; ═════════════════════════════════════════════════════════════════════
@@ -1503,11 +1503,11 @@
   ;; BL with target VA: compute relative offset and emit BL (AArch64 PC = current, no +8)
   (func $emit_aarch64_bl_rel (param $target_va i32)
     (local $saved i32)
-    (local.set $saved (i32.load (global.get $JS_CODE_PTR)))
+    (local.set $saved (i32.load (global.get $JS_CODE_PTR_aarch64)))
     (call $emit_aarch64_bl
       (i32.sub
         (local.get $target_va)
-        (i32.add (global.get $TEXT_VA) (i32.sub (local.get $saved) (global.get $ELF_OUT_OFF)))))
+        (i32.add (global.get $TEXT_VA_aarch64) (i32.sub (local.get $saved) (global.get $ELF_OUT_OFF_aarch64)))))
   )
 
   ;; ── ELF64 header (64 bytes) ─────────────────────────────────────
@@ -1591,7 +1591,7 @@
     (call $emit_aarch64_instr_str_32_off (i32.const 0) (i32.const 19) (i32.const 16))
 
     ;; BL to compiled code
-    (call $emit_aarch64_bl_rel (i32.add (global.get $TEXT_VA) (global.get $ELF_CODE_OFF)))
+    (call $emit_aarch64_bl_rel (i32.add (global.get $TEXT_VA_aarch64) (global.get $ELF_CODE_OFF_aarch64)))
 
     ;; MOV X8, #93 (SYS_exit); SVC #0
     (call $emit_aarch64_instr_movz_64 (i32.const 8) (i32.const 0) (global.get $LINUX_SYS_AARCH64_EXIT))
@@ -1600,9 +1600,9 @@
 
   ;; ── Copy compiled code from JIT cache to output ────────────────
 
-  (func $copy_compiled_code (param $src i32) (param $size i32) (param $dst_off i32)
+  (func $copy_compiled_code_aarch64 (param $src i32) (param $size i32) (param $dst_off i32)
     (local $i i32) (local $dst i32)
-    (local.set $dst (i32.add (global.get $ELF_OUT_BUF) (local.get $dst_off)))
+    (local.set $dst (i32.add (global.get $ELF_OUT_BUF_aarch64) (local.get $dst_off)))
     (local.set $i (i32.const 0))
     (block $done
       (loop $copy
@@ -1633,23 +1633,23 @@
   ;; Emit bare-metal stub (no headers). Returns stub size.
   (func $emit_aarch64_bare_metal_stub (result i32)
     (local $stub_size i32) (local $current_off i32)
-    (call $emit_aarch64_instr_movz_64 (i32.const 19) (i32.const 0) (i32.and (global.get $BSS_JITGLOBALS) (i32.const 0xFFFF)))
-    (call $emit_aarch64_instr_movk_64 (i32.const 19) (i32.const 1) (i32.shr_u (global.get $BSS_JITGLOBALS) (i32.const 16)))
-    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_MEM) (i32.const 0xFFFF)))
-    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_MEM) (i32.const 16)))
+    (call $emit_aarch64_instr_movz_64 (i32.const 19) (i32.const 0) (i32.and (global.get $BSS_JITGLOBALS_aarch64) (i32.const 0xFFFF)))
+    (call $emit_aarch64_instr_movk_64 (i32.const 19) (i32.const 1) (i32.shr_u (global.get $BSS_JITGLOBALS_aarch64) (i32.const 16)))
+    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_MEM_aarch64) (i32.const 0xFFFF)))
+    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_MEM_aarch64) (i32.const 16)))
     (call $emit_aarch64_instr_str_64_off (i32.const 0) (i32.const 19) (i32.const 1))
-    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_LOCALS) (i32.const 0xFFFF)))
-    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_LOCALS) (i32.const 16)))
+    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_LOCALS_aarch64) (i32.const 0xFFFF)))
+    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_LOCALS_aarch64) (i32.const 16)))
     (call $emit_aarch64_instr_str_64_off (i32.const 0) (i32.const 19) (i32.const 0))
-    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_GLOBALS) (i32.const 0xFFFF)))
-    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_GLOBALS) (i32.const 16)))
+    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_GLOBALS_aarch64) (i32.const 0xFFFF)))
+    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_GLOBALS_aarch64) (i32.const 16)))
     (call $emit_aarch64_instr_str_64_off (i32.const 0) (i32.const 19) (i32.const 3))
-    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_TABLE) (i32.const 0xFFFF)))
-    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_TABLE) (i32.const 16)))
+    (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.and (global.get $BSS_TABLE_aarch64) (i32.const 0xFFFF)))
+    (call $emit_aarch64_instr_movk_64 (i32.const 0) (i32.const 1) (i32.shr_u (global.get $BSS_TABLE_aarch64) (i32.const 16)))
     (call $emit_aarch64_instr_str_64_off (i32.const 0) (i32.const 19) (i32.const 6))
     (call $emit_aarch64_instr_movz_64 (i32.const 0) (i32.const 0) (i32.const 1))
     (call $emit_aarch64_instr_str_32_off (i32.const 0) (i32.const 19) (i32.const 16))
-    (local.set $current_off (i32.sub (i32.load (global.get $JS_CODE_PTR)) (global.get $BIN_OUT_OFF)))
+    (local.set $current_off (i32.sub (i32.load (global.get $JS_CODE_PTR_aarch64)) (global.get $BIN_OUT_OFF_aarch64)))
     (local.set $stub_size (i32.add (local.get $current_off) (i32.const 16)))
     (call $emit_aarch64_bl
       (i32.sub (local.get $stub_size) (local.get $current_off)))
@@ -1659,7 +1659,7 @@
 
   ;; ── Copy code to binary output buffer ──────────────────────────
 
-  (func $copy_code_to (param $dst_buf i32) (param $code_size i32) (param $code_off i32)
+  (func $copy_code_to_aarch64 (param $dst_buf i32) (param $code_size i32) (param $code_off i32)
     (local $i i32) (local $dst i32)
     (local.set $dst (i32.add (local.get $dst_buf) (local.get $code_off)))
     (local.set $i (i32.const 0))
@@ -1705,22 +1705,22 @@
   ;; MOV X0, X1: ORR X0, XZR, X1
   ;; = 0xAA000020 | X1  = 0xAA000021
   (func $emit_aarch64_mov_x0_x1
-    (call $emit_aarch64_instr_orr_64 (global.get $REG_X0) (global.get $REG_XZR) (global.get $REG_X1))
+    (call $emit_aarch64_instr_orr_64 (global.get $REG_X0_aarch64) (global.get $REG_XZR_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; MOV X1, X0: ORR X1, XZR, X0
   (func $emit_aarch64_mov_x1_x0
-    (call $emit_aarch64_instr_orr_64 (global.get $REG_X1) (global.get $REG_XZR) (global.get $REG_X0))
+    (call $emit_aarch64_instr_orr_64 (global.get $REG_X1_aarch64) (global.get $REG_XZR_aarch64) (global.get $REG_X0_aarch64))
   )
 
   ;; MOV W0, W1: ORR W0, WZR, W1
   (func $emit_aarch64_mov_w0_w1
-    (call $emit_aarch64_instr_orr_32 (global.get $REG_X0) (global.get $REG_XZR) (global.get $REG_X1))
+    (call $emit_aarch64_instr_orr_32 (global.get $REG_X0_aarch64) (global.get $REG_XZR_aarch64) (global.get $REG_X1_aarch64))
   )
 
   ;; MOV W1, W0
   (func $emit_aarch64_mov_w1_w0
-    (call $emit_aarch64_instr_orr_32 (global.get $REG_X1) (global.get $REG_XZR) (global.get $REG_X0))
+    (call $emit_aarch64_instr_orr_32 (global.get $REG_X1_aarch64) (global.get $REG_XZR_aarch64) (global.get $REG_X0_aarch64))
   )
 
   ;; ═════════════════════════════════════════════════════════════════════
@@ -1750,25 +1750,25 @@
 
   ;; Push Q0 onto WASM value stack (grows downward): SUB SP,#16; STR Q0,[SP]
   (func $emit_aarch64_v128_push
-    (call $emit_aarch64_instr_subi_64 (global.get $REG_SP) (global.get $REG_SP) (i32.const 16))
-    (call $emit_aarch64_instr_str_q_off (global.get $REG_V0) (global.get $REG_SP) (i32.const 0))
+    (call $emit_aarch64_instr_subi_64 (global.get $REG_SP_aarch64) (global.get $REG_SP_aarch64) (i32.const 16))
+    (call $emit_aarch64_instr_str_q_off (global.get $REG_V0) (global.get $REG_SP_aarch64) (i32.const 0))
   )
 
   ;; Pop Q0 from WASM value stack: LDR Q0,[SP]; ADD SP,#16
   (func $emit_aarch64_v128_pop
-    (call $emit_aarch64_instr_ldr_q_off (global.get $REG_V0) (global.get $REG_SP) (i32.const 0))
-    (call $emit_aarch64_instr_addi_64 (global.get $REG_SP) (global.get $REG_SP) (i32.const 16))
+    (call $emit_aarch64_instr_ldr_q_off (global.get $REG_V0) (global.get $REG_SP_aarch64) (i32.const 0))
+    (call $emit_aarch64_instr_addi_64 (global.get $REG_SP_aarch64) (global.get $REG_SP_aarch64) (i32.const 16))
   )
 
   ;; Load Q0 from address in X1 into Q0: LDR Q0, [X1] (imm12=0 for bare reg)
   ;; Uses ldr_q_off with Xn = X1 (=1), imm12 = 0
   (func $emit_aarch64_v128_load_reg
-    (call $emit_aarch64_instr_ldr_q_off (global.get $REG_V0) (global.get $REG_X1) (i32.const 0))
+    (call $emit_aarch64_instr_ldr_q_off (global.get $REG_V0) (global.get $REG_X1_aarch64) (i32.const 0))
   )
 
   ;; Store Q0 to address in X1: STR Q0, [X1] (imm12=0 for bare reg)
   (func $emit_aarch64_v128_store_reg
-    (call $emit_aarch64_instr_str_q_off (global.get $REG_V0) (global.get $REG_X1) (i32.const 0))
+    (call $emit_aarch64_instr_str_q_off (global.get $REG_V0) (global.get $REG_X1_aarch64) (i32.const 0))
   )
 
   ;; Load 32-bit constant address into X1 (used to address v128 immediate)
@@ -2029,14 +2029,14 @@
   (func $emit_aarch64_maybe_push_x0
     (local $next_op i32)
     (local $next_imm0 i32)
-    (if (i32.eqz (global.get $RESULT_IN_X0))
+    (if (i32.eqz (global.get $RESULT_IN_X0_aarch64))
       (then
-        (local.set $next_op (i32.load8_u (i32.add (global.get $CURRENT_DEC_PTR) (global.get $DEC_SZ))))
-        (local.set $next_imm0 (i32.load (i32.add (i32.add (global.get $CURRENT_DEC_PTR) (global.get $DEC_SZ)) (i32.const 4))))
+        (local.set $next_op (i32.load8_u (i32.add (global.get $CURRENT_DEC_PTR_aarch64) (global.get $DEC_SZ))))
+        (local.set $next_imm0 (i32.load (i32.add (i32.add (global.get $CURRENT_DEC_PTR_aarch64) (global.get $DEC_SZ)) (i32.const 4))))
         (if (i32.and (i32.or (i32.eq (local.get $next_op) (i32.const 0x21)) (i32.eq (local.get $next_op) (i32.const 0x22)))
                       (i32.le_u (local.get $next_imm0) (i32.const 1)))
           (then
-            (global.set $RESULT_IN_X0 (i32.const 1))
+            (global.set $RESULT_IN_X0_aarch64 (i32.const 1))
           )
           (else
             (call $emit_aarch64_push_x0)
