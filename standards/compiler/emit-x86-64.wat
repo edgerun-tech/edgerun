@@ -1844,5 +1844,4 @@
   (func $compile_to_elf_arm32 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
   (func $compile_to_elf_aarch64 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
   ;; Stubs referenced by dispatch but not implemented for x86_64
-  (func $fixup_calls_x86_64)
   (func $emit_elf_stub_x86_64 (param $bss_va i32) (param $syscall_data_va i32) (param $import_count i32))

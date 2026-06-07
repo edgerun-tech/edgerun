@@ -67,24 +67,29 @@ function assemble(arch, dir, tmplPath) {
   const dispatch = generate(tmplPath, path.join(dir, 'compiler.wat'));
   const genDir = path.join(dir, 'gen');
 
-  // Read fragment files (skip (module) header from templates)
+  // Normalize arch for file names (x86_64 → x86-64)
+  const fa = arch.replace(/_/g, '-');
+
+  // Read fragment files
   const memoryMap = fs.readFileSync(path.join(dir, '..', 'runtime', 'memory-map.wat'), 'utf8');
   const emitCore = fs.readFileSync(path.join(dir, 'emit-core.wat'), 'utf8');
-  const emit = fs.readFileSync(path.join(dir, `emit-${arch}.wat`), 'utf8');
-  let templates = fs.readFileSync(path.join(dir, `templates-${arch}.wat`), 'utf8');
-  const simd = fs.readFileSync(path.join(dir, `simd-${arch}.wat`), 'utf8');
+  const emit = fs.readFileSync(path.join(dir, `emit-${fa}.wat`), 'utf8');
+  let templates = fs.readFileSync(path.join(dir, `templates-${fa}.wat`), 'utf8');
+  const simd = fs.readFileSync(path.join(dir, `simd-${fa}.wat`), 'utf8');
   const wasmEmit = fs.readFileSync(path.join(dir, 'wasm-emit.wat'), 'utf8');
 
-  // Strip (module) from templates if present (it's a fragment inside our module)
-  if (templates.startsWith('(module')) {
+  // Strip (module ... ) wrapper from templates (it'\''s a fragment inside our module)
+  if (templates.trimStart().startsWith('(module')) {
     templates = templates.replace(/^\(module\s*\n/, '');
+    if (templates.endsWith(')\n')) templates = templates.slice(0, -2);
+    else if (templates.endsWith(')')) templates = templates.slice(0, -1);
   }
 
   const parts = [memoryMap, dispatch, emitCore, emit, templates, simd, wasmEmit];
   const full = `(module\n${parts.join('\n\n')})\n`;
 
   if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
-  const outPath = path.join(genDir, `jit-full-${arch}.wat`);
+  const outPath = path.join(genDir, `jit-full-${fa}.wat`);
   fs.writeFileSync(outPath, full);
   console.log(`Assembled: ${outPath} (${full.length} bytes)`);
 }

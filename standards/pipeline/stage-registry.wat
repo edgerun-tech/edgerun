@@ -1,5 +1,6 @@
 ;; Pipeline Stage Registry — elem entries for stage dispatch table
   ;; Must be included at the END of the MANIFEST so all process_* functions are in scope.
+  ;; Most stages are auto-generated in pipeline-stages.wat by gen-stages.js from registry.json.
 
   ;; Slots 0:  passthrough (defined in pipeline-core.wat)
   ;; Slots 1-2: hex encode/decode (from encoding-text.wat)
