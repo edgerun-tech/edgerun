@@ -11,8 +11,8 @@
   (func $process_edgerun_compile (export "process_edgerun_compile")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $len_slot i32) (local $read i32) (local $g i32)
-    (local $plan i32) (local $desc i32) (local $pcap i32)
+    (local $len_slot i32) (local $g i32)
+    (local $plan i32) (local $desc i32) (local $pcap i32) (local $read i32)
 
     (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
     (drop (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))

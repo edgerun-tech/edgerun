@@ -333,6 +333,37 @@
       (then (call $pipe_restore (local.get $snapshot))))
     local.get $result)
 
+  ;; ── Stage boilerplate helpers ──
+
+  ;; stage_read_input: read all available data from input pipe into 0x3000.
+  ;; Returns length read, or 0 if no data.
+  (func $stage_read_input (export "stage_read_input")
+    (param $input i32) (param $scratch i32) (param $scap i32) (result i32)
+    (local $len_slot i32) (local $read i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (drop (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
+    (drop (call $pipe_read (local.get $input) (i32.const 0x3000) (local.get $read)))
+    local.get $read)
+
+  ;; stage_write_result: unpack i64 result (high32=status, low32=out_len),
+  ;; write to output pipe. Returns written length or negative error.
+  (func $stage_write_result (export "stage_write_result")
+    (param $output i32) (param $result i64) (param $buf i32) (result i32)
+    (local $status i32) (local $out_len i32)
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $out_len (i32.wrap_i64 (local.get $result)))
+    (drop (call $pipe_write (local.get $output) (local.get $buf) (local.get $out_len)))
+    local.get $out_len)
+
+  ;; stage_write_output: write known-length buffer to output pipe, return length.
+  (func $stage_write_output (export "stage_write_output")
+    (param $output i32) (param $buf i32) (param $len i32) (result i32)
+    (drop (call $pipe_write (local.get $output) (local.get $buf) (local.get $len)))
+    local.get $len)
+
   ;; ── Built-in passthrough stage (table index 0) ──
   (func $stage_passthrough
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)

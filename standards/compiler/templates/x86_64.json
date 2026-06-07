@@ -1,8 +1,8 @@
 {
   "arch": "x86_64",
-  "op_prefix": "template_x86_",
-  "op_suffix": "",
-  "simd_prefix": "template_x86_",
+  "op_prefix": "template_",
+  "op_suffix": "_x86_64",
+  "simd_prefix": "template_simd_",
   "simd_suffix": "",
   "emit_prefix": "emit_x86_",
   "result_global": "RESULT_IN_EAX",

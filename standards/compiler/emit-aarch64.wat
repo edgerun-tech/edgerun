@@ -1296,6 +1296,8 @@
   ;; I'll use FMOV + FCMEQ + BIT/BIF approach for max/min, or just hardcode literal values.
   ;; Let me actually just use the branch-based max/min like the x86 version does.
 
+  (global $FUNC_OFF_TABLE_aarch64 i32 (i32.const 0x80000))   ;; 256 funcs * 4 bytes = 1KB
+
   ;; ── AArch64 function prologue/epilogue ────────────────────────────
 
   ;; Prologue: save FP/LR, set FP = SP, allocate frame, save callee-saved regs

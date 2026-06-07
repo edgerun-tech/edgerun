@@ -18,6 +18,7 @@
   (func $process_ui_event (export "process_ui_event")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $px i32) (local $py i32)
     (local $avail i32) (local $px f32) (local $py f32) (local $node_count i32)
     (local $hit i32)
     (local.set $avail (call $pipe_available (local.get $input)))

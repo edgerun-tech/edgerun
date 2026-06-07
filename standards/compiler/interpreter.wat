@@ -5,6 +5,19 @@
   ;; linear memory. Includes a WAT parser for standalone usage.
   ;; ═════════════════════════════════════════════════════════════════════
 
+;; ═════════════════════════════════════════════════════════════════════
+  ;; EdgeRun WASM Interpreter Core — shared between compiler/ and pipeline/
+  ;;
+  ;; Contains the interpreter engine (load, validate, decode, execute)
+  ;; without WAT parser or standalone entry points.
+  ;;
+  ;; Include this fragment INSIDE a (module ...) block. Then include
+  ;; either:
+  ;;   - compiler/interpreter.wat   (adds WAT parser + standalone exports)
+  ;;   - pipeline/wasm-interpreter.wat (adds pipeline import + no WAT parser)
+  ;;
+  ;; Imports memory from edgerun-core (shared linear memory).
+  ;; ═════════════════════════════════════════════════════════════════════
   (global $OFF_ERR         i32 (i32.const 0))
   (global $OFF_SCRATCH0    i32 (i32.const 8))
   (global $OFF_SCRATCH1    i32 (i32.const 16))
@@ -5595,7 +5608,7 @@
   ;;   0x8D000: WASM bytecode emission buffer (4KB)
 
 
-
+  ;; (All shared globals, decode, execute, and load functions are in
 
   ;; ═════════════════════════════════════════════════════════════════════
   ;; WAT Parser — parse WAT text format directly into state buffers
@@ -5639,13 +5652,10 @@
   ;; Returns new position in scratch0, error in return value.
   (func $wat_skip_ws (param $pos i32) (result i32)
     (local $p i32) (local $l i32) (local $b i32) (local $end i32)
-))
-)
     (local.set $p (i32.load (global.get $OFF_WAT_PTR)))
     (local.set $l (i32.load (global.get $OFF_WAT_LEN)))
     (local.set $end (i32.add (local.get $p) (local.get $l)))
     (local.set $p (i32.add (local.get $p) (local.get $pos)))
-)
     (block $done
       (loop $lp
         (if (i32.ge_u (local.get $p) (local.get $end)) (then (br $done)))
@@ -6165,8 +6175,6 @@
   (func $wat_emit_byte (param $off i32) (param $b i32) (result i32)
     (if (i32.ge_u (local.get $off) (global.get $WAT_BODY_SZ))
       (then
-)
-)
         (return (global.get $ERR_NO_MEM))
       )
     )
@@ -6303,23 +6311,15 @@
     (local $err i32) (local $b i32) (local $kw_off i32)
     (local $kw_len i32) (local $b0 i32) (local $b1 i32) (local $b2 i32) (local $b3 i32)
     (local $imm i32)
-)
-)
 
     ;; Skip whitespace
-)
     (if (call $wat_skip_ws (local.get $pos)) (then (return (global.get $ERR_PARSE))))
-)
-))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
-)
 
     ;; Check for end of function: closing paren at top level
-)
     (local.set $b (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))))
     (if (i32.eq (local.get $b) (i32.const 0x29))  ;; )
       (then
-)
         ;; Emit end opcode
         (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x0B))
           (then (return (global.get $ERR_NO_MEM)))
@@ -6361,10 +6361,7 @@
     )
 
     ;; Read opcode keyword
-)
-)
     (local.set $err (call $wat_read_kw (local.get $pos)))
-)
     (if (local.get $err) (then (return (global.get $ERR_PARSE))))
     (local.set $kw_off (i32.load (global.get $OFF_SCRATCH0)))
     (local.set $kw_len (i32.load (global.get $OFF_SCRATCH1)))
@@ -6373,10 +6370,6 @@
       ;; ─── Opcode dispatch ───
       ;; Inline byte comparison: load first few bytes and compare
       (local.set $b0 (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $kw_off))))
-)
-)
-)
-))
         (block $not_unreachable
           (if (i32.ne (local.get $kw_len) (i32.const 11)) (then (br $not_unreachable)))
           (if (i32.ne (local.get $b0) (i32.const 0x75)) (then (br $not_unreachable)))  ;; 'u'
@@ -6580,7 +6573,6 @@
         )
 
         ;; Unknown opcode
-)
         (return (global.get $ERR_PARSE))
       )
 
@@ -6989,7 +6981,6 @@
         (if (i32.lt_s (local.get $err) (i32.const 0)) (then (br $body_done)))  ;; DONE
         (if (local.get $err)
           (then
-            (i32.store (global.get $OFF_WAT_DBG) (i32.const 0x2001))
             (i32.store (global.get $OFF_WAT_TMP) (local.get $err))
             (return (global.get $ERR_PARSE))
           )
@@ -7052,8 +7043,6 @@
     (local $kw_off i32) (local $kw_len i32) (local $open_parens i32)
     (local $b0 i32) (local $b1 i32) (local $b2 i32) (local $b3 i32)
 
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 1))  ;; debug: entered
-
     ;; Save original wasm_ptr/len
     (i32.store (global.get $OFF_WAT_SAV_PTR) (i32.load (global.get $OFF_WASM_PTR)))
     (i32.store (global.get $OFF_WAT_SAV_LEN) (i32.load (global.get $OFF_WASM_LEN)))
@@ -7090,37 +7079,26 @@
     (i32.store (global.get $OFF_WAT_LEN) (local.get $wat_len))
     (local.set $pos (i32.const 0))
 
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 2))
-
     ;; Skip whitespace
     (if (call $wat_skip_ws (local.get $pos)) (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 10)) (return (global.get $ERR_PARSE))))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
-
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 3))
 
     ;; Expect "("
     (i32.store (global.get $OFF_WAT_TMP0) (i32.load (global.get $OFF_WAT_PTR)))
     (i32.store (global.get $OFF_WAT_TMP1) (local.get $pos))
     (i32.store (global.get $OFF_WAT_TMP1) (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos)))
     (local.set $b (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))))
-    (i32.store8 (global.get $OFF_WAT_DBG) (local.get $b))
     (i32.store8 (global.get $OFF_WAT_TMP0) (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))))
     (if (i32.ne (local.get $b) (i32.const 0x28))
       (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 0x1100)) (return (global.get $ERR_PARSE)))
     )
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
 
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 4))
-
     ;; Expect "module"
     (if (call $wat_skip_ws (local.get $pos)) (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 12)) (return (global.get $ERR_PARSE))))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
 
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 5))
-
     (if (call $wat_read_kw (local.get $pos)) (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 13)) (return (global.get $ERR_PARSE))))
-
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 6))
 
     (local.set $kw_off (i32.load (global.get $OFF_SCRATCH0)))
     (local.set $kw_len (i32.load (global.get $OFF_SCRATCH1)))
@@ -7128,13 +7106,9 @@
       (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 14)) (return (global.get $ERR_PARSE)))
     )
 
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 7))
-
     (if (i32.ne (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $kw_off))) (i32.const 0x6D))
       (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 15)) (return (global.get $ERR_PARSE)))  ;; 'm'
     )
-
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 8))
 
     (if (call $wat_kw_match_rest (local.get $kw_off) (i32.const 1) (i32.const 5)
           (i32.const 0x6F) (i32.const 0x64) (i32.const 0x75) (i32.const 0x6C)
@@ -7143,11 +7117,7 @@
       (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 16)) (return (global.get $ERR_PARSE)))
     )
 
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 9))
-
     (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
-
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 20))
 
     ;; ═══ Pass 1: Scan all declarations, register names, count entities ═══
     (block $pass1_done
@@ -7284,8 +7254,6 @@
       )
     )
 
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 30))
-
     ;; ═══ Pass 2: Parse declarations into state buffers ═══
     (local.set $pos (i32.const 0))
     (if (call $wat_skip_ws (local.get $pos)) (then (i32.store (global.get $OFF_WAT_DBG) (i32.const 31)) (return (global.get $ERR_PARSE))))
@@ -7396,8 +7364,6 @@
     ;; Set wasm ptr to body buffer so emit_wasm finds the code
     (i32.store (global.get $OFF_WASM_PTR) (global.get $OFF_WAT_BODY))
     (i32.store (global.get $OFF_WASM_LEN) (global.get $WAT_BODY_SZ))
-
-    (i32.store (global.get $OFF_WAT_DBG) (i32.const 99))
     (return (global.get $OK))
   )
 

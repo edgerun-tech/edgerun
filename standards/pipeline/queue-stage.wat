@@ -29,6 +29,7 @@
 
   ;; ── Helper: peek message length from pipe without consuming ──
   (func $queue_peek_len (param $pipe i32) (result i32)
+  (local $data i32) (local $len i32) (local $q i32)
     (local $fill i32)
     (local.set $fill (call $pipe_fill (local.get $pipe)))
     (if (i32.lt_u (local.get $fill) (i32.const 4))
