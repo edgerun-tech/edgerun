@@ -230,6 +230,10 @@
   (elem (i32.const 137) $process_bracket_list_next)
   ;; Slot 138: Host:Port scan
   (elem (i32.const 138) $process_host_port_scan)
+  ;; Slot 139: X25519 scalar multiply
+  (elem (i32.const 139) $process_x25519_scalar_mult)
+  ;; Slot 140: AES-256 encrypt
+  (elem (i32.const 140) $process_aes256_encrypt)
 
   ;; Slots 46-47: Edgerun compiler/interpreter stages
   (elem (i32.const 46) $process_edgerun_parse)

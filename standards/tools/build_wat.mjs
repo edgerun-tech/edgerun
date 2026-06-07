@@ -423,6 +423,8 @@ const MANIFEST = [
   'pipeline/unquote-span-stage.wat',
   'pipeline/bracket-list-next-stage.wat',
   'pipeline/host-port-scan-stage.wat',
+  'pipeline/x25519-scalar-mult-stage.wat',
+  'pipeline/aes256-encrypt-stage.wat',
 
   // ── Layer 8: Protocol parsers ──
   'protocol/binary-core.wat',

@@ -728,6 +728,7 @@
 
     (i32.store (i32.const 0x8C060) (local.get $pos))
     (i32.store (i32.const 0x8C080) (local.get $body_off))
+    (i32.store (i32.const 0x8C0B8) (i32.add (i32.load (i32.const 0x8C0B8)) (i32.const 1)))
 
     ;; Skip whitespace
     (i32.store (i32.const 0x8C048) (i32.const 0x7001))
@@ -770,6 +771,7 @@
       )
     )
 
+    (i32.store (i32.const 0x8C0C0) (local.get $pos))
     ;; Check for end of input
     (if (i32.ge_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))
                   (i32.add (i32.load (global.get $OFF_WAT_PTR)) (i32.load (global.get $OFF_WAT_LEN))))
@@ -872,6 +874,7 @@
           (local.set $imm (i32.load (global.get $OFF_SCRATCH0)))
           (local.set $pos (i32.add (local.get $pos) (i32.load (global.get $OFF_SCRATCH1))))
           (i32.store (i32.const 0x8C090) (local.get $body_off))
+          (i32.store (i32.const 0x8C0A4) (local.get $pos))
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x41)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_i32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))

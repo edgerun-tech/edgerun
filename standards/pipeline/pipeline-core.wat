@@ -148,6 +148,8 @@
   (func (export "STAGE_UNQUOTE_SPAN")           (result i32) i32.const 136)
   (func (export "STAGE_BRACKET_LIST_NEXT")      (result i32) i32.const 137)
   (func (export "STAGE_HOST_PORT_SCAN")         (result i32) i32.const 138)
+  (func (export "STAGE_X25519_SCALAR_MULT")     (result i32) i32.const 139)
+  (func (export "STAGE_AES256_ENCRYPT")         (result i32) i32.const 140)
   (func (export "STAGE_DASHBOARD")         (result i32) i32.const 14)
 
   ;; ── Stage function type ──

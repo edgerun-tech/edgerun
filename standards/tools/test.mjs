@@ -365,7 +365,13 @@ const u32 = new Uint32Array(mem.buffer);
   const emitBodyOffVal = emitBodyOff[0] | (emitBodyOff[1] << 8) | (emitBodyOff[2] << 16) | (emitBodyOff[3] << 24);
   const posAfterWs = new Uint8Array(wasm.memory.buffer, 0x8C094, 4);
   const posAfterWsVal = posAfterWs[0] | (posAfterWs[1] << 8) | (posAfterWs[2] << 16) | (posAfterWs[3] << 24);
-  check(watStatus === 0, `load_wat status=${watStatus} dbg=0x${dbgVal.toString(16)} body=0x${bodyDbgVal.toString(16)} emitOff=${emitOffVal} emitFlg=${emitFlgVal} err=${funcErrVal} posParam=0x${posParamVal.toString(16)} bodyOffWs=${bodyOffAfterWsVal} emitBodyOff=${emitBodyOffVal} posAfterWs=${posAfterWsVal}`);
+  const bodyCallCount = new Uint8Array(wasm.memory.buffer, 0x8C0B8, 4);
+  const bodyCallCountVal = bodyCallCount[0] | (bodyCallCount[1] << 8) | (bodyCallCount[2] << 16) | (bodyCallCount[3] << 24);
+  const posBeforeEndCheck = new Uint8Array(wasm.memory.buffer, 0x8C0C0, 4);
+  const posBeforeEndCheckVal = posBeforeEndCheck[0] | (posBeforeEndCheck[1] << 8) | (posBeforeEndCheck[2] << 16) | (posBeforeEndCheck[3] << 24);
+  const posAfterDelta = new Uint8Array(wasm.memory.buffer, 0x8C0A4, 4);
+  const posAfterDeltaVal = posAfterDelta[0] | (posAfterDelta[1] << 8) | (posAfterDelta[2] << 16) | (posAfterDelta[3] << 24);
+  check(watStatus === 0, `load_wat status=${watStatus} dbg=0x${dbgVal.toString(16)} body=0x${bodyDbgVal.toString(16)} emitOff=${emitOffVal} emitFlg=${emitFlgVal} err=${funcErrVal} posParam=0x${posParamVal.toString(16)} bodyOffWs=${bodyOffAfterWsVal} emitBodyOff=${emitBodyOffVal} posAfterWs=${posAfterWsVal} calls=${bodyCallCountVal} posEnd=${posBeforeEndCheckVal} posDelta=${posAfterDeltaVal}`);
   // Check what was stored at OFF_WAT_PTR after load_wat
   const watPtr = new Uint8Array(wasm.memory.buffer, 0x8C000, 4);
   const watPtrVal = watPtr[0] | (watPtr[1] << 8) | (watPtr[2] << 16) | (watPtr[3] << 24);

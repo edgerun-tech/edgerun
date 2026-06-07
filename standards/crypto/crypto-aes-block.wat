@@ -1030,7 +1030,7 @@
     local.get $out
     call $decrypt128)
 
-  (func (export "aes256_encrypt") (param $key i32) (param $key_len i32) (param $block i32) (param $block_len i32) (param $out i32) (result i64)
+  (func $aes256_encrypt (export "aes256_encrypt") (param $key i32) (param $key_len i32) (param $block i32) (param $block_len i32) (param $out i32) (result i64)
     local.get $key
     local.get $key_len
     local.get $block

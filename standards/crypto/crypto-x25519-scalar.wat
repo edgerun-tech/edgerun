@@ -554,7 +554,7 @@
     local.get $z2 local.get $E local.get $T0 call $fe_mul)
 
   ;; ── x25519_scalar_mult(out[32], scalar[32], point[32]) ──
-  (func (export "x25519_scalar_mult")
+  (func $x25519_scalar_mult (export "x25519_scalar_mult")
     (param $out i32) (param $scalar i32) (param $point i32)
     (result i32)
     (local $sc i32) (local $x1 i32) (local $x2 i32) (local $z2 i32)
