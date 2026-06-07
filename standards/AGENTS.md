@@ -12,7 +12,7 @@ A **WebAssembly Text (.wat) standards library** for the EdgeRun decentralized ed
 |--------|------:|------:|------|
 | **runtime/** | 2 | 767 | **Shared core** — memory, char LUTs, `pack` helpers, syscall constants, math utils |
 | **compiler/** | 17 | 25,779 | WASM interpreter + JIT compiler (x86-64, AArch64, ARM32 backends) |
-| **pipeline/** | 9 | 6,788 | **Pipeline framework** — stage dispatch, framing, mux, WASM exec |
+| **pipeline/** | 11 | 6,788 | **Pipeline framework** — stage dispatch, framing, mux, WASM detect/load/call |
 | **protocol/** | 13 | 25,190 | Network protocol parsers/serializers (HTTP/1-3, TLS, DNS, WebSocket, QUIC, DHCP, HPACK, QPACK, DER/ASN.1) — merged from 55 fragments |
 | **codec/** | 9 | 22,352 | Encoding/decoding (base64/64url/32hex, JSON, TOML, YAML, PEM, zlib/gzip, UTF-8, deflate) — merged from 38 fragments |
 | **crypto/** | 19 | 7,658 | Cryptographic primitives (SHA-256/512, AES-* , HMAC, HKDF, X25519, ECDSA, Ed25519, RSA) |
@@ -420,7 +420,10 @@ source .wat fragments  ──►  tools/build_wat.mjs  ──►  edgerun.wat  �
 4. Stage table (funcref table length and population)
 5. UI framework exports (5 `er_ui_*` functions)
 6. Compiler/interpreter exports (6 decode/execute functions)
-7. Stage constants (16 `STAGE_*` constants with correct values)
+7. Stage constants (18 `STAGE_*` constants with correct values)
+8. Metadata (self-description, module/function/global counts)
+9. JIT compilation (multi-function compile, fixups, relocations)
+10. UI layout/render (er_ui_layout_set_buf, layout, render, hit-test)
 
 ### Supported Flags (build_wat.mjs)
 
@@ -479,3 +482,58 @@ Completed all three JIT compiler backends (x86-64, ARM32, AArch64) so they coexi
 | **Total** | **10 files** | **~1050** |
 
 **Status**: All 3 backends (x86-64 + ARM32 + AArch64) compile, validate, and run in a single WASM binary.
+
+### 19. UI Framework Pipeline Integration (Session 2026-06-07) ✅
+Integrated the UI framework into the EdgeRun pipeline, hardened defensively, split over-bundled wasm-exec-stage into 3 composable sub-stages, and removed standalone crypto/encoding exports so pipeline stages are the canonical public API.
+
+**What was done:**
+- **10 defensive changes across 5 UI files**: null buffer guards, pipe_read clamping, writer-global save/restore, unknown-kind magenta rect, separate paint buffer at 0x1130000, checked string pointer, gen counter guard, writer-has-string guard, node count cap, emit-failure early return
+- **Pipeline descriptor validation**: magic header check → -1, stage_count bounds check → -2 in `pipeline_run`
+- **`pipeline_set_stage` bounds check**: returns early if idx >= descriptor stage count
+- **UI stage constants (141-143)** added; dead `STAGE_DASHBOARD` removed
+- **wasm-exec-stage split** into 3 stages: `wasm-detect-stage` (slot 13, STAGE_WASM_DETECT), `wasm-load-stage` (slot 14, STAGE_WASM_LOAD), `wasm-call-stage` (slot 144, STAGE_WASM_CALL). Old file deleted.
+- **Standalone exports removed**: `(export "sha1")` from `crypto/crypto-sha1.wat`, `(export "base64_standard_encode")` from `codec/base64.wat`. Pipeline stages are the canonical entry points.
+- **Stage table grown from 144 to 145** for slot 144
+- **`wasm-load-stage.wat` bug fixed**: removed `(drop (call $memcpy ...))` — `$memcpy` returns void
+- **Test fixes**: stage_table length check → 145, hit-test coordinate → (10,8), rebuilt
+- **Stale files removed**: `pipeline/wasm-exec-stage.wat` (old file, not in manifest), `build/manifest.txt` (outdated — actual build uses `build_wat.mjs`'s inline manifest)
+- **Build**: `bun run build` ✓, `wasm-tools validate` ✓, **64/65 tests pass** (1 pre-existing: wayland)
+
+| File | Changes |
+|------|---------|
+| `pipeline/wasm-detect-stage.wat` (new) | Slot 13 WASM binary/WAT detection stage |
+| `pipeline/wasm-load-stage.wat` (new) | Slot 14 WASM/WAT loader stage |
+| `pipeline/wasm-call-stage.wat` (new) | Slot 144 WASM function call stage |
+| `pipeline/wasm-exec-stage.wat` | Deleted (replaced by 3 stages) |
+| `pipeline/pipeline-core.wat` | +UI stage constants (141-143), -STAGE_DASHBOARD, descriptor validation, set_stage bounds |
+| `pipeline/stage-registry.wat` | Updated elem for slots 13, 14, 144 |
+| `crypto/crypto-sha1.wat` | Removed `(export "sha1")` |
+| `codec/base64.wat` | Removed `(export "base64_standard_encode")` |
+| 5 UI files | 10 defensive hardening guards |
+| `tools/test.mjs` | Stage table 145, hit-test (10,8), 18 STAGE_* constants |
+| `tools/build_wat.mjs` | 236 fragments (was 234: +3 -1) |
+
+**Key architectural decisions:**
+- Pipeline stages are the canonical public API for crypto/encoding operations
+- Internal same-module callers (ws.wat) may still reference `$sha1`/`$base64_encode` by name — removing exports is sufficient to prevent external misuse
+- wasm-exec split into detect → load → call provides composability at the pipeline level
+- `build/manifest.txt` is stale/not used; canonical build tool is `tools/build_wat.mjs` with its inline MANIFEST
+
+### 20. Interpreter Bug Fixes + WAT Parser Fixes (Session 2026-06-07) ✅
+Fixed 3 interpreter-core bugs causing incorrect fib/sum results and 3 WAT parser bugs for Wayland support.
+
+**Interpreter core fixes** (`compiler/interpreter-core.wat`):
+1. **Init loop range** (line ~2035): changed `(i32.const 0)` → `(local.get $args_len)` so declared locals are zeroed but function params preserved
+2. **Total local count** (new line after ~2030): added `(local.set $local_count (i32.add (local.get $local_count) (local.get $args_len)))` so save/restore and init loops cover all locals (params + declared)
+3. **3-arg `i32.add` in save/restore** (lines ~2538/2566): nested as `(i32.add (i32.add a b) c)` so frame base contributes; before fix, locals saved to fixed address 16 instead of `op_base+16`, causing cross-frame corruption during recursion
+
+**WAT parser fixes** (`compiler/interpreter.wat`):
+1. **Export check** (line ~1251): when `(func ...)` has `(param ...)` instead of `(export ...)`, saves `(` position and falls through to inline type parsing instead of returning `ERR_PARSE`
+2. **Param `$name` identifiers** (line ~1339): skips `$name` tokens in `(param $name type)` before reading value type; previously `$` caused `wat_read_kw` to fail
+3. **Unread open paren** (line ~1397): uses saved `(` position (`$p2`) instead of computing `pos - 1` from keyword-end position
+
+**Verification:**
+- `fib(25)=75025`, `sum(100K)=704982704`, `sum(100)=4950`, `fib(2)=1` all correct
+- 64/65 tests pass (only pre-existing Wayland WAT body parse failure remains, debug=0x2001)
+- Build validates (`wasm-tools parse` + `wasm-tools validate`)
+- Wayland `load_wat status=7` confirmed pre-existing (fails on clean repo too)

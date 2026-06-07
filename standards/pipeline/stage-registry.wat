@@ -20,7 +20,8 @@
   (elem (i32.const 11) $process_ws_encode)
   (elem (i32.const 12) $process_ws_decode)
   ;; Slot 13: exec (from pipeline/wasm-exec-stage.wat)
-  (elem (i32.const 13) $process_exec)
+  (elem (i32.const 13) $process_wasm_detect)
+  (elem (i32.const 14) $process_wasm_load)
   ;; Slots 14: (removed — old dashboard deleted)
   ;; Slot 15: frame pacer (from frame-pacer.wat)
   (elem (i32.const 15) $process_frame_pacer)
@@ -247,3 +248,6 @@
   (elem (i32.const 141) $process_ui_layout)
   (elem (i32.const 142) $process_ui_paint)
   (elem (i32.const 143) $process_ui_event)
+  ;; Slot 144: WASM call
+  (elem (i32.const 144) $process_wasm_call)
+  (elem (i32.const 145) $process_edgerun_compile)

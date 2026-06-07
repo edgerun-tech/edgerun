@@ -1,0 +1,22 @@
+;; WASM Load Stage — slot 14
+  ;; Stage type: batch (state=0)
+  ;; Input:  1-byte format flag + raw bytes
+  ;; Output: 4-byte success marker
+  (func $process_wasm_load (export "process_wasm_load")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $len i32) (local $flag i32) (local $err i32) (local $data_len i32)
+    (local.set $len (call $pipe_read (local.get $input) (local.get $scratch) (local.get $scap)))
+    (if (i32.le_s (local.get $len) (i32.const 1))
+      (then (return (local.get $len))))
+    (local.set $flag (i32.load8_u (local.get $scratch)))
+    (local.set $data_len (i32.sub (local.get $len) (i32.const 1)))
+    (call $memcpy (local.get $scratch) (i32.add (local.get $scratch) (i32.const 1)) (local.get $data_len))
+    (if (local.get $flag)
+      (then (local.set $err (call $load (local.get $scratch) (local.get $data_len))))
+      (else (local.set $err (call $load_wat (local.get $scratch) (local.get $data_len)))))
+    (if (local.get $err)
+      (then (return (i32.sub (i32.const 0) (local.get $err)))))
+    (i32.store (local.get $scratch) (i32.const 0))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 4)))
+    (i32.const 4))

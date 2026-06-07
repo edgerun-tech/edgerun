@@ -80,7 +80,7 @@
   ;; ELF output buffer (for compile_to_elf)
   ;; ═════════════════════════════════════════════════════════════════════
   (global $ELF_OUT_BUF_arm32  i32 (i32.const 0x400000))
-  (global $ELF_OUT_OFF_arm32  i32 (i32.const 0x700000))  ;; ELF_OUT_BUF - JIT_CACHE
+  (global $ELF_OUT_OFF_arm32  i32 (i32.const 0x300000))  ;; ELF_OUT_BUF - JIT_CACHE
 
   (global $TEXT_VA_arm32      i32 (i32.const 0x400000))
   (global $BSS_VA_arm32       i32 (i32.const 0x500000))

@@ -99,7 +99,7 @@
       end
     end)
 
-  (func $base64_encode (export "base64_standard_encode")
+  (func $base64_encode
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $groups i32)

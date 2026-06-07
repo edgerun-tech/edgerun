@@ -152,7 +152,7 @@
     local.get $value
     i32.store8)
 
-  (func $sha1 (export "sha1")
+  (func $sha1
     (param $ptr i32)
     (param $len i32)
     (param $out_ptr i32)

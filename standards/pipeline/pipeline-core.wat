@@ -3,7 +3,7 @@
     ;; Standard ID removed — merged into single module
 
   ;; ── Stage dispatch table ──
-  (table (export "stage_table") 144 funcref)
+  (table (export "stage_table") 146 funcref)
 
   ;; ── Stage type constants (dispatch table indices) ──
   (func (export "STAGE_PASSTHROUGH") (result i32) i32.const 0)
@@ -19,12 +19,14 @@
   (func (export "STAGE_WS_FRAME")     (result i32) i32.const 10)
   (func (export "STAGE_WS_ENCODE")    (result i32) i32.const 11)
   (func (export "STAGE_WS_DECODE")    (result i32) i32.const 12)
-  (func (export "STAGE_EXEC")         (result i32) i32.const 13)
-  (func (export "STAGE_FRAME_PACER")  (result i32) i32.const 15)
+  (func (export "STAGE_WASM_DETECT")     (result i32) i32.const 13)
+  (func (export "STAGE_WASM_LOAD")       (result i32) i32.const 14)
+  (func (export "STAGE_FRAME_PACER")     (result i32) i32.const 15)
 
   ;; ── Edgerun pipeline stages (compiler/interpreter) ──
   (func (export "STAGE_EDGERUN_PARSE") (result i32) i32.const 46)
   (func (export "STAGE_EDGERUN_EXEC")  (result i32) i32.const 47)
+  (func (export "STAGE_EDGERUN_COMPILE") (result i32) i32.const 145)
 
   ;; ── Queue/Buffer/CDC stages ──
   (func (export "STAGE_QUEUE")  (result i32) i32.const 48)
@@ -150,7 +152,10 @@
   (func (export "STAGE_HOST_PORT_SCAN")         (result i32) i32.const 138)
   (func (export "STAGE_X25519_SCALAR_MULT")     (result i32) i32.const 139)
   (func (export "STAGE_AES256_ENCRYPT")         (result i32) i32.const 140)
-  (func (export "STAGE_DASHBOARD")         (result i32) i32.const 14)
+  (func (export "STAGE_UI_LAYOUT")              (result i32) i32.const 141)
+  (func (export "STAGE_UI_PAINT")               (result i32) i32.const 142)
+  (func (export "STAGE_UI_EVENT")               (result i32) i32.const 143)
+  (func (export "STAGE_WASM_CALL")              (result i32) i32.const 144)
 
   ;; ── Stage function type ──
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) -> result

@@ -632,14 +632,14 @@
     ;; Get decoded_ops base from imported global
     (local.set $decoded_ops_base (global.get $OFF_DECODED_OPS))
 
-    ;; ── Emit prologue ─────────────────────────────────────────────
-    (call $emit_x86_prologue)
-
     ;; ── Record this function's offset in func_off_table ────────────
     (i32.store
       (i32.add (global.get $FUNC_OFF_TABLE_x86_64) (i32.shl (local.get $func_idx) (i32.const 2)))
       (i32.load (global.get $JS_CODE_PTR_x86_64))
     )
+
+    ;; ── Emit prologue ─────────────────────────────────────────────
+    (call $emit_x86_prologue)
 
     ;; ── Main compile loop ─────────────────────────────────────────
     (local.set $dec_ptr (local.get $decoded_ops_base))

@@ -1239,6 +1239,7 @@
       (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
       (local.set $b (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))))
       (if (i32.ne (local.get $b) (i32.const 0x28)) (then (br $export_check_done)))  ;; not '('
+      (local.set $p1 (local.get $pos))  ;; save '(' position
       (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
       ;; Read keyword
       (if (call $wat_skip_ws (local.get $pos)) (then (return (global.get $ERR_PARSE))))
@@ -1248,13 +1249,13 @@
       (local.set $kw_len (i32.load (global.get $OFF_SCRATCH1)))
       (local.set $p0 (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $kw_off))))
       ;; Check "export" (6 bytes)
-      (if (i32.ne (local.get $kw_len) (i32.const 6)) (then (return (global.get $ERR_PARSE))))
-      (if (i32.ne (local.get $p0) (i32.const 0x65)) (then (return (global.get $ERR_PARSE))))
+      (if (i32.ne (local.get $kw_len) (i32.const 6)) (then (local.set $pos (local.get $p1)) (br $export_check_done)))
+      (if (i32.ne (local.get $p0) (i32.const 0x65)) (then (local.set $pos (local.get $p1)) (br $export_check_done)))
       (if (call $wat_kw_match_rest (local.get $kw_off) (i32.const 1) (i32.const 5)
             (i32.const 0x78) (i32.const 0x70) (i32.const 0x6f) (i32.const 0x72)
             (i32.const 0x74) (i32.const 0) (i32.const 0) (i32.const 0)
             (i32.const 0) (i32.const 0))
-        (then (return (global.get $ERR_PARSE)))
+        (then (local.set $pos (local.get $p1)) (br $export_check_done))
       )
       (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
 
@@ -1308,6 +1309,7 @@
         (if (i32.eq (local.get $b) (i32.const 0x29)) (then (local.set $pos (i32.add (local.get $pos) (i32.const 1))) (br $type_done)))
         ;; Must be '('
         (if (i32.ne (local.get $b) (i32.const 0x28)) (then (br $type_done)))  ;; not '(', assume body starts
+        (local.set $p2 (local.get $pos))  ;; save '(' position
         (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
         ;; Read keyword
         (if (call $wat_skip_ws (local.get $pos)) (then (return (global.get $ERR_PARSE))))
@@ -1335,6 +1337,14 @@
               (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
               (local.set $b (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))))
               (if (i32.eq (local.get $b) (i32.const 0x29)) (then (local.set $pos (i32.add (local.get $pos) (i32.const 1))) (br $param_done)))  ;; ')'
+              ;; Skip optional $name identifier
+              (if (i32.eq (local.get $b) (i32.const 0x24))  ;; '$'
+                (then
+                  (if (call $wat_read_id (local.get $pos)) (then (return (global.get $ERR_PARSE))))
+                  (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
+                  (br $param_lp)
+                )
+              )
               ;; Read value type
               (if (call $wat_read_kw (local.get $pos)) (then (return (global.get $ERR_PARSE))))
               (if (call $wat_valtype (i32.load (global.get $OFF_SCRATCH0)) (i32.load (global.get $OFF_SCRATCH1)))
@@ -1385,7 +1395,7 @@
         )
 
         ;; Not param or result — unread the open paren and go to body
-        (local.set $pos (i32.sub (local.get $pos) (i32.const 1)))
+        (local.set $pos (local.get $p2))
         (br $type_done)
       )
     )

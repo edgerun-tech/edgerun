@@ -1,6 +1,7 @@
 runtime/module-header.wat
 runtime/memory.wat
 runtime/memory-map.wat
+runtime/elf-entry.wat
 runtime/edgerun-core.wat
 runtime/math-utils.wat
 pipeline/pipe-core.wat
@@ -22,6 +23,7 @@ lang/edgerun-lower.wat
 lang/edgerun-privacy.wat
 pipeline/edgerun-parse-stage.wat
 pipeline/edgerun-exec-stage.wat
+pipeline/edgerun-compile-stage.wat
 pipeline/x25519-scalar-mult-stage.wat
 pipeline/aes256-encrypt-stage.wat
 compiler/base-x86-64.wat
@@ -70,7 +72,9 @@ pipeline/gzip-encode-stage.wat
 pipeline/zlib-decode-stage.wat
 pipeline/zlib-encode-stage.wat
 pipeline/json-parse-stage.wat
-pipeline/wasm-exec-stage.wat
+pipeline/wasm-detect-stage.wat
+pipeline/wasm-load-stage.wat
+pipeline/wasm-call-stage.wat
 pipeline/percent-decode-stage.wat
 pipeline/percent-encode-stage.wat
 pipeline/utf8-repair-stage.wat
@@ -229,6 +233,7 @@ data/terminal-state-core.wat
 data/uuid-util.wat
 data/generated-metadata.wat
 pipeline/stage-registry.wat
+compiler/compile-all.wat
 compiler/dispatch-wrapper.wat
 app/wayland-patch-syscalls.wat
 runtime/module-footer.wat
