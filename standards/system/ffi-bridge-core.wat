@@ -1,6 +1,11 @@
 ;; Captures the portable meaning from edgerun-wasm-bindgen and its macro-support:
   ;; ABI primitive packing, descriptor wrappers, closure ownership, attribute parsing,
   ;; AST import/export classification, and custom-section encoding rules.
+  (func $m195lower (param $b i32) (result i32)
+    (if (result i32)
+      (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90)))
+      (then (i32.add (local.get $b) (i32.const 32)))
+      (else (local.get $b))))
   (func $m195fnv1a_lower (param $ptr i32) (param $len i32) (result i32)
     (local $end i32) (local $h i32)
     (local.set $end (i32.add (local.get $ptr) (local.get $len)))

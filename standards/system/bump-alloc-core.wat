@@ -1,3 +1,8 @@
+(func $m37min (param $a i32) (param $b i32) (result i32)
+  (if (result i32)
+    (i32.lt_u (local.get $a) (local.get $b))
+    (then (local.get $a))
+    (else (local.get $b))))
 (func $next_power2 (param $n i32) (result i32)
     (local $p i32)
     i32.const 1

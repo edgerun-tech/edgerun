@@ -8,7 +8,7 @@
       (local.set $i (i32.add (local.get $i) (i32.const 1)))
       (br $loop))
     i32.const 0)
-  (func (export "tracing_level_code") (param $ptr i32) (param $len i32) (result i32)
+  (func (export "telemetry_tracing_level_code") (param $ptr i32) (param $len i32) (result i32)
     (if (call $m187eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 5))))
     (if (call $m187eq (local.get $ptr) (local.get $len) (i32.const 21) (i32.const 5)) (then (return (i32.const 4))))
     (if (call $m187eq (local.get $ptr) (local.get $len) (i32.const 26) (i32.const 4)) (then (return (i32.const 3))))
@@ -29,7 +29,7 @@
     (if (i32.lt_s (local.get $fields_present) (local.get $fields_required)) (then (return (i32.const 0))))
     (call $tracing_level_allows (local.get $filter_level) (local.get $event_level)))
 
-  (func (export "tracing_interest_join") (param $outer i32) (param $inner i32) (result i32)
+  (func (export "telemetry_tracing_interest_join") (param $outer i32) (param $inner i32) (result i32)
     (if (i32.or (i32.eqz (local.get $outer)) (i32.eqz (local.get $inner))) (then (return (i32.const 0))))
     (if (i32.and (i32.eq (local.get $outer) (i32.const 2)) (i32.eq (local.get $inner) (i32.const 2))) (then (return (i32.const 2))))
     i32.const 1)

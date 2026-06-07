@@ -30,7 +30,7 @@
   (func (export "monotime_elapsed") (param $now i64) (param $start i64) (result i64)
     (i64.sub (local.get $now) (local.get $start)))
 
-  (func (export "align_up") (param $value i32) (param $align i32) (result i32)
+  (func (export "platform_align_up") (param $value i32) (param $align i32) (result i32)
     (call $round_up (local.get $value) (local.get $align)))
 
   (func (export "allocator_heap_min_start") (param $is_xtensa i32) (result i32)

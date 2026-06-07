@@ -167,6 +167,11 @@
     i32.and)
 
   (export "virtio_queue_configured_size" (func $virtio_queue_configured_size))
+  (func $m214min (param $a i32) (param $b i32) (result i32)
+    (if (result i32)
+      (i32.lt_u (local.get $a) (local.get $b))
+      (then (local.get $a))
+      (else (local.get $b))))
   (func $virtio_queue_configured_size
     (param $host_queue_size i32)
     (param $max_queue_size i32)

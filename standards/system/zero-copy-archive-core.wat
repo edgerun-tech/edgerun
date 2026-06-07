@@ -1,4 +1,4 @@
-(func $is_power_of_two (param $value i64) (result i32)
+(func $zca_is_power_of_two (param $value i64) (result i32)
     (i32.and
       (i64.gt_u (local.get $value) (i64.const 0))
       (i64.eqz (i64.and (local.get $value) (i64.sub (local.get $value) (i64.const 1))))))
@@ -69,7 +69,7 @@
     i32.const 1)
 
   (func (export "rkyv_aligned_vec_max_capacity") (param $alignment i64) (param $max_isize i64) (result i64)
-    (if (i32.eqz (call $is_power_of_two (local.get $alignment))) (then (return (i64.const -1))))
+    (if (i32.eqz (call $zca_is_power_of_two (local.get $alignment))) (then (return (i64.const -1))))
     (if (i64.ge_u (local.get $alignment) (local.get $max_isize)) (then (return (i64.const -1))))
     (i64.sub (local.get $max_isize) (i64.sub (local.get $alignment) (i64.const 1))))
 
@@ -80,7 +80,7 @@
   (func (export "rkyv_suballocator_alloc_offset") (param $used i64) (param $size i64) (param $request_size i64) (param $align i64) (result i64)
     (local $start i64)
     (local $end i64)
-    (if (i32.eqz (call $is_power_of_two (local.get $align))) (then (return (i64.const -1))))
+    (if (i32.eqz (call $zca_is_power_of_two (local.get $align))) (then (return (i64.const -1))))
     (local.set $start (call $align_up_u64 (local.get $used) (local.get $align)))
     (local.set $end (i64.add (local.get $start) (local.get $request_size)))
     (if (i64.lt_u (local.get $end) (local.get $start)) (then (return (i64.const -1))))

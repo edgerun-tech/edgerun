@@ -1,5 +1,22 @@
 ;; Captures the useful portable semantics from edgerun-js-sys:
   ;; ECMAScript global families, Temporal option/unit spellings, and futures glue state.
+  (func $m122fnv1a_lower (param $ptr i32) (param $len i32) (result i32)
+    (local $end i32) (local $h i32) (local $b i32)
+    (local.set $end (i32.add (local.get $ptr) (local.get $len)))
+    (local.set $h (i32.const 0x811c9dc5))
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $ptr) (local.get $end)))
+        (local.set $b (i32.load8_u (local.get $ptr)))
+        (if (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90)))
+          (then (local.set $b (i32.add (local.get $b) (i32.const 32)))))
+        (local.set $h
+          (i32.mul
+            (i32.xor (local.get $h) (local.get $b))
+            (i32.const 0x01000193)))
+        (local.set $ptr (i32.add (local.get $ptr) (i32.const 1)))
+        (br $loop)))
+    local.get $h)
   (func $m122is (param $h i32) (param $want i32) (result i32)
     (i32.eq (local.get $h) (local.get $want)))
 

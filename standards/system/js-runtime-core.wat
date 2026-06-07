@@ -1,4 +1,29 @@
-(func $m135ends (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
+(func $m135eq (param $ptr i32) (param $len i32) (param $offset i32) (param $cmp_len i32) (result i32)
+    (local $i i32)
+    (if (i32.ne (local.get $len) (local.get $cmp_len)) (then (return (i32.const 0))))
+    (block $done
+      (loop $loop
+        (if (i32.ne
+              (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+              (i32.load8_u (i32.add (local.get $offset) (local.get $i))))
+          (then (return (i32.const 0))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br_if $loop (i32.lt_u (local.get $i) (local.get $cmp_len)))))
+    (i32.const 1))
+  (func $m135starts (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
+    (local $i i32)
+    (if (i32.lt_u (local.get $len) (local.get $lit_len))
+      (then (return (i32.const 0))))
+    (block $done
+      (loop $loop
+        (if (i32.ne
+              (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+              (i32.load8_u (i32.add (local.get $lit) (local.get $i))))
+          (then (return (i32.const 0))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br_if $loop (i32.lt_u (local.get $i) (local.get $lit_len)))))
+    (i32.const 1))
+  (func $m135ends (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
     (if (i32.lt_u (local.get $len) (local.get $lit_len)) (then (return (i32.const 0))))
     (call $m135eq
       (i32.add (local.get $ptr) (i32.sub (local.get $len) (local.get $lit_len)))

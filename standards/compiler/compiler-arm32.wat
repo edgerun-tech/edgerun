@@ -243,7 +243,6 @@
   ;; B.cond #imm (conditional branch, ±32MB): cond 1010 imm24
   ;; cond codes: EQ=0, NE=1, CS=2, CC=3, MI=4, PL=5, VS=6, VC=7
   ;; HI=8, LS=9, GE=10, LT=11, GT=12, LE=13, AL=14
-  )
 
   ;; CBZ/CBNZ not available in ARM32 (it's a Thumb-2 instruction)
   ;; Use CMP + B cond instead

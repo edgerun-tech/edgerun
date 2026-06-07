@@ -612,6 +612,11 @@
     i32.const 81)
 
   (export "evdev_product_field_count" (func $evdev_product_field_count))
+  (func $m208min (param $a i32) (param $b i32) (result i32)
+    (if (result i32)
+      (i32.lt_u (local.get $a) (local.get $b))
+      (then (local.get $a))
+      (else (local.get $b))))
   (func $evdev_product_field_count (param $slash_parts i32) (result i32)
     local.get $slash_parts
     i32.const 4

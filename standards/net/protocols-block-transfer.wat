@@ -24,6 +24,11 @@
           (i32.shl (call $m151b (local.get $ptr) (i32.const 2)) (i32.const 16))
           (i32.shl (call $m151b (local.get $ptr) (i32.const 3)) (i32.const 24))))))
 
+  (func $m151upper (param $b i32) (result i32)
+    (if (result i32)
+      (i32.and (i32.ge_u (local.get $b) (i32.const 97)) (i32.le_u (local.get $b) (i32.const 122)))
+      (then (i32.sub (local.get $b) (i32.const 32)))
+      (else (local.get $b))))
   (func $eq_ci_byte (param $ptr i32) (param $off i32) (param $c i32) (result i32)
     (i32.eq (call $m151upper (call $m151b (local.get $ptr) (local.get $off))) (local.get $c)))
 

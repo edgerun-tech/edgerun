@@ -1,3 +1,11 @@
+(func $is_ascii_alnum (param $b i32) (result i32)
+  (i32.or
+    (i32.or
+      (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90)))
+      (i32.and (i32.ge_u (local.get $b) (i32.const 97)) (i32.le_u (local.get $b) (i32.const 122))))
+    (i32.and (i32.ge_u (local.get $b) (i32.const 48)) (i32.le_u (local.get $b) (i32.const 57)))))
+(func $is_upper_ascii (param $b i32) (result i32)
+  (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90))))
 (func $forbidden_namespace_byte (param $b i32) (result i32)
     local.get $b
     i32.const 32

@@ -7,6 +7,12 @@
   ;; - JSON escape action: raw=0 simple=1 nl=2 cr=3 tab=4 bs=5 ff=6 unicode=7
   ;; - cookie store/send: skip=0 store/send=1
 
+  (func $ascii_alpha (param $b i32) (result i32)
+    (i32.or
+      (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90)))
+      (i32.and (i32.ge_u (local.get $b) (i32.const 97)) (i32.le_u (local.get $b) (i32.const 122)))))
+  (func $ascii_digit (param $b i32) (result i32)
+    (i32.and (i32.ge_u (local.get $b) (i32.const 48)) (i32.le_u (local.get $b) (i32.const 57))))
   (func $m50bool (param $x i32) (result i32)
     local.get $x
     i32.const 0

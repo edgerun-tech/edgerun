@@ -5,6 +5,13 @@
   
   
 
+  (func $m130is_wsp (param $b i32) (result i32)
+    (i32.or (i32.eq (local.get $b) (i32.const 32)) (i32.eq (local.get $b) (i32.const 9))))
+  (func $m130lower (param $b i32) (result i32)
+    (if (result i32)
+      (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90)))
+      (then (i32.add (local.get $b) (i32.const 32)))
+      (else (local.get $b))))
   (func $m130trim_start (param $ptr i32) (param $start i32) (param $end i32) (result i32)
     (local $i i32)
     local.get $start
