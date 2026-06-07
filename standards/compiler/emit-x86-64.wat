@@ -1422,7 +1422,7 @@
   ;; ELF64 binary output
   ;; ═════════════════════════════════════════════════════════════════════
 
-  (global $ELF_OUT_BUF  i32 (i32.const 0x800000))
+  (global $ELF_OUT_BUF  i32 (i32.const 0x400000))
   (global $ELF_OUT_OFF  i32 (i32.const 0x700000))  ;; ELF_OUT_BUF - JIT_CACHE
 
   (global $TEXT_VA      i32 (i32.const 0x400000))

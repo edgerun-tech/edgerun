@@ -42,8 +42,9 @@
   (global $OFF_WAT_SYM  i32 (i32.const 0x8C00C))
   (global $OFF_WAT_SAV_PTR i32 (i32.const 0x8C010))
   (global $OFF_WAT_SAV_LEN i32 (i32.const 0x8C014))
-  (global $OFF_WAT_ERR    i32 (i32.const 0x8C018))
+  (global $OFF_WAT_SAV_DC  i32 (i32.const 0x8C018))
   (global $OFF_WAT_TMP    i32 (i32.const 0x8C01C))
+  (global $OFF_WAT_TMP2   i32 (i32.const 0x8C024))
   (global $OFF_WAT_SYMS   i32 (i32.const 0x8B000))
   (global $WAT_SYM_SZ     i32 (i32.const 16))
   (global $WAT_MAX_SYMS   i32 (i32.const 256))
@@ -621,37 +622,37 @@
   ;; Emit a LEB128 signed integer (32-bit).
   ;; Output: scratch0 = new offset
   (func $wat_emit_leb_i32 (param $off i32) (param $val i32) (result i32)
-    (local $b i32) (local $more i32) (local $sign i32)
-    (local.set $sign (i32.and (local.get $val) (i32.const 0x40)))  ;; bit 6 of original
+    (local $b i32) (local $more i32)
     (block $done
       (loop $lp
         (local.set $b (i32.and (local.get $val) (i32.const 0x7F)))
         (local.set $val (i32.shr_s (local.get $val) (i32.const 7)))
-        ;; Check if more bytes needed
-        (block $check_more
-          (if (i32.eq (local.get $val) (i32.const 0))
-            (then
-              (if (i32.eqz (i32.and (local.get $b) (i32.const 0x40))) (then (br $check_more)))
+        ;; Check if more bytes needed — DONE when:
+        ;;   val == 0 && b bit 6 == 0, OR val == -1 && b bit 6 == 1
+        (if (i32.eq (local.get $val) (i32.const 0))
+          (then
+            (if (i32.eqz (i32.and (local.get $b) (i32.const 0x40)))
+              (then (br $done))  ;; done
             )
-            (else
-              (if (i32.eq (local.get $val) (i32.const -1))
-                (then
-                  (if (i32.and (local.get $b) (i32.const 0x40)) (then (br $check_more)))
+          )
+          (else
+            (if (i32.eq (local.get $val) (i32.const -1))
+              (then
+                (if (i32.and (local.get $b) (i32.const 0x40))
+                  (then (br $done))  ;; done
                 )
-                (else (br $check_more))
               )
             )
           )
-          (local.set $more (i32.const 0))
-          (br $done)
         )
-        (local.set $more (i32.const 1))
+        ;; More bytes needed
         (local.set $b (i32.or (local.get $b) (i32.const 0x80)))
         (if (call $wat_emit_byte (local.get $off) (local.get $b)) (then (return (global.get $ERR_NO_MEM))))
         (local.set $off (i32.load (global.get $OFF_SCRATCH0)))
         (br $lp)
       )
     )
+    ;; Emit last byte (without high bit)
     (if (call $wat_emit_byte (local.get $off) (local.get $b)) (then (return (global.get $ERR_NO_MEM))))
     (local.set $off (i32.load (global.get $OFF_SCRATCH0)))
     (i32.store (global.get $OFF_SCRATCH0) (local.get $off))
@@ -728,7 +729,6 @@
 
     (i32.store (i32.const 0x8C060) (local.get $pos))
     (i32.store (i32.const 0x8C080) (local.get $body_off))
-    (i32.store (i32.const 0x8C0B8) (i32.add (i32.load (i32.const 0x8C0B8)) (i32.const 1)))
 
     ;; Skip whitespace
     (i32.store (i32.const 0x8C048) (i32.const 0x7001))
@@ -755,15 +755,22 @@
         (i32.store (global.get $OFF_WAT_SAV_LEN) (i32.load (global.get $OFF_WASM_LEN)))
         (i32.store (global.get $OFF_WASM_PTR) (global.get $OFF_WAT_BODY))
         (i32.store (global.get $OFF_WASM_LEN) (local.get $body_off))
+        ;; OFF_DECODED_COUNT shares address 0x8C000 with OFF_WAT_PTR —
+        ;; save and reset so decode starts at index 0
+        (i32.store (global.get $OFF_WAT_SAV_DC) (i32.load (global.get $OFF_DECODED_COUNT)))
+        (i32.store (global.get $OFF_DECODED_COUNT) (i32.const 0))
         (local.set $err (call $decode_opcodes (i32.const 0) (local.get $body_off)))
         (if (local.get $err) (then (return (local.get $err))))
         (i32.store (global.get $OFF_WASM_PTR) (i32.load (global.get $OFF_WAT_SAV_PTR)))
         (i32.store (global.get $OFF_WASM_LEN) (i32.load (global.get $OFF_WAT_SAV_LEN)))
+        ;; Save decoded count, restore OFF_DECODED_COUNT (=OFF_WAT_PTR)
+        (i32.store (global.get $OFF_WAT_TMP2) (i32.load (global.get $OFF_DECODED_COUNT)))
+        (i32.store (global.get $OFF_DECODED_COUNT) (i32.load (global.get $OFF_WAT_SAV_DC)))
         (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-        (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_DECODED_COUNT)))
+        (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_WAT_TMP2)))
         (local.set $err (call $compute_end_targets
           (local.get $body_off)
-          (i32.load (global.get $OFF_DECODED_COUNT))
+          (i32.load (global.get $OFF_WAT_TMP2))
         ))
         (if (local.get $err) (then (return (local.get $err))))
         (i32.store (global.get $OFF_SCRATCH2) (i32.add (local.get $pos) (i32.const 1)))
@@ -771,7 +778,6 @@
       )
     )
 
-    (i32.store (i32.const 0x8C0C0) (local.get $pos))
     ;; Check for end of input
     (if (i32.ge_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))
                   (i32.add (i32.load (global.get $OFF_WAT_PTR)) (i32.load (global.get $OFF_WAT_LEN))))
@@ -873,8 +879,6 @@
           (if (call $wat_read_sint (local.get $pos)) (then (return (global.get $ERR_PARSE))))
           (local.set $imm (i32.load (global.get $OFF_SCRATCH0)))
           (local.set $pos (i32.add (local.get $pos) (i32.load (global.get $OFF_SCRATCH1))))
-          (i32.store (i32.const 0x8C090) (local.get $body_off))
-          (i32.store (i32.const 0x8C0A4) (local.get $pos))
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x41)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_i32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))

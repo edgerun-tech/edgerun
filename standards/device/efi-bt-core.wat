@@ -132,12 +132,12 @@
 
   (func (export "efi_bt_rtl_frag_len") (result i32) i32.const 252)
 
-  (func (export "efi_bt_rtl_download_frag_count") (param $data_len i32) (result i32)
+  (func $efi_bt_rtl_download_frag_count (export "efi_bt_rtl_download_frag_count") (param $data_len i32) (result i32)
     (i32.add (i32.div_u (local.get $data_len) (i32.const 252)) (i32.const 1)))
 
   (func (export "efi_bt_rtl_download_frag_payload_len") (param $data_len i32) (param $frag_index i32) (result i32)
     (local $frag_count i32)
-    (local.set $frag_count (call 32 (local.get $data_len)))
+    (local.set $frag_count (call $efi_bt_rtl_download_frag_count (local.get $data_len)))
     (if (i32.eq (local.get $frag_index) (i32.sub (local.get $frag_count) (i32.const 1)))
       (then (return (i32.rem_u (local.get $data_len) (i32.const 252)))))
     i32.const 252)

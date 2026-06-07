@@ -6,7 +6,7 @@
  *   1. Compile app/wayland-client.wat → WASM binary via wasm-tools parse
  *   2. Load edgerun.wasm (interpreter + JIT + wayland-patch-syscalls)
  *   3. Write Wayland WASM binary into interpreter memory
- *   4. Call compile_wasm_to_elf → produces ELF in memory at 0x800000
+ *   4. Call compile_wasm_to_elf → produces ELF at ELF_OUT_BUF (0x400000)
  *   5. Read ELF from memory → write to disk as ./wayland-window.elf
  *
  * Usage: bun tools/emit_wayland_window.mjs [--output=./wayland-window.elf]

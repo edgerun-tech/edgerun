@@ -31,7 +31,7 @@
     (i64.sub (local.get $now) (local.get $start)))
 
   (func (export "align_up") (param $value i32) (param $align i32) (result i32)
-    (call round_up (local.get $value) (local.get $align)))
+    (call $round_up (local.get $value) (local.get $align)))
 
   (func (export "allocator_heap_min_start") (param $is_xtensa i32) (result i32)
     (if (local.get $is_xtensa) (then (return (i32.const 0))))
@@ -45,7 +45,7 @@
     ;; 0 ok, 1 zero-size/null, 2 out of heap.
     (local $aligned i32)
     (if (i32.eqz (local.get $size)) (then (return (i32.const 1))))
-    (local.set $aligned (call round_up (local.get $current) (local.get $align)))
+    (local.set $aligned (call $round_up (local.get $current) (local.get $align)))
     (if (i32.gt_u (i32.add (local.get $aligned) (local.get $size)) (local.get $heap_end)) (then (return (i32.const 2))))
     i32.const 0)
 

@@ -59,7 +59,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; ELF output buffer (for compile_to_elf)
   ;; ═════════════════════════════════════════════════════════════════════
-  (global $ELF_OUT_BUF  i32 (i32.const 0x800000))
+  (global $ELF_OUT_BUF  i32 (i32.const 0x400000))
   (global $ELF_OUT_OFF  i32 (i32.const 0x700000))  ;; ELF_OUT_BUF - JIT_CACHE
 
   (global $TEXT_VA      i32 (i32.const 0x400000))
@@ -81,7 +81,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; Flat binary output buffer (for compile_to_bin)
   ;; ═════════════════════════════════════════════════════════════════════
-  (global $BIN_OUT_BUF  i32 (i32.const 0x900000))
+  (global $BIN_OUT_BUF  i32 (i32.const 0x500000))
   (global $BIN_OUT_OFF  i32 (i32.const 0x800000))  ;; BIN_OUT_BUF - JIT_CACHE
 
 
@@ -259,23 +259,18 @@
 
   ;; B #imm (unconditional branch, ±128MB): 000101 + imm26
   ;; imm26 = (target - pc) >> 2, encoded as signed 26-bit
-  )
 
   ;; BL #imm (branch with link): 100101 + imm26
-  )
 
   ;; B.cond #imm (conditional branch, ±1MB): 01010100 imm19 0 cond
   ;; cond codes (AArch64): EQ=0, NE=1, CS/HS=2, CC/LO=3, MI=4, PL=5,
   ;;   VS=6, VC=7, HI=8, LS=9, GE=10, LT=11, GT=12, LE=13, AL=14
-  )
 
   ;; CBZ Xt, #imm (compare and branch if zero, ±1MB): 10110100 imm19 Rt
   ;; For 64-bit: 10110100 imm19 Rt
-  )
 
   ;; CBNZ Xt, #imm (compare and branch if non-zero, ±1MB): 10110101 imm19 Rt
   ;; For 64-bit: 10110101 imm19 Rt
-  )
 
   ;; ── AArch64 Conditional set (CSET) ────────────────────────────────
   ;; CSET Wd, cond = CSINC Wd, WZR, WZR, invert(cond)
@@ -378,26 +373,20 @@
 
   ;; Let me define a simple helper that takes invert(cond) and emits CSINC X0, XZR, XZR, inv_cond
   ;; This sets X0 to 1 if the original cond was true, 0 otherwise
-  )
 
   ;; CSET W0, inv_cond (32-bit)
-  )
 
   ;; CMP Xn, Xm: alias for SUBS XZR, Xn, Xm
   ;; SUBS XZR, Xn, Xm: sf=1, S=1, 11011 000 Rm 000000 Rn 11111
   ;; = 0xEB00001F | (Rm << 16) | (Rn << 5)
-  )
 
   ;; CMP Wn, Wm (32-bit): SUBS WZR, Wn, Wm
   ;; = 0x6B00001F | (Rm << 16) | (Rn << 5)
-  )
 
   ;; TST Xn, Xm: alias for ANDS XZR, Xn, Xm
   ;; = 0xEA00001F | (Rm << 16) | (Rn << 5)
-  )
 
   ;; TST Wn, Wm (32-bit)
-  )
 
   ;; ── AArch64 Memory load/store via register offset ────────────────
 
@@ -802,8 +791,6 @@
 
   ;; ── Copy compiled code from JIT cache to output ────────────────
 
-    )
-  )
 
   ;; ── compile_to_elf: compile WASM, emit ELF64 executable ─────────
 
@@ -862,8 +849,6 @@
 
   ;; ── Copy code to binary output buffer ──────────────────────────
 
-    )
-  )
 
   ;; ── compile_to_bin: emit flat binary ───────────────────────────
 
@@ -1016,119 +1001,8 @@
 
   ;; ── Pop two, operate, push (pattern for binary ops) ──────────────
 
-  ;; Push X0 only if RESULT_IN_X0 is 0 (peephole)
-          (else
-            (call $emit_aarch64_push_x0)
-          )
-        )
-      )
-    )
-  )
-
-
   ;; Opcode templates — each emits AArch64 code for one WASM opcode
   ;; ═════════════════════════════════════════════════════════════════════
-
-  ;; ── unreachable (0x00): BRK #0 (debug breakpoint) ────────────────
-
-  ;; ── nop (0x01): nothing ────────────────────────────────────────────
-
-  ;; ── select (0x1B): pop cond, pop val2, pop val1, select ──────────
-
-  ;; ── i32.const (0x41): push imm32 ──────────────────────────────────
-    )
-    (call $emit_aarch64_maybe_push_x0)
-  )
-
-  ;; ── i64.const (0x42): push imm64 ──────────────────────────────────
-    (if (i32.ne (local.get $val2) (i32.const 0))
-      (then (call $emit_aarch64_instr_movk_64 (global.get $REG_X0) (i32.const 2) (local.get $val2)))
-    )
-    (if (i32.ne (local.get $val3) (i32.const 0))
-      (then (call $emit_aarch64_instr_movk_64 (global.get $REG_X0) (i32.const 3) (local.get $val3)))
-    )
-    (call $emit_aarch64_maybe_push_x0)
-  )
-
-  ;; ── local.get (0x20): load local at index ─────────────────────────
-      (else
-        (if (i32.eq (local.get $idx) (i32.const 1))
-          (then
-            (call $emit_aarch64_instr (i32.const 0xAA0003F6))  ;; MOV X0, X22
-            (call $emit_aarch64_push_x0)
-          )
-          (else
-            ;; Load from memory via X20 (locals base)
-            (call $emit_aarch64_ldr_x0_x20 (local.get $idx))  ;; actual offset = idx * 8 / 8 = idx
-            (call $emit_aarch64_maybe_push_x0)
-          )
-        )
-      )
-    )
-  )
-
-  ;; ── local.set (0x21): pop/store to local ──────────────────────────
-          (else
-            (if (i32.eq (local.get $idx) (i32.const 1))
-              (then (call $emit_aarch64_instr (i32.const 0xAA0003C0)))  ;; MOV X22, X0
-              (else (call $emit_aarch64_str_x0_x20 (i32.mul (local.get $idx) (i32.const 1))))  ;; offset = idx*8/8 = idx
-            )
-          )
-        )
-      )
-      (else
-        (if (i32.eqz (local.get $idx))
-          (then
-            (call $emit_aarch64_pop_x0)
-            (call $emit_aarch64_instr (i32.const 0xAA0003E0))  ;; MOV X21, X0
-          )
-          (else
-            (if (i32.eq (local.get $idx) (i32.const 1))
-              (then
-                (call $emit_aarch64_pop_x0)
-                (call $emit_aarch64_instr (i32.const 0xAA0003C0))  ;; MOV X22, X0
-              )
-              (else
-                (call $emit_aarch64_pop_x0)
-                (call $emit_aarch64_str_x0_x20 (i32.mul (local.get $idx) (i32.const 1)))
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-
-  ;; ── local.tee (0x22): like local.set but keep value on stack ──────
-          )
-        )
-      )
-      (else
-        ;; Load TOS, duplicate, store
-        ;; LDR X0, [SP] — unsigned offset 0
-        (call $emit_aarch64_instr_ldr_64_off (global.get $REG_X0) (global.get $REG_SP) (i32.const 0))
-        (call $emit_aarch64_push_x0)
-        (if (i32.eqz (local.get $idx))
-          (then
-            (call $emit_aarch64_pop_x0)
-            (call $emit_aarch64_instr (i32.const 0xAA0003E0))  ;; MOV X21, X0
-          )
-          (else
-            (if (i32.eq (local.get $idx) (i32.const 1))
-              (then
-                (call $emit_aarch64_pop_x0)
-                (call $emit_aarch64_instr (i32.const 0xAA0003C0))  ;; MOV X22, X0
-              )
-              (else
-                (call $emit_aarch64_pop_x0)
-                (call $emit_aarch64_str_x0_x20 (i32.mul (local.get $idx) (i32.const 1)))
-              )
-            )
-          )
-        )
-      )
-    )
-  )
 
   ;; ── global.get (0x23) ─────────────────────────────────────────────
 

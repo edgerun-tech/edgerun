@@ -138,58 +138,6 @@ function getBackendSuffix(relIdx) {
 }
 
 /**
- * Remove broken WAT constructs from hand-written ARM32/AArch64 files.
- *
- * These files have structural issues: function bodies without a (func header,
- * stray ) characters, orphaned (if / (else / (call blocks at module level.
- * This function strips all content that would cause parse errors:
- * no valid form begins at module level → dropped.
- */
-function cleanBrokenWAT(content) {
-  const lines = content.split('\n');
-  const cleaned = [];
-  let depth = 0;
-  let inString = false;
-
-  for (const raw of lines) {
-    // Build a "code" view: strip inline comments (but not inside strings)
-    let code = '';
-    for (let i = 0; i < raw.length; i++) {
-      const ch = raw[i];
-      if (ch === '"' && (i === 0 || raw[i - 1] !== '\\')) inString = !inString;
-      if (ch === ';' && raw[i + 1] === ';' && !inString) break;
-      code += ch;
-    }
-
-    const trimmed = code.trim();
-    const opens = (code.match(/\(/g) || []).length;
-    const closes = (code.match(/\)/g) || []).length;
-
-    // Detect orphaned opens at module level
-    if (depth === 0 && trimmed.startsWith('(')) {
-      const firstForm = trimmed.match(/^\((\w+)/)?.[1] || '';
-      // Valid forms that can appear at module level
-      if (/^(func|global|import|memory|table|data|elem|type|export|module|start)$/.test(firstForm)) {
-        depth += opens - closes;
-        cleaned.push(raw);
-      }
-      // else: orphaned block at module level → drop this line
-      continue;
-    }
-
-    // At module level, skip stray ) that would make depth negative
-    if (depth === 0 && closes > opens && /^\s*\)/.test(trimmed)) {
-      continue;
-    }
-
-    depth += opens - closes;
-    cleaned.push(raw);
-  }
-
-  return cleaned.join('\n');
-}
-
-/**
  * Rename all colliding module-level names in a backend file by appending
  * a backend-specific suffix. Also renames exports and gives local names
  * to anonymous exported functions.
@@ -243,6 +191,12 @@ const MANIFEST = [
 
   // ── Layer 3a: Socket/Transport ──
   'net/socket-core.wat',
+  'net/bt-stdio-frame-codec.wat',
+  'net/mail-protocol-state.wat',
+  'net/protocol-core-validation.wat',
+  'net/protocols-block-transfer.wat',
+  'net/session-core.wat',
+  'net/spp-frame-codec.wat',
 
   // Queue/Buffer/CDC stages (slots 48-50)
   'pipeline/queue-stage.wat',
@@ -458,6 +412,47 @@ const MANIFEST = [
   // ── Layer 10: UI Framework ──
   'ui/ui_framework.wat',
 
+  // ── Layer 11: System ──
+  'system/async-state-core.wat',
+  'system/bump-alloc-core.wat',
+  'system/byte-layout-core.wat',
+  'system/codegen-annotation-core.wat',
+  'system/collection-core-state.wat',
+  'system/compat-surface-core.wat',
+  'system/compositor-core.wat',
+  'system/event-loop-core.wat',
+  'system/ffi-bridge-core.wat',
+  'system/fs-walk-core.wat',
+  'system/host-glue-core.wat',
+  'system/js-runtime-core.wat',
+  'system/log-api-core.wat',
+  'system/log-telemetry-core.wat',
+  'system/method-signature-core.wat',
+  'system/native-runtime-binding.wat',
+  'system/runtime-core-state.wat',
+  'system/syntax-parse-core.wat',
+  'system/telemetry-api-core.wat',
+  'system/telemetry-value-core.wat',
+  'system/tokenizer-core.wat',
+  'system/utility-compat-core.wat',
+  'system/zero-copy-archive-core.wat',
+
+  // ── Layer 11a: Device ──
+  'device/ble-uart-service.wat',
+  'device/bt-spp-host.wat',
+  'device/device-types-core.wat',
+  'device/efi-bt-core.wat',
+  'device/esp32s3-platform-map.wat',
+  'device/linux-adapter-core.wat',
+  'device/linux-machine-inventory.wat',
+  'device/node-hardware-core.wat',
+  'device/platform-core.wat',
+  'device/tcl-bridge-esp32s3-core.wat',
+  'device/tpm-identity-core.wat',
+  'device/unikernel-event-core.wat',
+  'device/unit-usb-bridge-core.wat',
+  'device/virtio-core.wat',
+
   // ── Layer 12: App ──
   'app/repo-dashboard.wat',
   'app/oauth.wat',
@@ -552,9 +547,6 @@ function build() {
     if (fileIdx >= backendFileStart && fileIdx < backendFileEnd) {
       const relIdx = fileIdx - backendFileStart;
       const isArmAarch64 = relIdx >= 5; // files 5-8 = arm32 + aarch64 (compiler + emitter)
-      if (isArmAarch64) {
-        content = cleanBrokenWAT(content);
-      }
       content = renameBackend(content, getBackendSuffix(relIdx));
     }
 

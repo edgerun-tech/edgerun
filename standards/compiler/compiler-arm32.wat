@@ -79,7 +79,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; ELF output buffer (for compile_to_elf)
   ;; ═════════════════════════════════════════════════════════════════════
-  (global $ELF_OUT_BUF  i32 (i32.const 0x800000))
+  (global $ELF_OUT_BUF  i32 (i32.const 0x400000))
   (global $ELF_OUT_OFF  i32 (i32.const 0x700000))  ;; ELF_OUT_BUF - JIT_CACHE
 
   (global $TEXT_VA      i32 (i32.const 0x400000))
@@ -101,7 +101,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; Flat binary output buffer (for compile_to_bin)
   ;; ═════════════════════════════════════════════════════════════════════
-  (global $BIN_OUT_BUF  i32 (i32.const 0x900000))
+  (global $BIN_OUT_BUF  i32 (i32.const 0x500000))
   (global $BIN_OUT_OFF  i32 (i32.const 0x800000))  ;; BIN_OUT_BUF - JIT_CACHE
 
   ;; ═════════════════════════════════════════════════════════════════════
@@ -237,10 +237,8 @@
 
   ;; B #imm (unconditional branch, ±32MB): 0xEA000000 | imm24
   ;; imm24 = (target - pc - 8) >> 2, signed 24-bit
-  )
 
   ;; BL #imm (branch with link): 0xEB000000 | imm24
-  )
 
   ;; B.cond #imm (conditional branch, ±32MB): cond 1010 imm24
   ;; cond codes: EQ=0, NE=1, CS=2, CC=3, MI=4, PL=5, VS=6, VC=7
@@ -377,8 +375,6 @@
 
   ;; ── Copy compiled code from JIT cache to output ────────────────
 
-    )
-  )
 
   ;; ── compile_to_elf: compile WASM, emit ELF32 executable ─────────
 
@@ -438,8 +434,6 @@
 
   ;; ── Copy code to binary output buffer ──────────────────────────
 
-    )
-  )
 
   ;; ── compile_to_bin: emit flat binary ───────────────────────────
 
@@ -583,118 +577,8 @@
 
   ;; ── Pop two, operate, push (pattern for binary ops) ──────────────
 
-  ;; Push R0 only if RESULT_IN_X0 is 0 (peephole)
-          (else
-            (call $emit_arm32_push_r0)
-          )
-        )
-      )
-    )
-  )
-
   ;; Opcode templates — each emits AArch64 code for one WASM opcode
   ;; ═════════════════════════════════════════════════════════════════════
-
-  ;; ── unreachable (0x00): BRK #0 (debug breakpoint) ────────────────
-
-  ;; ── nop (0x01): nothing ────────────────────────────────────────────
-
-  ;; ── select (0x1B): pop cond, pop val2, pop val1, select ──────────
-
-  ;; ── i32.const (0x41): push imm32 ──────────────────────────────────
-    )
-    (call $emit_arm32_maybe_push_x0)
-  )
-
-  ;; ── i64.const (0x42): push imm64 ──────────────────────────────────
-    (if (i32.ne (local.get $val2) (i32.const 0))
-      (then (call $emit_arm32_instr_movk_64 (global.get $REG_X0) (i32.const 2) (local.get $val2)))
-    )
-    (if (i32.ne (local.get $val3) (i32.const 0))
-      (then (call $emit_arm32_instr_movk_64 (global.get $REG_X0) (i32.const 3) (local.get $val3)))
-    )
-    (call $emit_arm32_maybe_push_x0)
-  )
-
-  ;; ── local.get (0x20): load local at index ─────────────────────────
-      (else
-        (if (i32.eq (local.get $idx) (i32.const 1))
-          (then
-            (call $emit_arm32_instr (i32.const 0xAA0003F6))  ;; MOV X0, X22
-            (call $emit_arm32_push_x0)
-          )
-          (else
-            ;; Load from memory via X20 (locals base)
-            (call $emit_arm32_ldr_x0_x20 (local.get $idx))  ;; actual offset = idx * 8 / 8 = idx
-            (call $emit_arm32_maybe_push_x0)
-          )
-        )
-      )
-    )
-  )
-
-  ;; ── local.set (0x21): pop/store to local ──────────────────────────
-          (else
-            (if (i32.eq (local.get $idx) (i32.const 1))
-              (then (call $emit_arm32_instr (i32.const 0xAA0003C0)))  ;; MOV X22, X0
-              (else (call $emit_arm32_str_x0_x20 (i32.mul (local.get $idx) (i32.const 1))))  ;; offset = idx*8/8 = idx
-            )
-          )
-        )
-      )
-      (else
-        (if (i32.eqz (local.get $idx))
-          (then
-            (call $emit_arm32_pop_x0)
-            (call $emit_arm32_instr (i32.const 0xAA0003E0))  ;; MOV X21, X0
-          )
-          (else
-            (if (i32.eq (local.get $idx) (i32.const 1))
-              (then
-                (call $emit_arm32_pop_x0)
-                (call $emit_arm32_instr (i32.const 0xAA0003C0))  ;; MOV X22, X0
-              )
-              (else
-                (call $emit_arm32_pop_x0)
-                (call $emit_arm32_str_x0_x20 (i32.mul (local.get $idx) (i32.const 1)))
-              )
-            )
-          )
-        )
-      )
-    )
-  )
-
-  ;; ── local.tee (0x22): like local.set but keep value on stack ──────
-          )
-        )
-      )
-      (else
-        ;; Load TOS, duplicate, store
-        ;; LDR X0, [SP] — unsigned offset 0
-        (call $emit_arm32_instr_ldr_64_off (global.get $REG_X0) (global.get $REG_SP) (i32.const 0))
-        (call $emit_arm32_push_x0)
-        (if (i32.eqz (local.get $idx))
-          (then
-            (call $emit_arm32_pop_x0)
-            (call $emit_arm32_instr (i32.const 0xAA0003E0))  ;; MOV X21, X0
-          )
-          (else
-            (if (i32.eq (local.get $idx) (i32.const 1))
-              (then
-                (call $emit_arm32_pop_x0)
-                (call $emit_arm32_instr (i32.const 0xAA0003C0))  ;; MOV X22, X0
-              )
-              (else
-                (call $emit_arm32_pop_x0)
-                (call $emit_arm32_str_x0_x20 (i32.mul (local.get $idx) (i32.const 1)))
-              )
-            )
-          )
-        )
-      )
-    )
-  )
 
   ;; ── global.get (0x23) ─────────────────────────────────────────────
 

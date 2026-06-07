@@ -331,7 +331,7 @@ const u32 = new Uint32Array(mem.buffer);
   // Write 0xAABBCCDD to 0x8C000 manually
   const checkPtrArr = new Uint8Array(wasm.memory.buffer, 0x8C000, 4);
   checkPtrArr[0] = 0xDD; checkPtrArr[1] = 0xCC; checkPtrArr[2] = 0xBB; checkPtrArr[3] = 0xAA;
-  const checkRead = checkPtrArr[0] | (checkPtrArr[1]<<8) | (checkPtrArr[2]<<16) | (checkPtrArr[3]<<24);
+  const checkRead = (checkPtrArr[0] | (checkPtrArr[1]<<8) | (checkPtrArr[2]<<16) | (checkPtrArr[3]<<24)) >>> 0;
   check(checkRead === 0xAABBCCDD, `memory[0x8C000] before load_wat=0x${checkRead.toString(16)}`);
 
   const watBytes = new TextEncoder().encode('(module (func (export "f") (result i32) i32.const 42))');

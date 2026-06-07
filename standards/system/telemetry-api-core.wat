@@ -38,7 +38,7 @@
       (loop $loop
         (br_if $bad (i32.ge_u (local.get $ptr) (local.get $end)))
         (local.set $c (i32.load8_u (local.get $ptr)))
-        (if (i32.eqz (call $m145is_hex (local.get $c))) (then (return (i32.const 0))))
+        (if (i32.eqz (call $is_hex (local.get $c))) (then (return (i32.const 0))))
         (if (i32.ne (local.get $c) (i32.const 48)) (then (local.set $nonzero (i32.const 1))))
         (local.set $ptr (i32.add (local.get $ptr) (i32.const 1)))
         (br $loop)))
@@ -137,12 +137,12 @@
                 (i32.or (i32.ne (i32.load8_u (i32.add (local.get $ptr) (i32.const 35))) (i32.const 45))
                         (i32.ne (i32.load8_u (i32.add (local.get $ptr) (i32.const 52))) (i32.const 45))))
       (then (return (i32.const 0))))
-    (if (i32.eqz (call $m145is_hex (i32.load8_u (local.get $ptr)))) (then (return (i32.const 0))))
-    (if (i32.eqz (call $m145is_hex (i32.load8_u (i32.add (local.get $ptr) (i32.const 1))))) (then (return (i32.const 0))))
+    (if (i32.eqz (call $is_hex (i32.load8_u (local.get $ptr)))) (then (return (i32.const 0))))
+    (if (i32.eqz (call $is_hex (i32.load8_u (i32.add (local.get $ptr) (i32.const 1))))) (then (return (i32.const 0))))
     (if (i32.eqz (call $all_hex_nonzero (i32.add (local.get $ptr) (i32.const 3)) (i32.const 32))) (then (return (i32.const 0))))
     (if (i32.eqz (call $all_hex_nonzero (i32.add (local.get $ptr) (i32.const 36)) (i32.const 16))) (then (return (i32.const 0))))
-    (if (i32.eqz (call $m145is_hex (i32.load8_u (i32.add (local.get $ptr) (i32.const 53))))) (then (return (i32.const 0))))
-    (call $m145is_hex (i32.load8_u (i32.add (local.get $ptr) (i32.const 54)))))
+    (if (i32.eqz (call $is_hex (i32.load8_u (i32.add (local.get $ptr) (i32.const 53))))) (then (return (i32.const 0))))
+    (call $is_hex (i32.load8_u (i32.add (local.get $ptr) (i32.const 54)))))
 
   ;; Status rank is Unset=0, Error=1, Ok=2. Ok is final via max rank.
   (func (export "otel_status_apply") (param $current i32) (param $next i32) (result i32)

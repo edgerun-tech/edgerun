@@ -59,8 +59,8 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; ELF output buffer (for compile_to_elf)
   ;; ═════════════════════════════════════════════════════════════════════
-  (global $ELF_OUT_BUF  i32 (i32.const 0x800000))
-  (global $ELF_OUT_OFF  i32 (i32.const 0x700000))  ;; ELF_OUT_BUF - JIT_CACHE
+  (global $ELF_OUT_BUF  i32 (i32.const 0x400000))
+  (global $ELF_OUT_OFF  i32 (i32.const 0x300000))  ;; ELF_OUT_BUF - JIT_CACHE
 
   (global $TEXT_VA      i32 (i32.const 0x400000))
   (global $BSS_VA       i32 (i32.const 0x500000))
@@ -81,5 +81,5 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; Flat binary output buffer (for compile_to_bin)
   ;; ═════════════════════════════════════════════════════════════════════
-  (global $BIN_OUT_BUF  i32 (i32.const 0x900000))
-  (global $BIN_OUT_OFF  i32 (i32.const 0x800000))  ;; BIN_OUT_BUF - JIT_CACHE
+  (global $BIN_OUT_BUF  i32 (i32.const 0x500000))
+  (global $BIN_OUT_OFF  i32 (i32.const 0x400000))  ;; BIN_OUT_BUF - JIT_CACHE

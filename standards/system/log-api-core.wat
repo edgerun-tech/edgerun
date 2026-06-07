@@ -4,7 +4,7 @@
 
   (func (export "tracing_level_code") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
-    (local.set $h (call $m186fnv1a_lower (local.get $ptr) (local.get $len)))
+    (local.set $h (call $fnv1a_lower (local.get $ptr) (local.get $len)))
     (if (i32.eq (local.get $h) (i32.const 0xab3a8a0a)) (then (return (i32.const 0))))
     (if (i32.eq (local.get $h) (i32.const 0x21918751)) (then (return (i32.const 1))))
     (if (i32.eq (local.get $h) (i32.const 0x84fa6af1)) (then (return (i32.const 2))))
@@ -86,7 +86,7 @@
   ;; Metadata kind names: span=1, event=2.
   (func (export "tracing_metadata_kind_code") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
-    (local.set $h (call $m186fnv1a_lower (local.get $ptr) (local.get $len)))
+    (local.set $h (call $fnv1a_lower (local.get $ptr) (local.get $len)))
     (if (i32.eq (local.get $h) (i32.const 0x290182c1)) (then (return (i32.const 1))))
     (if (i32.eq (local.get $h) (i32.const 0xfe30d09f)) (then (return (i32.const 2))))
     (i32.const 0))

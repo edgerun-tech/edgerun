@@ -12,11 +12,11 @@
 (global $SCRATCH_SIZE    (export "SCRATCH_SIZE")    i32 (i32.const 0x1000))
 (global $SHA256_OUT_BUF  (export "SHA256_OUT_BUF")  i32 (i32.const 0x5000))
 
-;; ── Region: Pipeline Bump Allocator Heap (256 KB) ────────────────────
+;; ── Region: Pipeline Bump Allocator Heap (192 KB) ────────────────────
 ;; Pipes, pipeline descriptors, stage configs, intermediate buffers
 (global $HEAP_START (export "HEAP_START") i32 (i32.const 0x40000))
-(global $HEAP_END   (export "HEAP_END")   i32 (i32.const 0x80000))
-(global $HEAP_SIZE  (export "HEAP_SIZE")  i32 (i32.const 0x40000))
+(global $HEAP_END   (export "HEAP_END")   i32 (i32.const 0x70000))
+(global $HEAP_SIZE  (export "HEAP_SIZE")  i32 (i32.const 0x30000))
 
 ;; ── Region: Interpreter Module State (128 KB) ────────────────────────
 ;; Error codes, scratch, type section, import section, function section
@@ -57,37 +57,49 @@
 (global $JIT_CACHE_SIZE (export "JIT_CACHE_SIZE") i32 (i32.const 0x100000))
 (global $JIT_CACHE      (export "JIT_CACHE")      i32 (i32.const 0x100000))
 
-;; ── Region: Guest WASM Heap (2 MB) ──────────────────────────────────
+;; ── Region: Guest WASM Heap (1 MB) ──────────────────────────────────
+;; Shrunk to 1MB so it doesn't overlap JIT_STATE at 0x300000
 (global $GUEST_HEAP_BASE (export "GUEST_HEAP_BASE") i32 (i32.const 0x200000))
-(global $GUEST_HEAP_SIZE (export "GUEST_HEAP_SIZE") i32 (i32.const 0x200000))
+(global $GUEST_HEAP_SIZE (export "GUEST_HEAP_SIZE") i32 (i32.const 0x100000))
 
 ;; ── Region: UI Writer Buffer (64 KB) ────────────────────────────────
 (global $UI_WRITER_BASE (export "UI_WRITER_BASE") i32 (i32.const 0x30000))
 (global $UI_WRITER_SIZE (export "UI_WRITER_SIZE") i32 (i32.const 0x10000))
 
 ;; ── Region: UI Command Buffer (64 KB) ───────────────────────────────
-(global $UI_CMD_BUF (export "UI_CMD_BUF") i32 (i32.const 0x40000))
+(global $UI_CMD_BUF (export "UI_CMD_BUF") i32 (i32.const 0x10000))
 (global $UI_CMD_SIZE (export "UI_CMD_SIZE") i32 (i32.const 0x10000))
 
 ;; ── Region: Font Glyph Data (64 KB) ─────────────────────────────────
-(global $FONT_GLYPH_BUF (export "FONT_GLYPH_BUF") i32 (i32.const 0x50000))
+(global $FONT_GLYPH_BUF (export "FONT_GLYPH_BUF") i32 (i32.const 0x20000))
 (global $FONT_GLYPH_SIZE (export "FONT_GLYPH_SIZE") i32 (i32.const 0x10000))
 
 ;; ── Region: Icon IR Bytecode (64 KB) ────────────────────────────────
-(global $ICON_IR_BUF  (export "ICON_IR_BUF")  i32 (i32.const 0x60000))
+(global $ICON_IR_BUF  (export "ICON_IR_BUF")  i32 (i32.const 0x30000))
 (global $ICON_IR_SIZE (export "ICON_IR_SIZE") i32 (i32.const 0x10000))
 
 ;; ── Region: Protocol Parser Scratch (128 KB) ────────────────────────
-(global $PROTO_SCRATCH (export "PROTO_SCRATCH") i32 (i32.const 0x70000))
+;; At 0x1010000 (after test buffer area at 0x1000000-0x1005000)
+(global $PROTO_SCRATCH (export "PROTO_SCRATCH") i32 (i32.const 0x1010000))
 (global $PROTO_SCRATCH_SZ (export "PROTO_SCRATCH_SZ") i32 (i32.const 0x20000))
 
 ;; ── Region: Streaming Parser State (256 KB) ─────────────────────────
 (global $STREAM_STATE_BUF (export "STREAM_STATE_BUF") i32 (i32.const 0xC0000))
 (global $STREAM_STATE_SZ  (export "STREAM_STATE_SZ")  i32 (i32.const 0x40000))
 
-;; ── Region: RGBA Framebuffer (4 MB @ 0x400000) ──────────────────────
+;; ── Region: JIT State (1 MB @ 0x300000) ────────────────────────────
+(global $JIT_STATE       (export "JIT_STATE")       i32 (i32.const 0x300000))
+
+;; ── Region: Compiler Output Buffers (1 MB each) ────────────────────
+(global $ELF_OUT_BUF     (export "ELF_OUT_BUF")     i32 (i32.const 0x400000))
+(global $BIN_OUT_BUF     (export "BIN_OUT_BUF")     i32 (i32.const 0x500000))
+(global $BSS_BUF         (export "BSS_BUF")         i32 (i32.const 0x600000))
+
+;; ── Region: Model/Render Data (1 MB @ 0x700000) ────────────────────
+(global $MODEL_DATA_BASE (export "MODEL_DATA_BASE") i32 (i32.const 0x700000))
+
+;; ── Region: RGBA Framebuffer (8 MB @ 0x800000) ──────────────────────
 ;; 1920×1080×4 = 8.3 MB — we reserve 8 MB starting at 0x800000
-;; (above the guest heap). For smaller displays, use offset within this.
 (global $FB_BASE    (export "FB_BASE")    i32 (i32.const 0x800000))
 (global $FB_SIZE    (export "FB_SIZE")    i32 (i32.const 0x800000))
 

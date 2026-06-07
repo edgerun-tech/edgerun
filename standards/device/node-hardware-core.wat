@@ -1,10 +1,10 @@
 (func (export "node_hw_hash_lower") (param $ptr i32) (param $len i32) (result i32)
-    (call $m134fnv_lower (local.get $ptr) (local.get $len)))
+    (call $fnv1a_lower (local.get $ptr) (local.get $len)))
 
   (func $m134hex_nibble (param $c i32) (result i32)
     (if (i32.and (i32.ge_u (local.get $c) (i32.const 48)) (i32.le_u (local.get $c) (i32.const 57)))
       (then (return (i32.sub (local.get $c) (i32.const 48)))))
-    (local.set $c (call $m134ascii_lower (local.get $c)))
+    (local.set $c (call $to_lower (local.get $c)))
     (if (i32.and (i32.ge_u (local.get $c) (i32.const 97)) (i32.le_u (local.get $c) (i32.const 102)))
       (then (return (i32.add (i32.sub (local.get $c) (i32.const 97)) (i32.const 10)))))
     i32.const -1)
@@ -65,7 +65,7 @@
 
   (func (export "node_hw_connector_status") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
-    (local.set $h (call $m134fnv_lower (local.get $ptr) (local.get $len)))
+    (local.set $h (call $fnv1a_lower (local.get $ptr) (local.get $len)))
     (if (i32.eq (local.get $h) (i32.const 1424938192)) (then (return (i32.const 1))))
     (if (i32.eq (local.get $h) (i32.const 908767658)) (then (return (i32.const 2))))
     (if (i32.eq (local.get $h) (i32.const 49525662)) (then (return (i32.const 3))))
@@ -132,7 +132,7 @@
 
   (func (export "node_hw_npu_driver") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
-    (local.set $h (call $m134fnv_lower (local.get $ptr) (local.get $len)))
+    (local.set $h (call $fnv1a_lower (local.get $ptr) (local.get $len)))
     (if (i32.eq (local.get $h) (i32.const 3186769420)) (then (return (i32.const 1))))
     (if (i32.eq (local.get $h) (i32.const 2150824133)) (then (return (i32.const 2))))
     (if (i32.eq (local.get $h) (i32.const 746761889)) (then (return (i32.const 2))))
@@ -146,8 +146,8 @@
     (result i32)
     (local $m i32)
     (local $p i32)
-    (local.set $m (call $m134fnv_lower (local.get $method_ptr) (local.get $method_len)))
-    (local.set $p (call $m134fnv_lower (local.get $path_ptr) (local.get $path_len)))
+    (local.set $m (call $fnv1a_lower (local.get $method_ptr) (local.get $method_len)))
+    (local.set $p (call $fnv1a_lower (local.get $path_ptr) (local.get $path_len)))
     (if (i32.eq (local.get $m) (i32.const 4012403877)) (then (return (i32.const 200))))
     (if
       (i32.and

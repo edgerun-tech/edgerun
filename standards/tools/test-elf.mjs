@@ -68,8 +68,8 @@ try {
 }
 
 // ── Read ELF from WASM memory ──
-// ELF output is at JIT_CACHE + ELF_OUT_OFF = 0x100000 + 0x700000 = 0x800000
-const ELF_ADDR = 0x800000;
+// ELF output is at ELF_OUT_BUF = 0x400000
+const ELF_ADDR = 0x400000;
 const elfBytes = Buffer.from(u8.slice(ELF_ADDR, ELF_ADDR + totalSize));
 
 const elfPath = '/tmp/test_output.elf';
