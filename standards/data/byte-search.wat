@@ -310,9 +310,6 @@
         br $scan))
     i32.const -1)
 
-  (func (export "simd_capabilities") (result i32)
-    i32.const 1)
-
   (func (export "memchr_simd")
     (param $ptr i32) (param $len i32) (param $needle i32) (result i32)
     (local $i i32)

@@ -49,8 +49,8 @@
   )
 
   ;; Check whether pairing is required for a given security level
-  (func (export "bt_spp_security_requires_pairing")
-    (param $security_level i32)
-    (result i32)
-    (i32.gt_u (local.get $security_level) (i32.const 0))
-  ))
+(func (export "bt_spp_security_requires_pairing")
+  (param $security_level i32)
+  (result i32)
+  (i32.gt_u (local.get $security_level) (i32.const 0))
+)

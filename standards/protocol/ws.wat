@@ -2078,6 +2078,20 @@
       (local.get $input) (local.get $scratch) (local.get $scap)
       (local.get $state) (i32.const 8) (local.get $output) (i32.const 0)))
 
+  (func $process_ws_encode (export "process_ws_encode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (call $ws_encode
+      (local.get $input) (local.get $output) (local.get $cfg) (local.get $clen)
+      (local.get $scratch) (local.get $scap) (local.get $state)))
+
+  (func $process_ws_decode (export "process_ws_decode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (call $ws_decode
+      (local.get $input) (local.get $output) (local.get $cfg) (local.get $clen)
+      (local.get $scratch) (local.get $scap) (local.get $state)))
+
   ;; ════════════════════════════════════════════════════════════════
   ;; process_ws_frame — bidirectional WS framing (socket mode)
   ;; Config: pointer to socket handle (4 bytes)

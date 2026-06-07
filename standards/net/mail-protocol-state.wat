@@ -47,7 +47,7 @@
       (local.set $h
         (i32.add
           (i32.mul (local.get $h) (i32.const 33))
-          (call $m131upper (i32.load8_u (i32.add (i32.add (local.get $ptr) (local.get $off)) (local.get $i))))))
+          (call to_upper (i32.load8_u (i32.add (i32.add (local.get $ptr) (local.get $off)) (local.get $i))))))
       (local.set $i (i32.add (local.get $i) (i32.const 1)))
       (br $loop))
     local.get $h)

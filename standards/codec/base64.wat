@@ -1551,7 +1551,7 @@
 
 
 
-  (func (export "read_u16_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+  (func (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
     (if (result i64)
       (call $bounds_check (local.get $len) (local.get $offset) (i32.const 2))
       (then
@@ -1567,7 +1567,7 @@
               (i32.const 8)))))
       (else (call $pack (i32.const 1) (i32.const 0)))))
 
-  (func (export "read_u32_le") (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
+  (func (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
     (if (result i64)
       (call $bounds_check (local.get $len) (local.get $offset) (i32.const 4))
       (then
@@ -1597,7 +1597,7 @@
                 (i32.const 24))))))
       (else (call $pack (i32.const 1) (i32.const 0)))))
 
-  (func (export "varint_encode_u64")
+  (func
     (param $value_low i32) (param $value_high i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $value i64)
@@ -1623,7 +1623,7 @@
       (br_if $again (i64.ne (local.get $value) (i64.const 0))))
     (call $pack (i32.const 0) (local.get $written)))
 
-  (func (export "varint_decode_u64")
+  (func
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32)
     (result i64)
     (local $i i32)
@@ -1660,7 +1660,7 @@
       (br $again))
     (call $pack (i32.const 5) (local.get $i)))
 
-  (func (export "quic_varint_encode_u64")
+  (func
     (param $value_low i32) (param $value_high i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $value i64)
@@ -1744,7 +1744,7 @@
       (i32.wrap_i64 (local.get $value)))
     (call $pack (i32.const 0) (i32.const 8)))
 
-  (func (export "quic_varint_decode_u64")
+  (func
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32)
     (result i64)
     (local $first i32)
@@ -1776,7 +1776,7 @@
     (i64.store (local.get $out_ptr) (local.get $value))
     (call $pack (i32.const 0) (local.get $need)))
 
-  (func (export "crc32") (param $ptr i32) (param $len i32) (result i32)
+  (func (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $j i32)
     (local $crc i32)
@@ -1809,10 +1809,10 @@
 
   
 
-  (func (export "adler32") (param $ptr i32) (param $len i32) (result i32)
+  (func (param $ptr i32) (param $len i32) (result i32)
     (call $adler32_update (i32.const 1) (local.get $ptr) (local.get $len)))
 
-  (func (export "crc32_unrolled") (param $ptr i32) (param $len i32) (result i32)
+  (func (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
     (local $j i32)
     (local $k i32)
@@ -1879,7 +1879,7 @@
               (br $loop))))))
     (i32.xor (local.get $crc) (i32.const -1)))
 
-  (func (export "adler32_vec") (param $ptr i32) (param $len i32) (result i32)
+  (func (param $ptr i32) (param $len i32) (result i32)
     (call $adler32_update_vec (i32.const 1) (local.get $ptr) (local.get $len)))
 
   

@@ -5391,7 +5391,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; call: call an exported function by index
   ;; ═════════════════════════════════════════════════════════════════════
-  (func (export "call") (param $func_idx i32) (param $args_ptr i32) (param $args_len i32) (result i32)
+  (func $call (export "call") (param $func_idx i32) (param $args_ptr i32) (param $args_len i32) (result i32)
     ;; Reset execution state
     (i32.store (global.get $OFF_EXEC_STACK_LEN) (i32.const 0))
     (i32.store (global.get $OFF_EXEC_CTRL_LEN) (i32.const 0))
@@ -5406,7 +5406,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; load: main entry point
   ;; ═════════════════════════════════════════════════════════════════════
-  (func (export "load") (param $wasm_ptr i32) (param $wasm_len i32) (result i32)
+  (func $load (export "load") (param $wasm_ptr i32) (param $wasm_len i32) (result i32)
     (local $offset i32) (local $err i32) (local $start_func i32) (local $sec_id i32)
 
     (i32.store (global.get $OFF_WASM_PTR) (local.get $wasm_ptr))
@@ -5578,14 +5578,14 @@
     (return (global.get $OK))
   )
 
-  (func (export "get_result_value") (param $idx i32) (result i64)
+  (func $get_result_value (export "get_result_value") (param $idx i32) (result i64)
     (i64.store (global.get $OFF_SCRATCH0)
       (i64.load (i32.add (global.get $OFF_EXEC_RESULT) (i32.shl (local.get $idx) (i32.const 3))))
     )
     (return (i64.load (global.get $OFF_SCRATCH0)))
   )
 
-  (func (export "get_result_count") (result i32)
+  (func $get_result_count (export "get_result_count") (result i32)
     (return (i32.load (global.get $OFF_EXEC_RES_COUNT)))
   )
 

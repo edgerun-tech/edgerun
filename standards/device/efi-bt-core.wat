@@ -175,4 +175,4 @@
     i32.const 1)
 
   (func (export "efi_bt_main_stall_micros") (result i32)
-    i32.const 250000))
+    i32.const 250000)

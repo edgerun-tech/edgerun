@@ -491,9 +491,6 @@
       (call $huffman_decode_internal
         (local.get $in_ptr) (local.get $in_len) (i32.const 0) (i32.const 2147483647) (i32.const 0))))
 
-  (func (export "simd_capabilities") (result i32)
-    i32.const 1)
-
   (func $m103huff_lookup_simd (param $code i32) (param $bits i32) (result i32)
     (local $i i32)
     (local $codes_vec v128)

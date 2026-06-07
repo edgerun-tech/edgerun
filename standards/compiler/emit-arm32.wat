@@ -1026,7 +1026,7 @@
 
   ;; ── JIT state helpers ─────────────────────────────────────────────
 
-  (func $jit_reset_state
+  (func $emit_arm32_jit_reset_state
     (i32.store (global.get $JS_CODE_PTR) (i32.const 0))
     (i32.store (global.get $JS_LABEL_DEPTH) (i32.const 0))
     (i32.store (global.get $JS_FIXUP_COUNT) (i32.const 0))

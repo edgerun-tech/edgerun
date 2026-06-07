@@ -3910,9 +3910,6 @@
     i32.const 0)
 
 
-  (func (export "simd_capabilities") (result i32)
-    i32.const 1)
-
   (func (export "http_find_crlf_simd") (param $ptr i32) (param $len i32) (param $start i32) (result i64)
     (local $i i32)
     (local $v v128)
@@ -5435,22 +5432,7 @@
       (local.get $value) (local.get $prefix_bits) (local.get $prefix_high_bits)
       (local.get $out_ptr) (local.get $out_cap)))
 
-  (func (export "qpack_prefix_int_decode")
-    (param $in_ptr i32) (param $in_len i32) (param $prefix_bits i32) (param $out_ptr i32)
-    (result i32)
-    (call $prefix_decode
-      (local.get $in_ptr) (local.get $in_len) (local.get $prefix_bits) (local.get $out_ptr)
-      (i32.const 10)))
-
-  (func (export "qpack_prefix_int_encode")
-    (param $value i64) (param $prefix_bits i32) (param $prefix_high_bits i32)
-    (param $out_ptr i32) (param $out_cap i32)
-    (result i64)
-    (call $http_prefix_encode
-      (local.get $value) (local.get $prefix_bits) (local.get $prefix_high_bits)
-      (local.get $out_ptr) (local.get $out_cap)))
-
-(data (i32.const 65500) "18446744073709551615")
+  (data (i32.const 65500) "18446744073709551615")
   (data (i32.const 65440) "content-length")
   (data (i32.const 65456) "transfer-encoding")
   (data (i32.const 65480) "chunked")

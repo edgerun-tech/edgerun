@@ -514,9 +514,6 @@
     local.get $written
     call $pack)
 
-  (func (export "simd_capabilities") (result i32)
-    i32.const 1)
-
   (func (export "utf8_scan_simd") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32)
     (local $j i32)

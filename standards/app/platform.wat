@@ -45,8 +45,8 @@
         local.get $pos
         local.get $j
         i32.add
-        call $m31ch
-        call $m31lower
+        call load8_u
+        call to_lower
         local.get $pat
         local.get $j
         i32.add
@@ -252,13 +252,13 @@
       loop $scan
         local.get $i local.get $limit i32.ge_u br_if $done
         local.get $i local.get $len i32.ge_u br_if $done
-        local.get $ptr local.get $i call $m31ch local.set $c
+        local.get $ptr local.get $i call load8_u local.set $c
         local.get $state i32.eqz
         if
           local.get $i i32.const 1 i32.add local.get $limit i32.lt_u
           local.get $i i32.const 1 i32.add local.get $len i32.lt_u i32.and
           if
-            local.get $ptr local.get $i i32.const 1 i32.add call $m31ch local.set $next
+            local.get $ptr local.get $i i32.const 1 i32.add call load8_u local.set $next
             local.get $c i32.const 47 i32.eq
             local.get $next i32.const 47 i32.eq i32.and
             if
@@ -298,7 +298,7 @@
             local.get $i i32.const 1 i32.add local.get $len i32.lt_u i32.and
             if
               local.get $c i32.const 42 i32.eq
-              local.get $ptr local.get $i i32.const 1 i32.add call $m31ch i32.const 47 i32.eq
+              local.get $ptr local.get $i i32.const 1 i32.add call load8_u i32.const 47 i32.eq
               i32.and
               if
                 i32.const 0 local.set $state
@@ -351,7 +351,7 @@
         local.get $len
         i32.ge_u
         br_if $done
-        local.get $ptr local.get $i call $m31ch
+        local.get $ptr local.get $i call load8_u
         local.set $c
         local.get $state
         i32.eqz
@@ -359,7 +359,7 @@
           local.get $i i32.const 1 i32.add local.set $next
           local.get $i i32.const 1 i32.add local.get $len i32.lt_u
           if
-            local.get $ptr local.get $i i32.const 1 i32.add call $m31ch
+            local.get $ptr local.get $i i32.const 1 i32.add call load8_u
             local.set $next
             local.get $c i32.const 47 i32.eq
             local.get $next i32.const 47 i32.eq i32.and
@@ -401,7 +401,7 @@
             local.get $i i32.const 1 i32.add local.get $len i32.lt_u
             if
               local.get $c i32.const 42 i32.eq
-              local.get $ptr local.get $i i32.const 1 i32.add call $m31ch i32.const 47 i32.eq
+              local.get $ptr local.get $i i32.const 1 i32.add call load8_u i32.const 47 i32.eq
               i32.and
               if
                 i32.const 0 local.set $state
@@ -500,7 +500,7 @@
     i32.const 0
     i32.ne)
 
-  (func $min64 (param $a i64) (param $b i64) (result i64)
+  (func $platform_min64 (param $a i64) (param $b i64) (result i64)
     local.get $a
     local.get $b
     i64.lt_u
@@ -510,7 +510,7 @@
       local.get $b
     end)
 
-  (func $max64 (param $a i64) (param $b i64) (result i64)
+  (func $platform_max64 (param $a i64) (param $b i64) (result i64)
     local.get $a
     local.get $b
     i64.gt_u
@@ -1103,7 +1103,7 @@
     if (result i64)
       local.get $cost
       local.get $max_cost
-      call $min64
+      call $platform_min64
     else
       local.get $cost
     end)
@@ -1130,7 +1130,7 @@
   (func $browser_admitted_budget (param $retrieval_cost i64) (result i64)
     local.get $retrieval_cost
     i64.const 1
-    call $max64)
+    call $platform_max64)
 
   (export "browser_host_error_status" (func $browser_host_error_status))
   (func $browser_host_error_status (param $error_kind i32) (result i32)
@@ -1681,7 +1681,7 @@
     local.get $pos
     i32.const 1
     i32.sub
-    call $m31ch
+    call load8_u
     call $is_ident)
 
   (func $m44skip_ws (param $ptr i32) (param $len i32) (param $pos i32) (result i32)
@@ -1696,7 +1696,7 @@
         br_if $done
         local.get $ptr
         local.get $i
-        call $m31ch
+        call load8_u
         call $m44is_ws
         i32.eqz
         br_if $done
@@ -1720,7 +1720,7 @@
     end
     local.get $ptr
     local.get $pos
-    call $m31ch
+    call load8_u
     call $is_ident_start
     i32.eqz
     if
@@ -1739,7 +1739,7 @@
         br_if $done
         local.get $ptr
         local.get $i
-        call $m31ch
+        call load8_u
         call $is_ident
         i32.eqz
         br_if $done
@@ -1764,14 +1764,14 @@
     local.get $len
     i32.const 3
     i32.sub
-    call $m31ch
+    call load8_u
     local.get $a
     i32.eq
     local.get $ptr
     local.get $len
     i32.const 2
     i32.sub
-    call $m31ch
+    call load8_u
     local.get $b
     i32.eq
     i32.and
@@ -1779,7 +1779,7 @@
     local.get $len
     i32.const 1
     i32.sub
-    call $m31ch
+    call load8_u
     local.get $c
     i32.eq
     i32.and)
@@ -1796,14 +1796,14 @@
     local.get $len
     i32.const 2
     i32.sub
-    call $m31ch
+    call load8_u
     local.get $a
     i32.eq
     local.get $ptr
     local.get $len
     i32.const 1
     i32.sub
-    call $m31ch
+    call load8_u
     local.get $b
     i32.eq
     i32.and)
@@ -1835,11 +1835,11 @@
     i32.const 5
     i32.ge_u
     if
-      local.get $ptr local.get $len i32.const 5 i32.sub call $m31ch i32.const 46 i32.eq
-      local.get $ptr local.get $len i32.const 4 i32.sub call $m31ch i32.const 106 i32.eq i32.and
-      local.get $ptr local.get $len i32.const 3 i32.sub call $m31ch i32.const 97 i32.eq i32.and
-      local.get $ptr local.get $len i32.const 2 i32.sub call $m31ch i32.const 118 i32.eq i32.and
-      local.get $ptr local.get $len i32.const 1 i32.sub call $m31ch i32.const 97 i32.eq i32.and
+      local.get $ptr local.get $len i32.const 5 i32.sub call load8_u i32.const 46 i32.eq
+      local.get $ptr local.get $len i32.const 4 i32.sub call load8_u i32.const 106 i32.eq i32.and
+      local.get $ptr local.get $len i32.const 3 i32.sub call load8_u i32.const 97 i32.eq i32.and
+      local.get $ptr local.get $len i32.const 2 i32.sub call load8_u i32.const 118 i32.eq i32.and
+      local.get $ptr local.get $len i32.const 1 i32.sub call load8_u i32.const 97 i32.eq i32.and
       if i32.const 6 return end
     end
     i32.const 0)
@@ -1853,7 +1853,7 @@
     block $done
       loop $loop
         local.get $i local.get $len i32.ge_u br_if $done
-        local.get $ptr local.get $i call $m31ch local.set $c
+        local.get $ptr local.get $i call load8_u local.set $c
         local.get $c i32.const 123 i32.eq
         if
           local.get $depth i32.const 1 i32.add local.set $depth
@@ -1889,8 +1889,8 @@
     i32.eq
     if
       local.get $pos i32.const 1 i32.add local.get $len i32.lt_u
-      local.get $ptr local.get $pos call $m31ch i32.const 102 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 1 i32.add call $m31ch i32.const 110 i32.eq i32.and
+      local.get $ptr local.get $pos call load8_u i32.const 102 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 1 i32.add call load8_u i32.const 110 i32.eq i32.and
       local.get $pos i32.eqz local.get $ptr local.get $pos call $prev_ident i32.eqz i32.or i32.and
       if i32.const 2 return end
     end
@@ -1899,9 +1899,9 @@
     i32.eq
     if
       local.get $pos i32.const 2 i32.add local.get $len i32.lt_u
-      local.get $ptr local.get $pos call $m31ch i32.const 100 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 1 i32.add call $m31ch i32.const 101 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 2 i32.add call $m31ch i32.const 102 i32.eq i32.and
+      local.get $ptr local.get $pos call load8_u i32.const 100 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 1 i32.add call load8_u i32.const 101 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 2 i32.add call load8_u i32.const 102 i32.eq i32.and
       local.get $pos i32.eqz local.get $ptr local.get $pos call $prev_ident i32.eqz i32.or i32.and
       if i32.const 3 return end
     end
@@ -1910,10 +1910,10 @@
     i32.eq
     if
       local.get $pos i32.const 3 i32.add local.get $len i32.lt_u
-      local.get $ptr local.get $pos call $m31ch i32.const 102 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 1 i32.add call $m31ch i32.const 117 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 2 i32.add call $m31ch i32.const 110 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 3 i32.add call $m31ch i32.const 99 i32.eq i32.and
+      local.get $ptr local.get $pos call load8_u i32.const 102 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 1 i32.add call load8_u i32.const 117 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 2 i32.add call load8_u i32.const 110 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 3 i32.add call load8_u i32.const 99 i32.eq i32.and
       local.get $pos i32.eqz local.get $ptr local.get $pos call $prev_ident i32.eqz i32.or i32.and
       if i32.const 4 return end
     end
@@ -1922,14 +1922,14 @@
     i32.eq
     if
       local.get $pos i32.const 7 i32.add local.get $len i32.lt_u
-      local.get $ptr local.get $pos call $m31ch i32.const 102 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 1 i32.add call $m31ch i32.const 117 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 2 i32.add call $m31ch i32.const 110 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 3 i32.add call $m31ch i32.const 99 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 4 i32.add call $m31ch i32.const 116 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 5 i32.add call $m31ch i32.const 105 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 6 i32.add call $m31ch i32.const 111 i32.eq i32.and
-      local.get $ptr local.get $pos i32.const 7 i32.add call $m31ch i32.const 110 i32.eq i32.and
+      local.get $ptr local.get $pos call load8_u i32.const 102 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 1 i32.add call load8_u i32.const 117 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 2 i32.add call load8_u i32.const 110 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 3 i32.add call load8_u i32.const 99 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 4 i32.add call load8_u i32.const 116 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 5 i32.add call load8_u i32.const 105 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 6 i32.add call load8_u i32.const 111 i32.eq i32.and
+      local.get $ptr local.get $pos i32.const 7 i32.add call load8_u i32.const 110 i32.eq i32.and
       local.get $pos i32.eqz local.get $ptr local.get $pos call $prev_ident i32.eqz i32.or i32.and
       if i32.const 8 return end
     end
@@ -1943,18 +1943,18 @@
     block $not_found
       loop $scan
         local.get $i local.get $len i32.ge_u br_if $not_found
-        local.get $ptr local.get $i call $m31ch local.set $c
+        local.get $ptr local.get $i call load8_u local.set $c
 
         ;; Skip line comments, including Python # comments.
         local.get $c i32.const 35 i32.eq
         local.get $c i32.const 47 i32.eq
         local.get $i i32.const 1 i32.add local.get $len i32.lt_u i32.and
-        local.get $ptr local.get $i i32.const 1 i32.add call $m31ch i32.const 47 i32.eq i32.and
+        local.get $ptr local.get $i i32.const 1 i32.add call load8_u i32.const 47 i32.eq i32.and
         i32.or
         if
           loop $line
             local.get $i local.get $len i32.ge_u br_if $scan
-            local.get $ptr local.get $i call $m31ch i32.const 10 i32.eq br_if $scan
+            local.get $ptr local.get $i call load8_u i32.const 10 i32.eq br_if $scan
             local.get $i i32.const 1 i32.add local.set $i
             br $line
           end
@@ -1963,13 +1963,13 @@
         ;; Skip block comments.
         local.get $c i32.const 47 i32.eq
         local.get $i i32.const 1 i32.add local.get $len i32.lt_u i32.and
-        local.get $ptr local.get $i i32.const 1 i32.add call $m31ch i32.const 42 i32.eq i32.and
+        local.get $ptr local.get $i i32.const 1 i32.add call load8_u i32.const 42 i32.eq i32.and
         if
           local.get $i i32.const 2 i32.add local.set $i
           loop $block
             local.get $i i32.const 1 i32.add local.get $len i32.ge_u br_if $not_found
-            local.get $ptr local.get $i call $m31ch i32.const 42 i32.eq
-            local.get $ptr local.get $i i32.const 1 i32.add call $m31ch i32.const 47 i32.eq i32.and
+            local.get $ptr local.get $i call load8_u i32.const 42 i32.eq
+            local.get $ptr local.get $i i32.const 1 i32.add call load8_u i32.const 47 i32.eq i32.and
             if
               local.get $i i32.const 2 i32.add local.set $i
               br $scan
@@ -1987,12 +1987,12 @@
           local.get $i i32.const 1 i32.add local.set $i
           loop $str
             local.get $i local.get $len i32.ge_u br_if $not_found
-            local.get $ptr local.get $i call $m31ch i32.const 92 i32.eq
+            local.get $ptr local.get $i call load8_u i32.const 92 i32.eq
             if
               local.get $i i32.const 2 i32.add local.set $i
               br $str
             end
-            local.get $ptr local.get $i call $m31ch local.get $c i32.eq
+            local.get $ptr local.get $i call load8_u local.get $c i32.eq
             if
               local.get $i i32.const 1 i32.add local.set $i
               br $scan
@@ -2013,13 +2013,13 @@
           local.get $ptr local.get $len local.get $i local.get $kw i32.add call $m44skip_ws local.set $name_start
           local.get $lang i32.const 5 i32.eq
           local.get $name_start local.get $len i32.lt_u i32.and
-          local.get $ptr local.get $name_start call $m31ch i32.const 40 i32.eq i32.and
+          local.get $ptr local.get $name_start call load8_u i32.const 40 i32.eq i32.and
           if
             ;; Go receiver: func (r Receiver) Name(
             local.get $name_start i32.const 1 i32.add local.set $paren
             loop $recv
               local.get $paren local.get $len i32.ge_u br_if $not_found
-              local.get $ptr local.get $paren call $m31ch i32.const 41 i32.eq
+              local.get $ptr local.get $paren call load8_u i32.const 41 i32.eq
               if
                 local.get $ptr local.get $len local.get $paren i32.const 1 i32.add call $m44skip_ws local.set $name_start
                 br $recv
@@ -2039,7 +2039,7 @@
               local.get $i local.set $brace
               loop $brace_scan
                 local.get $brace local.get $len i32.ge_u br_if $not_found
-                local.get $ptr local.get $brace call $m31ch i32.const 123 i32.eq
+                local.get $ptr local.get $brace call load8_u i32.const 123 i32.eq
                 if
                   local.get $ptr local.get $len local.get $brace call $find_close_brace local.set $brace
                   local.get $out local.get $name_start local.get $name_end local.get $i local.get $brace i32.const 0 local.get $lang call $m44write_out
@@ -2067,7 +2067,7 @@
           block $have_name
             loop $back
               local.get $name_end local.get $line_start i32.le_u br_if $have_name
-              local.get $ptr local.get $name_end i32.const 1 i32.sub call $m31ch call $m44is_ws
+              local.get $ptr local.get $name_end i32.const 1 i32.sub call load8_u call $m44is_ws
               i32.eqz br_if $have_name
               local.get $name_end i32.const 1 i32.sub local.set $name_end
               br $back
@@ -2077,7 +2077,7 @@
           block $back_done
             loop $back_ident
               local.get $name_start local.get $line_start i32.le_u br_if $back_done
-              local.get $ptr local.get $name_start i32.const 1 i32.sub call $m31ch call $is_ident
+              local.get $ptr local.get $name_start i32.const 1 i32.sub call load8_u call $is_ident
               i32.eqz br_if $back_done
               local.get $name_start i32.const 1 i32.sub local.set $name_start
               br $back_ident
@@ -2088,11 +2088,11 @@
             local.get $i local.set $paren
             loop $sig
               local.get $paren local.get $len i32.ge_u br_if $not_found
-              local.get $ptr local.get $paren call $m31ch i32.const 41 i32.eq
+              local.get $ptr local.get $paren call load8_u i32.const 41 i32.eq
               if
                 local.get $ptr local.get $len local.get $paren i32.const 1 i32.add call $m44skip_ws local.set $brace
                 local.get $brace local.get $len i32.lt_u
-                local.get $ptr local.get $brace call $m31ch i32.const 123 i32.eq i32.and
+                local.get $ptr local.get $brace call load8_u i32.const 123 i32.eq i32.and
                 if
                   local.get $ptr local.get $len local.get $brace call $find_close_brace local.set $brace
                   i32.const 0 local.set $static
@@ -4494,13 +4494,6 @@
     i32.load8_u
     i32.const 1
     i32.and)
-
-  ;; -----------------------------------------------------------
-  ;; simd_capabilities: returns bitmask of SIMD features
-  ;; bit 0 = v128 available
-  ;; -----------------------------------------------------------
-  (func (export "simd_capabilities") (result i32)
-    i32.const 1)
 
   ;; -----------------------------------------------------------
   ;; url_scheme_validate_simd: LUT + SIMD batch pre-check

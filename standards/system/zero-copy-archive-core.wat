@@ -3,7 +3,7 @@
       (i64.gt_u (local.get $value) (i64.const 0))
       (i64.eqz (i64.and (local.get $value) (i64.sub (local.get $value) (i64.const 1))))))
 
-  (func $align_up (param $value i64) (param $align i64) (result i64)
+  (func $align_up_u64 (param $value i64) (param $align i64) (result i64)
     (i64.and
       (i64.add (local.get $value) (i64.sub (local.get $align) (i64.const 1)))
       (i64.xor (i64.sub (local.get $align) (i64.const 1)) (i64.const -1))))
@@ -81,7 +81,7 @@
     (local $start i64)
     (local $end i64)
     (if (i32.eqz (call $is_power_of_two (local.get $align))) (then (return (i64.const -1))))
-    (local.set $start (call $align_up (local.get $used) (local.get $align)))
+    (local.set $start (call $align_up_u64 (local.get $used) (local.get $align)))
     (local.set $end (i64.add (local.get $start) (local.get $request_size)))
     (if (i64.lt_u (local.get $end) (local.get $start)) (then (return (i64.const -1))))
     (if (i64.gt_u (local.get $end) (local.get $size)) (then (return (i64.const -1))))

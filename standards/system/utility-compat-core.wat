@@ -115,4 +115,4 @@
   (func (export "derive_macro_kind_code") (param $kind i32) (result i32)
     ;; futures/select/join/error/strum/async_trait/cfg_if/unit/wasm_bindgen/tokio are 1..10.
     (if (i32.and (i32.ge_u (local.get $kind) (i32.const 1)) (i32.le_u (local.get $kind) (i32.const 10))) (then (return (local.get $kind))))
-    i32.const 0))
+    i32.const 0)

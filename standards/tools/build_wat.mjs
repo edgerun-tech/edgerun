@@ -13,6 +13,68 @@ import { resolve } from 'path';
 import { execSync } from 'child_process';
 
 const ROOT = resolve(import.meta.dirname, '..');
+const argv = process.argv.slice(2);
+
+function getArgValue(name, fallback = null) {
+  const eqArg = argv.find((item) => item.startsWith(`${name}=`));
+  if (eqArg) return eqArg.split('=', 2)[1];
+  const idx = argv.indexOf(name);
+  if (idx >= 0) {
+    const next = argv[idx + 1];
+    if (next && !next.startsWith('--')) {
+      return next;
+    }
+  }
+  return fallback;
+}
+
+function showUsage() {
+  console.log('Usage: bun tools/build_wat.mjs [--arch=<x86-64|arm32|aarch64>] [--out=<path>] [--no-wasm] [--watch]');
+  console.log('Options:');
+  console.log('  --arch         Compiler backend (default: x86-64, env: EDGERUN_COMPILER_ARCH)');
+  console.log('  --out          Output WAT path (default: edgerun.wat)');
+  console.log('  --no-wasm      Skip WASM compile step');
+  console.log('  --watch        Rebuild on file changes');
+  process.exit(0);
+}
+
+if (argv.includes('-h') || argv.includes('--help')) {
+  showUsage();
+}
+
+function normalizeCompilerArch(value) {
+  const normalized = (value || '').toLowerCase();
+  if (!normalized) return 'x86-64';
+  if (normalized === 'x86-64' || normalized === 'x86_64' || normalized === 'x86') return 'x86-64';
+  if (normalized === 'arm32' || normalized === 'armv7' || normalized === 'armv7-a') return 'arm32';
+  if (normalized === 'aarch64' || normalized === 'arm64') return 'aarch64';
+  return null;
+}
+
+const COMPILER_ARCH = normalizeCompilerArch(
+  getArgValue('--arch', process.env.EDGERUN_COMPILER_ARCH || 'x86-64')
+);
+if (!COMPILER_ARCH) {
+  throw new Error('Invalid --arch value. Use --arch=x86-64|arm32|aarch64');
+}
+
+const COMPILER_BACKENDS = {
+  'x86-64': [
+    'compiler/base-x86-64.wat',
+    'compiler/emit-x86-64.wat',
+    'compiler/dispatch.wat',
+    'compiler/templates-x86-64.wat',
+    'compiler/simd-x86-64.wat',
+  ],
+  arm32: [
+    'compiler/compiler-arm32.wat',
+  ],
+  aarch64: [
+    'compiler/compiler-aarch64.wat',
+  ],
+};
+
+const COMPILER_BACKEND_SLOT = '__ER_COMPILER_BACKEND__';
 
 // ── Manifest: just file paths, in dependency order ──
 // Files are concatenated as-is. module-header.wat provides (module + host imports.
@@ -57,9 +119,8 @@ const MANIFEST = [
   'pipeline/edgerun-parse-stage.wat',
   'pipeline/edgerun-exec-stage.wat',
 
-  // ── Layer 6: JIT Compiler (x86-64 backend) ──
-  'compiler/base-x86-64.wat',
-  'compiler/emit-x86-64.wat',
+  // ── Layer 6: JIT Compiler backend ──
+  COMPILER_BACKEND_SLOT,
 
   // ── Layer 7: Crypto ──
   'crypto/hash-djb2.wat',
@@ -165,16 +226,27 @@ const MANIFEST = [
 ];
 
 function build() {
-  const outPath = resolve(ROOT, process.argv.find(a => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
+  const outPath = resolve(ROOT, argv.find((a) => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
   const skipWasm = process.argv.includes('--no-wasm');
+  const selectedJitBackend = COMPILER_BACKENDS[COMPILER_ARCH];
+  const resolvedManifest = [];
+
+  for (const filePath of MANIFEST) {
+    if (filePath === COMPILER_BACKEND_SLOT) {
+      resolvedManifest.push(...selectedJitBackend);
+    } else {
+      resolvedManifest.push(filePath);
+    }
+  }
 
   console.log(`EdgeRun Build — ${new Date().toISOString()}`);
   console.log(`Output: ${outPath}\n`);
+  console.log(`Target compiler backend: ${COMPILER_ARCH}\n`);
 
   let body = '';
   let count = 0;
 
-  for (const filePath of MANIFEST) {
+  for (const filePath of resolvedManifest) {
     const fullPath = resolve(ROOT, filePath);
     if (!existsSync(fullPath)) {
       console.warn(`  ⚠  ${filePath} not found — skipping`);

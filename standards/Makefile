@@ -1,6 +1,8 @@
 BUN  := $(shell which bun 2>/dev/null || echo node)
 WAT  := edgerun.wat
 WASM := edgerun.wasm
+ARCH ?= x86-64
+ARCH_FLAG := --arch=$(ARCH)
 
 .DEFAULT_GOAL := all
 
@@ -10,7 +12,7 @@ all: build validate
 
 ## Build: concatenate fragments + compile WAT→WASM
 build:
-	$(BUN) tools/build_wat.mjs
+	$(BUN) tools/build_wat.mjs $(ARCH_FLAG)
 
 ## Validate: run wasm-tools validate on outputs
 validate:
@@ -22,7 +24,7 @@ test:
 
 ## Watch: rebuild on file changes
 watch:
-	$(BUN) tools/build_wat.mjs --watch
+	$(BUN) tools/build_wat.mjs --watch $(ARCH_FLAG)
 
 ## CI: full pipeline (build → validate → test)
 ci: build validate test
