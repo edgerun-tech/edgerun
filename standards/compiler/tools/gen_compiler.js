@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// EdgeRun JIT Compiler Generator
+// Usage:
+//   node tools/gen_compiler.js templates/x86_64.json              # dispatch only → stdout
+//   node tools/gen_compiler.js --assemble templates/x86_64.json   # full JIT → gen/jit-full-*.wat
+//   node tools/gen_compiler.js --assemble all                     # all 3 architectures
 const fs = require('fs');
 const path = require('path');
 
@@ -58,13 +63,58 @@ function generate(tmplPath, compilerPath) {
   return wat;
 }
 
+function assemble(arch, dir, tmplPath) {
+  const dispatch = generate(tmplPath, path.join(dir, 'compiler.wat'));
+  const genDir = path.join(dir, 'gen');
+
+  // Read fragment files (skip (module) header from templates)
+  const memoryMap = fs.readFileSync(path.join(dir, '..', 'runtime', 'memory-map.wat'), 'utf8');
+  const emit = fs.readFileSync(path.join(dir, `emit-${arch}.wat`), 'utf8');
+  let templates = fs.readFileSync(path.join(dir, `templates-${arch}.wat`), 'utf8');
+  const simd = fs.readFileSync(path.join(dir, `simd-${arch}.wat`), 'utf8');
+  const wasmEmit = fs.readFileSync(path.join(dir, 'wasm-emit.wat'), 'utf8');
+
+  // Strip (module) from templates if present (it's a fragment inside our module)
+  if (templates.startsWith('(module')) {
+    templates = templates.replace(/^\(module\s*\n/, '');
+  }
+
+  const parts = [memoryMap, dispatch, emit, templates, simd, wasmEmit];
+  const full = `(module\n${parts.join('\n\n')})\n`;
+
+  if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
+  const outPath = path.join(genDir, `jit-full-${arch}.wat`);
+  fs.writeFileSync(outPath, full);
+  console.log(`Assembled: ${outPath} (${full.length} bytes)`);
+}
+
 function main() {
-  if (process.argv.length < 3) { console.error(`Usage: ${process.argv[1]} <template.json>`); process.exit(1); }
-  const tmplPath = path.resolve(process.argv[2]);
+  const args = process.argv.slice(2);
   const dir = path.resolve(path.dirname(process.argv[1]), '..');
   const compiler = path.join(dir, 'compiler.wat');
   if (!fs.existsSync(compiler)) { console.error(`${compiler} not found`); process.exit(1); }
-  console.log(generate(tmplPath, compiler));
+
+  if (args[0] === '--assemble') {
+    const target = args[1];
+    const archs = ['x86-64', 'aarch64', 'arm32'];
+    if (target === 'all') {
+      for (const arch of archs) {
+        const tmplPath = path.join(dir, 'templates', `${arch.replace('-', '_')}.json`);
+        if (fs.existsSync(tmplPath)) assemble(arch, dir, tmplPath);
+      }
+    } else {
+      const tmplPath = path.resolve(target);
+      if (!fs.existsSync(tmplPath)) { console.error(`Template not found: ${tmplPath}`); process.exit(1); }
+      const tmpl = JSON.parse(fs.readFileSync(tmplPath, 'utf8'));
+      assemble(tmpl.arch, dir, tmplPath);
+    }
+    return;
+  }
+
+  // Legacy mode: print dispatch to stdout
+  if (args.length < 1) { console.error(`Usage: ${process.argv[1]} [--assemble <template.json>|all]`); process.exit(1); }
+  const tmplPath = path.resolve(args[0]);
+  process.stdout.write(generate(tmplPath, compiler));
 }
 
 main();

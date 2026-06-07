@@ -1,46 +1,4 @@
-(func $m100hex_value (param $c i32) (result i32)
-    local.get $c
-    i32.const 48
-    i32.ge_u
-    local.get $c
-    i32.const 57
-    i32.le_u
-    i32.and
-    if (result i32)
-      local.get $c
-      i32.const 48
-      i32.sub
-    else
-      local.get $c
-      i32.const 97
-      i32.ge_u
-      local.get $c
-      i32.const 102
-      i32.le_u
-      i32.and
-      if (result i32)
-        local.get $c
-        i32.const 87
-        i32.sub
-      else
-        local.get $c
-        i32.const 65
-        i32.ge_u
-        local.get $c
-        i32.const 70
-        i32.le_u
-        i32.and
-        if (result i32)
-          local.get $c
-          i32.const 55
-          i32.sub
-        else
-          i32.const -1
-        end
-      end
-    end)
-
-  (func $has_prefix (param $ptr i32) (param $len i32) (result i32)
+(func $has_prefix (param $ptr i32) (param $len i32) (result i32)
     local.get $len
     i32.const 2
     i32.ge_u
@@ -115,7 +73,7 @@
       local.get $pos
       i32.add
       i32.load8_u
-      call $m100hex_value
+      call $parse_hex_digit
       local.tee $lo
       i32.const 0
       i32.lt_s
@@ -147,7 +105,7 @@
         local.get $pos
         i32.add
         i32.load8_u
-        call $m100hex_value
+        call $parse_hex_digit
         local.tee $hi
         i32.const 0
         i32.lt_s
@@ -163,7 +121,7 @@
         i32.add
         i32.add
         i32.load8_u
-        call $m100hex_value
+        call $parse_hex_digit
         local.tee $lo
         i32.const 0
         i32.lt_s
@@ -231,7 +189,7 @@
         local.get $pos
         i32.add
         i32.load8_u
-        call $m100hex_value
+        call $parse_hex_digit
         local.tee $nibble
         i32.const 0
         i32.lt_s
@@ -296,7 +254,7 @@
         i32.mul
         i32.add
         i32.load8_u
-        call $m100hex_value
+        call $parse_hex_digit
         local.tee $hi
         i32.const 0
         i32.lt_s
@@ -313,7 +271,7 @@
         i32.add
         i32.add
         i32.load8_u
-        call $m100hex_value
+        call $parse_hex_digit
         local.tee $lo
         i32.const 0
         i32.lt_s
