@@ -41,6 +41,16 @@ try {
       sock_recv: () => -1,
       sock_close: () => {},
     },
+    linux: {
+      poll: () => -1,
+      mmap: (addr, len, prot, flags, fd, off) => 0,
+      munmap: () => 0,
+      socket: () => -1,
+      connect: () => -1,
+      sendmsg: () => -1,
+      memfd_create: () => -1,
+      ftruncate: () => -1,
+    },
   });
   wasm = instance.exports;
   check(true, 'edgerun.wasm instantiated');
@@ -212,6 +222,102 @@ const u32 = new Uint32Array(mem.buffer);
     }
   }
   check(allOk, `${expected.length} STAGE_* constants correct`);
+}
+
+// ── Test 8: Metadata introspection ──
+{
+  const modCount = wasm.metadata_module_count();
+  check(modCount > 0, `metadata_module_count=${modCount}`);
+
+  const funcCount = wasm.metadata_function_count();
+  check(funcCount > 0, `metadata_function_count=${funcCount}`);
+
+  const globalCount = wasm.metadata_global_count();
+  check(globalCount > 0, `metadata_global_count=${globalCount}`);
+
+  // Verify we can find a known function
+  const DATA = 0x2050000;
+  const enc = new TextEncoder();
+  u8.set(enc.encode('pack'), DATA);
+  const fIdx = wasm.metadata_find_function(DATA, 4);
+  check(fIdx >= 0, `metadata_find_function('pack')=${fIdx}`);
+
+  // Verify we can find a known global
+  u8.set(enc.encode('INT_ERR'), DATA);
+  const gIdx = wasm.metadata_find_global(DATA, 7);
+  check(gIdx >= 0, `metadata_find_global('INT_ERR')=${gIdx}`);
+
+  // List functions
+  const LIST = 0x2051000;
+  const written = wasm.metadata_list_functions(LIST, 65536);
+  check(written > 0, `metadata_list_functions wrote ${written} bytes`);
+
+  // Verify source line for a known function
+  const packIdx = fIdx;
+  const packLine = wasm.metadata_function_source_line(packIdx);
+  check(packLine >= 60 && packLine <= 66, `metadata_function_source_line(pack)=${packLine}`);
+
+  // Verify find_export works for exported functions
+  u8.set(enc.encode('memcpy'), DATA);
+  const expResult = wasm.metadata_find_export(DATA, 6);
+  const expKind = Number(expResult >> 32n);
+  const expIdx = Number(expResult & 0xffffffffn);
+  check(expKind === 1 && expIdx >= 0, `metadata_find_export('memcpy')=pack(${expKind},${expIdx})`);
+
+  // Unknown export returns pack(0, -1)
+  u8.set(enc.encode('nonexistent'), DATA);
+  const badExp = wasm.metadata_find_export(DATA, 11);
+  const badIdx = Number(badExp & 0xffffffffn);
+  const badKind = Number(badExp >> 32n);
+  check(badKind === 0 && badIdx === 4294967295, `metadata_find_export('nonexistent')=pack(${badKind},${badIdx})`);
+
+  // Verify module_functions for module 0 (module-header.wat)
+  const MODBUF = 0x2052000;
+  const mFuncCount = wasm.metadata_module_functions(0, MODBUF, 256);
+  check(mFuncCount > 0, `metadata_module_functions(0) returned ${mFuncCount} functions`);
+
+  // Verify search_functions finds functions matching a pattern
+  u8.set(enc.encode('sha256'), DATA);
+  const SRCHBUF = 0x2053000;
+  const matchCount = wasm.metadata_search_functions(DATA, 6, SRCHBUF, 256);
+  check(matchCount >= 3, `metadata_search_functions('sha256') found ${matchCount} matches`);
+}
+
+// ── Test 9: WASM emitter round-trip ──
+{
+  // Minimal module: (func (export "f") (result i32) i32.const 42)
+  // Encodes to 34 bytes: magic(8) + type(7) + func(4) + export(7) + code(8)
+  const SRC = 0x500000;
+  const OUT = 0x520000;
+  const moduleBytes = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7F,
+    0x03, 0x02, 0x01, 0x00,
+    0x07, 0x05, 0x01, 0x01, 0x66, 0x00, 0x00,
+    0x0A, 0x06, 0x01, 0x04, 0x00, 0x41, 0x2A, 0x0B,
+  ]);
+
+  u8.set(moduleBytes, SRC);
+  const loadStatus = wasm.load(SRC, moduleBytes.length);
+  check(loadStatus === 0, `load minimal module: status=${loadStatus}`);
+
+  const emitResult = wasm.emit_wasm(OUT, 4096);
+  const emitStatus = Number(emitResult >> 32n);
+  const emitSize = Number(emitResult & 0xFFFFFFFFn);
+  check(emitStatus === 0, `emit_wasm status=${emitStatus}`);
+  check(emitSize === moduleBytes.length, `emit_wasm size ${emitSize} == ${moduleBytes.length}`);
+
+  // Verify magic header
+  check(
+    u8[OUT + 0] === 0x00 && u8[OUT + 1] === 0x61 &&
+    u8[OUT + 2] === 0x73 && u8[OUT + 3] === 0x6D,
+    'emitted magic \\0asm'
+  );
+  check(
+    u8[OUT + 4] === 0x01 && u8[OUT + 5] === 0x00 &&
+    u8[OUT + 6] === 0x00 && u8[OUT + 7] === 0x00,
+    'emitted version 1'
+  );
 }
 
 // ── Summary ──

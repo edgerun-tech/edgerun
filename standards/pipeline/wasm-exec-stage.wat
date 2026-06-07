@@ -5,7 +5,7 @@
   ;;   +4: arg_count i32  (number of i32 arguments)
   ;;   +8: args[]    i32  (inline argument values)
 
-  (func (export "process_exec")
+  (func $process_exec (export "process_exec")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $len i32) (local $err i32) (local $func_idx i32)

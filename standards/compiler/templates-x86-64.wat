@@ -1442,7 +1442,7 @@
     (call $emit_x86_maybe_push_rax)
   )
 
-  (func $template_x86_unsupported
+  (func $template_x86_unsupported (param $dec_ptr i32)
     ;; just emit ud2 and nop
     (call $emit_x86_ud2)
   )
@@ -1529,7 +1529,7 @@
       )
       (else
         ;; Local function — not yet supported (would need multi-function JIT)
-        (call $template_x86_unsupported)
+        (call $template_x86_unsupported (i32.const 0))
       )
     )
   )

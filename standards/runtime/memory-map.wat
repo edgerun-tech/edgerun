@@ -1,6 +1,6 @@
 ;; Unified Address Space Map — single source of truth for all memory offsets.
 ;; Include this fragment BEFORE any other fragment that references memory.
-;; All offsets are relative to (memory (export "memory") 2048).
+;; All offsets are relative to (memory (export "memory") 288).
 
 ;; ── Region: Character Classification LUTs (4 KB) ──────────────────────
 (global $LUT_CHAR_CLASS (export "LUT_CHAR_CLASS") i32 (i32.const 0x1000))

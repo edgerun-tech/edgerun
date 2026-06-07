@@ -477,7 +477,7 @@
   ;; Parse function section (list of type indices)
   ;; ═════════════════════════════════════════════════════════════════════
   (func $parse_function_section (param $offset i32) (param $size i32) (result i32)
-    (local $count i32) (local $i i32) (local $fc i32)
+    (local $count i32) (local $i i32) (local $fc i32) (local $ic i32)
 
     (if (call $leb_u32 (local.get $offset)) (then (return (global.get $ERR_PARSE))))
     (local.set $count (i32.load (global.get $OFF_SCRATCH0)))
@@ -485,15 +485,16 @@
     (if (i32.gt_u (local.get $count) (global.get $MAX_FUNCTIONS)) (then (return (global.get $ERR_PARSE))))
 
     (local.set $i (i32.const 0))
+    (local.set $ic (i32.load (global.get $OFF_IMPORT_COUNT)))
     (local.set $fc (i32.load (global.get $OFF_FUNCTION_COUNT)))
     (block $lp
       (loop $cont
         (if (i32.ge_u (local.get $i) (local.get $count)) (then (br $lp)))
         ;; Read type index
         (if (call $leb_u32 (local.get $offset)) (then (return (global.get $ERR_PARSE))))
-        ;; Store to functions_buf[fc + i] = type_index (first 8 bytes of 16-byte entry)
+        ;; Store to functions_buf[ic + i] = type_index (skip import slots)
         (i32.store
-          (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (i32.add (local.get $fc) (local.get $i)) (global.get $SZ_FUNC)))
+          (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (i32.add (local.get $ic) (local.get $i)) (global.get $SZ_FUNC)))
           (i32.load (global.get $OFF_SCRATCH0))
         )
         (local.set $offset (i32.add (local.get $offset) (i32.load (global.get $OFF_SCRATCH1))))
@@ -501,7 +502,7 @@
         (br $cont)
       )
     )
-    (i32.store (global.get $OFF_FUNCTION_COUNT) (i32.add (local.get $fc) (local.get $count)))
+    (i32.store (global.get $OFF_FUNCTION_COUNT) (i32.add (local.get $ic) (local.get $count)))
     (return (global.get $OK))
   )
 
@@ -544,8 +545,12 @@
 
         (if (i32.eq (local.get $kind) (global.get $EXT_FUNC))
           (then
-            ;; Function import: skip type index
+            ;; Function import: read and STORE type index in functions_buf
             (if (call $leb_u32 (local.get $offset)) (then (return (global.get $ERR_PARSE))))
+            (i32.store
+              (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $i) (global.get $SZ_FUNC)))
+              (i32.load (global.get $OFF_SCRATCH0))
+            )
             (local.set $offset (i32.add (local.get $offset) (i32.load (global.get $OFF_SCRATCH1))))
           )
         )
@@ -2010,8 +2015,8 @@
 
     (local.set $code_base (i32.add (global.get $OFF_CODE_BUF) (i32.mul (local.get $code_idx) (global.get $SZ_CODE))))
 
-    ;; Look up result count from function type
-    (local.set $type_idx (i32.load (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $code_idx) (global.get $SZ_FUNC)))))
+    ;; Look up result count from function type (functions_buf indexed by global func_idx)
+    (local.set $type_idx (i32.load (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $func_idx) (global.get $SZ_FUNC)))))
     (local.set $result_count (i32.load16_u (i32.add (global.get $OFF_TYPES_BUF) (i32.add (i32.mul (local.get $type_idx) (global.get $SZ_TYPE)) (i32.const 136)))))
 
     ;; Read decoded op range
@@ -2493,8 +2498,8 @@
               (if (i32.lt_u (local.get $imm0) (i32.load (global.get $OFF_IMPORT_COUNT)))
                 (then (return (global.get $ERR_MISS_IMP)))
               )
-              ;; Look up type to get param count (adjust for imports)
-              (local.set $val (i32.load (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (i32.sub (local.get $imm0) (i32.load (global.get $OFF_IMPORT_COUNT))) (global.get $SZ_FUNC)))))
+              ;; Look up type to get param count (functions_buf indexed by global func_idx)
+              (local.set $val (i32.load (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $imm0) (global.get $SZ_FUNC)))))
               (local.set $val (i32.add (global.get $OFF_TYPES_BUF) (i32.mul (local.get $val) (global.get $SZ_TYPE))))
               (local.set $val (i32.load16_u (i32.add (local.get $val) (i32.const 128))))  ;; param_count
               ;; Pop params into call args buffer (reversed order - WASM convention)
@@ -2605,7 +2610,7 @@
               )
               (local.set $p (i32.load
                 (i32.add (global.get $OFF_FUNCTIONS_BUF)
-                  (i32.mul (i32.sub (local.get $type_idx) (i32.load (global.get $OFF_IMPORT_COUNT))) (global.get $SZ_FUNC))
+                  (i32.mul (local.get $type_idx) (global.get $SZ_FUNC))
                 )
               ))
               ;; $p = actual type_idx of the target function

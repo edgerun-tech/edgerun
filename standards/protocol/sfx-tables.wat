@@ -1,7 +1,7 @@
-(global (export "sine_table") i32 (i32.const 0))
-  (global (export "noise_table") i32 (i32.const 65536))
+(global (export "sine_table") i32 (i32.const 17825792))
+  (global (export "noise_table") i32 (i32.const 17891328))
 
-  (data (i32.const 0)
+  (data (i32.const 17825792)
     "\00\00\03\00\06\00\09\00\0c\00\0f\00\12\00\15\00"
     "\19\00\1c\00\1f\00\22\00\25\00\28\00\2b\00\2f\00"
     "\32\00\35\00\38\00\3b\00\3e\00\41\00\45\00\48\00"
@@ -4100,7 +4100,7 @@
     "\ffe7\ff\ffea\ff\ffee\ff\fff1\ff\fff4\ff\fff7\ff\fffa\ff\fffd\ff"
     ""
   )
-  (data (i32.const 65536)
+  (data (i32.const 17891328)
     "\01\00\01\00\ffff\ff\01\00\01\00\ffff\ff\01\00\ffff\ff"
     "\01\00\01\00\ffff\ff\ffff\ff\ffff\ff\01\00\01\00\01\00"
     "\01\00\ffff\ff\01\00\ffff\ff\ffff\ff\ffff\ff\ffff\ff\ffff\ff"
@@ -8200,8 +8200,8 @@
     ""
   )
   (func (export "sfx_tables_get_sine") (param $i i32) (result i32)
-    (i32.load16_s (i32.shl (local.get $i) (i32.const 1)))
+    (i32.load16_s (i32.add (i32.const 17825792) (i32.shl (local.get $i) (i32.const 1))))
   )
   (func (export "sfx_tables_get_noise") (param $i i32) (result i32)
-    (i32.load16_s (i32.add (i32.const 65536) (i32.shl (local.get $i) (i32.const 1))))
+    (i32.load16_s (i32.add (i32.const 17891328) (i32.shl (local.get $i) (i32.const 1))))
   )

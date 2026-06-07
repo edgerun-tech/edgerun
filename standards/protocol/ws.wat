@@ -2019,7 +2019,7 @@
   ;; Batch stage: state is ignored (pass 0).
   ;; ════════════════════════════════════════════════════════════════
 
-  (func (export "ws_encode")
+  (func $ws_encode (export "ws_encode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $opcode i32) (local $n i32) (local $result i64)
@@ -2071,7 +2071,7 @@
   ;; Thin wrapper around $decode_frame_socket with dbuf_off=8 and no send_pipe.
   ;; ════════════════════════════════════════════════════════════════
 
-  (func (export "ws_decode")
+  (func $ws_decode (export "ws_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (call $decode_frame_socket
@@ -2108,7 +2108,7 @@
   ;; to output pipe. Ping→Pong, Close→Close echo.
   ;; ════════════════════════════════════════════════════════════════
 
-  (func (export "process_ws_frame")
+  (func $process_ws_frame (export "process_ws_frame")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $sock i32) (local $send_pipe i32) (local $recv_pipe i32)

@@ -451,7 +451,7 @@
   ;;   +8:  start_tick   i32 (tick when phase=1 was entered)
   ;;   +12: timeout_ticks i32 (max ticks to wait before returning TIMEOUT, 0=infinite)
   ;; (input_pipe, output_pipe, config_ptr, config_len, scratch, scap, state_ptr) → OK | MORE | error
-  (func (export "process_transport")
+  (func $process_transport (export "process_transport")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $sock i32) (local $n i32) (local $phase i32) (local $sent i32)

@@ -68,27 +68,112 @@
     (call $emit_x86_epilogue)
   )
 
+  ;; ── Control flow templates (using helpers from templates-x86-64.wat) ──
+
   (func $template_x86_block (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
+    (call $push_label (global.get $JIT_LABEL_BLOCK))
   )
 
-  (func $template_x86_br (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
+  (func $template_x86_loop (param $dec_ptr i32)
+    (local $depth i32)
+    (call $push_label (global.get $JIT_LABEL_LOOP))
+    (local.set $depth (i32.sub (i32.load (global.get $JS_LABEL_DEPTH)) (i32.const 1)))
+    (call $set_label_offset (local.get $depth) (i32.load (global.get $JS_CODE_PTR)))
   )
 
-  (func $template_x86_br_if (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
-  )
-
-  (func $template_x86_br_table (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
+  (func $template_x86_if (param $dec_ptr i32)
+    (local $depth i32)
+    (call $emit_x86_pop_rax)
+    (call $emit_x86_test_eax)
+    (call $emit_x86_jz_rel32 (i32.const 0))
+    (call $push_label (global.get $JIT_LABEL_IF))
+    (local.set $depth (i32.sub (i32.load (global.get $JS_LABEL_DEPTH)) (i32.const 1)))
+    (call $set_label_if_jz (local.get $depth) (i32.load (global.get $JS_CODE_PTR)))
   )
 
   (func $template_x86_else (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
+    (local $depth i32) (local $kind i32) (local $jz_off i32) (local $code_ptr i32) (local $disp i32)
+    (local.set $depth (call $pop_label))
+    (local.set $kind (call $get_label_kind (local.get $depth)))
+    (local.set $code_ptr (i32.load (global.get $JS_CODE_PTR)))
+    (local.set $jz_off (call $get_label_if_jz (local.get $depth)))
+    (local.set $disp (i32.sub (local.get $code_ptr) (i32.add (local.get $jz_off) (i32.const 4))))
+    (i32.store (i32.add (global.get $JIT_CACHE) (local.get $jz_off)) (local.get $disp))
+    (call $emit_x86_jmp_rel32 (i32.const 0))
+    (call $push_label (global.get $JIT_LABEL_ELSE))
+    (call $set_label_offset (local.get $depth) (i32.sub (i32.load (global.get $JS_CODE_PTR)) (i32.const 4)))
   )
 
   (func $template_x86_end (param $dec_ptr i32)
+    (local $depth i32) (local $kind i32) (local $code_ptr i32) (local $disp i32) (local $loop_start i32)
+    (local.set $depth (call $pop_label))
+    (local.set $kind (call $get_label_kind (local.get $depth)))
+    (local.set $code_ptr (i32.load (global.get $JS_CODE_PTR)))
+    (if (i32.eq (local.get $kind) (global.get $JIT_LABEL_LOOP))
+      (then
+        (local.set $loop_start (call $get_label_offset (local.get $depth)))
+        (local.set $disp (i32.sub (local.get $loop_start) (i32.add (local.get $code_ptr) (i32.const 5))))
+        (call $emit_x86_jmp_rel32 (local.get $disp))
+      )
+      (else
+        (call $patch_fixups (local.get $depth))
+        (if (i32.eq (local.get $kind) (global.get $JIT_LABEL_IF))
+          (then
+            (local.set $loop_start (call $get_label_if_jz (local.get $depth)))
+            (local.set $disp (i32.sub (local.get $code_ptr) (i32.add (local.get $loop_start) (i32.const 4))))
+            (i32.store (i32.add (global.get $JIT_CACHE) (local.get $loop_start)) (local.get $disp))
+          )
+        )
+        (if (i32.eq (local.get $kind) (global.get $JIT_LABEL_ELSE))
+          (then
+            (local.set $loop_start (call $get_label_offset (local.get $depth)))
+            (local.set $disp (i32.sub (local.get $code_ptr) (i32.add (local.get $loop_start) (i32.const 4))))
+            (i32.store (i32.add (global.get $JIT_CACHE) (local.get $loop_start)) (local.get $disp))
+          )
+        )
+      )
+    )
+  )
+
+  (func $template_x86_br (param $dec_ptr i32)
+    (local $depth i32) (local $target_depth i32) (local $kind i32) (local $code_ptr i32) (local $disp i32)
+    (local.set $depth (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
+    (local.set $target_depth (i32.sub (i32.sub (i32.load (global.get $JS_LABEL_DEPTH)) (i32.const 1)) (local.get $depth)))
+    (local.set $kind (call $get_label_kind (local.get $target_depth)))
+    (local.set $code_ptr (i32.load (global.get $JS_CODE_PTR)))
+    (if (i32.eq (local.get $kind) (global.get $JIT_LABEL_LOOP))
+      (then
+        (local.set $disp (i32.sub (call $get_label_offset (local.get $target_depth)) (i32.add (local.get $code_ptr) (i32.const 5))))
+        (call $emit_x86_jmp_rel32 (local.get $disp))
+      )
+      (else
+        (call $emit_x86_jmp_rel32 (i32.const 0))
+        (call $push_fixup (local.get $target_depth))
+      )
+    )
+  )
+
+  (func $template_x86_br_if (param $dec_ptr i32)
+    (local $depth i32) (local $target_depth i32) (local $kind i32) (local $code_ptr i32) (local $disp i32)
+    (call $emit_x86_pop_rax)
+    (call $emit_x86_test_eax)
+    (local.set $depth (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
+    (local.set $target_depth (i32.sub (i32.sub (i32.load (global.get $JS_LABEL_DEPTH)) (i32.const 1)) (local.get $depth)))
+    (local.set $kind (call $get_label_kind (local.get $target_depth)))
+    (local.set $code_ptr (i32.load (global.get $JS_CODE_PTR)))
+    (if (i32.eq (local.get $kind) (global.get $JIT_LABEL_LOOP))
+      (then
+        (local.set $disp (i32.sub (call $get_label_offset (local.get $target_depth)) (i32.add (local.get $code_ptr) (i32.const 6))))
+        (call $emit_x86_jne_rel32 (local.get $disp))
+      )
+      (else
+        (call $emit_x86_jne_rel32 (i32.const 0))
+        (call $push_fixup (local.get $target_depth))
+      )
+    )
+  )
+
+  (func $template_x86_br_table (param $dec_ptr i32)
     (call $template_x86_unsupported (local.get $dec_ptr))
   )
 
@@ -488,16 +573,10 @@
     (call $template_x86_unsupported (local.get $dec_ptr))
   )
 
-  (func $template_x86_if (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
-  )
-
-  (func $template_x86_loop (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
-  )
-
   (func $template_x86_return (param $dec_ptr i32)
-    (call $template_x86_unsupported (local.get $dec_ptr))
+    ;; Pop return value into EAX, then epilogue
+    (call $emit_x86_byte (i32.const 0x58))  ;; pop rax
+    (call $emit_x86_epilogue)
   )
 
   (func $template_x86_return_call (param $dec_ptr i32)
@@ -546,8 +625,10 @@
     (local $loop_top_offset i32)
     (local $decoded_ops_base i32) (local $decoded_ops_count i32)
 
-    ;; Reset code ptr
+    ;; Reset code ptr and label stack state
     (i32.store (global.get $JS_CODE_PTR) (i32.const 0))
+    (i32.store (global.get $JS_LABEL_DEPTH) (i32.const 0))
+    (i32.store (global.get $JS_FIXUP_COUNT) (i32.const 0))
 
     ;; Get decoded_ops base from imported global
     (local.set $decoded_ops_base (global.get $OFF_DECODED_OPS))
@@ -1141,15 +1222,16 @@
         )
         ;; Advance to next decoded op
         (local.set $dec_ptr (i32.add (local.get $dec_ptr) (global.get $DEC_SZ)))
-        ;; Check if we've reached the end (opcode == 0 or count exhausted)
-        ;; For now loop forever until opcode 0x0B (end) with matching
-        ;; Actually just check for opcode 0 or completion
-        (br_if $compile_done (i32.eq (local.get $opcode) (i32.const 0x0B)))
+        ;; return (0x0F) is always function end
+        (br_if $compile_done (i32.eq (local.get $opcode) (i32.const 0x0F)))
+        ;; end (0x0B): stop only when block_depth went negative (function end)
+        (br_if $compile_done (i32.lt_s (i32.load (global.get $JS_LABEL_DEPTH)) (i32.const 0)))
         (br $compile_loop)
       )
     )
 
-    ;; ── Emit epilogue ─────────────────────────────────────────────
+    ;; ── Pop return value into EAX, then epilogue ──────────────────
+    (call $emit_x86_byte (i32.const 0x58))  ;; pop rax
     (call $emit_epilogue)
 
     ;; ── Return code size ──────────────────────────────────────────

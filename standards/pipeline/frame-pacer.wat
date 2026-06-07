@@ -11,7 +11,7 @@
   ;; Config (4 bytes):
   ;;   +0: timeout_ticks i32  — flush partial frame after N idle ticks (0=never)
 
-  (func $process_frame_pacer
+  (func $process_frame_pacer (export "process_frame_pacer")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $tick i32) (local $frame_size i32) (local $buf_len i32) (local $last_flush i32)

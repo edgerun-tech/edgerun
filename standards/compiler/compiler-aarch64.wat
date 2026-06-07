@@ -1197,6 +1197,9 @@
   ;; ── f64.promote_f32 (0xBB) ─ placeholder
 
   ;; ── Control flow templates ────────────────────────────────────
+  (func $template_unreachable
+    (call $emit_aarch64_instr (i32.const 0x00000000))
+  )
   (func $template_block (param $dec_ptr i32))
   (func $template_loop (param $dec_ptr i32))
   (func $template_if (param $dec_ptr i32)

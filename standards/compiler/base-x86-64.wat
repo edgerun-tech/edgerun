@@ -38,6 +38,7 @@
   (global $JIT_LABEL_BLOCK   i32 (i32.const 0))
   (global $JIT_LABEL_LOOP    i32 (i32.const 1))
   (global $JIT_LABEL_IF      i32 (i32.const 2))
+  (global $JIT_LABEL_ELSE    i32 (i32.const 3))
 
   ;; Error codes
 

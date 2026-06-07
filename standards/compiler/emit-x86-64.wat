@@ -1417,3 +1417,371 @@
     (local.get $base)
     (i32.sub (i32.load (global.get $JS_CODE_PTR)) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE)))
   )
+
+  ;; ═════════════════════════════════════════════════════════════════════
+  ;; ELF64 binary output
+  ;; ═════════════════════════════════════════════════════════════════════
+
+  (global $ELF_OUT_BUF  i32 (i32.const 0x800000))
+  (global $ELF_OUT_OFF  i32 (i32.const 0x700000))  ;; ELF_OUT_BUF - JIT_CACHE
+
+  (global $TEXT_VA      i32 (i32.const 0x400000))
+  (global $BSS_VA       i32 (i32.const 0x500000))
+
+  (global $EHDR_SIZE    i32 (i32.const 64))
+  (global $PHDR_SIZE    i32 (i32.const 56))
+  (global $ELF_STUB_OFF i32 (i32.const 120))       ;; after 1 phdr (64 + 56)
+  (global $ELF_CODE_OFF i32 (i32.const 256))        ;; aligned after stub
+  (global $BSS_SIZE     i32 (i32.const 0x100000))   ;; 1MB — covers import_count (0x4108), syscall_map (0x90000), runtime state
+
+  ;; BSS item VAs (relative to BSS_VA)
+  (global $BSS_JITGLOBALS i32 (i32.const 0x500000))
+  (global $BSS_MEM       i32 (i32.const 0x500080))
+  (global $BSS_LOCALS    i32 (i32.const 0x510080))
+  (global $BSS_GLOBALS   i32 (i32.const 0x520080))
+  (global $BSS_TABLE     i32 (i32.const 0x530080))
+
+  ;; ── ELF emit helpers ───────────────────────────────────────────────
+
+  ;; MOV r64, imm32 sign-extended: REX.W + C7 /0 id
+  (func $emit_mov_r64_imm32 (param $rex i32) (param $modrm i32) (param $val i32)
+    (call $emit_x86_byte (local.get $rex))
+    (call $emit_x86_byte (i32.const 0xC7))
+    (call $emit_x86_byte (local.get $modrm))
+    (call $emit_x86_dword (local.get $val))
+  )
+
+  ;; MOV [r15+off8], rax: 49 89 47 <off>
+  (func $emit_mov_r15off_rax (param $off i32)
+    (call $emit_x86_byte (i32.const 0x49))
+    (call $emit_x86_byte (i32.const 0x89))
+    (call $emit_x86_byte (i32.const 0x47))
+    (call $emit_x86_byte (local.get $off))
+  )
+
+  ;; MOV dword [r15+off8], imm32: 41 C7 47 <off> <imm32>
+  (func $emit_mov_dword_r15off (param $off i32) (param $val i32)
+    (call $emit_x86_byte (i32.const 0x41))
+    (call $emit_x86_byte (i32.const 0xC7))
+    (call $emit_x86_byte (i32.const 0x47))
+    (call $emit_x86_byte (local.get $off))
+    (call $emit_x86_dword (local.get $val))
+  )
+
+  ;; CALL rel32: E8 <disp32>  (target = current_va + 5 + disp)
+  (func $emit_call_rel (param $target_va i32)
+    (local $saved i32)
+    (local.set $saved (i32.load (global.get $JS_CODE_PTR)))
+    (call $emit_x86_byte (i32.const 0xE8))
+    (call $emit_x86_dword
+      (i32.sub
+        (local.get $target_va)
+        (i32.add
+          (i32.add (global.get $TEXT_VA) (i32.sub (local.get $saved) (global.get $ELF_OUT_OFF)))
+          (i32.const 5)
+        )
+      )
+    )
+  )
+
+  ;; MOV edi, eax: 89 C7
+  (func $emit_mov_edi_eax
+    (call $emit_x86_byte (i32.const 0x89))
+    (call $emit_x86_byte (i32.const 0xC7))
+  )
+
+  ;; MOV dword [r14+disp32], imm32: 41 C7 86 <disp32> <imm32>
+  (func $emit_mov_dword_r14disp32 (param $disp i32) (param $val i32)
+    (call $emit_x86_byte (i32.const 0x41))
+    (call $emit_x86_byte (i32.const 0xC7))
+    (call $emit_x86_byte (i32.const 0x86))
+    (call $emit_x86_dword (local.get $disp))
+    (call $emit_x86_dword (local.get $val))
+  )
+
+  ;; MOV r14, [r15+8] (load $mem): 4D 8B 77 08
+  (func $emit_mov_r14_r15off8
+    (call $emit_x86_byte (i32.const 0x4D))
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x77))
+    (call $emit_x86_byte (i32.const 0x08))
+  )
+
+  ;; MOV esi, imm32 (zero-extends to rsi): BE <dword>
+  (func $emit_mov_esi_imm32 (param $val i32)
+    (call $emit_x86_byte (i32.const 0xBE))
+    (call $emit_x86_dword (local.get $val))
+  )
+
+  ;; MOV rdi, [r15+8] (load $mem): 49 8B 7F 08
+  (func $emit_mov_rdi_r15off8
+    (call $emit_x86_byte (i32.const 0x49))
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x7F))
+    (call $emit_x86_byte (i32.const 0x08))
+  )
+
+  ;; ADD rdi, imm32: 48 81 C7 <dword>
+  (func $emit_add_rdi_imm32 (param $val i32)
+    (call $emit_x86_rex_w)
+    (call $emit_x86_byte (i32.const 0x81))
+    (call $emit_x86_byte (i32.const 0xC7))
+    (call $emit_x86_dword (local.get $val))
+  )
+
+  ;; MOV ecx, imm32: B9 <dword>
+  (func $emit_mov_ecx_imm32 (param $val i32)
+    (call $emit_x86_byte (i32.const 0xB9))
+    (call $emit_x86_dword (local.get $val))
+  )
+
+  ;; REP MOVSB: F3 A4
+  (func $emit_rep_movsb
+    (call $emit_x86_byte (i32.const 0xF3))
+    (call $emit_x86_byte (i32.const 0xA4))
+  )
+
+  ;; MOV eax, imm32: B8 <dword>
+  (func $emit_mov_eax_imm (param $val i32)
+    (call $emit_x86_byte (i32.const 0xB8))
+    (call $emit_x86_dword (local.get $val))
+  )
+
+  ;; ── ELF64 header (64 bytes) ───────────────────────────────────────
+
+  (func $emit_elf64_ehdr (param $entry_va i32) (param $phoff i32) (param $phnum i32)
+    (call $emit_x86_byte (i32.const 0x7F))
+    (call $emit_x86_byte (i32.const 0x45)) (call $emit_x86_byte (i32.const 0x4C)) (call $emit_x86_byte (i32.const 0x46))
+    (call $emit_x86_byte (i32.const 2))     (call $emit_x86_byte (i32.const 1))
+    (call $emit_x86_byte (i32.const 1))     (call $emit_x86_byte (i32.const 0))
+    (call $emit_x86_qword (i64.const 0))    ;; padding bytes 8-15
+    (call $emit_x86_byte (i32.const 2)) (call $emit_x86_byte (i32.const 0))  ;; e_type=ET_EXEC
+    (call $emit_x86_byte (i32.const 0x3E)) (call $emit_x86_byte (i32.const 0))  ;; e_machine=x86_64
+    (call $emit_x86_dword (i32.const 1))    ;; e_version
+    (call $emit_x86_qword (i64.extend_i32_u (local.get $entry_va)))  ;; e_entry
+    (call $emit_x86_qword (i64.extend_i32_u (local.get $phoff)))     ;; e_phoff
+    (call $emit_x86_qword (i64.const 0))    ;; e_shoff
+    (call $emit_x86_dword (i32.const 0))    ;; e_flags
+    (call $emit_x86_byte (i32.const 64)) (call $emit_x86_byte (i32.const 0))  ;; e_ehsize
+    (call $emit_x86_byte (i32.const 56)) (call $emit_x86_byte (i32.const 0))  ;; e_phentsize
+    (call $emit_x86_byte (i32.wrap_i64 (i64.extend_i32_u (local.get $phnum))))
+    (call $emit_x86_byte (i32.const 0))   ;; e_phnum
+    (call $emit_x86_byte (i32.const 0)) (call $emit_x86_byte (i32.const 0))  ;; e_shentsize=0
+    (call $emit_x86_byte (i32.const 0)) (call $emit_x86_byte (i32.const 0))  ;; e_shnum=0
+    (call $emit_x86_byte (i32.const 0)) (call $emit_x86_byte (i32.const 0))  ;; e_shstrndx=0
+  )
+
+  ;; ── ELF64 program header (56 bytes) ──────────────────────────────
+
+  (func $emit_elf64_phdr (param $type i32) (param $flags i32)
+                         (param $offset i32) (param $vaddr i32)
+                         (param $filesz i32) (param $memsz i32)
+    (call $emit_x86_dword (local.get $type))     ;; p_type
+    (call $emit_x86_dword (local.get $flags))    ;; p_flags
+    (call $emit_x86_qword (i64.extend_i32_u (local.get $offset)))  ;; p_offset
+    (call $emit_x86_qword (i64.extend_i32_u (local.get $vaddr)))   ;; p_vaddr
+    (call $emit_x86_qword (i64.extend_i32_u (local.get $vaddr)))   ;; p_paddr = p_vaddr
+    (call $emit_x86_qword (i64.extend_i32_u (local.get $filesz)))  ;; p_filesz
+    (call $emit_x86_qword (i64.extend_i32_u (local.get $memsz)))   ;; p_memsz
+    (call $emit_x86_qword (i64.const 0x1000))    ;; p_align
+  )
+
+  ;; ── Runtime stub: _start that calls compiled code and exits ──────
+  ;; $bss_va = page-aligned start of BSS (right after compiled code)
+
+  (func $emit_elf_stub (param $bss_va i32) (param $syscall_data_va i32) (param $import_count i32)
+    (local $jitglobs i32) (local $mem i32) (local $locals i32)
+    (local $globals i32) (local $table i32) (local $syscall_data_size i32)
+
+    (local.set $jitglobs (local.get $bss_va))
+    (local.set $mem     (i32.add (local.get $bss_va) (i32.const 0x80)))
+    (local.set $locals  (i32.add (local.get $bss_va) (i32.const 0x10080)))
+    (local.set $globals (i32.add (local.get $bss_va) (i32.const 0x20080)))
+    (local.set $table   (i32.add (local.get $bss_va) (i32.const 0x30080)))
+    (local.set $syscall_data_size (i32.shl (local.get $import_count) (i32.const 2)))
+
+    ;; mov r15, $jitglobs
+    (call $emit_mov_r64_imm32 (i32.const 0x4D) (i32.const 0xC7) (local.get $jitglobs))
+
+    ;; mov rax, $mem; mov [r15+8], rax   (JitGlobals.mem_ptr)
+    (call $emit_mov_r64_imm32 (i32.const 0x48) (i32.const 0xC0) (local.get $mem))
+    (call $emit_mov_r15off_rax (i32.const 8))
+
+    ;; mov rax, $locals; mov [r15+0], rax  (JitGlobals.locals)
+    (call $emit_mov_r64_imm32 (i32.const 0x48) (i32.const 0xC0) (local.get $locals))
+    (call $emit_mov_r15off_rax (i32.const 0))
+
+    ;; mov rax, $globals; mov [r15+24], rax (JitGlobals.globals_buf)
+    (call $emit_mov_r64_imm32 (i32.const 0x48) (i32.const 0xC0) (local.get $globals))
+    (call $emit_mov_r15off_rax (i32.const 24))
+
+    ;; mov rax, $table; mov [r15+48], rax  (JitGlobals.table_entries)
+    (call $emit_mov_r64_imm32 (i32.const 0x48) (i32.const 0xC0) (local.get $table))
+    (call $emit_mov_r15off_rax (i32.const 48))
+
+    ;; mov dword [r15+64], 1  (JitGlobals.memory_pages)
+    (call $emit_mov_dword_r15off (i32.const 64) (i32.const 1))
+
+    ;; ── Initialize syscall map and import count for JIT-compiled code ──
+    ;; The JIT's template_x86_call reads import count from WASM addr 0x4108
+    ;; and sysno[i] from WASM addr 0x90000 + i*4.
+    ;; These are in the BSS (zeroed by OS), so we write them here.
+
+    ;; r14 = $mem (base of WASM linear memory)
+    (call $emit_mov_r14_r15off8)
+
+    ;; Store import_count at $mem + 0x4108
+    (call $emit_mov_dword_r14disp32 (i32.const 0x4108) (local.get $import_count))
+
+    ;; Copy syscall map data from text segment to $mem + 0x90000
+    ;; Source: rsi = syscall_data_va (embedded in ELF text after compiled code)
+    ;; Dest:   rdi = $mem + 0x90000
+    ;; Count:  ecx = import_count * 4
+    (call $emit_mov_esi_imm32 (local.get $syscall_data_va))
+    (call $emit_mov_rdi_r15off8)
+    (call $emit_add_rdi_imm32 (i32.const 0x90000))
+    (call $emit_mov_ecx_imm32 (local.get $syscall_data_size))
+    (call $emit_rep_movsb)
+
+    ;; Load locals pointer into rbx
+    (call $emit_x86_mov_rbx_r15)
+
+    ;; Load locals[0] into r12, locals[1] into r13 (function params)
+    (call $emit_x86_load_r12_rbx)
+    (call $emit_x86_load_r13_rbx8)
+
+    ;; call compiled_code
+    (call $emit_call_rel (i32.add (global.get $TEXT_VA) (global.get $ELF_CODE_OFF)))
+
+    ;; exit(result)  — rax holds the return value from compiled code
+    (call $emit_mov_edi_eax)
+    (call $emit_mov_eax_imm (global.get $LINUX_SYS_X64_EXIT))  ;; SYS_exit
+    (call $emit_syscall)
+  )
+
+  ;; ── Copy compiled code from cache into ELF output ────────────────
+
+  (func $copy_compiled_code (param $src i32) (param $size i32)
+    (local $i i32) (local $dst i32)
+    (local.set $dst (i32.add (global.get $ELF_OUT_BUF) (global.get $ELF_CODE_OFF)))
+    (local.set $i (i32.const 0))
+    (block $done
+      (loop $copy
+        (if (i32.ge_u (local.get $i) (local.get $size))
+          (then (br $done))
+        )
+        (i32.store8
+          (i32.add (local.get $dst) (local.get $i))
+          (i32.load8_u (i32.add (local.get $src) (local.get $i)))
+        )
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $copy)
+      )
+    )
+  )
+
+  ;; ── compile_to_elf: compile a WASM function and emit ELF64 ───────
+  ;; Returns (buffer_address, total_size)
+  (func (export "compile_to_elf") (param $func_idx i32) (result i32 i32)
+    (local $code_size i32) (local $total_size i32) (local $import_count i32)
+    (local $syscall_data_size i32) (local $saved i32) (local $bss_va i32)
+    (local $data_va i32) (local $i i32) (local $sysno i32)
+
+    ;; 1. Run the compiler (produces code at 0x100000)
+    (local.set $code_size (call $jit_compile (local.get $func_idx)))
+
+    ;; 2. Read import count from interpreter state (WASM addr 0x4108)
+    (local.set $import_count (i32.load (i32.const 0x4108)))
+    (local.set $syscall_data_size (i32.shl (local.get $import_count) (i32.const 2)))
+
+    ;; 3. Compute total ELF file size (header + stub + code + syscall map data)
+    (local.set $total_size
+      (i32.add
+        (i32.add (global.get $ELF_CODE_OFF) (local.get $code_size))
+        (local.get $syscall_data_size)
+      )
+    )
+
+    ;; 4. Compute BSS base: page-align TEXT_VA + total_size
+    (local.set $bss_va
+      (i32.add
+        (i32.and (i32.add (local.get $total_size) (i32.const 0xFFF)) (i32.const -0x1000))
+        (global.get $TEXT_VA)
+      )
+    )
+
+    ;; 5. Compute VA of syscall map data (right after compiled code)
+    (local.set $data_va
+      (i32.add
+        (global.get $TEXT_VA)
+        (i32.add (global.get $ELF_CODE_OFF) (local.get $code_size))
+      )
+    )
+
+    ;; 6. Save JS_CODE_PTR, redirect emit to ELF output buffer
+    (local.set $saved (i32.load (global.get $JS_CODE_PTR)))
+    (i32.store (global.get $JS_CODE_PTR) (global.get $ELF_OUT_OFF))
+
+    ;; 7. Emit ELF64 header (1 program header: text + BSS combined)
+    (call $emit_elf64_ehdr
+      (i32.add (global.get $TEXT_VA) (global.get $ELF_STUB_OFF))  ;; entry = _start
+      (i32.const 64)   ;; e_phoff
+      (i32.const 1)    ;; 1 program header (text + bss)
+    )
+
+    ;; 8. Emit PH#1: text + BSS combined LOAD (R|W|X), offset=0
+    ;;     filesz = total_size, memsz includes BSS
+    (call $emit_elf64_phdr
+      (i32.const 1)         ;; PT_LOAD
+      (i32.const 7)         ;; PF_R | PF_W | PF_X
+      (i32.const 0)         ;; p_offset = 0
+      (global.get $TEXT_VA) ;; p_vaddr
+      (local.get $total_size) ;; p_filesz
+      (i32.add (i32.and (i32.add (local.get $total_size) (i32.const 0xFFF)) (i32.const -0x1000)) (global.get $BSS_SIZE)) ;; p_memsz includes BSS
+    )
+
+    ;; 9. Emit runtime stub (with BSS base, syscall data VA, import count)
+    (call $emit_elf_stub (local.get $bss_va) (local.get $data_va) (local.get $import_count))
+
+    ;; 10. Pad with zeros from end of stub to ELF_CODE_OFF
+    (block $pad_done
+      (loop $pad_loop
+        (if (i32.ge_u (i32.load (global.get $JS_CODE_PTR))
+                       (i32.add (global.get $ELF_OUT_OFF) (global.get $ELF_CODE_OFF)))
+          (then (br $pad_done))
+        )
+        (call $emit_x86_byte (i32.const 0))
+        (br $pad_loop)
+      )
+    )
+
+    ;; 11. Copy compiled code from cache (0x100000) to ELF output
+    (call $copy_compiled_code (global.get $JIT_CACHE) (local.get $code_size))
+
+    ;; 12. Advance JS_CODE_PTR past the compiled code
+    (i32.store (global.get $JS_CODE_PTR)
+      (i32.add (i32.load (global.get $JS_CODE_PTR)) (local.get $code_size))
+    )
+
+    ;; 13. Write syscall map data (read from interpreter's syscall map at 0x90000)
+    (local.set $i (i32.const 0))
+    (block $data_loop_done
+      (loop $data_loop
+        (if (i32.ge_u (local.get $i) (local.get $import_count))
+          (then (br $data_loop_done))
+        )
+        (local.set $sysno
+          (i32.load (i32.add (i32.const 0x90000) (i32.shl (local.get $i) (i32.const 2))))
+        )
+        (call $emit_x86_dword (local.get $sysno))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $data_loop)
+      )
+    )
+
+    ;; 14. Restore JS_CODE_PTR
+    (i32.store (global.get $JS_CODE_PTR) (local.get $saved))
+
+    ;; Return (buffer_address, total_size)
+    (return (global.get $ELF_OUT_BUF) (local.get $total_size))
+  )

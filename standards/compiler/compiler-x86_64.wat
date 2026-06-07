@@ -2187,12 +2187,8 @@
     (i32.store (global.get $JS_CACHE_END) (local.get $cache_end))
     (i32.store (global.get $JS_FUNC_IDX) (local.get $func_idx))
 
-    ;; Convert global func_idx to local function index (subtract imports)
-    (local.set $import_count (i32.load (global.get $OFF_IMPORT_COUNT)))
-    (local.set $local_idx (i32.sub (local.get $func_idx) (local.get $import_count)))
-
-    ;; Get result_count from function type (16-bit at offset 136 in type entry)
-    (local.set $code_off (i32.mul (local.get $local_idx) (i32.const 16)))
+    ;; Get result_count from function type (functions_buf now indexed by global func_idx)
+    (local.set $code_off (i32.mul (local.get $func_idx) (i32.const 16)))
     (local.set $code_off (i32.shl (i32.load (i32.add (global.get $OFF_FUNCTIONS_BUF) (local.get $code_off))) (i32.const 8)))
     (local.set $result_count (i32.load16_u (i32.add (i32.add (global.get $OFF_TYPES_BUF) (local.get $code_off)) (i32.const 136))))
     (i32.store (global.get $JS_RESULT_COUNT) (local.get $result_count))

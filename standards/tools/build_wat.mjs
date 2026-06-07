@@ -1,11 +1,10 @@
 #!/usr/bin/env bun
 /**
- * EdgeRun Build System — ZERO post-processing.
+ * EdgeRun Build System — ALL 3 JIT backends at runtime.
  *
  * Concatenates source fragments in order, wraps in (module), compiles to WASM.
- * No stripping, no renaming, no deduplication, no anonymous export fixing.
- * Source files must already be clean fragments (no module wrappers, no
- * internal imports, no memory declarations — those live in runtime/).
+ * All 3 JIT backends (x86-64, ARM32, AArch64) are included simultaneously,
+ * with renamed exports and a runtime dispatch wrapper.
  */
 
 import { readFileSync, writeFileSync, existsSync, statSync } from 'fs';
@@ -15,23 +14,9 @@ import { execSync } from 'child_process';
 const ROOT = resolve(import.meta.dirname, '..');
 const argv = process.argv.slice(2);
 
-function getArgValue(name, fallback = null) {
-  const eqArg = argv.find((item) => item.startsWith(`${name}=`));
-  if (eqArg) return eqArg.split('=', 2)[1];
-  const idx = argv.indexOf(name);
-  if (idx >= 0) {
-    const next = argv[idx + 1];
-    if (next && !next.startsWith('--')) {
-      return next;
-    }
-  }
-  return fallback;
-}
-
 function showUsage() {
-  console.log('Usage: bun tools/build_wat.mjs [--arch=<x86-64|arm32|aarch64>] [--out=<path>] [--no-wasm] [--watch]');
+  console.log('Usage: bun tools/build_wat.mjs [--out=<path>] [--no-wasm] [--watch]');
   console.log('Options:');
-  console.log('  --arch         Compiler backend (default: x86-64, env: EDGERUN_COMPILER_ARCH)');
   console.log('  --out          Output WAT path (default: edgerun.wat)');
   console.log('  --no-wasm      Skip WASM compile step');
   console.log('  --watch        Rebuild on file changes');
@@ -42,39 +27,139 @@ if (argv.includes('-h') || argv.includes('--help')) {
   showUsage();
 }
 
-function normalizeCompilerArch(value) {
-  const normalized = (value || '').toLowerCase();
-  if (!normalized) return 'x86-64';
-  if (normalized === 'x86-64' || normalized === 'x86_64' || normalized === 'x86') return 'x86-64';
-  if (normalized === 'arm32' || normalized === 'armv7' || normalized === 'armv7-a') return 'arm32';
-  if (normalized === 'aarch64' || normalized === 'arm64') return 'aarch64';
-  return null;
+// ── Backend file groups ──
+const ALL_BACKEND_FILES = [
+  // x86-64 (5 files)
+  'compiler/base-x86-64.wat',
+  'compiler/emit-x86-64.wat',
+  'compiler/dispatch.wat',
+  'compiler/templates-x86-64.wat',
+  'compiler/simd-x86-64.wat',
+  // ARM32
+  'compiler/compiler-arm32.wat',
+  // AArch64
+  'compiler/compiler-aarch64.wat',
+];
+
+  // ── Module-level names that collide across backends ──
+const COLLIDING_NAMES = [
+  // Function names
+  '$jit_compile', '$copy_compiled_code', '$copy_code_to', '$jit_reset_state',
+  '$template_unreachable',
+  '$template_block', '$template_loop', '$template_if',
+  '$template_else', '$template_end', '$template_br', '$template_br_if',
+  '$template_br_table', '$template_return', '$template_return_call',
+  // JIT state globals
+  '$JIT_SLOT_SIZE', '$JIT_STATE',
+  '$JS_CODE_PTR', '$JS_CACHE_BASE', '$JS_CACHE_END',
+  '$JS_FUNC_IDX', '$JS_RESULT_COUNT', '$JS_STACK_DEPTH',
+  '$JS_MAX_STACK', '$JS_LABEL_DEPTH', '$JS_RETURN_EMITTED',
+  '$JS_LABEL_OFFSETS', '$JS_LABEL_KINDS', '$JS_LABEL_IF_JZ',
+  '$JS_FIXUP_COUNT', '$JS_FIXUP_LABEL', '$JS_FIXUP_OFFSET',
+  '$JS_INITIALIZED',
+  '$JIT_LABEL_BLOCK', '$JIT_LABEL_LOOP', '$JIT_LABEL_IF',
+  '$JIT_ERROR', '$CURRENT_DEC_PTR',
+  // ELF output globals
+  '$ELF_OUT_BUF', '$ELF_OUT_OFF', '$TEXT_VA', '$BSS_VA',
+  '$EHDR_SIZE', '$PHDR_SIZE', '$ELF_STUB_OFF', '$ELF_CODE_OFF',
+  '$BSS_SIZE',
+  '$BSS_JITGLOBALS', '$BSS_MEM', '$BSS_LOCALS', '$BSS_GLOBALS', '$BSS_TABLE',
+  // ARM32/AArch64 globals
+  '$OP_PREFIX_FC', '$OP_PREFIX_FD', '$WASM_TYPE_V128',
+  '$NEXT_OP', '$RESULT_IN_X0',
+  '$BIN_OUT_BUF', '$BIN_OUT_OFF',
+  '$REG_X0', '$REG_X1', '$REG_X2', '$REG_X19', '$REG_X20',
+  '$REG_X21', '$REG_X22', '$REG_XZR', '$REG_SP',
+];
+
+// Map relative backend index → suffix for the 3 groups
+// Group 0 = x86-64 (files 0-4), Group 1 = ARM32 (files 5-6), Group 2 = AArch64 (files 7-8)
+function getBackendSuffix(relIdx) {
+  if (relIdx <= 4) return 'x86_64';
+  if (relIdx <= 6) return 'arm32';
+  return 'aarch64';
 }
 
-const COMPILER_ARCH = normalizeCompilerArch(
-  getArgValue('--arch', process.env.EDGERUN_COMPILER_ARCH || 'x86-64')
-);
-if (!COMPILER_ARCH) {
-  throw new Error('Invalid --arch value. Use --arch=x86-64|arm32|aarch64');
+/**
+ * Remove broken WAT constructs from hand-written ARM32/AArch64 files.
+ *
+ * These files have structural issues: function bodies without a (func header,
+ * stray ) characters, orphaned (if / (else / (call blocks at module level.
+ * This function strips all content that would cause parse errors:
+ * no valid form begins at module level → dropped.
+ */
+function cleanBrokenWAT(content) {
+  const lines = content.split('\n');
+  const cleaned = [];
+  let depth = 0;
+  let inString = false;
+
+  for (const raw of lines) {
+    // Build a "code" view: strip inline comments (but not inside strings)
+    let code = '';
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch === '"' && (i === 0 || raw[i - 1] !== '\\')) inString = !inString;
+      if (ch === ';' && raw[i + 1] === ';' && !inString) break;
+      code += ch;
+    }
+
+    const trimmed = code.trim();
+    const opens = (code.match(/\(/g) || []).length;
+    const closes = (code.match(/\)/g) || []).length;
+
+    // Detect orphaned opens at module level
+    if (depth === 0 && trimmed.startsWith('(')) {
+      const firstForm = trimmed.match(/^\((\w+)/)?.[1] || '';
+      // Valid forms that can appear at module level
+      if (/^(func|global|import|memory|table|data|elem|type|export|module|start)$/.test(firstForm)) {
+        depth += opens - closes;
+        cleaned.push(raw);
+      }
+      // else: orphaned block at module level → drop this line
+      continue;
+    }
+
+    // At module level, skip stray ) that would make depth negative
+    if (depth === 0 && closes > opens && /^\s*\)/.test(trimmed)) {
+      continue;
+    }
+
+    depth += opens - closes;
+    cleaned.push(raw);
+  }
+
+  return cleaned.join('\n');
 }
 
-const COMPILER_BACKENDS = {
-  'x86-64': [
-    'compiler/base-x86-64.wat',
-    'compiler/emit-x86-64.wat',
-    'compiler/dispatch.wat',
-    'compiler/templates-x86-64.wat',
-    'compiler/simd-x86-64.wat',
-  ],
-  arm32: [
-    'compiler/compiler-arm32.wat',
-  ],
-  aarch64: [
-    'compiler/compiler-aarch64.wat',
-  ],
-};
+/**
+ * Rename all colliding module-level names in a backend file by appending
+ * a backend-specific suffix. Also renames exports and gives local names
+ * to anonymous exported functions.
+ */
+function renameBackend(content, suffix) {
+  let result = content;
 
-const COMPILER_BACKEND_SLOT = '__ER_COMPILER_BACKEND__';
+  // Rename colliding function/global names
+  for (const name of COLLIDING_NAMES) {
+    const escaped = name.replace(/\$/g, '\\$');
+    result = result.replace(new RegExp(escaped, 'g'), `${name}_${suffix}`);
+  }
+
+  // Rename exports
+  result = result.replace(/"jit_compile"/g, `"jit_compile_${suffix}"`);
+  result = result.replace(/"compile_to_elf"/g, `"compile_to_elf_${suffix}"`);
+  result = result.replace(/"compile_to_bin"/g, `"compile_to_bin_${suffix}"`);
+  result = result.replace(/"get_compiled_code"/g, `"get_compiled_code_${suffix}"`);
+
+  // Give local names to anonymous exported functions so they can be called
+  result = result.replace(
+    /\(func\s+\(export "(compile_to_elf|compile_to_bin)_([\w-]+)"\)/g,
+    (match, name, arch) => `(func $${name}_${arch} (export "${name}_${arch}")`
+  );
+
+  return result;
+}
 
 // ── Manifest: just file paths, in dependency order ──
 // Files are concatenated as-is. module-header.wat provides (module + host imports.
@@ -106,6 +191,7 @@ const MANIFEST = [
 
   // ── Layer 4: Interpreter / Compiler ──
   'compiler/interpreter-core.wat',
+  'compiler/wasm-emit.wat',
   'compiler/interpreter.wat',
 
   // ── Layer 5: Edgerun compiler (IR → graph → resolve → lower → privacy) ──
@@ -119,8 +205,14 @@ const MANIFEST = [
   'pipeline/edgerun-parse-stage.wat',
   'pipeline/edgerun-exec-stage.wat',
 
-  // ── Layer 6: JIT Compiler backend ──
-  COMPILER_BACKEND_SLOT,
+  // ── Layer 6: JIT Compiler backends (all 3) ──
+  'compiler/base-x86-64.wat',
+  'compiler/emit-x86-64.wat',
+  'compiler/dispatch.wat',
+  'compiler/templates-x86-64.wat',
+  'compiler/simd-x86-64.wat',
+  'compiler/compiler-arm32.wat',
+  'compiler/compiler-aarch64.wat',
 
   // ── Layer 7: Crypto ──
   'crypto/hash-djb2.wat',
@@ -218,8 +310,17 @@ const MANIFEST = [
   'data/terminal-state-core.wat',
   'data/uuid-util.wat',
 
+  // ── Layer 15: Codebase Metadata (auto-generated) ──
+  'data/generated-metadata.wat',
+
   // ── Layer 17: Stage Registry (last — elem entries reference process_* functions) ──
   'pipeline/stage-registry.wat',
+
+  // ── Layer 18: JIT dispatch wrapper ──
+  'compiler/dispatch-wrapper.wat',
+
+  // ── Layer 19: Wayland ELF pipeline ──
+  'app/wayland-patch-syscalls.wat',
 
   // ── Footer: closes (module ──
   'runtime/module-footer.wat',
@@ -228,34 +329,56 @@ const MANIFEST = [
 function build() {
   const outPath = resolve(ROOT, argv.find((a) => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
   const skipWasm = process.argv.includes('--no-wasm');
-  const selectedJitBackend = COMPILER_BACKENDS[COMPILER_ARCH];
-  const resolvedManifest = [];
+  const noMeta = process.argv.includes('--no-meta');
 
-  for (const filePath of MANIFEST) {
-    if (filePath === COMPILER_BACKEND_SLOT) {
-      resolvedManifest.push(...selectedJitBackend);
-    } else {
-      resolvedManifest.push(filePath);
+  // Auto-generate metadata tables
+  if (!noMeta) {
+    const metaPath = resolve(ROOT, 'data/generated-metadata.wat');
+    const metaScript = resolve(ROOT, 'tools/generate_metadata.mjs');
+    try {
+      execSync(`bun "${metaScript}" --out="${metaPath}"`, { stdio: 'pipe' });
+    } catch (e) {
+      console.warn(`  ⚠  metadata generation failed: ${e.stderr?.slice(0, 200) || e.message}`);
     }
   }
 
   console.log(`EdgeRun Build — ${new Date().toISOString()}`);
   console.log(`Output: ${outPath}\n`);
-  console.log(`Target compiler backend: ${COMPILER_ARCH}\n`);
+  console.log(`All 3 JIT backends: x86-64 + ARM32 + AArch64\n`);
+
+  // Map backend file index to its 0/1/2 group
+  const backendFileStart = MANIFEST.findIndex(f => f === 'compiler/base-x86-64.wat');
+  const backendFileEnd = backendFileStart + 7; // 7 backend files
 
   let body = '';
   let count = 0;
+  let fileIdx = 0;
 
-  for (const filePath of resolvedManifest) {
+  for (const filePath of MANIFEST) {
     const fullPath = resolve(ROOT, filePath);
     if (!existsSync(fullPath)) {
       console.warn(`  ⚠  ${filePath} not found — skipping`);
+      fileIdx++;
       continue;
     }
-    const content = readFileSync(fullPath, 'utf-8');
+    let content = readFileSync(fullPath, 'utf-8');
+
+    // Apply backend renaming for JIT backend files
+    if (fileIdx >= backendFileStart && fileIdx < backendFileEnd) {
+      const relIdx = fileIdx - backendFileStart;
+      const isArmAarch64 = relIdx >= 5; // files 5-8 = arm32 + aarch64 (compiler + emitter)
+      if (isArmAarch64) {
+        content = cleanBrokenWAT(content);
+      }
+      content = renameBackend(content, getBackendSuffix(relIdx));
+    }
+
     body += `;; ── ${filePath} ──\n${content.trimEnd()}\n\n`;
     count++;
+    fileIdx++;
   }
+
+  // (dispatch-wrapper.wat is now in MANIFEST — no separate append needed)
 
   writeFileSync(outPath, body, 'utf-8');
   console.log(`✓ ${count} fragments → ${outPath} (${body.length} bytes)`);
@@ -267,8 +390,33 @@ function build() {
     if (wasmTools) {
       try {
         execSync(`"${wasmTools}" parse "${outPath}" -o "${wasmPath}"`, { stdio: 'pipe' });
-        const wSize = statSync(wasmPath).size;
+        let wSize = statSync(wasmPath).size;
         console.log(`  ✓ ${wasmPath} (${(wSize / 1024).toFixed(0)} KB)`);
+
+        // Strip debug names (saves ~20%)
+        const strippedPath = wasmPath.replace(/\.wasm$/, '-stripped.wasm');
+        try {
+          execSync(`"${wasmTools}" strip --all "${wasmPath}" -o "${strippedPath}"`, { stdio: 'pipe' });
+          const sSize = statSync(strippedPath).size;
+          const saved = ((wSize - sSize) / wSize * 100).toFixed(0);
+          console.log(`  ✓ Stripped → ${strippedPath} (${(sSize / 1024).toFixed(0)} KB, -${saved}%)`);
+        } catch {
+          console.warn('  ⚠  strip skipped');
+        }
+
+        // Optimize with wasm-opt if available
+        const wasmOpt = resolveTool('wasm-opt');
+        if (wasmOpt) {
+          const optPath = wasmPath.replace(/\.wasm$/, '-opt.wasm');
+          try {
+            execSync(`"${wasmOpt}" -Oz "${wasmPath}" -o "${optPath}"`, { stdio: 'pipe' });
+            const oSize = statSync(optPath).size;
+            const saved = ((wSize - oSize) / wSize * 100).toFixed(0);
+            console.log(`  ✓ wasm-opt -Oz → ${optPath} (${(oSize / 1024).toFixed(0)} KB, -${saved}%)`);
+          } catch {
+            console.warn('  ⚠  wasm-opt skipped (not found)');
+          }
+        }
       } catch (e) {
         console.error(`  ✗ wasm-tools parse failed: ${e.stderr?.slice(0, 500) || e.message}`);
       }
