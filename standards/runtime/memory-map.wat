@@ -32,7 +32,7 @@
 (global $INT_IMPORT_CNT (export "INT_IMPORT_CNT") i32 (i32.const 0x04108))
 (global $INT_IMPORT_BUF (export "INT_IMPORT_BUF") i32 (i32.const 0x04110))
 (global $INT_FUNC_BUF   (export "INT_FUNC_BUF")   i32 (i32.const 0x04518))
-(global $INT_CODE_BUF   (export "INT_CODE_BUF")   i32 (i32.const 0x05518))
+(global $INT_CODE_BUF   (export "INT_CODE_BUF")   i32 (i32.const 0x0551C))
 (global $INT_FRAME_SAVE (export "INT_FRAME_SAVE") i32 (i32.const 0x70000))
 (global $INT_SCRATCH_WK (export "INT_SCRATCH_WK") i32 (i32.const 0x80000))
 
@@ -125,9 +125,9 @@
 ;; Referenced by compiler/interpreter-core.wat fragments.
 (global $OFF_TYPES_BUF       i32 (i32.const 0x00104))
 (global $SZ_TYPE              i32 (i32.const 140))
-(global $OFF_FUNCTIONS_BUF   i32 (i32.const 0x04510))
+(global $OFF_FUNCTIONS_BUF   i32 (i32.const 0x04514))
 (global $SZ_FUNC              i32 (i32.const 16))
-(global $OFF_CODE_BUF        i32 (i32.const 0x05518))
+(global $OFF_CODE_BUF        i32 (i32.const 0x0551C))
 (global $SZ_CODE              i32 (i32.const 64))
 (global $OFF_DECODED_COUNT   i32 (i32.const 0x8C000))
 (global $OFF_DECODED_OPS     i32 (i32.const 0xA0000))

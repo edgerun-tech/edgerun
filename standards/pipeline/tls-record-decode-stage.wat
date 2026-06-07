@@ -1,0 +1,28 @@
+;; TLS Record Header Decode Stage — slot 61
+  ;; Stage type: batch (state=0)
+  ;; Input:  raw TLS record bytes via input pipe (at least 5)
+  ;; Output: 16 bytes {content_type, version, fragment_len, 0} as i32le
+  ;; Calls $tls_record_header_decode from protocol/tls.wat
+
+  (func $process_tls_record_decode (export "process_tls_record_decode")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $len_slot i32) (local $read i32) (local $result i64) (local $status i32)
+    (local $content_type i32) (local $version i32) (local $fragment_len i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (drop (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.lt_u (local.get $read) (i32.const 5)) (then (return (i32.const 0))))
+    (drop (call $pipe_read (local.get $input) (i32.const 0x3000) (local.get $read)))
+    (local.set $result (call $tls_record_header_decode (i32.const 0x3000) (local.get $read)))
+    (local.set $status (i32.wrap_i64 (i64.and (local.get $result) (i64.const 0xffff))))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (local.set $content_type (i32.wrap_i64 (i64.and (i64.shr_u (local.get $result) (i64.const 16)) (i64.const 0xff))))
+    (local.set $version (i32.wrap_i64 (i64.and (i64.shr_u (local.get $result) (i64.const 24)) (i64.const 0xffff))))
+    (local.set $fragment_len (i32.wrap_i64 (i64.and (i64.shr_u (local.get $result) (i64.const 40)) (i64.const 0xffff))))
+    (i32.store (local.get $scratch) (local.get $content_type))
+    (i32.store (i32.add (local.get $scratch) (i32.const 4)) (local.get $version))
+    (i32.store (i32.add (local.get $scratch) (i32.const 8)) (local.get $fragment_len))
+    (i32.store (i32.add (local.get $scratch) (i32.const 12)) (i32.const 0))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 16)))
+    i32.const 16)

@@ -7,18 +7,6 @@
   (func (export "ecdsa_der_last_s_len") (result i32)
     global.get $last_s_len)
 
-  (func $m56copy (param $src i32) (param $dst i32) (param $len i32)
-    (local $i i32)
-    (local.set $i (i32.const 0))
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (i32.store8
-          (i32.add (local.get $dst) (local.get $i))
-          (i32.load8_u (i32.add (local.get $src) (local.get $i))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
-
   ;; Decode DER definite length. Return low16=status, next16=consumed, high32=value.
   ;; status: 0 ok, 1 too_large/unsupported, 3 invalid.
   (func $len_decode (param $ptr i32) (param $end i32) (result i64)
@@ -160,7 +148,7 @@
         (local.set $out_len (i32.sub (local.get $int_len) (i32.const 1)))))
     (if (i32.gt_u (local.get $out_len) (local.get $r_cap))
       (then (return (call $pack (i32.const 2) (i32.const 0)))))
-    (call $m56copy (local.get $payload) (local.get $r_out) (local.get $out_len))
+    (call $memcpy (local.get $r_out) (local.get $payload) (local.get $out_len))
     (local.set $r_len (local.get $out_len))
     (local.set $p (i32.add (local.get $p) (local.get $int_len)))
 
@@ -194,7 +182,7 @@
         (local.set $out_len (i32.sub (local.get $int_len) (i32.const 1)))))
     (if (i32.gt_u (local.get $out_len) (local.get $s_cap))
       (then (return (call $pack (i32.const 2) (i32.const 0)))))
-    (call $m56copy (local.get $payload) (local.get $s_out) (local.get $out_len))
+    (call $memcpy (local.get $s_out) (local.get $payload) (local.get $out_len))
     (local.set $s_len (local.get $out_len))
     (local.set $p (i32.add (local.get $p) (local.get $int_len)))
     (if (i32.ne (local.get $p) (local.get $seq_end))
@@ -256,7 +244,7 @@
       (then
         (i32.store8 (local.get $p) (i32.const 0))
         (local.set $p (i32.add (local.get $p) (i32.const 1)))))
-    (call $m56copy (local.get $r) (local.get $p) (local.get $r_len))
+    (call $memcpy (local.get $p) (local.get $r) (local.get $r_len))
     (local.set $p (i32.add (local.get $p) (local.get $r_len)))
     (i32.store8 (local.get $p) (i32.const 2))
     (local.set $p (i32.add (local.get $p) (i32.const 1)))
@@ -265,5 +253,5 @@
       (then
         (i32.store8 (local.get $p) (i32.const 0))
         (local.set $p (i32.add (local.get $p) (i32.const 1)))))
-    (call $m56copy (local.get $s) (local.get $p) (local.get $s_len))
+    (call $memcpy (local.get $p) (local.get $s) (local.get $s_len))
     (call $pack (i32.const 0) (local.get $written)))

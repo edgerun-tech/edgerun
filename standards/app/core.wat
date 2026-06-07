@@ -1160,7 +1160,7 @@
     (i32.store8 (i32.add (local.get $ptr) (i32.const 2)) (i32.add (i32.rem_u (i32.div_u (local.get $value) (i32.const 10)) (i32.const 10)) (i32.const 48)))
     (i32.store8 (i32.add (local.get $ptr) (i32.const 3)) (i32.add (i32.rem_u (local.get $value) (i32.const 10)) (i32.const 48))))
 
-  (func (export "rfc3339_parse") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $rfc3339_parse (export "rfc3339_parse") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $end i32)
     (local $year i32)
     (local $month i32)

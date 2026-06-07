@@ -302,35 +302,17 @@
 
   ;; memcpy(src, dst, len)
   (func $m137memcpy (param $src i32) (param $dst i32) (param $len i32)
-    (local $i i32)
-    block $done
-    loop $loop
-      local.get $i
-      local.get $len
-      i32.ge_u
-      br_if $done
-      local.get $dst
-      local.get $i
-      i32.add
-      local.get $src
-      local.get $i
-      i32.add
-      i32.load8_u
-      i32.store8
-      local.get $i
-      i32.const 1
-      i32.add
-      local.set $i
-      br $loop
-    end
-    end)
-
-  ;; memcpy_fixed(src, dst, len) — source is a fixed data addr (same module)
-  (func $m137memcpy_fixed (param $src i32) (param $dst i32) (param $len i32)
-    local.get $src
     local.get $dst
+    local.get $src
     local.get $len
-    call $m137memcpy)
+    call $memcpy)
+
+  ;; memcpy_fixed(src, dst, len)
+  (func $m137memcpy_fixed (param $src i32) (param $dst i32) (param $len i32)
+    local.get $dst
+    local.get $src
+    local.get $len
+    call $memcpy)
 
 
   ;; ================================================================
@@ -533,7 +515,7 @@
   ;; Percent-encode URL-unsafe characters (RFC 3986).
   ;; Returns packed (status, encoded_len)
   ;; ================================================================
-  (func (export "oauth_url_encode")
+  (func $oauth_url_encode (export "oauth_url_encode")
     (param $src i32) (param $slen i32)
     (param $dst i32) (param $dcap i32)
     (result i64)
@@ -1124,31 +1106,19 @@
 
   ;; memcpy(src, dst, len)
   (func $m138memcpy (param $src i32) (param $dst i32) (param $len i32)
-    (local $i i32)
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add
-      local.get $src local.get $i i32.add i32.load8_u
-      i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end)
+    local.get $dst
+    local.get $src
+    local.get $len
+    call $memcpy)
 
   ;; memcpy_to_off(src, dst, dst_off, len) — copies len bytes from src to dst+dst_off
   (func $m138memcpy_to_off (param $src i32) (param $dst i32) (param $off i32) (param $len i32)
-    (local $i i32)
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $off i32.add local.get $i i32.add
-      local.get $src local.get $i i32.add i32.load8_u
-      i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end)
+    local.get $dst
+    local.get $off
+    local.get $src
+    i32.const 0
+    local.get $len
+    call $memcpy_off)
 
   ;; emit_u32_dec(n, out, offset) -> new_offset
   ;; Renders n as decimal ASCII at out[offset..] and returns new offset

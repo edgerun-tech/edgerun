@@ -26,7 +26,7 @@
     local.get $b i32.const 10 i32.eq i32.or
   )
 
-  (func (export "uuid_parse") (param $in i32) (param $out i32) (result i32)
+  (func $uuid_parse (export "uuid_parse") (param $in i32) (param $out i32) (result i32)
     (local $i i32) (local $o i32) (local $b i32)
     i32.const 0 local.set $i
     i32.const 0 local.set $o
@@ -55,7 +55,7 @@
     i32.const 0
   )
 
-  (func (export "uuid_format") (param $in i32) (param $out i32) (result i32)
+  (func $uuid_format (export "uuid_format") (param $in i32) (param $out i32) (result i32)
     (local $i i32) (local $o i32) (local $b i32)
     i32.const 0 local.set $i
     i32.const 0 local.set $o

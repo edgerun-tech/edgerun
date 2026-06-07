@@ -279,6 +279,7 @@
     )
     (i32.store (global.get $OFF_SCRATCH0) (local.get $dst))
     (i32.store (global.get $OFF_SCRATCH1) (i32.add (local.get $adv) (local.get $len)))
+    (i32.store (global.get $OFF_SCRATCH2) (local.get $len))
     ;; Advance names buffer
     (i32.store (global.get $OFF_NAMES_PTR) (i32.add (local.get $dst) (local.get $len)))
     (return (global.get $OK))
@@ -810,8 +811,8 @@
         ;; Read name string
         (if (call $read_name (local.get $offset)) (then (return (global.get $ERR_PARSE))))
         (local.set $name_off (i32.load (global.get $OFF_SCRATCH0)))
-        (local.set $name_len (i32.load (global.get $OFF_SCRATCH1)))
-        (local.set $offset (i32.add (local.get $offset) (local.get $name_len)))
+        (local.set $name_len (i32.load (global.get $OFF_SCRATCH2)))
+        (local.set $offset (i32.add (local.get $offset) (i32.load (global.get $OFF_SCRATCH1))))
 
         ;; Read kind (1 byte)
         (local.set $p (i32.load (global.get $OFF_WASM_PTR)))

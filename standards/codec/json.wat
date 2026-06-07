@@ -27,9 +27,6 @@
     i32.add
     i32.load)
 
-  (func $m126byte_at (param $ptr i32) (param $offset i32) (result i32)
-    (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))))
-
   (func $limit_digit (param $limit i32) (param $idx i32) (result i32)
     local.get $limit
     i32.const 0
@@ -112,7 +109,7 @@
         local.get $start
         local.get $i
         i32.add
-        call $m126byte_at
+        call $load8_u
         i32.const 48
         i32.sub
         local.set $digit
@@ -316,7 +313,7 @@
         br_if $done
         local.get $ptr
         local.get $p
-        call $m126byte_at
+        call $load8_u
         i64.extend_i32_u
         i64.const 48
         i64.sub
@@ -379,7 +376,7 @@
     local.set $p
     local.get $ptr
     i32.const 0
-    call $m126byte_at
+    call $load8_u
     i32.const 45
     i32.eq
     if
@@ -401,7 +398,7 @@
     local.set $start_digits
     local.get $ptr
     local.get $p
-    call $m126byte_at
+    call $load8_u
     call $is_digit
     i32.eqz
     if
@@ -412,7 +409,7 @@
     end
     local.get $ptr
     local.get $p
-    call $m126byte_at
+    call $load8_u
     i32.const 48
     i32.eq
     if
@@ -426,7 +423,7 @@
         local.get $p
         i32.const 1
         i32.add
-        call $m126byte_at
+        call $load8_u
         call $is_digit
         if
           i32.const 3
@@ -446,7 +443,7 @@
         br_if $digits_done
         local.get $ptr
         local.get $p
-        call $m126byte_at
+        call $load8_u
         call $is_digit
         i32.eqz
         br_if $digits_done
@@ -461,7 +458,7 @@
     if
       local.get $ptr
       local.get $p
-      call $m126byte_at
+      call $load8_u
       i32.const 46
       i32.eq
       if
@@ -488,7 +485,7 @@
             br_if $frac_done
             local.get $ptr
             local.get $p
-            call $m126byte_at
+            call $load8_u
             call $is_digit
             i32.eqz
             br_if $frac_done
@@ -505,12 +502,12 @@
     if
       local.get $ptr
       local.get $p
-      call $m126byte_at
+      call $load8_u
       i32.const 101
       i32.eq
       local.get $ptr
       local.get $p
-      call $m126byte_at
+      call $load8_u
       i32.const 69
       i32.eq
       i32.or
@@ -532,12 +529,12 @@
         end
         local.get $ptr
         local.get $p
-        call $m126byte_at
+        call $load8_u
         i32.const 43
         i32.eq
         local.get $ptr
         local.get $p
-        call $m126byte_at
+        call $load8_u
         i32.const 45
         i32.eq
         i32.or
@@ -558,7 +555,7 @@
         end
         local.get $ptr
         local.get $p
-        call $m126byte_at
+        call $load8_u
         call $is_digit
         i32.eqz
         if
@@ -575,7 +572,7 @@
             br_if $exp_done
             local.get $ptr
             local.get $p
-            call $m126byte_at
+            call $load8_u
             call $is_digit
             i32.eqz
             br_if $exp_done
@@ -739,10 +736,10 @@
         i32.add
         local.get $i
         i32.add
-        call $m126byte_at
+        call $load8_u
         local.get $key_ptr
         local.get $i
-        call $m126byte_at
+        call $load8_u
         i32.ne
         if
           i32.const 0
@@ -901,7 +898,7 @@
           (local.get $out_ptr)
           (local.get $out_cap)
           (local.get $written)
-          (call $m126byte_at (local.get $in_ptr) (local.get $i))))
+          (call $load8_u (local.get $in_ptr) (local.get $i))))
       (if (i32.ne (i32.wrap_i64 (local.get $packed)) (i32.const 0))
         (then (return (local.get $packed))))
       (local.set $written (i32.wrap_i64 (i64.shr_u (local.get $packed) (i64.const 32))))
@@ -1016,7 +1013,7 @@
         (then
           (local.set $packed (call $m123put (local.get $out_ptr) (local.get $out_cap) (local.get $written) (i32.const 34)))
           (return (local.get $packed))))
-      (local.set $c (call $m126byte_at (local.get $in_ptr) (local.get $i)))
+      (local.set $c (call $load8_u (local.get $in_ptr) (local.get $i)))
       (if (i32.eq (local.get $c) (i32.const 34))
         (then
           (local.set $packed (call $m123put (local.get $out_ptr) (local.get $out_cap) (local.get $written) (i32.const 92)))
@@ -1098,7 +1095,7 @@
     (if (i32.gt_u (i32.add (local.get $off) (i32.const 4)) (local.get $len))
       (then (return (i32.const 5))))
     (loop $again
-      (local.set $d (call $m124hex_value (call $m126byte_at (local.get $ptr) (i32.add (local.get $off) (local.get $i)))))
+      (local.set $d (call $m124hex_value (call $load8_u (local.get $ptr) (i32.add (local.get $off) (local.get $i)))))
       (if (i32.lt_s (local.get $d) (i32.const 0))
         (then (return (i32.const 3))))
       (local.set $value (i32.or (i32.shl (local.get $value) (i32.const 4)) (local.get $d)))
@@ -1124,14 +1121,14 @@
     (local $low i32)
     (if (i32.ge_u (local.get $offset) (local.get $len))
       (then (return (call $pack (i32.const 1) (local.get $offset)))))
-    (if (i32.ne (call $m126byte_at (local.get $ptr) (local.get $offset)) (i32.const 34))
+    (if (i32.ne (call $load8_u (local.get $ptr) (local.get $offset)) (i32.const 34))
       (then (return (call $pack (i32.const 3) (local.get $offset)))))
     (local.set $p (i32.add (local.get $offset) (i32.const 1)))
     (block $done
       (loop $again
         (if (i32.ge_u (local.get $p) (local.get $len))
           (then (return (call $pack (i32.const 5) (local.get $len)))))
-        (local.set $c (call $m126byte_at (local.get $ptr) (local.get $p)))
+        (local.set $c (call $load8_u (local.get $ptr) (local.get $p)))
         (if (i32.eq (local.get $c) (i32.const 34))
           (then (return (call $pack (i32.const 0) (i32.add (local.get $p) (i32.const 1))))))
         (if (i32.lt_u (local.get $c) (i32.const 32))
@@ -1142,7 +1139,7 @@
             (local.set $p (i32.add (local.get $p) (i32.const 1)))
             (if (i32.ge_u (local.get $p) (local.get $len))
               (then (return (call $pack (i32.const 5) (local.get $len)))))
-            (local.set $c (call $m126byte_at (local.get $ptr) (local.get $p)))
+            (local.set $c (call $load8_u (local.get $ptr) (local.get $p)))
             (if (i32.eq (local.get $c) (i32.const 117))
               (then
                 (if (call $read_hex_quad (local.get $ptr) (local.get $len) (i32.add (local.get $p) (i32.const 1)) (i32.const 0))
@@ -1154,8 +1151,8 @@
                     (if (i32.gt_u (i32.add (local.get $p) (i32.const 6)) (local.get $len))
                       (then (return (call $pack (i32.const 3) (local.get $esc)))))
                     (if (i32.or
-                          (i32.ne (call $m126byte_at (local.get $ptr) (local.get $p)) (i32.const 92))
-                          (i32.ne (call $m126byte_at (local.get $ptr) (i32.add (local.get $p) (i32.const 1))) (i32.const 117)))
+                          (i32.ne (call $load8_u (local.get $ptr) (local.get $p)) (i32.const 92))
+                          (i32.ne (call $load8_u (local.get $ptr) (i32.add (local.get $p) (i32.const 1))) (i32.const 117)))
                       (then (return (call $pack (i32.const 3) (local.get $esc)))))
                     (if (call $read_hex_quad (local.get $ptr) (local.get $len) (i32.add (local.get $p) (i32.const 2)) (i32.const 0))
                       (then (return (call $pack (i32.const 3) (local.get $esc)))))
@@ -1221,11 +1218,11 @@
     (loop $again
       (if (i32.ge_u (local.get $p) (local.get $end))
         (then (return (call $pack (i32.const 0) (local.get $written)))))
-      (local.set $c (call $m126byte_at (local.get $in_ptr) (local.get $p)))
+      (local.set $c (call $load8_u (local.get $in_ptr) (local.get $p)))
       (if (i32.eq (local.get $c) (i32.const 92))
         (then
           (local.set $p (i32.add (local.get $p) (i32.const 1)))
-          (local.set $c (call $m126byte_at (local.get $in_ptr) (local.get $p)))
+          (local.set $c (call $load8_u (local.get $in_ptr) (local.get $p)))
           (if (i32.eq (local.get $c) (i32.const 117))
             (then
               (drop (call $read_hex_quad (local.get $in_ptr) (local.get $in_len) (i32.add (local.get $p) (i32.const 1)) (i32.const 0)))
@@ -1275,16 +1272,16 @@
     (if (i32.ge_u (local.get $offset) (local.get $len))
       (then (return (call $pack (i32.const 1) (local.get $offset)))))
     (local.set $p (local.get $offset))
-    (if (i32.eq (call $m126byte_at (local.get $ptr) (local.get $p)) (i32.const 45))
+    (if (i32.eq (call $load8_u (local.get $ptr) (local.get $p)) (i32.const 45))
       (then
         (local.set $p (i32.add (local.get $p) (i32.const 1)))
         (if (i32.ge_u (local.get $p) (local.get $len))
           (then (return (call $pack (i32.const 5) (local.get $p)))))))
-    (local.set $c (call $m126byte_at (local.get $ptr) (local.get $p)))
+    (local.set $c (call $load8_u (local.get $ptr) (local.get $p)))
     (if (i32.eq (local.get $c) (i32.const 48))
       (then
         (local.set $p (i32.add (local.get $p) (i32.const 1)))
-        (if (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $m126byte_at (local.get $ptr) (local.get $p))))
+        (if (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $load8_u (local.get $ptr) (local.get $p))))
           (then (return (call $pack (i32.const 3) (local.get $offset))))))
       (else
         (if (i32.eqz (call $m124is_digit_1_9 (local.get $c)))
@@ -1292,31 +1289,31 @@
         (loop $digits
           (local.set $p (i32.add (local.get $p) (i32.const 1)))
           (br_if $digits
-            (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $m126byte_at (local.get $ptr) (local.get $p))))))))
-    (if (i32.and (i32.lt_u (local.get $p) (local.get $len)) (i32.eq (call $m126byte_at (local.get $ptr) (local.get $p)) (i32.const 46)))
+            (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $load8_u (local.get $ptr) (local.get $p))))))))
+    (if (i32.and (i32.lt_u (local.get $p) (local.get $len)) (i32.eq (call $load8_u (local.get $ptr) (local.get $p)) (i32.const 46)))
       (then
         (local.set $p (i32.add (local.get $p) (i32.const 1)))
-        (if (i32.or (i32.ge_u (local.get $p) (local.get $len)) (i32.eqz (call $is_digit (call $m126byte_at (local.get $ptr) (local.get $p)))))
+        (if (i32.or (i32.ge_u (local.get $p) (local.get $len)) (i32.eqz (call $is_digit (call $load8_u (local.get $ptr) (local.get $p)))))
           (then (return (call $pack (i32.const 3) (local.get $offset)))))
         (loop $frac
           (local.set $p (i32.add (local.get $p) (i32.const 1)))
           (br_if $frac
-            (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $m126byte_at (local.get $ptr) (local.get $p))))))))
+            (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $load8_u (local.get $ptr) (local.get $p))))))))
     (if (i32.and
           (i32.lt_u (local.get $p) (local.get $len))
-          (i32.or (i32.eq (call $m126byte_at (local.get $ptr) (local.get $p)) (i32.const 101)) (i32.eq (call $m126byte_at (local.get $ptr) (local.get $p)) (i32.const 69))))
+          (i32.or (i32.eq (call $load8_u (local.get $ptr) (local.get $p)) (i32.const 101)) (i32.eq (call $load8_u (local.get $ptr) (local.get $p)) (i32.const 69))))
       (then
         (local.set $p (i32.add (local.get $p) (i32.const 1)))
         (if (i32.and
               (i32.lt_u (local.get $p) (local.get $len))
-              (i32.or (i32.eq (call $m126byte_at (local.get $ptr) (local.get $p)) (i32.const 43)) (i32.eq (call $m126byte_at (local.get $ptr) (local.get $p)) (i32.const 45))))
+              (i32.or (i32.eq (call $load8_u (local.get $ptr) (local.get $p)) (i32.const 43)) (i32.eq (call $load8_u (local.get $ptr) (local.get $p)) (i32.const 45))))
           (then (local.set $p (i32.add (local.get $p) (i32.const 1)))))
-        (if (i32.or (i32.ge_u (local.get $p) (local.get $len)) (i32.eqz (call $is_digit (call $m126byte_at (local.get $ptr) (local.get $p)))))
+        (if (i32.or (i32.ge_u (local.get $p) (local.get $len)) (i32.eqz (call $is_digit (call $load8_u (local.get $ptr) (local.get $p)))))
           (then (return (call $pack (i32.const 3) (local.get $offset)))))
         (loop $exp
           (local.set $p (i32.add (local.get $p) (i32.const 1)))
           (br_if $exp
-            (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $m126byte_at (local.get $ptr) (local.get $p))))))))
+            (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_digit (call $load8_u (local.get $ptr) (local.get $p))))))))
     (call $pack (i32.const 0) (local.get $p)))
 
   (func (export "json_parse_u64") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
@@ -1325,12 +1322,12 @@
     (local $value i64)
     (local $digit i64)
     (if (i32.eqz (local.get $len)) (then (return (i32.const 1))))
-    (if (i32.and (i32.gt_u (local.get $len) (i32.const 1)) (i32.eq (call $m126byte_at (local.get $ptr) (i32.const 0)) (i32.const 48)))
+    (if (i32.and (i32.gt_u (local.get $len) (i32.const 1)) (i32.eq (call $load8_u (local.get $ptr) (i32.const 0)) (i32.const 48)))
       (then (return (i32.const 3))))
     (loop $again
       (if (i32.ge_u (local.get $i) (local.get $len))
         (then (i64.store (local.get $out_ptr) (local.get $value)) (return (i32.const 0))))
-      (local.set $c (call $m126byte_at (local.get $ptr) (local.get $i)))
+      (local.set $c (call $load8_u (local.get $ptr) (local.get $i)))
       (if (i32.eqz (call $is_digit (local.get $c))) (then (return (i32.const 3))))
       (local.set $digit (i64.extend_i32_u (i32.sub (local.get $c) (i32.const 48))))
       (if (i64.gt_u (local.get $value) (i64.const 1844674407370955161))
@@ -1352,18 +1349,18 @@
     (local $digit i64)
     (if (i32.eqz (local.get $len)) (then (return (i32.const 1))))
     (local.set $limit (i64.const 9223372036854775807))
-    (if (i32.eq (call $m126byte_at (local.get $ptr) (i32.const 0)) (i32.const 45))
+    (if (i32.eq (call $load8_u (local.get $ptr) (i32.const 0)) (i32.const 45))
       (then
         (local.set $neg (i32.const 1))
         (local.set $i (i32.const 1))
     (local.set $limit (i64.const -9223372036854775808))
         (if (i32.eq (local.get $len) (i32.const 1)) (then (return (i32.const 3)))))
       (else
-        (if (i32.eq (call $m126byte_at (local.get $ptr) (i32.const 0)) (i32.const 43))
+        (if (i32.eq (call $load8_u (local.get $ptr) (i32.const 0)) (i32.const 43))
           (then (return (i32.const 3))))))
     (if (i32.and
           (i32.gt_u (i32.sub (local.get $len) (local.get $i)) (i32.const 1))
-          (i32.eq (call $m126byte_at (local.get $ptr) (local.get $i)) (i32.const 48)))
+          (i32.eq (call $load8_u (local.get $ptr) (local.get $i)) (i32.const 48)))
       (then (return (i32.const 3))))
     (loop $again
       (if (i32.ge_u (local.get $i) (local.get $len))
@@ -1372,7 +1369,7 @@
             (then (i64.store (local.get $out_ptr) (i64.sub (i64.const 0) (local.get $value))))
             (else (i64.store (local.get $out_ptr) (local.get $value))))
           (return (i32.const 0))))
-      (local.set $c (call $m126byte_at (local.get $ptr) (local.get $i)))
+      (local.set $c (call $load8_u (local.get $ptr) (local.get $i)))
       (if (i32.eqz (call $is_digit (local.get $c))) (then (return (i32.const 3))))
       (local.set $digit (i64.extend_i32_u (i32.sub (local.get $c) (i32.const 48))))
       (if (i64.gt_u (local.get $value) (i64.div_u (local.get $limit) (i64.const 10)))

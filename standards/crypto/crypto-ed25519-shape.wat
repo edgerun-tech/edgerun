@@ -1,27 +1,4 @@
-(func $m57copy (param $src i32) (param $dst i32) (param $len i32)
-    (local $i i32)
-    loop $loop
-      local.get $i
-      local.get $len
-      i32.lt_u
-      if
-        local.get $dst
-        local.get $i
-        i32.add
-        local.get $src
-        local.get $i
-        i32.add
-        i32.load8_u
-        i32.store8
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $loop
-      end
-    end)
-
-  ;; Status 0 ok, 2 length/output short, 3 invalid.
+;; Status 0 ok, 2 length/output short, 3 invalid.
   (func (export "ed25519_seed_status") (param $ptr i32) (param $len i32) (result i32)
     local.get $len
     i32.const 32
@@ -84,16 +61,16 @@
       call $pack
       return
     end
-    local.get $sig_ptr
     local.get $r_out
+    local.get $sig_ptr
     i32.const 32
-    call $m57copy
+    call $memcpy
+    local.get $s_out
     local.get $sig_ptr
     i32.const 32
     i32.add
-    local.get $s_out
     i32.const 32
-    call $m57copy
+    call $memcpy
     i32.const 0
     i32.const 64
     call $pack)
@@ -113,10 +90,10 @@
       call $pack
       return
     end
-    local.get $in_ptr
     local.get $out_ptr
+    local.get $in_ptr
     i32.const 32
-    call $m57copy
+    call $memcpy
     local.get $out_ptr
     local.get $out_ptr
     i32.load8_u

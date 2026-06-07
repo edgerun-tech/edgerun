@@ -303,16 +303,7 @@
   ;; Status: 0 ok, 2 output/input short, 3 invalid.
   ;; Packed i64 emit result: low u32 status, high u32 bytes_written.
 
-  (func $m161copy (param $src i32) (param $len i32) (param $dst i32)
-    (local $i i32)
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (i32.store8
-          (i32.add (local.get $dst) (local.get $i))
-          (i32.load8_u (i32.add (local.get $src) (local.get $i))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
+  
 
   (func $sdk_app_slug_valid (export "sdk_app_slug_valid") (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
@@ -416,16 +407,16 @@
       (then (return (call $pack (i32.const 2) (i32.const 0)))))
     (i64.store (local.get $out_ptr) (i64.const 3273683113332925541))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 8)) (i32.const 980447329))
-    (call $m161copy (local.get $slug_ptr) (local.get $slug_len) (i32.add (local.get $out_ptr) (local.get $prefix_len)))
+    (call $memcpy (i32.add (local.get $out_ptr) (local.get $prefix_len)) (local.get $slug_ptr) (local.get $slug_len))
     (i32.store8 (i32.add (i32.add (local.get $out_ptr) (local.get $prefix_len)) (local.get $slug_len)) (i32.const 0))
-    (call $m161copy
-      (local.get $dev_ptr)
-      (i32.const 32)
+    (call $memcpy
       (i32.add
         (i32.add
           (i32.add (local.get $out_ptr) (local.get $prefix_len))
           (local.get $slug_len))
-        (i32.const 1)))
+        (i32.const 1))
+      (local.get $dev_ptr)
+      (i32.const 32))
     (call $pack (i32.const 0) (local.get $need)))
 
   (func (export "sdk_release_preimage")
@@ -445,14 +436,14 @@
     (local.set $need (i32.add (i32.add (i32.const 66) (local.get $version_len)) (i32.const 0)))
     (if (i32.lt_u (local.get $out_cap) (local.get $need))
       (then (return (call $pack (i32.const 2) (i32.const 0)))))
-    (call $m161copy (local.get $app_id_ptr) (i32.const 32) (local.get $out_ptr))
+    (call $memcpy (local.get $out_ptr) (local.get $app_id_ptr) (i32.const 32))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 32)) (i32.const 0))
-    (call $m161copy (local.get $version_ptr) (local.get $version_len) (i32.add (local.get $out_ptr) (i32.const 33)))
+    (call $memcpy (i32.add (local.get $out_ptr) (i32.const 33)) (local.get $version_ptr) (local.get $version_len))
     (i32.store8 (i32.add (i32.add (local.get $out_ptr) (i32.const 33)) (local.get $version_len)) (i32.const 0))
-    (call $m161copy
+    (call $memcpy
+      (i32.add (i32.add (local.get $out_ptr) (i32.const 34)) (local.get $version_len))
       (local.get $manifest_hash_ptr)
-      (i32.const 32)
-      (i32.add (i32.add (local.get $out_ptr) (i32.const 34)) (local.get $version_len)))
+      (i32.const 32))
     (call $pack (i32.const 0) (local.get $need)))
 
 
@@ -469,17 +460,6 @@
     (i32.or
       (i32.or (call $m162is_lower (local.get $c)) (call $is_digit (local.get $c)))
       (i32.eq (local.get $c) (i32.const 45))))
-
-  (func $m162copy (param $src i32) (param $len i32) (param $dst i32)
-    (local $i i32)
-    (block $done
-      (loop $loop
-        (br_if $done (i32.ge_u (local.get $i) (local.get $len)))
-        (i32.store8
-          (i32.add (local.get $dst) (local.get $i))
-          (i32.load8_u (i32.add (local.get $src) (local.get $i))))
-        (local.set $i (i32.add (local.get $i) (i32.const 1)))
-        (br $loop))))
 
   (func $unit_index (param $ptr i32) (param $len i32) (result i32)
     (if (call $string_eq (local.get $ptr) (local.get $len) (i32.const 32800) (i32.const 23))
@@ -679,14 +659,14 @@
     (local.set $need (i32.add (i32.const 39) (local.get $id_len)))
     (if (i32.lt_u (local.get $out_cap) (local.get $need))
       (then (return (call $pack (i32.const 2) (i32.const 0)))))
-    (call $m162copy (i32.const 32768) (i32.const 30) (local.get $out_ptr))
+    (call $memcpy (local.get $out_ptr) (i32.const 32768) (i32.const 30))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 30)) (local.get $index))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 31)) (call $unit_kind (local.get $index)))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 32)) (call $unit_standard_code (local.get $index)))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 33)) (call $unit_wasm_export_code (local.get $index)))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 34)) (call $unit_requirement_mask (local.get $index)))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 38)) (local.get $id_len))
-    (call $m162copy (local.get $id_ptr) (local.get $id_len) (i32.add (local.get $out_ptr) (i32.const 39)))
+    (call $memcpy (i32.add (local.get $out_ptr) (i32.const 39)) (local.get $id_ptr) (local.get $id_len))
     (call $pack (i32.const 0) (local.get $need)))
 
   (func $sdk_seed_shape32 (export "sdk_seed_shape32")

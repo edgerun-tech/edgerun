@@ -1,0 +1,19 @@
+;; DNS Question Next Stage — slot 71
+  ;; Input:  DNS message bytes via input pipe (offset embedded in first 4 bytes)
+  ;; Output: 20-byte record {name_start, name_wire_len, qtype, qclass, next_offset}
+  ;; Calls $dns_question_next from protocol/dns.wat
+
+  (func $process_dns_question_next (export "process_dns_question_next")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $len_slot i32) (local $read i32) (local $status i32) (local $start i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (drop (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.lt_u (local.get $read) (i32.const 8)) (then (return (i32.const 0))))
+    (drop (call $pipe_read (local.get $input) (i32.const 0x3000) (local.get $read)))
+    (local.set $start (i32.load (i32.const 0x3000)))
+    (local.set $status (call $dns_question_next (i32.add (i32.const 0x3000) (i32.const 4)) (i32.sub (local.get $read) (i32.const 4)) (local.get $start) (local.get $scratch)))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (i32.const 20)))
+    i32.const 20)

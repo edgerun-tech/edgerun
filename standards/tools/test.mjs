@@ -153,7 +153,7 @@ const u32 = new Uint32Array(mem.buffer);
 {
   const table = wasm.stage_table;
   check(!!table, 'stage_table exists');
-  check(table.length === 64, `stage_table length=${table.length}`);
+  check(table.length === 144, `stage_table length=${table.length}`);
 
   // Index 0 should have passthrough
   const fn = table.get(0);
@@ -318,6 +318,67 @@ const u32 = new Uint32Array(mem.buffer);
     u8[OUT + 6] === 0x00 && u8[OUT + 7] === 0x00,
     'emitted version 1'
   );
+}
+
+// ── Test 10: WAT load + emit round-trip ──
+{
+  // Minimal WAT: (func (export "f") (result i32) i32.const 42)
+  const WAT = 0x540000;
+  const OUT = 0x560000;
+  // Direct memory consistency check before load_wat
+  const memCheck = new Uint8Array(wasm.memory.buffer, WAT, 4);
+  const origBytes = [memCheck[0], memCheck[1], memCheck[2], memCheck[3]];
+  // Write 0xAABBCCDD to 0x8C000 manually
+  const checkPtrArr = new Uint8Array(wasm.memory.buffer, 0x8C000, 4);
+  checkPtrArr[0] = 0xDD; checkPtrArr[1] = 0xCC; checkPtrArr[2] = 0xBB; checkPtrArr[3] = 0xAA;
+  const checkRead = checkPtrArr[0] | (checkPtrArr[1]<<8) | (checkPtrArr[2]<<16) | (checkPtrArr[3]<<24);
+  check(checkRead === 0xAABBCCDD, `memory[0x8C000] before load_wat=0x${checkRead.toString(16)}`);
+
+  const watBytes = new TextEncoder().encode('(module (func (export "f") (result i32) i32.const 42))');
+  u8.set(watBytes, WAT);
+  // Verify WAT was written correctly
+  const watCheck = new TextDecoder().decode(new Uint8Array(wasm.memory.buffer, WAT, watBytes.length));
+  check(watCheck === new TextDecoder().decode(watBytes), `WAT source check: "${watCheck.substring(0, 20)}..."`);
+  // Check byte at the start
+  const firstByte = new Uint8Array(wasm.memory.buffer, WAT, 1)[0];
+  check(firstByte === 0x28, `first byte=0x${firstByte.toString(16)}`);
+  const watStatus = wasm.load_wat(WAT, watBytes.length);
+  const dbg = new Uint8Array(wasm.memory.buffer, 0x8C020, 4);
+  const dbgVal = dbg[0] | (dbg[1] << 8) | (dbg[2] << 16) | (dbg[3] << 24);
+  // Debug markers from $wat_parse_body at 0x8C048
+  const bodyDbg = new Uint8Array(wasm.memory.buffer, 0x8C048, 4);
+  const bodyDbgVal = bodyDbg[0] | (bodyDbg[1] << 8) | (bodyDbg[2] << 16) | (bodyDbg[3] << 24);
+  // emit_byte failure debug at 0x8C06C
+  const emitOff = new Uint8Array(wasm.memory.buffer, 0x8C06C, 4);
+  const emitOffVal = emitOff[0] | (emitOff[1] << 8) | (emitOff[2] << 16) | (emitOff[3] << 24);
+  const emitFlg = new Uint8Array(wasm.memory.buffer, 0x8C070, 4);
+  const emitFlgVal = emitFlg[0] | (emitFlg[1] << 8) | (emitFlg[2] << 16) | (emitFlg[3] << 24);
+  // Error code from $wat_parse_func_decl at 0x8C01C (OFF_WAT_TMP)
+  const funcErr = new Uint8Array(wasm.memory.buffer, 0x8C01C, 4);
+  const funcErrVal = funcErr[0] | (funcErr[1] << 8) | (funcErr[2] << 16) | (funcErr[3] << 24);
+  // Additional debug: pos param (0x8C060), body_off after skip_ws (0x8C084), emit body_off (0x8C090)
+  const posParam = new Uint8Array(wasm.memory.buffer, 0x8C060, 4);
+  const posParamVal = posParam[0] | (posParam[1] << 8) | (posParam[2] << 16) | (posParam[3] << 24);
+  const bodyOffAfterWs = new Uint8Array(wasm.memory.buffer, 0x8C084, 4);
+  const bodyOffAfterWsVal = bodyOffAfterWs[0] | (bodyOffAfterWs[1] << 8) | (bodyOffAfterWs[2] << 16) | (bodyOffAfterWs[3] << 24);
+  const emitBodyOff = new Uint8Array(wasm.memory.buffer, 0x8C090, 4);
+  const emitBodyOffVal = emitBodyOff[0] | (emitBodyOff[1] << 8) | (emitBodyOff[2] << 16) | (emitBodyOff[3] << 24);
+  const posAfterWs = new Uint8Array(wasm.memory.buffer, 0x8C094, 4);
+  const posAfterWsVal = posAfterWs[0] | (posAfterWs[1] << 8) | (posAfterWs[2] << 16) | (posAfterWs[3] << 24);
+  check(watStatus === 0, `load_wat status=${watStatus} dbg=0x${dbgVal.toString(16)} body=0x${bodyDbgVal.toString(16)} emitOff=${emitOffVal} emitFlg=${emitFlgVal} err=${funcErrVal} posParam=0x${posParamVal.toString(16)} bodyOffWs=${bodyOffAfterWsVal} emitBodyOff=${emitBodyOffVal} posAfterWs=${posAfterWsVal}`);
+  // Check what was stored at OFF_WAT_PTR after load_wat
+  const watPtr = new Uint8Array(wasm.memory.buffer, 0x8C000, 4);
+  const watPtrVal = watPtr[0] | (watPtr[1] << 8) | (watPtr[2] << 16) | (watPtr[3] << 24);
+  // Also check the saved ptr
+  const savPtr = new Uint8Array(wasm.memory.buffer, 0x8C010, 4);
+  const savPtrVal = savPtr[0] | (savPtr[1] << 8) | (savPtr[2] << 16) | (savPtr[3] << 24);
+  check(watPtrVal === WAT, `OFF_WAT_PTR=0x${watPtrVal.toString(16)} sav=0x${savPtrVal.toString(16)}`);
+
+  const emitResult = wasm.emit_wasm(OUT, 4096);
+  const emitStatus = Number(emitResult >> 32n);
+  const emitSize = Number(emitResult & 0xFFFFFFFFn);
+  check(emitStatus === 0, `emit_wasm from WAT status=${emitStatus}`);
+  check(emitSize > 0, `emit_wasm from WAT size=${emitSize}`);
 }
 
 // ── Summary ──

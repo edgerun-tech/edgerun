@@ -219,7 +219,7 @@
     end
     i32.const 0)
 
-  (func (export "http_parse_content_length") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $http_parse_content_length (export "http_parse_content_length") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     local.get $ptr
     local.get $len
     local.get $out
@@ -430,7 +430,7 @@
 
   ;; out: kind, content_length_low, content_length_high, header_count
   ;; kind: 0 none, 1 content-length, 2 transfer-encoding chunked
-  (func (export "http_classify_body_framing") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $http_classify_body_framing (export "http_classify_body_framing") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $pos i32)
     (local $line_end i32)
     (local $i i32)
@@ -1141,7 +1141,7 @@
     local.get $out
     call $parse_next)
 
-  (func (export "http1_chunk_scan_body") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $http1_chunk_scan_body (export "http1_chunk_scan_body") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $offset i32)
     (local $rec i32)
     (local $count i32)
@@ -1601,7 +1601,7 @@
   ;; 20 flags: bit0 content-length, bit1 transfer-encoding, bit2 chunked, bit3 duplicate same CL
   ;; 24 content_length_low
   ;; 28 content_length_high
-  (func (export "http1_validate_header_block") (param $ptr i32) (param $len i32) (param $max_headers i32) (param $max_bytes i32) (param $out i32) (result i32)
+  (func $http1_validate_header_block (export "http1_validate_header_block") (param $ptr i32) (param $len i32) (param $max_headers i32) (param $max_bytes i32) (param $out i32) (result i32)
     (local $pos i32)
     (local $line_end i32)
     (local $i i32)
@@ -2093,7 +2093,7 @@
     i32.and)
 
   ;; out: method_off, method_len, target_off, target_len, major, minor, next_off
-  (func (export "http_parse_request_line") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $http_parse_request_line (export "http_parse_request_line") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $line_end i32)
     (local $i i32)
     (local $method_end i32)
@@ -2259,7 +2259,7 @@
     i32.const 0)
 
   ;; out: major, minor, status, reason_off, reason_len, next_off
-  (func (export "http_parse_status_line") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $http_parse_status_line (export "http_parse_status_line") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $line_end i32)
     (local $code i32)
     local.get $ptr
@@ -2423,7 +2423,7 @@
     i32.const 0)
 
   ;; out: name_off, name_len, value_off, value_len, next_off, is_end
-  (func (export "http_next_header") (param $ptr i32) (param $len i32) (param $start i32) (param $out i32) (result i32)
+  (func $http_next_header (export "http_next_header") (param $ptr i32) (param $len i32) (param $start i32) (param $out i32) (result i32)
     (local $line_end i32)
     (local $i i32)
     (local $colon i32)
@@ -3054,7 +3054,7 @@
     end
     i32.const 0)
 
-  (func (export "http_lowercase_header_name") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
+  (func $http_lowercase_header_name (export "http_lowercase_header_name") (param $ptr i32) (param $len i32) (param $out i32) (param $cap i32) (result i64)
     (local $i i32)
     (local $b i32)
     local.get $len
@@ -4131,7 +4131,7 @@
   ;; 16:u32 stream_id_cleared
   ;; 20:u32 header_len
   ;; 24:u32 total_len
-  (func (export "http2_frame_header_decode")
+  (func $http2_frame_header_decode (export "http2_frame_header_decode")
     (param $in_ptr i32) (param $in_len i32) (param $max_frame_size i32) (param $out_ptr i32)
     (result i32)
     (local $payload_len i32)
@@ -4331,7 +4331,7 @@
   ;; out record u32 fields:
   ;; 0 type_low, 4 type_high, 8 payload_len_low, 12 payload_len_high,
   ;; 16 header_len, 20 classification.
-  (func (export "http3_frame_header_decode")
+  (func $http3_frame_header_decode (export "http3_frame_header_decode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32)
     (result i32)
     (local $packed i64)
@@ -4811,7 +4811,7 @@
       (local.get $weekday) (local.get $kind))
     i32.const 0)
 
-  (func (export "http_date_parse") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $http_date_parse (export "http_date_parse") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $year i32) (local $month i32) (local $day i32)
     (local $hour i32) (local $minute i32) (local $second i32)
     (local $weekday i32) (local $x i64) (local $off i32)
@@ -4932,7 +4932,7 @@
   (func $month_name_ptr (param $month i32) (result i32)
     (i32.add (i32.const 1304) (i32.mul (i32.sub (local.get $month) (i32.const 1)) (i32.const 3))))
 
-  (func (export "http_date_format") (param $lo i32) (param $hi i32) (param $out i32) (param $cap i32) (result i64)
+  (func $http_date_format (export "http_date_format") (param $lo i32) (param $hi i32) (param $out i32) (param $cap i32) (result i64)
     (local $secs i64) (local $days i64) (local $sod i64)
     (local $year i32) (local $month i32) (local $mdays i32)
     (local $day i32) (local $hour i32) (local $minute i32) (local $second i32) (local $weekday i32)

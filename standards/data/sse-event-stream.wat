@@ -60,29 +60,6 @@
     local.get $end_off
     i32.store)
 
-  (func $m168copy (param $src i32) (param $len i32) (param $dst i32)
-    (local $i i32)
-    loop $loop
-      local.get $i
-      local.get $len
-      i32.lt_u
-      if
-        local.get $dst
-        local.get $i
-        i32.add
-        local.get $src
-        local.get $i
-        i32.add
-        i32.load8_u
-        i32.store8
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $loop
-      end
-    end)
-
   (func $m168copy_message (param $dst i32)
     local.get $dst
     i32.const 109
@@ -673,12 +650,12 @@
                   local.get $text_used
                   i32.add
                   local.set $event_out
-                  local.get $event_src
-                  local.get $event_len
-                  local.get $text_ptr
-                  local.get $text_used
-                  i32.add
-                  call $m168copy
+                local.get $text_ptr
+                local.get $text_used
+                i32.add
+                local.get $event_src
+                local.get $event_len
+                call $memcpy
                   local.get $text_used
                   local.get $event_len
                   i32.add
@@ -699,12 +676,12 @@
                 local.get $text_used
                 i32.add
                 local.set $id_out
-                local.get $id_src
-                local.get $id_len
                 local.get $text_ptr
                 local.get $text_used
                 i32.add
-                call $m168copy
+                local.get $id_src
+                local.get $id_len
+                call $memcpy
                 local.get $text_used
                 local.get $id_len
                 i32.add
@@ -876,14 +853,14 @@
                     call $pack
                     return
                   end
+                  local.get $text_ptr
+                  local.get $text_used
+                  i32.add
                   local.get $ptr
                   local.get $value_start
                   i32.add
                   local.get $value_len
-                  local.get $text_ptr
-                  local.get $text_used
-                  i32.add
-                  call $m168copy
+                  call $memcpy
                   local.get $text_used
                   local.get $value_len
                   i32.add
@@ -1065,12 +1042,12 @@
         local.get $text_used
         i32.add
         local.set $event_out
-        local.get $event_src
-        local.get $event_len
         local.get $text_ptr
         local.get $text_used
         i32.add
-        call $m168copy
+        local.get $event_src
+        local.get $event_len
+        call $memcpy
         local.get $text_used
         local.get $event_len
         i32.add
@@ -1091,12 +1068,12 @@
       local.get $text_used
       i32.add
       local.set $id_out
-      local.get $id_src
-      local.get $id_len
       local.get $text_ptr
       local.get $text_used
       i32.add
-      call $m168copy
+      local.get $id_src
+      local.get $id_len
+      call $memcpy
       local.get $text_used
       local.get $id_len
       i32.add

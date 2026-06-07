@@ -988,7 +988,7 @@
     i32.const 16
     call $pack)
 
-  (func (export "aes128_encrypt") (param $key i32) (param $key_len i32) (param $block i32) (param $block_len i32) (param $out i32) (result i64)
+  (func $aes128_encrypt (export "aes128_encrypt") (param $key i32) (param $key_len i32) (param $block i32) (param $block_len i32) (param $out i32) (result i64)
     local.get $key
     local.get $key_len
     local.get $block
@@ -1010,7 +1010,7 @@
     i32.const 10
     call $encrypt)
 
-  (func (export "aes128_decrypt") (param $key i32) (param $key_len i32) (param $block i32) (param $block_len i32) (param $out i32) (result i64)
+  (func $aes128_decrypt (export "aes128_decrypt") (param $key i32) (param $key_len i32) (param $block i32) (param $block_len i32) (param $out i32) (result i64)
     local.get $key
     local.get $key_len
     local.get $block

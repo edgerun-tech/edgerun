@@ -90,7 +90,7 @@
     (i32.store (i32.add (local.get $out) (i32.const 12)) (local.get $total_len)))
 
   ;; out record: value_ptr:u32, value_len:u32, header_len:u32, total_len:u32, negative:u32.
-  (func (export "der_asn1_integer_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $der_asn1_integer_decode (export "der_asn1_integer_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
     (local $vptr i32) (local $first i32) (local $second i32)
     (local.set $h (call $m68header_decode (local.get $ptr) (local.get $len)))
@@ -118,7 +118,7 @@
     i32.const 0)
 
   ;; out record: payload_ptr:u32, payload_len:u32, header_len:u32, total_len:u32, unused_bits:u32.
-  (func (export "der_asn1_bit_string_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $der_asn1_bit_string_decode (export "der_asn1_bit_string_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
     (local $vptr i32) (local $unused i32)
     (local.set $h (call $m68header_decode (local.get $ptr) (local.get $len)))
@@ -139,7 +139,7 @@
     (i32.store (i32.add (local.get $out) (i32.const 16)) (local.get $unused))
     i32.const 0)
 
-  (func (export "der_asn1_octet_string_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $der_asn1_octet_string_decode (export "der_asn1_octet_string_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
     (local.set $h (call $m68header_decode (local.get $ptr) (local.get $len)))
     (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
@@ -166,7 +166,7 @@
     i32.const 0)
 
   ;; out record: body_ptr:u32, body_len:u32, header_len:u32, total_len:u32.
-  (func (export "der_asn1_sequence_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $der_asn1_sequence_decode (export "der_asn1_sequence_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $h i64) (local $status i32) (local $hdr i32) (local $tag i32) (local $vlen i32)
     (local.set $h (call $m68header_decode (local.get $ptr) (local.get $len)))
     (local.set $status (i32.wrap_i64 (i64.and (local.get $h) (i64.const 65535))))
@@ -686,7 +686,7 @@
         (return (i32.const 0))))
     (return (i32.const 3)))
 
-  (func (export "der_time_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $der_time_decode (export "der_time_decode") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $tag i32)
     (local $status i32)
     (local $hdr i32)

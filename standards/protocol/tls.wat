@@ -1,7 +1,9 @@
 ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
   ;; Scan a TLS 1.3 Certificate handshake body.
   ;; Output record: context_offset:u32, context_len:u32, list_offset:u32, list_len:u32, next_offset:u32.
-  (func (export "tls_certificate_list_scan") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
+  (func $tls_certificate_list_scan (export "tls_certificate_list_scan") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
+
+
     (local $context_len i32)
     (local $list_offset i32)
     (local $list_len i32)
@@ -27,7 +29,9 @@
 
   ;; Iterate CertificateEntry records inside the certificate_list vector payload.
   ;; Output record: cert_offset:u32, cert_len:u32, extensions_offset:u32, extensions_len:u32, next_offset:u32.
-  (func (export "tls_certificate_entry_next") (param $ptr i32) (param $len i32) (param $start i32) (param $out_ptr i32) (result i32)
+  (func $tls_certificate_entry_next (export "tls_certificate_entry_next") (param $ptr i32) (param $len i32) (param $start i32) (param $out_ptr i32) (result i32)
+
+
     (local $pos i32)
     (local $cert_len i32)
     (local $ext_offset i32)
@@ -69,7 +73,7 @@
   ;; cipher_suites_offset:u32, cipher_suites_len:u32, cipher_suite_count:u32,
   ;; compression_offset:u32, compression_len:u32,
   ;; extensions_offset:u32, extensions_len:u32.
-  (func (export "tls_clienthello_scan") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
+  (func $tls_clienthello_scan (export "tls_clienthello_scan") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
     (local $pos i32)
     (local $legacy_version i32)
     (local $session_len i32)
@@ -171,7 +175,9 @@
 
   ;; Extract the first host_name entry from an SNI extension payload.
   ;; Output record: host_offset:u32, host_len:u32.
-  (func (export "tls_clienthello_sni_host") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
+  (func $tls_clienthello_sni_host (export "tls_clienthello_sni_host") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i32)
+
+
     (local $list_len i32)
     (local $name_type i32)
     (local $name_len i32)
@@ -195,7 +201,9 @@
   ;; Iterate ALPN protocol names from an ALPN extension payload.
   ;; start=0 validates the u16 protocol_name_list length and yields the first name.
   ;; Output record: proto_offset:u32, proto_len:u32, next_offset:u32, list_len:u32.
-  (func (export "tls_clienthello_alpn_next") (param $ptr i32) (param $len i32) (param $start i32) (param $out_ptr i32) (result i32)
+  (func $tls_clienthello_alpn_next (export "tls_clienthello_alpn_next") (param $ptr i32) (param $len i32) (param $start i32) (param $out_ptr i32) (result i32)
+
+
     (local $list_len i32)
     (local $pos i32)
     (local $proto_len i32)
@@ -441,7 +449,7 @@
   ;;
   ;; tls_record_header_decode return bits:
   ;; low16=status, next8=content_type, next16=version, next16=fragment_len.
-  (func (export "tls_record_header_decode") (param $in_ptr i32) (param $in_len i32) (result i64)
+  (func $tls_record_header_decode (export "tls_record_header_decode") (param $in_ptr i32) (param $in_len i32) (result i64)
     (local $content_type i32)
     (local $version i32)
     (local $fragment_len i32)

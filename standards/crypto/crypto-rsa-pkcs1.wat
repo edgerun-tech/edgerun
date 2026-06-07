@@ -244,30 +244,7 @@
       end
     end)
 
-  (func $m60copy (param $src i32) (param $dst i32) (param $len i32)
-    (local $i i32)
-    loop $again
-      local.get $i
-      local.get $len
-      i32.lt_u
-      if
-        local.get $dst
-        local.get $i
-        i32.add
-        local.get $src
-        local.get $i
-        i32.add
-        i32.load8_u
-        i32.store8
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $again
-      end
-    end)
-
-  (func (export "rsa_pkcs1_v15_verify")
+  (func $rsa_pkcs1_v15_verify (export "rsa_pkcs1_v15_verify")
     (param $hash_alg i32)
     (param $digest_ptr i32)
     (param $digest_len i32)
@@ -444,7 +421,7 @@
 
     i32.const 0)
 
-  (func (export "rsa_pkcs1_v15_emit")
+  (func $rsa_pkcs1_v15_emit (export "rsa_pkcs1_v15_emit")
     (param $hash_alg i32)
     (param $digest_ptr i32)
     (param $digest_len i32)
@@ -549,12 +526,12 @@
     local.get $want_digest_len
     i32.sub
     local.set $digest_start
-    local.get $digest_ptr
     local.get $out_ptr
     local.get $digest_start
     i32.add
+    local.get $digest_ptr
     local.get $want_digest_len
-    call $m60copy
+    call $memcpy
 
     i32.const 0
     local.get $out_len

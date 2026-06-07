@@ -32,29 +32,6 @@
     end
     i32.const 0)
 
-  (func $m58copy (param $src i32) (param $dst i32) (param $len i32)
-    (local $i i32)
-    loop $again
-      local.get $i
-      local.get $len
-      i32.lt_u
-      if
-        local.get $dst
-        local.get $i
-        i32.add
-        local.get $src
-        local.get $i
-        i32.add
-        i32.load8_u
-        i32.store8
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $again
-      end
-    end)
-
   (func (export "crypto_hmac_profile") (param $alg i32) (param $out_ptr i32) (result i32)
     (local $block i32)
     (local $digest i32)
@@ -209,16 +186,16 @@
       call $pack
       return
     end
-    local.get $previous_ptr
     local.get $out_ptr
+    local.get $previous_ptr
     local.get $previous_len
-    call $m58copy
-    local.get $info_ptr
+    call $memcpy
     local.get $out_ptr
     local.get $previous_len
     i32.add
+    local.get $info_ptr
     local.get $info_len
-    call $m58copy
+    call $memcpy
     local.get $out_ptr
     local.get $needed
     i32.add

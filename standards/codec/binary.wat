@@ -2098,7 +2098,7 @@
   ;;
   ;; Return bits: low32=status, high32=written.
   ;; status: 0 ok, 2 output_short, 3 invalid.
-  (func (export "generic_tlv_encode_header")
+  (func $generic_tlv_encode_header (export "generic_tlv_encode_header")
     (param $tag i32) (param $value_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $needed i32)

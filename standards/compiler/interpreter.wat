@@ -51,6 +51,7 @@
   (global $WAT_BODY_SZ    i32 (i32.const 4096))
   (global $OFF_WAT_TMP0   i32 (i32.const 0x8C040))
   (global $OFF_WAT_TMP1   i32 (i32.const 0x8C044))
+  (global $OFF_WAT_BODY_OFF i32 (i32.const 0x8C030))
 
   ;; ═════════════════════════════════════════════════════════════════════
   ;; WAT Lexer
@@ -585,7 +586,11 @@
   ;; Output: scratch0 = new offset
   (func $wat_emit_byte (param $off i32) (param $b i32) (result i32)
     (if (i32.ge_u (local.get $off) (global.get $WAT_BODY_SZ))
-      (then (return (global.get $ERR_NO_MEM)))
+      (then
+        (i32.store (i32.const 0x8C06C) (local.get $off))
+        (i32.store (i32.const 0x8C070) (i32.const 1))
+        (return (global.get $ERR_NO_MEM))
+      )
     )
     (i32.store8 (i32.add (global.get $OFF_WAT_BODY) (local.get $off)) (local.get $b))
     (i32.store (global.get $OFF_SCRATCH0) (i32.add (local.get $off) (i32.const 1)))
@@ -730,6 +735,7 @@
     (i32.store (i32.const 0x8C048) (i32.const 0x7002))
     (i32.store (i32.const 0x8C084) (i32.load (global.get $OFF_SCRATCH0)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
+    (i32.store (i32.const 0x8C094) (local.get $pos))
 
     ;; Check for end of function: closing paren at top level
     (i32.store (i32.const 0x8C048) (i32.const 0x7003))
@@ -864,7 +870,8 @@
           (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_read_sint (local.get $pos)) (then (return (global.get $ERR_PARSE))))
           (local.set $imm (i32.load (global.get $OFF_SCRATCH0)))
-          (local.set $pos (i32.load (global.get $OFF_SCRATCH1)))
+          (local.set $pos (i32.add (local.get $pos) (i32.load (global.get $OFF_SCRATCH1))))
+          (i32.store (i32.const 0x8C090) (local.get $body_off))
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x41)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_i32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
@@ -887,7 +894,7 @@
           (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_read_uint (local.get $pos)) (then (return (global.get $ERR_PARSE))))
           (local.set $imm (i32.load (global.get $OFF_SCRATCH0)))
-          (local.set $pos (i32.load (global.get $OFF_SCRATCH1)))
+          (local.set $pos (i32.add (local.get $pos) (i32.load (global.get $OFF_SCRATCH1))))
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x20)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_u32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
@@ -910,7 +917,7 @@
           (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_read_uint (local.get $pos)) (then (return (global.get $ERR_PARSE))))
           (local.set $imm (i32.load (global.get $OFF_SCRATCH0)))
-          (local.set $pos (i32.load (global.get $OFF_SCRATCH1)))
+          (local.set $pos (i32.add (local.get $pos) (i32.load (global.get $OFF_SCRATCH1))))
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x21)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_u32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
@@ -933,7 +940,7 @@
           (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_read_uint (local.get $pos)) (then (return (global.get $ERR_PARSE))))
           (local.set $imm (i32.load (global.get $OFF_SCRATCH0)))
-          (local.set $pos (i32.load (global.get $OFF_SCRATCH1)))
+          (local.set $pos (i32.add (local.get $pos) (i32.load (global.get $OFF_SCRATCH1))))
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x22)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_u32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
@@ -1386,7 +1393,8 @@
     (i32.store (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $fc) (global.get $SZ_FUNC))) (local.get $tc))
 
     ;; ── Parse body ──
-    (local.set $body_off (i32.const 0))
+    (local.set $body_off (i32.load (global.get $OFF_WAT_BODY_OFF)))
+    (local.set $dst (local.get $body_off))
     (block $body_done
       (loop $body_loop
         (local.set $err (call $wat_parse_body (local.get $pos) (local.get $body_off)))
@@ -1413,8 +1421,9 @@
     ;; ── Store code entry ──
     (local.set $code_i (i32.load (global.get $OFF_CODE_COUNT)))
     (local.set $base (i32.add (global.get $OFF_CODE_BUF) (i32.mul (local.get $code_i) (global.get $SZ_CODE))))
-    (i32.store (i32.add (local.get $base) (i32.const 0)) (i32.const 0))  ;; body_offset = 0
+    (i32.store (i32.add (local.get $base) (i32.const 0)) (local.get $dst))  ;; body_offset
     (i32.store (i32.add (local.get $base) (i32.const 8)) (local.get $body_len))  ;; body_len
+    (i32.store (global.get $OFF_WAT_BODY_OFF) (i32.add (local.get $dst) (local.get $body_len)))  ;; advance
     (i32.store (i32.add (local.get $base) (i32.const 16)) (i32.const 0))  ;; local_count = 0
     (i32.store (i32.add (local.get $base) (i32.const 24)) (local.get $decoded_start))  ;; decoded_start
     (i32.store (i32.add (local.get $base) (i32.const 32)) (local.get $decoded_count))  ;; decoded_count
@@ -1465,15 +1474,15 @@
     (i32.store (global.get $OFF_WAT_SAV_PTR) (i32.load (global.get $OFF_WASM_PTR)))
     (i32.store (global.get $OFF_WAT_SAV_LEN) (i32.load (global.get $OFF_WASM_LEN)))
 
-    ;; Store WAT source as the "wasm" pointer temporarily for lexer access
-    (i32.store (global.get $OFF_WAT_PTR) (local.get $wat_ptr))
-    (i32.store (global.get $OFF_WAT_LEN) (local.get $wat_len))
-    (local.set $pos (i32.const 0))
-
     ;; Clear symbol table
     (i32.store (global.get $OFF_WAT_SYM) (i32.const 0))
 
+    ;; Reset body offset tracker
+    (i32.store (global.get $OFF_WAT_BODY_OFF) (i32.const 0))
+
     ;; Clear state counters (reset module state fully)
+    ;; NOTE: OFF_DECODED_COUNT shares address 0x8C000 with OFF_WAT_PTR,
+    ;; so store WAT pointer AFTER clearing counters
     (i32.store (global.get $OFF_TYPE_COUNT) (i32.const 0))
     (i32.store (global.get $OFF_IMPORT_COUNT) (i32.const 0))
     (i32.store (global.get $OFF_FUNCTION_COUNT) (i32.const 0))
@@ -1490,6 +1499,12 @@
 
     ;; Reset names pointer
     (i32.store (global.get $OFF_NAMES_PTR) (global.get $OFF_NAMES_BUF))
+
+    ;; Store WAT source pointer AFTER clearing state counters
+    ;; (OFF_DECODED_COUNT uses same address 0x8C000 as OFF_WAT_PTR)
+    (i32.store (global.get $OFF_WAT_PTR) (local.get $wat_ptr))
+    (i32.store (global.get $OFF_WAT_LEN) (local.get $wat_len))
+    (local.set $pos (i32.const 0))
 
     (i32.store (global.get $OFF_WAT_DBG) (i32.const 2))
 
@@ -1795,9 +1810,9 @@
       )
     )
 
-    ;; Restore wasm ptr/len
-    (i32.store (global.get $OFF_WASM_PTR) (i32.load (global.get $OFF_WAT_SAV_PTR)))
-    (i32.store (global.get $OFF_WASM_LEN) (i32.load (global.get $OFF_WAT_SAV_LEN)))
+    ;; Set wasm ptr to body buffer so emit_wasm finds the code
+    (i32.store (global.get $OFF_WASM_PTR) (global.get $OFF_WAT_BODY))
+    (i32.store (global.get $OFF_WASM_LEN) (global.get $WAT_BODY_SZ))
 
     (i32.store (global.get $OFF_WAT_DBG) (i32.const 99))
     (return (global.get $OK))

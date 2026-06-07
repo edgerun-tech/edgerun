@@ -447,7 +447,7 @@
             (i32.const 4) (i32.const 4)))))
     (i32.const 3))
 
-  (func (export "hpack_header_block_scan")
+  (func $hpack_header_block_scan (export "hpack_header_block_scan")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $pos i32)
@@ -478,7 +478,7 @@
     (call $pack (i32.const 0) (local.get $count)))
 
 
-(func (export "hpack_huffman_decode")
+(func $hpack_huffman_decode (export "hpack_huffman_decode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (call $huffman_decode_internal

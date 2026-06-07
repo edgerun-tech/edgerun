@@ -1,0 +1,23 @@
+;; HTTP Lowercase Header Name Stage — slot 86
+  ;; Input:  HTTP header name bytes via input pipe
+  ;; Config: capacity as first 4 bytes of cfg (0 = in-place)
+  ;; Output: lowercased header name bytes
+
+  (func $process_http_lowercase_header (export "process_http_lowercase_header")
+    (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
+    (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
+    (local $len_slot i32) (local $read i32) (local $cap i32)
+    (local $result i64) (local $status i32) (local $written i32)
+    (local.set $len_slot (i32.sub (i32.add (local.get $scratch) (local.get $scap)) (i32.const 4)))
+    (drop (call $pipe_read_ptr (local.get $input) (local.get $len_slot)))
+    (local.set $read (i32.load (local.get $len_slot)))
+    (if (i32.eqz (local.get $read)) (then (return (i32.const 0))))
+    (drop (call $pipe_read (local.get $input) (i32.const 0x3000) (local.get $read)))
+    (local.set $cap (i32.load (local.get $cfg)))
+    (local.set $result (call $http_lowercase_header_name
+      (i32.const 0x3000) (local.get $read) (local.get $scratch) (local.get $cap)))
+    (local.set $status (i32.wrap_i64 (i64.shr_u (local.get $result) (i64.const 32))))
+    (local.set $written (i32.wrap_i64 (local.get $result)))
+    (if (local.get $status) (then (return (i32.sub (i32.const 0) (local.get $status)))))
+    (drop (call $pipe_write (local.get $output) (local.get $scratch) (local.get $written)))
+    (local.get $written))

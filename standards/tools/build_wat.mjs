@@ -293,6 +293,7 @@ const MANIFEST = [
   'crypto/crypto-hmac-hkdf.wat',
   'crypto/crypto-aes128-gcm.wat',
   'crypto/crypto-aes-ctr.wat',
+  'crypto/crypto-aes-block.wat',
   'crypto/crypto-hmac-sha256.wat',
   'crypto/crypto-x25519-scalar.wat',
 
@@ -324,6 +325,92 @@ const MANIFEST = [
   'pipeline/hex-decode-compat-stage.wat',
   'pipeline/cp1252-decode-stage.wat',
   'pipeline/pem-compact-stage.wat',
+  'pipeline/aes128-encrypt-stage.wat',
+  'pipeline/aes128-decrypt-stage.wat',
+  'pipeline/uuid-format-stage.wat',
+  'pipeline/uuid-parse-stage.wat',
+  'pipeline/to-title-case-stage.wat',
+  'pipeline/cesu8-to-utf8-stage.wat',
+  'pipeline/escape-text-stage.wat',
+  'pipeline/unescape-text-stage.wat',
+  'pipeline/http-request-line-parse-stage.wat',
+  'pipeline/http-status-line-parse-stage.wat',
+  'pipeline/http-date-parse-stage.wat',
+  'pipeline/http-date-format-stage.wat',
+  'pipeline/dns-header-decode-stage.wat',
+  'pipeline/dns-header-encode-stage.wat',
+  'pipeline/tls-record-decode-stage.wat',
+  'pipeline/hpack-huffman-decode-stage.wat',
+  'pipeline/http-next-header-stage.wat',
+  'pipeline/http-chunk-scan-stage.wat',
+  'pipeline/dns-name-decompress-stage.wat',
+  'pipeline/tls-clienthello-scan-stage.wat',
+  'pipeline/generic-tlv-decode-stage.wat',
+  'pipeline/generic-tlv-encode-stage.wat',
+  'pipeline/frame-header-decode-stage.wat',
+  'pipeline/frame-header-encode-stage.wat',
+  'pipeline/dns-question-next-stage.wat',
+  'pipeline/dns-rr-next-stage.wat',
+  'pipeline/endian-read-stage.wat',
+  'pipeline/endian-write-stage.wat',
+  'pipeline/rsa-pkcs1-verify-stage.wat',
+  'pipeline/rsa-pkcs1-emit-stage.wat',
+  'pipeline/oauth-url-encode-stage.wat',
+  'pipeline/http-classify-body-stage.wat',
+  'pipeline/url-scan-stage.wat',
+  'pipeline/x509-cert-scan-stage.wat',
+  'pipeline/http2-frame-header-decode-stage.wat',
+  'pipeline/http3-frame-header-decode-stage.wat',
+  'pipeline/tls-cert-list-scan-stage.wat',
+  'pipeline/tls-sni-host-stage.wat',
+  'pipeline/rfc3339-parse-stage.wat',
+  'pipeline/http-lowercase-header-stage.wat',
+  'pipeline/tls-alpn-next-stage.wat',
+  'pipeline/der-sequence-decode-stage.wat',
+  'pipeline/http-validate-headers-stage.wat',
+  'pipeline/http-parse-content-length-stage.wat',
+  'pipeline/der-integer-decode-stage.wat',
+  'pipeline/der-octet-string-decode-stage.wat',
+  'pipeline/der-time-decode-stage.wat',
+  'pipeline/tls-cert-entry-next-stage.wat',
+  'pipeline/oci-reference-scan-stage.wat',
+  'pipeline/ssh-auth-key-scan-stage.wat',
+  'pipeline/der-bit-string-decode-stage.wat',
+  'pipeline/utf8-scan-stage.wat',
+
+  // ── Layer 7b: Pipeline stages (batch 2 — slots 99-118) ──
+  'pipeline/hpack-header-block-scan-stage.wat',
+  'pipeline/ws-parse-header-stage.wat',
+  'pipeline/ws-write-frame-header-stage.wat',
+  'pipeline/tls-dns-name-normalize-stage.wat',
+  'pipeline/der-oid-root-decode-stage.wat',
+  'pipeline/der-oid-next-arc-stage.wat',
+  'pipeline/json-emit-string-stage.wat',
+  'pipeline/pem-find-boundaries-stage.wat',
+  'pipeline/uri-scan-path-query-stage.wat',
+  'pipeline/form-urlencoded-next-pair-stage.wat',
+  'pipeline/base64url-encode-stage.wat',
+  'pipeline/base64url-decode-stage.wat',
+  'pipeline/mac-scan-stage.wat',
+  'pipeline/utf8-scan-simd-stage.wat',
+  'pipeline/toml-scan-scalar-stage.wat',
+  'pipeline/toml-scan-key-value-stage.wat',
+  'pipeline/yaml-scan-line-stage.wat',
+  'pipeline/oauth-json-value-stage.wat',
+  'pipeline/oauth-parse-http-response-stage.wat',
+  'pipeline/sdk-seed-shape32-stage.wat',
+
+  // ── Layer 7c: Pipeline stages (batch 3 — slots 119-128) ──
+  'pipeline/crc32-unrolled-stage.wat',
+  'pipeline/adler32-vec-stage.wat',
+  'pipeline/base32hex-encode-stage.wat',
+  'pipeline/base32hex-decode-stage.wat',
+  'pipeline/varint-decode-stage.wat',
+  'pipeline/varint-encode-stage.wat',
+  'pipeline/tls-record-header-encode-stage.wat',
+  'pipeline/tls-handshake-header-decode-stage.wat',
+  'pipeline/http-find-crlf-stage.wat',
+  'pipeline/json-unescape-string-stage.wat',
 
   // ── Layer 8: Protocol parsers ──
   'protocol/binary-core.wat',
@@ -369,6 +456,7 @@ const MANIFEST = [
   'app/core.wat',
   'app/ui.wat',
   'app/wayland.wat',
+  'app/platform.wat',
 
   // ── Layer 14: Data ──
   'data/hex-core.wat',
@@ -433,6 +521,11 @@ function build() {
   let fileIdx = 0;
 
   for (const filePath of MANIFEST) {
+    // Skip metadata when --no-meta is active
+    if (noMeta && filePath === 'data/generated-metadata.wat') {
+      fileIdx++;
+      continue;
+    }
     const fullPath = resolve(ROOT, filePath);
     if (!existsSync(fullPath)) {
       console.warn(`  ⚠  ${filePath} not found — skipping`);

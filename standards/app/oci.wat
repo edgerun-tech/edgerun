@@ -826,7 +826,7 @@
     (i32.store (i32.add (local.get $out) (i32.const 28)) (local.get $dl))
     (i32.store (i32.add (local.get $out) (i32.const 32)) (local.get $kind)))
 
-  (func (export "oci_reference_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $oci_reference_scan (export "oci_reference_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32)
     (local $first_slash i32)
     (local $last_slash i32)

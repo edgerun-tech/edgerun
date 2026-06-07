@@ -213,19 +213,6 @@
     local.get $p i32.const 3 i32.add i32.load8_u i32.or
   )
 
-  ;; ── Helper: memset ──────────────────────────────────────────────
-  (func $pc_memset (param $base i32) (param $len i32) (param $val i32)
-    (local $i i32)
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $base local.get $i i32.add local.get $val i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end
-  )
-
   ;; ── Helper: read u64 big-endian ─────────────────────────────────
   (func $load_be64 (param $p i32) (result i64)
     local.get $p i32.load8_u i64.extend_i32_u i64.const 56 i64.shl
@@ -236,19 +223,6 @@
     local.get $p i32.const 5 i32.add i32.load8_u i64.extend_i32_u i64.const 16 i64.shl i64.or
     local.get $p i32.const 6 i32.add i32.load8_u i64.extend_i32_u i64.const 8 i64.shl i64.or
     local.get $p i32.const 7 i32.add i32.load8_u i64.extend_i32_u i64.or
-  )
-
-  ;; ── Helper: memcpy ──────────────────────────────────────────────
-  (func $pc_memcpy (param $src i32) (param $dst i32) (param $len i32)
-    (local $i i32)
-    block $done
-    loop $loop
-      local.get $i local.get $len i32.ge_u br_if $done
-      local.get $dst local.get $i i32.add local.get $src local.get $i i32.add i32.load8_u i32.store8
-      local.get $i i32.const 1 i32.add local.set $i
-      br $loop
-    end
-    end
   )
 
   ;; ── Internal append_u8 (no export overhead) ─────────────────────
@@ -546,9 +520,9 @@
 
   (func $session_reset_inner
     global.get $MEM_SESSION_STATE
-    global.get $SESS_SIZE
     i32.const 0
-    call $pc_memset
+    global.get $SESS_SIZE
+    call $memset
     global.get $MEM_SESSION_STATE global.get $SESS_GAME_FD i32.add i64.const -1 i64.store
     global.get $MEM_SESSION_STATE global.get $SESS_IN_OPCODE i32.add i32.const -1 i32.store
     global.get $MEM_SESSION_STATE global.get $SESS_IN_LENGTH i32.add i32.const -1 i32.store
@@ -744,9 +718,9 @@
     global.get $MEM_LOGIN_STATE global.get $L_ACCEPTED_SESSION_ID i32.add i64.const 0 i64.store
     global.get $MEM_LOGIN_STATE global.get $L_ACCEPTED_ACCOUNT_HASH i32.add i64.const 0 i64.store
     global.get $MEM_LOGIN_RESPONSE_PAYLOAD
-    global.get $PACKET_LOGIN_RESPONSE_PAYLOAD_MAX
     i32.const 0
-    call $pc_memset
+    global.get $PACKET_LOGIN_RESPONSE_PAYLOAD_MAX
+    call $memset
     global.get $ERR_PARTIAL
   )
 
@@ -1060,9 +1034,9 @@
 
   (func (export "packet_scene_event_reset") (result i32)
     global.get $MEM_SCENE_EVENT
-    global.get $SCENE_EVENT_SIZE
     i32.const 0
-    call $pc_memset
+    global.get $SCENE_EVENT_SIZE
+    call $memset
     i32.const 0
   )
 
@@ -1098,10 +1072,10 @@
     local.get $cap global.get $SCENE_EVENT_SIZE i32.lt_u if global.get $ERR_BOUNDS return end
     global.get $MEM_SCENE_EVENT global.get $SCENE_EVENT_TYPE i32.add i32.load local.set $event_type
     local.get $event_type i32.eqz if i32.const 0 return end
-    global.get $MEM_SCENE_EVENT
     local.get $out
+    global.get $MEM_SCENE_EVENT
     global.get $SCENE_EVENT_SIZE
-    call $pc_memcpy
+    call $memcpy
     global.get $MEM_SCENE_EVENT global.get $SCENE_EVENT_TYPE i32.add global.get $SCENE_EVENT_NONE i32.store
     local.get $event_type
   )
@@ -1335,10 +1309,10 @@
         global.get $MEM_LOGIN_STATE global.get $L_RESPONSE_PAYLOAD_LEN i32.add i32.load local.set $plen
         local.get $r11 local.get $plen i32.lt_u
         if global.get $ERR_PARTIAL return end
-        global.get $MEM_LOGIN_RESPONSE_PAYLOAD
         local.get $r10
+        global.get $MEM_LOGIN_RESPONSE_PAYLOAD
         local.get $plen
-        call $pc_memcpy
+        call $memcpy
         local.get $r10 local.get $plen i32.add local.set $r10
         local.get $r11 local.get $plen i32.sub local.set $r11
         global.get $MEM_LOGIN_STATE global.get $L_RESPONSE_BYTES i32.add
@@ -1787,7 +1761,7 @@
     local.get $out i32.const 17 i32.add global.get $PACKET_LOGIN_OUTER_PLATFORM_BYTE2 i32.store8
     local.get $out i32.const 18 i32.add local.get $rsa_len i32.const 8 i32.shr_u i32.store8
     local.get $out i32.const 19 i32.add local.get $rsa_len i32.const 0xff i32.and i32.store8
-    local.get $out i32.const 20 i32.add local.get $rsa_block local.get $rsa_len call $pc_memcpy
+    local.get $rsa_block local.get $out i32.const 20 i32.add local.get $rsa_len call $memcpy
     local.get $rsa_len i32.const 20 i32.add local.set $written
     global.get $MEM_LOGIN_STATE global.get $L_OUTER_XTEA_START i32.add local.get $written i64.extend_i32_u i64.store
     global.get $OUTER_CONF_OPCODE
@@ -1809,7 +1783,7 @@
     if call $tail_bounds_outer return end
     global.get $MEM_LOGIN_STATE global.get $L_OUTER_AUTH_PTR i32.add i32.load
     local.set $ptr
-    local.get $out local.get $written i32.add local.get $ptr local.get $len call $pc_memcpy
+    local.get $ptr local.get $out local.get $written i32.add local.get $len call $memcpy
     local.get $out local.get $written i32.add local.get $len i32.add i32.const 0 i32.store8
     local.get $written i32.const 1 i32.add local.get $len i32.add local.set $written
     local.get $conf global.get $OUTER_CONF_AUTH_STRING i32.or local.set $conf
@@ -1845,10 +1819,10 @@
     if call $tail_bounds_outer return end
     global.get $MEM_LOGIN_STATE global.get $L_OUTER_RANDOM_DAT_PTR i32.add i32.load
     local.set $ptr
-    local.get $out local.get $written i32.add
     local.get $ptr
+    local.get $out local.get $written i32.add
     global.get $PACKET_LOGIN_RANDOM_DAT_BYTES
-    call $pc_memcpy
+    call $memcpy
     local.get $written global.get $PACKET_LOGIN_RANDOM_DAT_BYTES i32.add local.set $written
     local.get $conf global.get $OUTER_CONF_RANDOM_DAT i32.or local.set $conf
     global.get $MEM_LOGIN_STATE global.get $L_OUTER_SECOND_AUTH_PTR i32.add i32.load
@@ -1864,7 +1838,7 @@
     if call $tail_bounds_outer return end
     global.get $MEM_LOGIN_STATE global.get $L_OUTER_SECOND_AUTH_PTR i32.add i32.load
     local.set $ptr
-    local.get $out local.get $written i32.add local.get $ptr local.get $len call $pc_memcpy
+    local.get $ptr local.get $out local.get $written i32.add local.get $len call $memcpy
     local.get $out local.get $written i32.add local.get $len i32.add i32.const 0 i32.store8
     local.get $written i32.const 1 i32.add local.get $len i32.add local.set $written
     local.get $conf global.get $OUTER_CONF_SECOND_AUTH_STRING i32.or local.set $conf
@@ -1888,10 +1862,10 @@
     local.get $out local.get $written i32.add i32.const 4 i32.add i32.const 0 i32.store8
     global.get $MEM_LOGIN_STATE global.get $L_PLATFORM_INFO_PTR i32.add i32.load
     local.set $ptr
-    local.get $out local.get $written i32.add i32.const 5 i32.add
     local.get $ptr
+    local.get $out local.get $written i32.add i32.const 5 i32.add
     local.get $len
-    call $pc_memcpy
+    call $memcpy
     local.get $out local.get $written i32.add i32.const 5 i32.add local.get $len i32.add i32.const 0 i32.store8
     local.get $out local.get $written i32.add i32.const 6 i32.add local.get $len i32.add i32.const 0 i32.store8
     local.get $written i32.const 7 i32.add local.get $len i32.add local.set $written
@@ -1915,10 +1889,10 @@
     if call $tail_bounds_outer return end
     global.get $MEM_LOGIN_STATE global.get $L_ARCHIVE_CRC_PTR i32.add i32.load
     local.set $ptr
-    local.get $out local.get $written i32.add
     local.get $ptr
+    local.get $out local.get $written i32.add
     local.get $len
-    call $pc_memcpy
+    call $memcpy
     local.get $written local.get $len i32.add local.set $written
     local.get $conf global.get $OUTER_CONF_ARCHIVE_CRC_BLOCK i32.or local.set $conf
     local.get $conf

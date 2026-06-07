@@ -114,7 +114,7 @@
   ;; signature_algorithm_ptr, signature_algorithm_total_len, signature_algorithm_header_len, signature_algorithm_body_len,
   ;; signature_value_ptr, signature_value_total_len, signature_value_header_len,
   ;; signature_value_payload_ptr, signature_value_payload_len, signature_value_unused_bits.
-  (func (export "x509_certificate_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $x509_certificate_scan (export "x509_certificate_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $h i64)
     (local $m200status i32)
     (local $hdr i32)
@@ -734,7 +734,7 @@
     i32.eq
     i32.or)
 
-  (func (export "ssh_authorized_key_scan")
+  (func $ssh_authorized_key_scan (export "ssh_authorized_key_scan")
     (param $ptr i32) (param $len i32) (param $out i32)
     (result i32)
     (local $end i32)

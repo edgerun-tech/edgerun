@@ -170,7 +170,7 @@
     (i32.const 3))
 
   ;; Return bits: low32=status, high32=written. Writes a lowercase dotted name.
-  (func (export "dns_name_to_lower_ascii_compressed")
+  (func $dns_name_to_lower_ascii_compressed (export "dns_name_to_lower_ascii_compressed")
     (param $ptr i32) (param $msg_len i32) (param $start i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $meta i32)
@@ -533,7 +533,7 @@
   ;; Output record, little-endian:
   ;; 0:id, 4:flags, 8:qr, 12:opcode, 16:aa, 20:tc, 24:rd, 28:ra,
   ;; 32:rcode, 36:qdcount, 40:ancount, 44:nscount, 48:arcount.
-  (func (export "dns_header_decode")
+  (func $dns_header_decode (export "dns_header_decode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32)
     (result i32)
     (local $id i32)
@@ -575,7 +575,7 @@
     (i32.const 0))
 
   ;; Return bits: low32=status, high32=written.
-  (func (export "dns_header_encode")
+  (func $dns_header_encode (export "dns_header_encode")
     (param $id i32) (param $flags i32) (param $qd i32) (param $an i32) (param $ns i32) (param $ar i32)
     (param $out_ptr i32) (param $out_cap i32)
     (result i64)
