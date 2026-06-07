@@ -1,4 +1,4 @@
-  ;; Portable scalar model extracted from crates/apps/edgerun-secret-service/src.
+;; Portable scalar model extracted from crates/apps/edgerun-secret-service/src.
   ;; Codes:
   ;; interface: 1 Service, 2 Collection, 3 Item, 4 Session, 5 Introspectable, 6 Properties.
   ;; action: 1 OpenSession, 2 CreateCollection, 3 SearchItems, 4 Unlock, 5 Lock,

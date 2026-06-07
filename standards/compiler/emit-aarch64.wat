@@ -1,5 +1,4 @@
-
-  ;; Current decoded op pointer
+;; Current decoded op pointer
   (global $CURRENT_DEC_PTR   (mut i32) (i32.const 0))
 
   ;; ═════════════════════════════════════════════════════════════════════
@@ -2149,4 +2148,3 @@
       )
     )
   )
-

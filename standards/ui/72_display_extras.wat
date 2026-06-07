@@ -1,4 +1,4 @@
-  (func (export "er_ui_separator_height") (result f32) f32.const 1)
+(func (export "er_ui_separator_height") (result f32) f32.const 1)
   (func (export "er_ui_separator_min_width") (result f32) f32.const 1)
   (func (export "er_ui_skeleton_min_width") (result f32) f32.const 96)
   (func (export "er_ui_skeleton_height") (result f32) f32.const 20)

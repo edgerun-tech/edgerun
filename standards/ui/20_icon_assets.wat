@@ -1,4 +1,4 @@
-  (func $icon_pack_loaded (result i32)
+(func $icon_pack_loaded (result i32)
     global.get $icon_index_ptr
     i32.const 0
     i32.ne

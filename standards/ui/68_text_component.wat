@@ -1,4 +1,4 @@
-  (func (export "er_ui_text_component_line_height") (result f32) f32.const 18)
+(func (export "er_ui_text_component_line_height") (result f32) f32.const 18)
   (func (export "er_ui_text_component_max_lines") (result i32) i32.const 8)
   (func (export "er_ui_text_component_min_width") (result f32) f32.const 24)
 

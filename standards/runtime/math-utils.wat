@@ -1,5 +1,5 @@
   ;; Shared math utilities — import instead of redefining.
-  ;; Consumers: (import "math" "min" (func $min (param i32 i32) (result i32)))
+  ;; Consumers import "math" "min" from this module.
 
   (func $min (export "min") (param $a i32) (param $b i32) (result i32)
     local.get $a local.get $b i32.lt_s if (result i32) local.get $a else local.get $b end)
@@ -30,15 +30,6 @@
 
   (func $max0 (export "max0") (param $n i32) (result i32)
     local.get $n i32.const 0 i32.gt_s if (result i32) local.get $n else i32.const 0 end)
-
-  (func $min_f32 (export "min_f32") (param $a f32) (param $b f32) (result f32)
-    local.get $a local.get $b f32.lt if (result f32) local.get $a else local.get $b end)
-
-  (func $max_f32 (export "max_f32") (param $a f32) (param $b f32) (result f32)
-    local.get $a local.get $b f32.gt if (result f32) local.get $a else local.get $b end)
-
-  (func $clamp_f32 (export "clamp_f32") (param $v f32) (param $lo f32) (param $hi f32) (result f32)
-    local.get $v local.get $lo call $max_f32 local.get $hi call $min_f32)
 
   (func $prefix_mask (export "prefix_mask") (param $prefix_bits i32) (result i32)
     (if (result i32) (i32.eq (local.get $prefix_bits) (i32.const 8))

@@ -1,4 +1,4 @@
-  (func (export "er_ui_input_group_separator_height") (result f32) f32.const 1)
+(func (export "er_ui_input_group_separator_height") (result f32) f32.const 1)
   (func (export "er_ui_input_group_addon_min_w") (result f32) f32.const 42)
   (func (export "er_ui_input_group_addon_max_w") (result f32) f32.const 96)
   (func (export "er_ui_input_group_addon_padding") (result f32) f32.const 10)

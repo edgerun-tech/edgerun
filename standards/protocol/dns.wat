@@ -1,29 +1,9 @@
-(module
-  (import "edgerun" "is_alpha" (func $is_alpha (param i32) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "to_lower" (func $m77lower_ascii (param i32) (result i32)))
-  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
-  (import "binary" "read_u32_be" (func $read_u32_be (param $ptr i32) (result i32)))
-  (import "binary" "write_u16_be" (func $write_u16_be (param $ptr i32) (param $v i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "host" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))
-  (import "host" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))
-  (import "host" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))
-  (import "host" "sock_close" (func $sock_close (param i32) (result i32)))
-  (memory (export "memory") 1)
-  ;; ═════════════════════════════════════════════════════════════════════
+;; ═════════════════════════════════════════════════════════════════════
   ;; DNS Core Primitives — shared across all DNS parsers
   ;; ═════════════════════════════════════════════════════════════════════
 
 ;; Valid DNS label byte: ALPHA, DIGIT, '-' (0x2D), or '_' (0x5F).
-  (func $is_label_byte (export "is_label_byte") (param $b i32) (result i32)
-    (i32.or
-      (i32.or
-        (call $is_alpha (local.get $b))
-        (call $is_digit (local.get $b)))
-      (i32.or
-        (i32.eq (local.get $b) (i32.const 45))
-        (i32.eq (local.get $b) (i32.const 95)))))
+  
 
 
 ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 6 too_long.
@@ -231,7 +211,7 @@
             (if (i32.lt_u (local.get $j) (local.get $len))
               (then
                 (local.set $b
-                  (call $m77lower_ascii
+                  (call $to_lower
                     (i32.load8_u
                       (i32.add (local.get $ptr) (i32.add (local.get $off) (local.get $j))))))
                 (i32.store8 (i32.add (local.get $out_ptr) (local.get $written)) (local.get $b))
@@ -737,7 +717,7 @@
           (loop $copy_label
             (if (i32.lt_u (local.get $j) (local.get $len))
               (then
-                (local.set $b (call $m77lower_ascii (i32.load8_u (i32.add (local.get $in_ptr) (i32.add (local.get $off) (local.get $j))))))
+                (local.set $b (call $to_lower (i32.load8_u (i32.add (local.get $in_ptr) (i32.add (local.get $off) (local.get $j))))))
                 (i32.store8 (i32.add (local.get $out_ptr) (local.get $written)) (local.get $b))
                 (local.set $written (i32.add (local.get $written) (i32.const 1)))
                 (local.set $j (i32.add (local.get $j) (i32.const 1)))
@@ -1527,5 +1507,3 @@
         (i32.store (i32.add (local.get $out_ptr) (i32.const 44)) (local.get $pos))
         (return (i32.const 3))))
     (i32.const 0))
-
-)

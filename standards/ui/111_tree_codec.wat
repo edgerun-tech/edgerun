@@ -1,4 +1,4 @@
-  (func (export "er_ui_tree_codec_tree_layout_size") (result i32) i32.const 16)
+(func (export "er_ui_tree_codec_tree_layout_size") (result i32) i32.const 16)
   (func (export "er_ui_tree_codec_slot_layout_size") (result i32) i32.const 16)
   (func (export "er_ui_tree_codec_max_children") (result i32) i32.const 64)
   (func (export "er_ui_tree_codec_id_size") (result i32) i32.const 32)

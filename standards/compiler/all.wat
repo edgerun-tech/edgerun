@@ -1,4 +1,4 @@
-  ;; Opcode templates — each emits AArch64 code for one WASM opcode
+;; Opcode templates — each emits AArch64 code for one WASM opcode
   ;; ═════════════════════════════════════════════════════════════════════
 
   ;; ── unreachable (0x00): BRK #0 (debug breakpoint) ────────────────
@@ -216,4 +216,3 @@
   ;; ════════════════════════════════════════════════════════════════════
   ;; ── The main compile function ─────────────────────────────────────
   ;; ════════════════════════════════════════════════════════════════════
-

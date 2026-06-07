@@ -1,4 +1,4 @@
-  ;; SHA-512 Hash Pipeline Stage — slot 19
+;; SHA-512 Hash Pipeline Stage — slot 19
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 64-byte SHA-512 hash via output pipe

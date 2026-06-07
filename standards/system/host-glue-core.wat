@@ -1,6 +1,3 @@
-  (import "edgerun" "to_lower" (func $m122lower (param i32) (result i32)))
-  (import "edgerun" "fnv1a_lower" (func $m122fnv1a_lower (param i32 i32) (result i32)))
-
 ;; Captures the useful portable semantics from edgerun-js-sys:
   ;; ECMAScript global families, Temporal option/unit spellings, and futures glue state.
   (func $m122is (param $h i32) (param $want i32) (result i32)

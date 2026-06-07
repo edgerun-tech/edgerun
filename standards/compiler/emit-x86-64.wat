@@ -1,4 +1,4 @@
-  ;; ── Helper: write bytes to code cache ──────────────────────────────
+;; ── Helper: write bytes to code cache ──────────────────────────────
 
   ;; Emit a single byte into the code cache, advance code_ptr
   (func $emit_x86_byte (param $b i32)
@@ -1417,4 +1417,3 @@
     (local.get $base)
     (i32.sub (i32.load (global.get $JS_CODE_PTR)) (i32.mul (local.get $slot) (global.get $JIT_SLOT_SIZE)))
   )
-

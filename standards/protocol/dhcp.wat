@@ -1,10 +1,3 @@
-(module
-  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
-  (import "binary" "read_u32_be" (func $read_u32_be (param $ptr i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (memory (export "memory") 1)
-
-
 ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid,
   ;; 4 invalid_cookie, 5 invalid_option_length.
   ;; Packed i64 return: low u32 status, high u32 value or next_offset.
@@ -797,5 +790,3 @@
     (if (i32.eq (local.get $kind) (i32.const 4)) (then (return (i32.const 1800))))
     (if (i32.eq (local.get $kind) (i32.const 5)) (then (return (i32.const 2700))))
     i32.const 0)
-
-)

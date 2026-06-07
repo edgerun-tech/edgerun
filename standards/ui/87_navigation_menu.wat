@@ -1,4 +1,4 @@
-  (func (export "er_ui_navigation_menu_item_count") (result i32) i32.const 3)
+(func (export "er_ui_navigation_menu_item_count") (result i32) i32.const 3)
   (func (export "er_ui_navigation_menu_id_stride") (result i32) i32.const 3)
   (func (export "er_ui_navigation_menu_gap") (result f32) f32.const 4)
   (func (export "er_ui_navigation_menu_item_h") (result f32) f32.const 36)

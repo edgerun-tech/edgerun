@@ -1,4 +1,4 @@
-  (func (export "er_ui_context_menu_trigger_label_len") (result i32) i32.const 7)
+(func (export "er_ui_context_menu_trigger_label_len") (result i32) i32.const 7)
   (func (export "er_ui_context_menu_item_count") (result i32) i32.const 2)
   (func (export "er_ui_context_menu_trigger_y") (result f32) f32.const 4)
   (func (export "er_ui_context_menu_trigger_w") (result f32) f32.const 64)

@@ -1,4 +1,4 @@
-  (func (export "er_ui_gallery_catalog_intro_title_bounds") (param $intro i32) (param $out i32) (result i32)
+(func (export "er_ui_gallery_catalog_intro_title_bounds") (param $intro i32) (param $out i32) (result i32)
     local.get $intro i32.eqz local.get $out i32.eqz i32.or
     if i32.const 0 return end
     local.get $out local.get $intro f32.load local.get $intro i32.const 4 i32.add f32.load local.get $intro i32.const 8 i32.add f32.load f32.const 22 call $rect_store)

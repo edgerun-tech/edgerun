@@ -1,4 +1,4 @@
-  ;; SHA-384 Hash Pipeline Stage — slot 20
+;; SHA-384 Hash Pipeline Stage — slot 20
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 48-byte SHA-384 hash via output pipe

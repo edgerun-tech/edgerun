@@ -1,4 +1,4 @@
-  (memory 1)
+(memory 1)
   (data (i32.const 0x2000) "0123456789abcdef")
   (func (export "_start") (result i32)
     (local $buf i32) (local $out i32) (local $nread i32)

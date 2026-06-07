@@ -1,4 +1,4 @@
-  (func (export "er_ui_menubar_item_count") (result i32) i32.const 3)
+(func (export "er_ui_menubar_item_count") (result i32) i32.const 3)
   (func (export "er_ui_menubar_id_stride") (result i32) i32.const 3)
   (func (export "er_ui_menubar_padding") (result f32) f32.const 4)
   (func (export "er_ui_menubar_item_h") (result f32) f32.const 28)

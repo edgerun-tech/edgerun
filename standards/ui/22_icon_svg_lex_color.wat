@@ -1,4 +1,4 @@
-  (func $svg_is_ws (param $ch i32) (result i32)
+(func $svg_is_ws (param $ch i32) (result i32)
     local.get $ch
     i32.const 32
     i32.eq

@@ -1,4 +1,4 @@
-  (func $icon_clip_points_contains (param $px i32) (param $py i32) (param $points i32) (param $count i32) (param $rule i32) (result i32)
+(func $icon_clip_points_contains (param $px i32) (param $py i32) (param $points i32) (param $count i32) (param $rule i32) (result i32)
     (local $pnx f32) (local $pny f32) (local $i i32) (local $j i32) (local $inside i32) (local $winding i32)
     (local $xi f32) (local $yi f32) (local $xj f32) (local $yj f32) (local $xhit f32)
     local.get $count

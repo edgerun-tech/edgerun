@@ -1,13 +1,4 @@
-(module
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))
-  (import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))
-  (memory (export "memory") 1)
-
-  (func $m100hex_value (param $c i32) (result i32)
+(func $m100hex_value (param $c i32) (result i32)
     local.get $c
     i32.const 48
     i32.ge_u
@@ -2552,5 +2543,3 @@
     local.get $buf local.get $off i32.add local.get $val i32.const 0x7FFFFFFF i32.and i32.store
     local.get $off i32.const 4 i32.add
   )
-
-)

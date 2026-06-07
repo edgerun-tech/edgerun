@@ -20,9 +20,6 @@
   (func $is_alpha (export "is_alpha") (param $b i32) (result i32)
     (i32.and (call $char_class (local.get $b)) (i32.const 6)))
 
-  (func $is_tchar (export "is_tchar") (param $b i32) (result i32)
-    (i32.and (call $char_class (local.get $b)) (i32.const 8)))
-
   (func $is_hex (export "is_hex") (param $b i32) (result i32)
     (i32.and (call $char_class (local.get $b)) (i32.const 16)))
 
@@ -667,47 +664,6 @@
         (i32.le_u
           (local.get $offset)
           (i32.sub (local.get $len) (local.get $need))))))
-
-  ;; ── Shared big-endian read helpers (returns i64: status<<32 | value) ──
-
-  (func $read_u16_be (export "read_u16_be")
-    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
-    (if (result i64)
-      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 2))
-      (then
-        (call $pack (i32.const 0)
-          (i32.or
-            (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 8))
-            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))))))
-      (else (call $pack (i32.const 1) (i32.const 0)))))
-
-  (func $read_u24_be (export "read_u24_be")
-    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
-    (if (result i64)
-      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 3))
-      (then
-        (call $pack (i32.const 0)
-          (i32.or
-            (i32.or
-              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 16))
-              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))) (i32.const 8)))
-            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 2)))))))
-      (else (call $pack (i32.const 1) (i32.const 0)))))
-
-  (func $read_u32_be (export "read_u32_be")
-    (param $ptr i32) (param $len i32) (param $offset i32) (result i64)
-    (if (result i64)
-      (call $bounds_check (local.get $len) (local.get $offset) (i32.const 4))
-      (then
-        (call $pack (i32.const 0)
-          (i32.or
-            (i32.or
-              (i32.or
-                (i32.shl (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))) (i32.const 24))
-                (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 1)))) (i32.const 16)))
-              (i32.shl (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 2)))) (i32.const 8)))
-            (i32.load8_u (i32.add (local.get $ptr) (i32.add (local.get $offset) (i32.const 3)))))))
-      (else (call $pack (i32.const 1) (i32.const 0)))))
 
   ;; ── LEB128 decoders ──
 

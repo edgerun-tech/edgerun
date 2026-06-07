@@ -1,4 +1,4 @@
-  (func $icon_write_line (param $out i32) (param $cap i32) (param $count i32) (param $x1 f32) (param $y1 f32) (param $x2 f32) (param $y2 f32) (result i32)
+(func $icon_write_line (param $out i32) (param $cap i32) (param $count i32) (param $x1 f32) (param $y1 f32) (param $x2 f32) (param $y2 f32) (result i32)
     (local $p i32)
     local.get $count
     i32.const 1

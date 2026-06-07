@@ -1,4 +1,4 @@
-  (func $er_ui_record_set_id (export "er_ui_record_set_id") (param $base i32) (param $len i32) (param $index i32) (param $id i32) (result i32)
+(func $er_ui_record_set_id (export "er_ui_record_set_id") (param $base i32) (param $len i32) (param $index i32) (param $id i32) (result i32)
     (local $n i32)
     local.get $base
     local.get $len

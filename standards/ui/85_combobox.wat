@@ -1,4 +1,4 @@
-  (func (export "er_ui_combobox_input_h") (result f32) f32.const 36)
+(func (export "er_ui_combobox_input_h") (result f32) f32.const 36)
   (func (export "er_ui_combobox_popup_gap") (result f32) f32.const 6)
   (func (export "er_ui_combobox_popup_radius") (result f32) f32.const 8)
   (func (export "er_ui_combobox_popup_padding") (result f32) f32.const 4)

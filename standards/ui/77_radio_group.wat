@@ -1,4 +1,4 @@
-  (func (export "er_ui_radio_item_count") (result i32) i32.const 2)
+(func (export "er_ui_radio_item_count") (result i32) i32.const 2)
   (func (export "er_ui_radio_box_size") (result f32) f32.const 18)
   (func (export "er_ui_radio_text_gap") (result f32) f32.const 10)
   (func (export "er_ui_radio_dot_size") (result f32) f32.const 8)

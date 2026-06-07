@@ -1,4 +1,3 @@
-
 (func $m57copy (param $src i32) (param $dst i32) (param $len i32)
     (local $i i32)
     loop $loop

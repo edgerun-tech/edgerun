@@ -308,6 +308,19 @@ Merged all 16 machine-generated Tor WAT fragments (~187K lines) into `tor/tor.wa
 - Deleted 16 individual files
 - **Deleted entire tor.wat** — depends on 6 host imports not in repo, impractical standalone (Session end — 2026-06-07)
 
+### 17. Anonymous Export Fix + Dedup Collision Fix (Session 18 — 2026-06-07) ✅
+Build script's `fixAnonymousExports` regex replaces `(func (export "name") ...)` → `(func $name (export "name") ...)` so call sites using `$name` resolve correctly. This is critical for `ui/ui_framework.wat` (1381 anonymous exports) and other files with cross-file named references.
+
+**Discovered side effect**: The fix gave local names to previously anonymous exports, causing the dedup to collide functions with the **same name but different signatures**. Specifically:
+- `codec/binary.wat`'s `$read_short_smart`: `(result i32)` — returns 1 value
+- `codec/model.wat`'s `$read_short_smart`: `(result i32 i32)` — returns 2 values
+
+Since `binary.wat` appears earlier in the manifest, its 1-return version survived dedup; `model.wat`'s 2-return version was dropped. All call sites in `model.wat` expecting 2 return values then hit "expected i32 but nothing on stack" during validation.
+
+**Fix**: Renamed `$read_short_smart` → `$model_read_short_smart` in `codec/model.wat` (1 def + 9 call sites). Updated build script compiler from `wat2wasm` → `wasm-tools parse` (wat2wasm crashes on >4MB WAT).
+
+**Current status**: `edgerun.wasm` builds and validates successfully (1015 KB, 43 deduplications, 4 host imports remaining).
+
 **Sessions completed** (current):
 1. ~~`compiler/` module — scan for inline duplicates~~ ✅ Done — no runtime-utility duplication found; critical bug documented (481+ mangled aarch64 call names)
 2. ~~`data/` module — scan for 4 inline duplicates~~ ✅ Fixed — 4 data/ files refactored to use runtime scope: `$load8_u`, `$memcpy`, `$string_eq`, `$starts_with`
@@ -380,11 +393,11 @@ Merged all 16 machine-generated Tor WAT fragments (~187K lines) into `tor/tor.wa
 
 | Tool | Command | Description |
 |------|---------|-------------|
-| **Build** | `bun run build` / `make` | Concatenates fragments → `edgerun.wat`, compiles to `edgerun.wasm` via `wat2wasm`, optionally strips via `wasm-tools strip` |
+| **Build** | `bun run build` / `make` | Concatenates fragments → `edgerun.wat`, compiles to `edgerun.wasm` via `wasm-tools parse`, optionally strips via `wasm-tools strip` |
 | **Watch** | `bun run build:watch` / `make watch` | Rebuild on file changes (polls `.wat` files in all source dirs) |
 | **Validate** | `bun run validate` / `make validate` | Runs `wasm-tools validate` on `edgerun.wat` + `edgerun.wasm` |
 | **Test** | `bun run test` / `make test` | Instantiates `edgerun.wasm` in Node.js WASM runtime, runs 7 integration test groups |
-| **Lint** | `bun run lint` / `make lint-wat` | Validates every individual `.wat` file with `wasm-tools validate` |
+| **Lint** | `bun run lint` / `make lint-wat` | Validates every individual `.wat` file with `wasm-tools validate` (expected: most fail because fragments reference cross-file names/imports — the integrated `validate` target is authoritative) |
 | **Stats** | `bun run stats` / `make stats` | Counts source files, lines, build output size |
 | **Clean** | `bun run clean` / `make clean` | Removes all build artifacts |
 | **CI** | `bun run ci` / `make ci` | Full pipeline: build → validate → test |
@@ -392,8 +405,8 @@ Merged all 16 machine-generated Tor WAT fragments (~187K lines) into `tor/tor.wa
 ### Build Pipeline
 
 ```
-source .wat fragments  ──►  tools/build_wat.mjs  ──►  edgerun.wat  ──►  wat2wasm  ──►  edgerun.wasm
-                                  (concatenate +                       (compile)         (binary)
+source .wat fragments  ──►  tools/build_wat.mjs  ──►  edgerun.wat  ──►  wasm-tools parse  ──►  edgerun.wasm
+                                  (concatenate +                       (compile)            (binary)
                                    deduplicate +                       wasm-tools strip
                                    strip wrappers)                     ──► edgerun-stripped.wasm
 ```
@@ -415,5 +428,5 @@ source .wat fragments  ──►  tools/build_wat.mjs  ──►  edgerun.wat  �
 |------|--------|
 | `--out <path>` | Custom WAT output path (default: `edgerun.wat`) |
 | `--watch` | Watch mode — rebuilds on `.wat` file changes |
-| `--no-wasm` | Skip `wat2wasm` compilation |
+| `--no-wasm` | Skip `wasm-tools parse` compilation |
 | `--no-strip` | Skip `wasm-tools strip` |

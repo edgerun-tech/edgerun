@@ -1,4 +1,4 @@
-  ;; SHA-256 Hash Pipeline Stage — slot 16
+;; SHA-256 Hash Pipeline Stage — slot 16
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 32-byte SHA-256 hash via output pipe

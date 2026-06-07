@@ -1,4 +1,4 @@
-  (func (export "er_ui_scroll_area_radius") (result f32) f32.const 7)
+(func (export "er_ui_scroll_area_radius") (result f32) f32.const 7)
   (func (export "er_ui_scroll_area_padding") (result f32) f32.const 8)
   (func (export "er_ui_scroll_area_content_y") (result f32) f32.const 6)
   (func (export "er_ui_scroll_area_text_h") (result f32) f32.const 14)

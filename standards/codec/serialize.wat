@@ -1,18 +1,12 @@
-(module
-  (import "edgerun" "load8_u" (func $m185byte (param i32 i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (memory (export "memory") 1)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 unexpected_end.
   ;; Scalar kinds: 1 quoted string, 2 literal string, 3 bool, 4 int, 5 float, 6 array, 7 bare string.
   ;; Line kinds: 0 blank, 1 comment, 2 key/value, 3 table, 4 array table.
 
   (func $m185is_ws (param $c i32) (result i32)
     (i32.or (i32.eq (local.get $c) (i32.const 32)) (i32.eq (local.get $c) (i32.const 9))))
+
+  (func $m185byte (param $ptr i32) (param $off i32) (result i32)
+    (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
 
   (func $m185is_hex (param $c i32) (result i32)
     (call $is_hex (local.get $c)))
@@ -1149,4 +1143,3 @@
     i32.const 0)
 
   (data (i32.const 0) "null~trueyesonfalsenooff---...")
-)

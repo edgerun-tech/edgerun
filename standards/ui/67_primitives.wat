@@ -1,4 +1,4 @@
-  (func (export "er_ui_primitives_min_extent") (result f32) f32.const 1)
+(func (export "er_ui_primitives_min_extent") (result f32) f32.const 1)
   (func (export "er_ui_primitives_side_panel_layout_size") (result i32) i32.const 16)
   (func (export "er_ui_primitives_menu_list_layout_size") (result i32) i32.const 24)
 

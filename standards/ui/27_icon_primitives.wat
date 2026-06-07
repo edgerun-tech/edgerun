@@ -1,4 +1,4 @@
-  (func $icon_render_line_alpha (param $alpha i32) (param $width i32) (param $height i32) (param $bx f32) (param $by f32) (param $bw f32) (param $bh f32) (param $x0n f32) (param $y0n f32) (param $x1n f32) (param $y1n f32) (param $stroke_n f32) (param $cap f32)
+(func $icon_render_line_alpha (param $alpha i32) (param $width i32) (param $height i32) (param $bx f32) (param $by f32) (param $bw f32) (param $bh f32) (param $x0n f32) (param $y0n f32) (param $x1n f32) (param $y1n f32) (param $stroke_n f32) (param $cap f32)
     (local $x0 f32) (local $y0 f32) (local $x1 f32) (local $y1 f32)
     (local $dx f32) (local $dy f32) (local $len2 f32) (local $seg_len f32) (local $radius f32) (local $cap_lo f32) (local $cap_hi f32) (local $cap_extend f32)
     (local $minx i32) (local $maxx i32) (local $miny i32) (local $maxy i32) (local $px i32) (local $py i32)

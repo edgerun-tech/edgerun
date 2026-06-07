@@ -1,4 +1,4 @@
-  (func $write_single_string_ref (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $src i32) (param $src_len i32) (param $second_ref i32) (result i32)
+(func $write_single_string_ref (param $base i32) (param $cap i32) (param $kind i32) (param $id i32) (param $src i32) (param $src_len i32) (param $second_ref i32) (result i32)
     (local $first_ref i32)
     local.get $base
     local.get $cap

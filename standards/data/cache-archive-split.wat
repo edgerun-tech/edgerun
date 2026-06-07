@@ -1,4 +1,4 @@
-  ;; JS5 multi-file archive splitter.
+;; JS5 multi-file archive splitter.
   ;;
   ;; Parses a decompressed JS5 archive payload with its entry table (last byte =
   ;; chunk count, preceding bytes = chunk_count × file_count big-endian i32

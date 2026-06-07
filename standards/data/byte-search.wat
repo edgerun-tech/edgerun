@@ -1,5 +1,4 @@
-
-  (func $matches3 (param $b i32) (param $n1 i32) (param $n2 i32) (param $n3 i32) (result i32)
+(func $matches3 (param $b i32) (param $n1 i32) (param $n2 i32) (param $n3 i32) (result i32)
     local.get $b
     local.get $n1
     i32.eq

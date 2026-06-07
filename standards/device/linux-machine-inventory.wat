@@ -2,8 +2,8 @@
   ;; crates/node/edgerun-machine-report. Host code gathers facts; this module
   ;; deterministically parses labels and applies deployment-mode policy.
 
-  (import "edgerun" "is_ws" (func $m130is_wsp (param i32) (result i32)))
-  (import "edgerun" "to_lower" (func $m130lower (param i32) (result i32)))
+  
+  
 
   (func $m130trim_start (param $ptr i32) (param $start i32) (param $end i32) (result i32)
     (local $i i32)

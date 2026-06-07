@@ -1,4 +1,3 @@
-
 (global $m63h0 (mut i64) (i64.const 0))
   (global $m63h1 (mut i64) (i64.const 0))
   (global $m63h2 (mut i64) (i64.const 0))

@@ -1,4 +1,4 @@
-  (func (export "er_ui_checkbox_box_size") (result f32) f32.const 18)
+(func (export "er_ui_checkbox_box_size") (result f32) f32.const 18)
   (func (export "er_ui_checkbox_min_width") (result f32) f32.const 96)
 
   (func (export "er_ui_checkbox_measure") (param $label_ptr i32) (param $label_len i32) (param $constraints i32) (param $out i32) (result i32)

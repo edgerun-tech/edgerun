@@ -1,4 +1,4 @@
-  (func $er_ui_command_hit_test (export "er_ui_command_hit_test") (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
+(func $er_ui_command_hit_test (export "er_ui_command_hit_test") (param $commands i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
     (local $i i32)
     (local $p i32)
     (local $hit i32)
@@ -456,4 +456,3 @@
     local.get $meta
     call $store32
     i32.const 1)
-

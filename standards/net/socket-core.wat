@@ -1,4 +1,4 @@
-  ;; Socket Core — transport stage with tick-based timeout
+;; Socket Core — transport stage with tick-based timeout
 ;; Abstract socket layer — transport-agnostic byte stream I/O.
   ;;
   ;; Socket types define the transport. Config structs are fixed-size

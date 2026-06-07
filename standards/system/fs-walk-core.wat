@@ -1,5 +1,3 @@
-(import "math" "max" (func $max (param i32 i32) (result i32)))
-
 ;; Filesystem walking and identity semantics captured from local walkdir,
   ;; same-file, and tempfile compatibility crates.
   ;;

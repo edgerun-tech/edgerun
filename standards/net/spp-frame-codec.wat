@@ -1,8 +1,8 @@
-  (global $spp_abi_version i32 (i32.const 1))
+(global $spp_abi_version i32 (i32.const 1))
   (global $spp_mtu_min i32 (i32.const 48))
   (global $spp_mtu_default i32 (i32.const 128))
 
-  (func (export "spp_abi_version") (result i32)
+  (func $spp_abi_version (export "spp_abi_version") (result i32)
     global.get $spp_abi_version
   )
 

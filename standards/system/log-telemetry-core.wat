@@ -1,5 +1,3 @@
-  (import "edgerun" "string_eq" (func $m187eq (param i32 i32 i32 i32) (result i32)))
-
 (func (export "tracing_level_code") (param $ptr i32) (param $len i32) (result i32)
     (if (call $m187eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 5))))
     (if (call $m187eq (local.get $ptr) (local.get $len) (i32.const 21) (i32.const 5)) (then (return (i32.const 4))))

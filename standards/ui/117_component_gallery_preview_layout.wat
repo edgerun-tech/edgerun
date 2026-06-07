@@ -1,4 +1,4 @@
-  (func (export "er_ui_gallery_selected_preview_surface_h") (result f32) f32.const 266)
+(func (export "er_ui_gallery_selected_preview_surface_h") (result f32) f32.const 266)
   (func (export "er_ui_gallery_selected_preview_compact_surface_h") (result f32) f32.const 320)
   (func (export "er_ui_gallery_catalog_preview_h") (result f32) f32.const 38)
   (func (export "er_ui_gallery_catalog_card_pad") (result f32) f32.const 14)

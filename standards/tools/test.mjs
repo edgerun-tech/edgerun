@@ -34,7 +34,14 @@ let wasm;
 try {
   const bin = readFileSync(resolve(ROOT, 'edgerun.wasm'));
   const mod = new WebAssembly.Module(bin);
-  const instance = new WebAssembly.Instance(mod, {});
+  const instance = new WebAssembly.Instance(mod, {
+    host: {
+      sock_open: () => -1,
+      sock_send: () => -1,
+      sock_recv: () => -1,
+      sock_close: () => {},
+    },
+  });
   wasm = instance.exports;
   check(true, 'edgerun.wasm instantiated');
 } catch (e) {

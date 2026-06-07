@@ -1,4 +1,4 @@
-  (func (export "er_ui_tabs_item_count") (result i32) i32.const 2)
+(func (export "er_ui_tabs_item_count") (result i32) i32.const 2)
   (func (export "er_ui_tabs_list_padding") (result f32) f32.const 3)
   (func (export "er_ui_tabs_list_radius") (result f32) f32.const 8)
   (func (export "er_ui_tabs_gap") (result f32) f32.const 8)

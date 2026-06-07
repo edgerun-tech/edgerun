@@ -1,4 +1,4 @@
-  ;; XTEA block cipher — 64-bit block, 128-bit key, 32 Feistel rounds.
+;; XTEA block cipher — 64-bit block, 128-bit key, 32 Feistel rounds.
   ;; Big-endian I/O, operates in-place on buffer.
   ;; Remaining bytes (< 8) at end are copied through unchanged.
   ;;
@@ -89,7 +89,7 @@
     local.get $block i32.const 4 i32.add local.get $v1 call $m65store_be32
   )
 
-  (func (export "xtea_encrypt") (param $data i32) (param $len i32) (param $key i32) (result i32)
+  (func $xtea_encrypt (export "xtea_encrypt") (param $data i32) (param $len i32) (param $key i32) (result i32)
     (local $i i32) (local $num i32)
     local.get $len i32.const 3 i32.shr_u local.set $num
     i32.const 0 local.set $i
@@ -104,7 +104,7 @@
     i32.const 0
   )
 
-  (func (export "xtea_decrypt") (param $data i32) (param $len i32) (param $key i32) (result i32)
+  (func $xtea_decrypt (export "xtea_decrypt") (param $data i32) (param $len i32) (param $key i32) (result i32)
     (local $i i32) (local $num i32)
     local.get $len i32.const 3 i32.shr_u local.set $num
     local.get $num i32.const 1 i32.sub local.set $i

@@ -1,6 +1,6 @@
-  ;; AES-128-CTR mode — self-contained AES-128 key expansion + block encrypt + CTR XOR.
+;; AES-128-CTR mode — self-contained AES-128 key expansion + block encrypt + CTR XOR.
   ;; Exports: aes128_ctr_xor(out, in, len, key[16], counter[16]) -> 0
-  (import "edgerun" "memcpy" (func $m54memcpy (param i32 i32 i32)))
+  
   (data (i32.const 0) "\63\7c\77\7b\f2\6b\6f\c5\30\01\67\2b\fe\d7\ab\76")  ;; S-box 0-15
   (data (i32.const 16) "\ca\82\c9\7d\fa\59\47\f0\ad\d4\a2\af\9c\a4\72\c0")  ;; 16-31
   (data (i32.const 32) "\b7\fd\93\26\36\3f\f7\cc\34\a5\e5\f1\71\d8\31\15")  ;; 32-47
@@ -43,7 +43,7 @@
     local.get $p i32.const 3 i32.add local.get $v i32.const 0xFF i32.and i32.store8)
 
   ;; ── SubWord: S-box applied to each byte of a little-endian word ──
-  (func $sub_word (param $w i32) (result i32)
+  (func $ctr_sub_word (param $w i32) (result i32)
     local.get $w i32.const 0xFF i32.and i32.load8_u
     local.get $w i32.const 8 i32.shr_u i32.const 0xFF i32.and i32.load8_u
     i32.const 8 i32.shl i32.or
@@ -53,7 +53,7 @@
     i32.const 24 i32.shl i32.or)
 
   ;; ── RotWord: left-rotate word by one byte ──
-  (func $rot_word (param $w i32) (result i32)
+  (func $ctr_rot_word (param $w i32) (result i32)
     local.get $w i32.const 8 i32.shl
     local.get $w i32.const 24 i32.shr_u
     i32.or)
@@ -81,7 +81,7 @@
       local.get $i i32.const 4 i32.rem_s i32.eqz
       if
         ;; t = SubWord(RotWord(w)) ^ Rcon[rcon_idx]
-        local.get $w call $rot_word call $sub_word
+        local.get $w call $ctr_rot_word call $ctr_sub_word
         i32.const 256 local.get $rcon_idx i32.add i32.load8_u i32.const 24 i32.shl
         i32.xor
         local.set $t
@@ -206,7 +206,7 @@
     local.get $b local.get $b i32.load offset=12 local.get $rk i32.load offset=12 i32.xor i32.store offset=12)
 
   ;; ── aes128_encrypt_block(block_ptr, rk_ptr) — encrypt one block in place ──
-  (func $aes128_encrypt_block (param $b i32) (param $rk i32)
+  (func $ctr_aes128_encrypt_block (param $b i32) (param $rk i32)
     (local $round i32)
 
     ;; Initial AddRoundKey with round key 0
@@ -249,7 +249,7 @@
     i32.const 16624 local.set $ks
 
     local.get $key local.get $rk call $m54aes128_key_expand
-    local.get $cbuf local.get $ctr i32.const 16 call $m54memcpy
+    local.get $cbuf local.get $ctr i32.const 16 call $memcpy
     local.get $len local.set $rem
 
     block $done
@@ -260,8 +260,8 @@
       local.get $rem i32.const 16 i32.lt_u
       if local.get $rem local.set $blk end
 
-      local.get $ks local.get $cbuf i32.const 16 call $m54memcpy
-      local.get $ks local.get $rk call $aes128_encrypt_block
+      local.get $ks local.get $cbuf i32.const 16 call $memcpy
+      local.get $ks local.get $rk call $ctr_aes128_encrypt_block
 
       i32.const 0 local.set $i
       block $xor_done
@@ -296,4 +296,3 @@
     end
 
     i32.const 0)
-

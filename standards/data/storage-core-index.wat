@@ -1,4 +1,4 @@
-  ;; Status values: 0 ok, 1 input_short, 3 invalid.
+;; Status values: 0 ok, 1 input_short, 3 invalid.
   ;; Derived DB: magic ERDB0001, format 2, schema 1, flags 0.
   ;; FileIndex strings are u64-len-prefixed UTF-8 fields in the Rust storage.
   ;; EdgeFS path validation mirrors normalize_path_checked enough to reject NUL

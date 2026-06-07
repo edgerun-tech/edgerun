@@ -1,4 +1,4 @@
-  ;; ═════════════════════════════════════════════════════════════════════
+;; ═════════════════════════════════════════════════════════════════════
   ;; EdgeRun WASM → AArch64 (ARM64) JIT Compiler
   ;;
   ;; Compiles WASM decoded ops into AArch64 machine code in a memory buffer.
@@ -10,8 +10,6 @@
   ;; ── Shared constants (from edgerun-core) ─────────────────────────────
 
   ;; JIT code cache: 1MB starting at 0x100000
-  (global $JIT_CACHE      i32 (i32.const 0x100000))
-  (global $JIT_CACHE_SIZE i32 (i32.const 0x100000))
   (global $JIT_SLOT_SIZE  i32 (i32.const 0x40000))  ;; 256KB per function
 
   ;; JIT state at 0x300000
@@ -41,8 +39,6 @@
   (global $JIT_LABEL_IF      i32 (i32.const 2))
 
   ;; Error codes
-  (global $OK                i32 (i32.const 0))
-  (global $ERR_UNSUP         i32 (i32.const -1))
 
   ;; ── WASM type constants ───────────────────────────────────────────────
   (global $WASM_TYPE_V128    i32 (i32.const 0x7B))

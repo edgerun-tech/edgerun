@@ -1,4 +1,4 @@
-  (func (export "er_ui_command_write_rect") (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $color i32) (result i32)
+(func (export "er_ui_command_write_rect") (param $out i32) (param $cap i32) (param $count i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $color i32) (result i32)
     local.get $w
     local.get $h
     call $valid_rect

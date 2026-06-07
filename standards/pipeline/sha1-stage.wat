@@ -1,4 +1,4 @@
-  ;; SHA-1 Hash Pipeline Stage — slot 18
+;; SHA-1 Hash Pipeline Stage — slot 18
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 20-byte SHA-1 hash via output pipe

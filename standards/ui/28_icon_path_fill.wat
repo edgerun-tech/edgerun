@@ -1,4 +1,4 @@
-  (func $icon_fill_point_append (param $points i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
+(func $icon_fill_point_append (param $points i32) (param $count i32) (param $x f32) (param $y f32) (result i32)
     local.get $count
     i32.const 256
     i32.ge_u

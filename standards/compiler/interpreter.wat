@@ -1,4 +1,4 @@
-  ;; ===================================================================
+;; ===================================================================
   ;; EdgeRun WASM Interpreter — standalone (WAT parser + syscall init)
   ;;
   ;; The interpreter core (load/validate/decode/execute) lives in

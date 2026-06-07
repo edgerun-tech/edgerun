@@ -1,4 +1,4 @@
-  (func $er_ui_svg_color_parse_rgba (export "er_ui_svg_color_parse_rgba") (param $ptr i32) (param $len i32) (result i32)
+(func $er_ui_svg_color_parse_rgba (export "er_ui_svg_color_parse_rgba") (param $ptr i32) (param $len i32) (result i32)
     (local $idx i32) (local $end i32) (local $r i32) (local $g i32) (local $b i32) (local $a i32)
     (local $h0 i32) (local $h1 i32) (local $h2 i32) (local $h3 i32) (local $h4 i32) (local $h5 i32) (local $h6 i32) (local $h7 i32)
     (local $idx_slot i32) (local $fv f32)

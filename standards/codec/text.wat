@@ -1,15 +1,4 @@
-(module
-  (import "edgerun" "load8_u" (func $m190byte (param i32 i32) (result i32)))
-  (import "edgerun" "is_cont" (func $m190is_cont (param i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))
-  (import "edgerun" "to_upper" (func $to_upper (param i32) (result i32)))
-  (memory (export "memory") 1)
-
-  ;; Status values: 0 ok, 2 output_short, 3 invalid, 5 incomplete.
+;; Status values: 0 ok, 2 output_short, 3 invalid, 5 incomplete.
   ;; utf8_scan out record: valid_up_to, error_len, suffix_len, expected_len.
   ;; error_len is 0 for incomplete suffixes.
 
@@ -32,6 +21,12 @@
     i32.add
     local.get $expected
     i32.store)
+
+  (func $m190byte (param $ptr i32) (param $off i32) (result i32)
+    (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
+
+  (func $m190is_cont (param $b i32) (result i32)
+    (call $is_cont (local.get $b)))
 
   (func $utf8_scan (export "utf8_scan") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $i i32)
@@ -1825,4 +1820,3 @@
     "\7e\01"  ;; 0x9E  ž U+017E
     "\78\01"  ;; 0x9F  Ÿ U+0178
   )
-)

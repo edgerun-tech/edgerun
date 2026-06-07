@@ -1,4 +1,4 @@
-  (global $TPM_ID_ABI i32 (i32.const 1))
+(global $TPM_ID_ABI i32 (i32.const 1))
 
   ;; TPM identity key types
   (global $ID_KEY_ECC i32 (i32.const 1))

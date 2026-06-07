@@ -1,4 +1,4 @@
-  (func $svg_norm_x (param $x f32) (param $min_x f32) (param $vw f32) (result f32)
+(func $svg_norm_x (param $x f32) (param $min_x f32) (param $vw f32) (result f32)
     local.get $x local.get $min_x f32.sub local.get $vw f32.div)
   (func $svg_norm_y (param $y f32) (param $min_y f32) (param $vh f32) (result f32)
     local.get $y local.get $min_y f32.sub local.get $vh f32.div)

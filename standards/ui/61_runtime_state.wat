@@ -1,4 +1,4 @@
-  (func (export "er_ui_runtime_state_size") (result i32)
+(func (export "er_ui_runtime_state_size") (result i32)
     i32.const 32)
 
   (func $er_ui_runtime_reset (export "er_ui_runtime_reset") (param $out i32) (result i32)

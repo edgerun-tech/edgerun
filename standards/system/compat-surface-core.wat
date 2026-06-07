@@ -1,6 +1,3 @@
-  (import "edgerun" "is_alpha" (func $ascii_alpha (param i32) (result i32)))
-  (import "edgerun" "is_digit" (func $ascii_digit (param i32) (result i32)))
-
 ;; Compact compatibility surfaces captured from local HTTP, reqwest-shaped
   ;; client glue, JSON schema, unicode, JNI, and wasm-bindgen shared crates.
   ;;

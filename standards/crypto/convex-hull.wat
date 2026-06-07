@@ -1,4 +1,4 @@
-  ;; Convex hull — Jarvis march (gift wrapping) algorithm.
+;; Convex hull — Jarvis march (gift wrapping) algorithm.
   ;; Points are (x, y) pairs stored as consecutive i32 values.
   ;; Writes hull point indices to output buffer.
   ;;

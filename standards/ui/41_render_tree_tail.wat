@@ -1,4 +1,4 @@
-                    local.get $count
+local.get $count
                     local.get $cx
                     f32.const 16
                     local.get $desc_depth
@@ -501,4 +501,3 @@
       end
     end
     local.get $count)
-

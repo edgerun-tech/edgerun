@@ -1,4 +1,4 @@
-  (func (export "er_ui_carousel_button_size") (result f32) f32.const 28)
+(func (export "er_ui_carousel_button_size") (result f32) f32.const 28)
   (func (export "er_ui_carousel_gap") (result f32) f32.const 8)
   (func (export "er_ui_carousel_radius") (result f32) f32.const 8)
   (func (export "er_ui_carousel_text_padding") (result f32) f32.const 8)
@@ -83,4 +83,3 @@
     local.get $out
     call $er_ui_layout_measurement_flexible drop
     local.get $out local.get $constraints local.get $out call $er_ui_layout_measurement_apply_exact)
-

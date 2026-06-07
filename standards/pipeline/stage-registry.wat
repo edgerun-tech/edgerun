@@ -1,4 +1,4 @@
-  ;; Pipeline Stage Registry — elem entries for stage dispatch table
+;; Pipeline Stage Registry — elem entries for stage dispatch table
   ;; Must be included at the END of the MANIFEST so all process_* functions are in scope.
 
   ;; Slots 0:  passthrough (defined in pipeline-core.wat)
@@ -34,3 +34,12 @@
   (elem (i32.const 24) $process_djb2_hash)
   (elem (i32.const 25) $process_inet_checksum)
   (elem (i32.const 26) $process_crc32_bzip)
+
+  ;; Slots 46-47: Edgerun compiler/interpreter stages
+  (elem (i32.const 46) $process_edgerun_parse)
+  (elem (i32.const 47) $process_edgerun_exec)
+
+  ;; Slots 48-50: Queue/Buffer/CDC stages
+  (elem (i32.const 48) $process_queue)
+  (elem (i32.const 49) $process_buffer)
+  (elem (i32.const 50) $process_cdc)

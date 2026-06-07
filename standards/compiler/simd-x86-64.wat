@@ -1,4 +1,4 @@
-  (func $emit_mov_rax_imm64_val (param $v i64)
+(func $emit_mov_rax_imm64_val (param $v i64)
     (call $emit_rex_w)
     (call $emit_byte (i32.const 0xB8))
     (call $emit_qword (local.get $v))
@@ -1222,4 +1222,3 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; JIT compile: compile a WASM function to x86_64 machine code
   ;; ═════════════════════════════════════════════════════════════════════
-

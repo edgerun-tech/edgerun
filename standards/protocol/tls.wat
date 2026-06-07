@@ -1,12 +1,3 @@
-(module
-  (import "binary" "read_u16_be" (func $read_u16_be (param $ptr i32) (result i32)))
-  (import "binary" "read_u24_be" (func $read_u24_be (param $ptr i32) (result i32)))
-  (import "edgerun" "to_lower" (func $m180ascii_lower (param i32) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "is_alnum" (func $is_alnum (param i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (memory (export "memory") 1)
-
 ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow, 5 truncated.
   ;; Scan a TLS 1.3 Certificate handshake body.
   ;; Output record: context_offset:u32, context_len:u32, list_offset:u32, list_len:u32, next_offset:u32.
@@ -244,7 +235,7 @@
           (i32.mul
             (i32.xor
               (local.get $h)
-              (call $m180ascii_lower (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
+              (call $to_lower (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))))
             (i32.const 0x01000193)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $scan)))
@@ -703,7 +694,7 @@
       (if (i32.lt_u (i32.add (local.get $start) (local.get $written)) (local.get $end))
         (then
           (local.set $b
-            (call $m180ascii_lower
+            (call $to_lower
               (i32.load8_u
                 (i32.add
                   (local.get $input_ptr)
@@ -766,7 +757,7 @@
         (then
           (i32.store8
             (i32.add (local.get $out_ptr) (local.get $written))
-            (call $m180ascii_lower
+            (call $to_lower
               (i32.load8_u
                 (i32.add
                   (local.get $ptr)
@@ -945,5 +936,3 @@
     (i32.store (i32.add (local.get $out_ptr) (i32.const 8)) (local.get $next_offset))
     (i32.store (i32.add (local.get $out_ptr) (i32.const 12)) (local.get $list_len))
     (i32.const 0))
-
-)

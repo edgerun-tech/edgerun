@@ -1,7 +1,4 @@
-(module
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (memory (export "memory") 1)
-  ;; ═════════════════════════════════════════════════════════════════════
+;; ═════════════════════════════════════════════════════════════════════
   ;; QUIC Core Primitives — shared across QUIC parsers
   ;; ═════════════════════════════════════════════════════════════════════
 
@@ -248,5 +245,3 @@
     (if (i32.eq (local.get $field) (i32.const 4))
       (then (return (i64.const 50000)))) ;; default rttvar micros
     (i64.const 0))
-
-)

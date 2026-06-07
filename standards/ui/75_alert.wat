@@ -1,4 +1,4 @@
-  (func (export "er_ui_alert_radius") (result f32) f32.const 8)
+(func (export "er_ui_alert_radius") (result f32) f32.const 8)
   (func (export "er_ui_alert_padding_x") (result f32) f32.const 16)
   (func (export "er_ui_alert_padding_y") (result f32) f32.const 12)
   (func (export "er_ui_alert_icon_size") (result f32) f32.const 16)

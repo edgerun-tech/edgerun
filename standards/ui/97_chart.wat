@@ -1,4 +1,4 @@
-  (func (export "er_ui_chart_separator_height") (result f32) f32.const 1)
+(func (export "er_ui_chart_separator_height") (result f32) f32.const 1)
   (func (export "er_ui_chart_bar_count") (result i32) i32.const 5)
   (func (export "er_ui_chart_grid_count") (result i32) i32.const 3)
   (func (export "er_ui_chart_radius") (result f32) f32.const 8)

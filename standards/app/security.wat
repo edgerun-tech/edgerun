@@ -1,17 +1,4 @@
-(module
-  (import "edgerun" "string_eq" (func $m30eq (param i32 i32 i32 i32) (result i32)))
-  (import "edgerun" "is_upper" (func $m169is_upper (param i32) (result i32)))
-  (import "edgerun" "is_lower" (func $m169is_lower (param i32) (result i32)))
-  (import "edgerun" "load8_u" (func $m76byte (param i32 i32) (result i32)))
-  (import "edgerun" "to_lower" (func $m28lower (param i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))
-  (memory (export "memory") 1)
-
-  ;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
+;; Status values: 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 overflow.
 
   (func $m200is_supported_tag (param $m200tag i32) (result i32)
     (if (i32.eq (i32.and (local.get $m200tag) (i32.const 31)) (i32.const 31))
@@ -691,6 +678,21 @@
 
 
 
+  (func $m30eq (param $ptr i32) (param $len i32) (param $lit_ptr i32) (param $lit_len i32) (result i32)
+    (local $i i32)
+    (if (i32.ne (local.get $len) (local.get $lit_len))
+      (then (return (i32.const 0))))
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $lit_len)))
+        (if
+          (i32.ne
+            (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+            (i32.load8_u (i32.add (local.get $lit_ptr) (local.get $i))))
+          (then (return (i32.const 0))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop)))
+    i32.const 1)
 
   (func $m169is_space (param $b i32) (result i32)
     local.get $b
@@ -718,6 +720,16 @@
     call $is_eol
     i32.eqz
     i32.and)
+
+  (func $m169is_upper (param $b i32) (result i32)
+    (i32.and
+      (i32.ge_u (local.get $b) (i32.const 65))
+      (i32.le_u (local.get $b) (i32.const 90))))
+
+  (func $m169is_lower (param $b i32) (result i32)
+    (i32.and
+      (i32.ge_u (local.get $b) (i32.const 97))
+      (i32.le_u (local.get $b) (i32.const 122))))
 
 
   (func $is_b64_data (param $b i32) (result i32)
@@ -1072,6 +1084,12 @@
     (i32.or
       (i32.eq (local.get $c) (i32.const 32))
       (i32.eq (local.get $c) (i32.const 9))))
+
+  (func $m76byte (param $ptr i32) (param $off i32) (result i32)
+    local.get $ptr
+    local.get $off
+    i32.add
+    i32.load8_u)
 
   (func $is_next_lf (param $in_ptr i32) (param $in_len i32) (param $i i32) (result i32)
     (if (i32.ge_u (i32.add (local.get $i) (i32.const 1)) (local.get $in_len))
@@ -1447,6 +1465,12 @@
       (i32.and (i32.eq (call $m28lower (i32.load8_u (i32.add (local.get $ptr) (i32.sub (local.get $len) (i32.const 2))))) (local.get $c))
                (i32.eq (call $m28lower (i32.load8_u (i32.add (local.get $ptr) (i32.sub (local.get $len) (i32.const 1))))) (local.get $d)))))
 
+  (func $m28lower (param $b i32) (result i32)
+    (if (result i32)
+      (i32.and (i32.ge_u (local.get $b) (i32.const 65)) (i32.le_u (local.get $b) (i32.const 90)))
+      (then (i32.add (local.get $b) (i32.const 32)))
+      (else (local.get $b))))
+
   (func $suffix5 (param $ptr i32) (param $len i32) (param $a i32) (param $b i32) (param $c i32) (param $d i32) (param $e i32) (result i32)
     (if (i32.lt_u (local.get $len) (i32.const 5)) (then (return (i32.const 0))))
     (i32.and
@@ -1548,4 +1572,3 @@
   (data (i32.const 48) "pendingreadyprocessinginvalidexpired")
   (data (i32.const 96) "http-01dns-01tls-alpn-01")
   (data (i32.const 128) "letsencryptletsencryptstaging")
-)

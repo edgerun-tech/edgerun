@@ -1,4 +1,4 @@
-  (func $er_ui_validate (export "er_ui_validate") (param $base i32) (param $len i32) (result i32)
+(func $er_ui_validate (export "er_ui_validate") (param $base i32) (param $len i32) (result i32)
     (local $node_count i32)
     (local $root_count i32)
     (local $axis i32)

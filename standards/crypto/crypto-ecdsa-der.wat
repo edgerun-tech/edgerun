@@ -1,4 +1,3 @@
-
 (global $last_r_len (mut i32) (i32.const 0))
   (global $last_s_len (mut i32) (i32.const 0))
 

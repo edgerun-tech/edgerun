@@ -6,7 +6,7 @@
   ;; - net kind: unknown=0 ethernet=1 loopback=2 wireless=3 bridge=4 vlan=5 tunnel=6 virtual=7
   ;; - input kind: other=0 touch=1 pen=2 pointer=3 gamepad=4 switch=5 keyboard=6
 
-  (import "math" "min" (func $m208min (param i32 i32) (result i32)))
+  
 
   (func $m208bool (param $x i32) (result i32)
     local.get $x

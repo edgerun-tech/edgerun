@@ -1,6 +1,3 @@
-(module
-
-  (memory (export "memory") 1)
 (func $m68is_supported_tag (param $tag i32) (result i32)
     (if (i32.and (i32.ge_u (local.get $tag) (i32.const 64)) (i32.le_u (local.get $tag) (i32.const 126)))
       (then (return (i32.const 1))))
@@ -987,5 +984,3 @@
           (i64.shl (i64.extend_i32_u (local.get $tag)) (i64.const 32)))
         (i64.shl (i64.extend_i32_u (local.get $consumed)) (i64.const 16)))
       (i64.const 0)))
-
-)

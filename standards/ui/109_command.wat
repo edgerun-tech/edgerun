@@ -1,4 +1,4 @@
-  (func (export "er_ui_command_radius") (result f32) f32.const 8)
+(func (export "er_ui_command_radius") (result f32) f32.const 8)
   (func (export "er_ui_command_input_h") (result f32) f32.const 36)
   (func (export "er_ui_command_icon_x") (result f32) f32.const 8)
   (func (export "er_ui_command_icon_size") (result f32) f32.const 14)

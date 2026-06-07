@@ -1,4 +1,4 @@
-  (func $finite_f32 (param $value f32) (result i32)
+(func $finite_f32 (param $value f32) (result i32)
     local.get $value
     i32.reinterpret_f32
     i32.const 0x7f800000

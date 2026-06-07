@@ -1,4 +1,4 @@
-  (func $er_ui_font_ascent (export "er_ui_font_ascent") (param $size f32) (result f32)
+(func $er_ui_font_ascent (export "er_ui_font_ascent") (param $size f32) (result f32)
     local.get $size
     f32.const 0.8
     f32.mul)

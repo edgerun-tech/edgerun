@@ -1,39 +1,29 @@
 #!/usr/bin/env bun
 /**
- * EdgeRun Build System
+ * EdgeRun Build System — ZERO post-processing.
  *
- * Concatenates source fragments into `edgerun.wat`, then compiles to `edgerun.wasm`
- * using `wat2wasm`. Optionally produces a stripped binary via `wasm-tools strip`.
- *
- * Usage:
- *   bun tools/build_wat.mjs                  # build edgerun.wat + edgerun.wasm
- *   bun tools/build_wat.mjs --watch           # rebuild on file changes
- *   bun tools/build_wat.mjs --out out.wat     # custom WAT output path
- *   bun tools/build_wat.mjs --no-wasm         # skip WASM compilation
- *   bun tools/build_wat.mjs --no-strip        # skip stripped binary
- *
- * Source order is defined by the MANIFEST array below.
- * Each entry can be:
- *   - A filename string (fragment, no (module) wrapper expected)
- *   - An object {file, strip_module, strip_memory, strip_imports}
- *
- * Files that end with "-stage.wat" are automatically treated as stage wrappers
- * and get their (import)s converted to local references when the target is in-module.
+ * Concatenates source fragments in order, wraps in (module), compiles to WASM.
+ * No stripping, no renaming, no deduplication, no anonymous export fixing.
+ * Source files must already be clean fragments (no module wrappers, no
+ * internal imports, no memory declarations — those live in runtime/).
  */
 
-import { readFileSync, writeFileSync, existsSync, statSync, watch } from 'fs';
-import { resolve, dirname, basename } from 'path';
+import { readFileSync, writeFileSync, existsSync, statSync } from 'fs';
+import { resolve } from 'path';
 import { execSync } from 'child_process';
 
 const ROOT = resolve(import.meta.dirname, '..');
 
-// ── Manifest: dependency-order fragment list ──────────────────────
-// Order matters: globals before functions, definitions before references.
+// ── Manifest: just file paths, in dependency order ──
+// Files are concatenated as-is. module-header.wat provides (module + host imports.
 const MANIFEST = [
+  // ── Header: opens (module + host imports ──
+  'runtime/module-header.wat',
+
   // ── Layer 0: Runtime foundation ──
   'runtime/memory.wat',           // canonical (memory) + LUT data
   'runtime/memory-map.wat',       // address space constants
-  {file: 'runtime/edgerun-core.wat', strip_funcs: ['\\$read_u16_be', '\\$read_u24_be', '\\$read_u32_be']},  // char helpers, pack, memcpy, status, syscalls
+  'runtime/edgerun-core.wat',     // char helpers, pack, memcpy, status, syscalls
   'runtime/math-utils.wat',       // min, max, clamp, etc.
 
   // ── Layer 1: Pipeline transport ──
@@ -46,16 +36,28 @@ const MANIFEST = [
   'pipeline/frame-core.wat',
   'pipeline/frame-pacer.wat',
   'pipeline/mux-core.wat',
-  // wasm-exec-stage.wat — needs $load/$load_wat/$call stubs (deleted from interpreter split)
-  // 'pipeline/wasm-exec-stage.wat',
+
+  // Queue/Buffer/CDC stages (slots 48-50)
+  'pipeline/queue-stage.wat',
+  'pipeline/buffer-stage.wat',
+  'pipeline/cdc-stage.wat',
 
   // ── Layer 4: Interpreter / Compiler ──
-  'compiler/interpreter-core.wat', // interpreter engine
-  'compiler/interpreter.wat',      // WAT parser + WAT→WASM compiler + exports
+  'compiler/interpreter-core.wat',
+  'compiler/interpreter.wat',
+
+  // ── Layer 5: Edgerun compiler (IR → graph → resolve → lower → privacy) ──
+  'lang/edgerun-ir-core.wat',
+  'lang/edgerun-parse.wat',
+  'lang/edgerun-resolve.wat',
+  'lang/edgerun-lower.wat',
+  'lang/edgerun-privacy.wat',
+
+  // ── Layer 5a: Edgerun pipeline stages (slots 46-47) ──
+  'pipeline/edgerun-parse-stage.wat',
+  'pipeline/edgerun-exec-stage.wat',
 
   // ── Layer 6: JIT Compiler (x86-64 backend) ──
-  // templates-x86-64.wat, simd-x86-64.wat, dispatch.wat excluded —
-  // they reference ~100+ $emit_* functions that don't exist yet (JIT is incomplete)
   'compiler/base-x86-64.wat',
   'compiler/emit-x86-64.wat',
 
@@ -74,20 +76,10 @@ const MANIFEST = [
   'crypto/crypto-ecdsa-der.wat',
   'crypto/crypto-rsa-pkcs1.wat',
   'crypto/crypto-hmac-hkdf.wat',
-  // AES files: data at offset 0 (S-box) — no LUT conflict, zero-page tolerated
-  {file: 'crypto/crypto-aes128-gcm.wat', rename_map: {'$m54memcpy': '$memcpy'}},
-  {file: 'crypto/crypto-aes-ctr.wat', rename_map: {
-    '$m54memcpy': '$memcpy',
-    '$sub_word': '$ctr_sub_word',
-    '$rot_word': '$ctr_rot_word',
-    '$aes128_encrypt_block': '$ctr_aes128_encrypt_block',
-    '$store_be32': '$gcm_store_be32',
-    '$load_be32': '$gcm_load_be32',
-    '$store_be64': '$gcm_store_be64'
-  }},
-  {file: 'crypto/crypto-hmac-sha256.wat', rename_map: {'$m59memcpy': '$memcpy'}},
-  {file: 'crypto/crypto-x25519-scalar.wat', rename_map: {'$m64memcpy': '$memcpy'}},
-  // crypto-aes-block.wat deferred (data at 0x2000 conflicts with lower_case LUT)
+  'crypto/crypto-aes128-gcm.wat',
+  'crypto/crypto-aes-ctr.wat',
+  'crypto/crypto-hmac-sha256.wat',
+  'crypto/crypto-x25519-scalar.wat',
 
   // ── Layer 7a: Pipeline crypto stages ──
   'pipeline/sha256-stage.wat',
@@ -102,64 +94,50 @@ const MANIFEST = [
   'pipeline/inet-checksum-stage.wat',
   'pipeline/crc32-bzip-stage.wat',
 
-  // ── Layer 8: Protocol parsers (merged families) ──
-  {file: 'protocol/binary-core.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/cache.wat', strip_module: true, strip_memory: true, rename_map: {'$read_u8': '$cache_read_u8'}},
-  {file: 'protocol/der.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/dhcp.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/dns.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$is_label_byte']},
-  {file: 'protocol/hpack.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/http.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$is_tchar', '\\$prefix_encode']},
-  {file: 'protocol/ipv4-net.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/packet-core.wat', strip_module: true, strip_memory: true, rename_map: {
-    '$memcpy': '$pc_memcpy',
-    '$memset': '$pc_memset',
-    '$store_be32': '$pc_store_be32',
-    '$load_be32': '$pc_load_be32',
-    '$mix': '$pc_mix',
-    '$read_u8': '$pc_read_u8',
-  }},
-  {file: 'protocol/quic.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/sfx-tables.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/tls.wat', strip_module: true, strip_memory: true},
-  {file: 'protocol/ws.wat', strip_module: true, strip_memory: true},
+  // ── Layer 8: Protocol parsers ──
+  'protocol/binary-core.wat',
+  'protocol/cache.wat',
+  'protocol/der.wat',
+  'protocol/dhcp.wat',
+  'protocol/dns.wat',
+  'protocol/hpack.wat',
+  'protocol/http.wat',
+  'protocol/ipv4-net.wat',
+  'protocol/packet-core.wat',
+  'protocol/quic.wat',
+  'protocol/sfx-tables.wat',
+  'protocol/tls.wat',
+  'protocol/ws.wat',
 
-  // ── Layer 9: Codec (merged families) ──
-  {file: 'codec/base64.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$adler32_update', '\\$adler32_update_byte', '\\$adler32_update_vec', '\\$crc32_update_byte', '\\$bounds_check']},
-  {file: 'codec/json.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/compress.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$bounds_check']},
-  {file: 'codec/text.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/serialize.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/binary.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/string-url.wat', strip_module: true, strip_memory: true},
-  {file: 'codec/media.wat', strip_module: true, strip_memory: true, strip_funcs: ['\\$reverse_bits']},
-  {file: 'codec/model.wat', strip_module: true, strip_memory: true, rename_map: {'$read_u8': '$model_read_u8'}},
+  // ── Layer 9: Codec ──
+  'codec/checksum-core.wat',
+  'codec/base64.wat',
+  'codec/json.wat',
+  'codec/compress.wat',
+  'codec/text.wat',
+  'codec/serialize.wat',
+  'codec/binary.wat',
+  'codec/string-url.wat',
+  'codec/media.wat',
+  'codec/model.wat',
   'pipeline/base64-encode-stage.wat',
   'pipeline/base64-decode-stage.wat',
 
   // ── Layer 10: UI Framework ──
-  {file: 'ui/ui_framework.wat', strip_funcs: ['\\$min_f32', '\\$max_f32']},  // auto-generated combined fragment (28K lines)
+  'ui/ui_framework.wat',
 
-  // ── Layer 11: System ──
-  // (TODO: convert system/*.wat to fragments)
-
-  // ── Layer 12: App (merged families) ──
+  // ── Layer 12: App ──
   'app/repo-dashboard.wat',
-  {file: 'app/oauth.wat', strip_module: true, strip_memory: true},
-  {file: 'app/oci.wat', strip_module: true, strip_memory: true},
-  {file: 'app/codex.wat', strip_module: true, strip_memory: true},
-  {file: 'app/wallet.wat', strip_module: true, strip_memory: true},
-  {file: 'app/security.wat', strip_module: true, strip_memory: true},
-  {file: 'app/identity.wat', strip_module: true, strip_memory: true},
-  {file: 'app/net.wat', strip_module: true, strip_memory: true},
-  // app/platform.wat — UNBALANCED PARENS (depth=4), deferred fix
-  // {file: 'app/platform.wat', strip_module: true, strip_memory: true},
-  {file: 'app/core.wat', strip_module: true, strip_memory: true},
-  {file: 'app/ui.wat', strip_module: true, strip_memory: true},
-  {file: 'app/wayland.wat', strip_module: true, strip_memory: true},
-
-  // ── Layer 13: Device ──
-  // (TODO: convert device/*.wat to fragments)
+  'app/oauth.wat',
+  'app/oci.wat',
+  'app/codex.wat',
+  'app/wallet.wat',
+  'app/security.wat',
+  'app/identity.wat',
+  'app/net.wat',
+  'app/core.wat',
+  'app/ui.wat',
+  'app/wayland.wat',
 
   // ── Layer 14: Data ──
   'data/hex-core.wat',
@@ -179,355 +157,55 @@ const MANIFEST = [
   'data/terminal-state-core.wat',
   'data/uuid-util.wat',
 
-  // ── Layer 15: Net ──
-  // (TODO: convert net/*.wat to fragments)
-
-  // ── Layer 16: Tools ──
-  // (TODO: convert tools/*.wat to fragments)
-
-  // ── Layer 17: Stage Registry (must be last — elem entries reference all process_* functions) ──
+  // ── Layer 17: Stage Registry (last — elem entries reference process_* functions) ──
   'pipeline/stage-registry.wat',
+
+  // ── Footer: closes (module ──
+  'runtime/module-footer.wat',
 ];
 
-// ── Fragments that import from edgerun-core (will be auto-resolved) ──
-// Map: fragment file → list of imported names that should become local refs
-const IMPORT_MAP = {
-  'pipeline/pipe-core.wat':              ['min_u'],
-  'pipeline/wasm-interpreter.wat':       ['STATUS_OK'],
-  'compiler/interpreter-core.wat':       [],
-  // Crypto files importing from "edgerun"
-  'crypto/crypto-aes128-gcm.wat':        ['memcpy', 'memset'],
-  'crypto/crypto-aes-ctr.wat':           ['memcpy'],
-  'crypto/crypto-hmac-sha256.wat':       ['memcpy'],
-  'crypto/crypto-x25519-scalar.wat':     ['memcpy'],
-};
+function build() {
+  const outPath = resolve(ROOT, process.argv.find(a => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
+  const skipWasm = process.argv.includes('--no-wasm');
 
-// ── Globals defined canonically in runtime/ — strip from all other files ──
-// These regex patterns match global definitions that should only appear once.
-const CANONICAL_GLOBALS = [
-  /^\s*\(global\s+\$OK\b.*\n?/gm,
-  /^\s*\(global\s+\$LINUX_SYS_X64_\w+\s.*\n?/gm,
-  /^\s*\(global\s+\$LINUX_SYS_AARCH64_\w+\s.*\n?/gm,
-  /^\s*\(global\s+\$JIT_CACHE\b.*\n?/gm,
-  /^\s*\(global\s+\$JIT_CACHE_SIZE\b.*\n?/gm,
-  /^\s*\(global\s+\$ERR_UNSUP\b.*\n?/gm,
-];
+  console.log(`EdgeRun Build — ${new Date().toISOString()}`);
+  console.log(`Output: ${outPath}\n`);
 
-// ── Build ────────────────────────────────────────────────────────────
+  let body = '';
+  let count = 0;
 
-function stripModuleHeader(content) {
-  const match = content.match(/^\s*\(module\b/m);
-  if (!match) return content;
-  // Remove (module wrapper, keeping inner content
-  const start = match.index;
-  const hdrEnd = start + match[0].length;
-  let depth = 1; // inside module after removing (module
-  let inStr = false;
-  let i = hdrEnd;
-  while (i < content.length) {
-    const ch = content[i];
-    if (inStr) {
-      if (ch === '\\' && i + 1 < content.length) { i += 2; continue; }
-      if (ch === '"') inStr = false;
+  for (const filePath of MANIFEST) {
+    const fullPath = resolve(ROOT, filePath);
+    if (!existsSync(fullPath)) {
+      console.warn(`  ⚠  ${filePath} not found — skipping`);
+      continue;
+    }
+    const content = readFileSync(fullPath, 'utf-8');
+    body += `;; ── ${filePath} ──\n${content.trimEnd()}\n\n`;
+    count++;
+  }
+
+  writeFileSync(outPath, body, 'utf-8');
+  console.log(`✓ ${count} fragments → ${outPath} (${body.length} bytes)`);
+
+  if (!skipWasm) {
+    const wasmPath = outPath.replace(/\.wat$/, '.wasm');
+    console.log(`Compiling → ${wasmPath}...`);
+    const wasmTools = resolveTool('wasm-tools');
+    if (wasmTools) {
+      try {
+        execSync(`"${wasmTools}" parse "${outPath}" -o "${wasmPath}"`, { stdio: 'pipe' });
+        const wSize = statSync(wasmPath).size;
+        console.log(`  ✓ ${wasmPath} (${(wSize / 1024).toFixed(0)} KB)`);
+      } catch (e) {
+        console.error(`  ✗ wasm-tools parse failed: ${e.stderr?.slice(0, 500) || e.message}`);
+      }
     } else {
-      if (ch === ';' && i + 1 < content.length && content[i + 1] === ';') {
-        // line comment — skip to EOL
-        while (i < content.length && content[i] !== '\n') i++;
-        i++; continue;
-      }
-      if (ch === '"') inStr = true;
-      else if (ch === '(') depth++;
-      else if (ch === ')') {
-        depth--;
-        if (depth === 0) break; // matching close of (module
-      }
-    }
-    i++;
-  }
-  if (depth !== 0) return content; // unbalanced — keep as-is to avoid breaking outer module
-  return content.slice(hdrEnd, i);
-}
-
-function stripMemory(content) {
-  return content.replace(/^\s*\(memory\s+\(export\s+"memory"\)\s+\d+\)\s*/m, '');
-}
-
-function stripImport(content, file) {
-  // Strip ALL imports from non-host modules — they resolve internally in the merge build.
-  // When the local import alias differs from the canonical name, rename all references.
-  // Uses balanced-paren matching, properly skipping comments and strings.
-  let result = '';
-  let i = 0;
-  const renames = {};  // localName → canonicalName
-  while (i < content.length) {
-    // Skip line comments
-    if (content[i] === ';' && i + 1 < content.length && content[i + 1] === ';') {
-      const end = content.indexOf('\n', i);
-      result += content.slice(i, end !== -1 ? end + 1 : content.length);
-      i = end !== -1 ? end + 1 : content.length;
-      continue;
-    }
-    // Skip string literals
-    if (content[i] === '"') {
-      let end = i + 1;
-      while (end < content.length) {
-        if (content[end] === '"') break;
-        if (content[end] === '\\') end++;
-        end++;
-      }
-      result += content.slice(i, end + 1);
-      i = end + 1;
-      continue;
-    }
-    // Look for imports starting from current position
-    const idx = content.indexOf('(import "', i);
-    if (idx === -1) { result += content.slice(i); break; }
-    // Check if the (import " is inside a ;; comment on this line
-    // Look for a ;; sequence between the last newline and idx
-    const lastNewline = Math.max(content.lastIndexOf('\n', idx), i - 1);
-    const beforeImport = content.slice(lastNewline + 1, idx);
-    if (beforeImport.includes(';;')) {
-      // (import " is inside a comment — skip to the end of this line
-      const nlIdx = content.indexOf('\n', idx);
-      result += content.slice(i, nlIdx !== -1 ? nlIdx + 1 : content.length);
-      i = nlIdx !== -1 ? nlIdx + 1 : content.length;
-      continue;
-    }
-    result += content.slice(i, idx);
-    // Find matching close paren
-    let depth = 1;
-    let j = idx + 1;
-    while (j < content.length) {
-      if (content[j] === '(' && !(content[j+1] === ';')) depth++;
-      if (content[j] === ')') {
-        depth--;
-        if (depth === 0) break;
-      }
-      j++;
-    }
-    if (depth !== 0) { result += content.slice(idx); break; }
-    // Extract module name
-    const importStr = content.slice(idx, j + 1);
-    const modMatch = importStr.match(/\(import\s+"([^"]+)"/);
-    const modName = modMatch ? modMatch[1] : '';
-    if (modName === 'host' || modName === 'wasi_snapshot_preview1') {
-      result += importStr;
-    } else {
-      // Track alias renames: when local name differs from canonical export name
-      const aliasMatch = importStr.match(/\(import\s+"([^"]+)"\s+"(\w+)"\s+\((?:func|global|memory|table)\s+\$(\w+)/);
-      if (aliasMatch) {
-        const [, mod, expName, localName] = aliasMatch;
-        if (localName !== expName) {
-          renames[localName] = expName;
-        }
-      }
-    }
-    i = j + 1;
-    while (i < content.length && (content[i] === ' ' || content[i] === '\n' || content[i] === '\r' || content[i] === '\t')) i++;
-  }
-  content = result;
-
-  // Apply renames — replace all references to local alias with canonical name.
-  // Uses word-boundary (\b) to avoid mangling longer identifiers that happen
-  // to share a prefix (e.g., $OK should not match $OK_FOO).
-  for (const [local, canonical] of Object.entries(renames)) {
-    const escaped = local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp('\\$' + escaped + '\\b', 'g');
-    content = content.replace(regex, '$' + canonical);
-  }
-
-  // Also strip per-file explicit non-edgerun imports if set
-  const imports = IMPORT_MAP[file];
-  if (!imports) return content;
-  for (const name of imports) {
-    const regex = new RegExp(
-      `\\s*\\(import\\s+"[^"]*"\\s+"${name}"\\s+\\(func\\s+\\$[^)]+\\)\\)\\s*`,
-      'g'
-    );
-    content = content.replace(regex, '');
-  }
-  return content;
-}
-
-function stripFuncs(content, funcNames) {
-  for (const name of funcNames) {
-    // Strip from (func $name... to matching closing paren
-    const startRegex = new RegExp(
-      `\\(func\\s+${name}(?:\\s+\\(export\\s+"[^"]*"\\))?`,
-      'g'
-    );
-    let match;
-    while ((match = startRegex.exec(content)) !== null) {
-      const start = match.index;
-      let depth = 0;
-      let i = start;
-      while (i < content.length) {
-        if (content[i] === '(') depth++;
-        if (content[i] === ')') {
-          depth--;
-          if (depth === 0) break;
-        }
-        i++;
-      }
-      const end = i + 1;
-      content = content.slice(0, start) + content.slice(end);
-      startRegex.lastIndex = start; // re-scan from replacement point
-    }
-  }
-  return content;
-}
-
-function deduplicateDefinitions(content) {
-  // Scans for duplicate (func $name), (global $name), (table $name) definitions
-  // and removes all but the first occurrence. Handles balanced parens, strings,
-  // and comments. Returns deduplicated content.
-  const seen = new Set();
-  let result = '';
-  let i = 0;
-  let skipped = 0;
-  while (i < content.length) {
-    // Line comments
-    if (content[i] === ';' && content[i + 1] === ';') {
-      const nl = content.indexOf('\n', i);
-      result += content.slice(i, nl !== -1 ? nl + 1 : content.length);
-      i = nl !== -1 ? nl + 1 : content.length;
-      continue;
-    }
-    // Block comments
-    if (content[i] === '(' && content[i + 1] === ';') {
-      const end = content.indexOf(';)', i + 2);
-      result += content.slice(i, end !== -1 ? end + 2 : content.length);
-      i = end !== -1 ? end + 2 : content.length;
-      continue;
-    }
-    // Strings
-    if (content[i] === '"') {
-      let end = i + 1;
-      while (end < content.length) {
-        if (content[end] === '"') break;
-        if (content[end] === '\\') end++;
-        end++;
-      }
-      result += content.slice(i, end + 1);
-      i = end + 1;
-      continue;
-    }
-    // Top-level definitions with $name — skip if seen before
-    if (content[i] === '(') {
-      const match = content.slice(i + 1).match(/^(func|global|table|type|data)\s+\$(\w+)/);
-      if (match) {
-        const key = match[1] + ':' + match[2];
-        if (seen.has(key)) {
-          // Skip to matching close paren, handling strings and comments
-          let depth = 1;
-          let j = i + 1;
-          while (j < content.length && depth > 0) {
-            // Skip block comments
-            if (content[j] === '(' && content[j + 1] === ';') {
-              const end = content.indexOf(';)', j + 2);
-              j = end !== -1 ? end + 2 : content.length;
-              continue;
-            }
-            // Skip line comments
-            if (content[j] === ';' && content[j + 1] === ';') {
-              const nl = content.indexOf('\n', j);
-              j = nl !== -1 ? nl + 1 : content.length;
-              continue;
-            }
-            // Skip strings
-            if (content[j] === '"') {
-              j++;
-              while (j < content.length) {
-                if (content[j] === '"') break;
-                if (content[j] === '\\') j++;
-                j++;
-              }
-              j++;
-              continue;
-            }
-            if (content[j] === '(') depth++;
-            if (content[j] === ')') depth--;
-            j++;
-          }
-          skipped++;
-          i = j;
-          continue;
-        }
-        seen.add(key);
-      }
-    }
-    result += content[i];
-    i++;
-  }
-  if (skipped > 0) console.log(`  Deduplicated ${skipped} definitions`);
-  return result;
-}
-
-function stripCanonicalGlobals(content, filePath) {
-  // Only strip from non-runtime files
-  if (filePath.startsWith('runtime/')) return content;
-  let stripped = 0;
-  for (const pattern of CANONICAL_GLOBALS) {
-    const before = content.length;
-    content = content.replace(pattern, '');
-    stripped += before - content.length;
-  }
-  if (stripped > 0) {
-    console.log(`  ${filePath}: stripped ${stripped} bytes (canonical globals)`);
-  }
-  return content;
-}
-
-function processFile(filePath, opts = {}) {
-  const fullPath = resolve(ROOT, filePath);
-  if (!existsSync(fullPath)) {
-    console.warn(`⚠  WARNING: ${filePath} not found — skipping`);
-    return '';
-  }
-
-  let content = readFileSync(fullPath, 'utf-8');
-  const originalLength = content.length;
-
-  // Strip (module ...) header if this is a standalone module being converted
-  if (opts.strip_module !== false && basename(filePath) !== 'edgerun.wat') {
-    content = stripModuleHeader(content);
-  }
-
-  // Strip (memory ...) if not the canonical source
-  if (opts.strip_memory !== false && filePath !== 'runtime/memory.wat') {
-    content = stripMemory(content);
-  }
-
-  // Strip imports that resolve to local functions
-  content = stripImport(content, filePath);
-
-  // Strip canonical globals (defined in runtime/) from non-runtime files
-  content = stripCanonicalGlobals(content, filePath);
-
-  // Strip ALL global definitions from this file (used when file is redundant with another)
-  if (opts.strip_all_globals) {
-    content = content.replace(/^\s*\(global\s+\$\w+(?:\s+\(export\s+"[^"]*"\))?\s+(?:i32|\(mut\s+i32\))\s+\([^)]*\)\s*\).*$/gm, '');
-  }
-
-  // Strip specific function definitions by name (to resolve conflicts)
-  if (opts.strip_funcs && opts.strip_funcs.length > 0) {
-    content = stripFuncs(content, opts.strip_funcs);
-  }
-
-  // Rename local identifiers (used when imports use different local names)
-  if (opts.rename_map) {
-    for (const [from, to] of Object.entries(opts.rename_map)) {
-      content = content.split(from).join(to);
+      console.warn('  ⚠  wasm-tools not found — skipping WASM compilation');
     }
   }
 
-  const stripped = originalLength - content.length;
-  if (stripped > 0) {
-    console.log(`  ${filePath}: stripped ${stripped} bytes (module/memory/imports)`);
-  }
-
-  // Add file marker comment
-  return `;; ── ${filePath} ──\n${content.trim()}\n\n`;
+  return true;
 }
 
 function resolveTool(name) {
@@ -537,132 +215,12 @@ function resolveTool(name) {
   } catch { return null; }
 }
 
-function compileWasm(watPath, wasmPath) {
-  const wat2wasm = resolveTool('wat2wasm');
-  if (!wat2wasm) {
-    console.warn('  ⚠  wat2wasm not found — skipping WASM compilation');
-    return false;
-  }
-  try {
-    execSync(`"${wat2wasm}" "${watPath}" -o "${wasmPath}"`, { stdio: 'pipe' });
-    return true;
-  } catch (e) {
-    console.error(`  ✗ wat2wasm failed: ${e.stderr?.slice(0, 200) || e.message}`);
-    return false;
-  }
-}
-
-function stripWasm(wasmPath, strippedPath) {
-  const wasmTools = resolveTool('wasm-tools');
-  if (!wasmTools) {
-    console.warn('  ⚠  wasm-tools not found — skipping stripped binary');
-    return false;
-  }
-  try {
-    execSync(`"${wasmTools}" strip -o "${strippedPath}" "${wasmPath}"`, { stdio: 'pipe' });
-    return true;
-  } catch (e) {
-    console.warn(`  ⚠  wasm-tools strip failed: ${e.stderr?.slice(0, 200) || e.message}`);
-    return false;
-  }
-}
-
-function build() {
-  const outPath = resolve(ROOT, process.argv.find(a => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
-  const skipWasm = process.argv.includes('--no-wasm');
-  const skipStrip = process.argv.includes('--no-strip');
-
-  console.log(`\nEdgeRun Build — ${new Date().toISOString()}`);
-  console.log(`Output: ${outPath}\n`);
-  console.log('Processing fragments:');
-
-  let body = '';
-  let count = 0;
-
-  for (const entry of MANIFEST) {
-    if (typeof entry === 'string') {
-      body += processFile(entry, {});
-      count++;
-    } else if (entry.file) {
-      body += processFile(entry.file, entry);
-      count++;
-    }
-  }
-
-  // Extract all remaining imports to top (must precede functions in WASM)
-  // Deduplicate identical imports (same module + name + type signature)
-  let imports = '';
-  let cleaned = '';
-  let seenImports = new Set();
-  let i = 0;
-  while (i < body.length) {
-    const idx = body.indexOf('(import "', i);
-    if (idx === -1) { cleaned += body.slice(i); break; }
-    cleaned += body.slice(i, idx);
-    // Find matching close paren
-    let depth = 1;
-    let j = idx + 1;
-    while (j < body.length) {
-      if (body[j] === '(') depth++;
-      if (body[j] === ')') {
-        depth--;
-        if (depth === 0) break;
-      }
-      j++;
-    }
-    if (depth !== 0) { cleaned += body.slice(idx); break; }
-    const importDecl = body.slice(idx, j + 1);
-    // Deduplicate: skip if we've seen this exact import before
-    if (!seenImports.has(importDecl)) {
-      seenImports.add(importDecl);
-      imports += importDecl + '\n';
-    }
-    i = j + 1;
-  }
-
-  // Deduplicate function/global/table definitions across fragments
-  cleaned = deduplicateDefinitions(cleaned);
-
-  // Wrap in module
-  const moduleDecl = '(module\n';
-  const moduleClose = '\n)\n';
-
-  const final = moduleDecl + imports + '\n' + cleaned + moduleClose;
-
-  writeFileSync(outPath, final, 'utf-8');
-  console.log(`\n✓ Written ${count} fragments → ${outPath} (${final.length} bytes)`);
-
-  // Compile WAT → WASM
-  if (!skipWasm) {
-    const wasmPath = outPath.replace(/\.wat$/, '.wasm');
-    console.log(`\nCompiling → ${wasmPath}...`);
-    if (compileWasm(outPath, wasmPath)) {
-      const wSize = statSync(wasmPath).size;
-      console.log(`  ✓ ${wasmPath} (${(wSize / 1024).toFixed(0)} KB)`);
-
-      // Strip
-      if (!skipStrip) {
-        const strippedPath = wasmPath.replace(/\.wasm$/, '-stripped.wasm');
-        console.log(`  Stripping → ${strippedPath}...`);
-        if (stripWasm(wasmPath, strippedPath)) {
-          const sSize = statSync(strippedPath).size;
-          console.log(`  ✓ ${strippedPath} (${(sSize / 1024).toFixed(0)} KB)`);
-        }
-      }
-    }
-  }
-
-  return true;
-}
-
 // ── Watch mode ──
 function watchMode() {
+  const { watch } = require('fs');
   const sourceDirs = ['runtime', 'compiler', 'pipeline', 'crypto', 'protocol', 'codec',
-                       'ui', 'app', 'data', 'device', 'net', 'system', 'tools'];
-
-  console.log(`\n👀 Watching for changes in ${sourceDirs.join(', ')}...\n`);
-
-  // Debounce: collect change events, rebuild after 200ms of quiet
+                       'ui', 'app', 'data', 'device', 'net', 'system', 'tools', 'lang'];
+  console.log(`Watching for changes in ${sourceDirs.join(', ')}...\n`);
   let timer = null;
   const onChange = () => {
     if (timer) clearTimeout(timer);
@@ -670,33 +228,19 @@ function watchMode() {
       try { build(); } catch (e) { console.error(`Build error: ${e.message}`); }
     }, 200);
   };
-
   for (const dir of sourceDirs) {
     const dirPath = resolve(ROOT, dir);
     if (!existsSync(dirPath)) continue;
     try {
       watch(dirPath, { recursive: true }, (event, filename) => {
-        if (filename?.endsWith('.wat')) {
-          console.log(`  Change: ${dir}/${filename}`);
-          onChange();
-        }
+        if (filename?.endsWith('.wat')) onChange();
       });
-    } catch (e) {
-      console.warn(`  ⚠  Cannot watch ${dir}: ${e.message}`);
-    }
+    } catch {}
   }
-
-  // Also watch the MANIFEST file (this script) for changes
-  watch(resolve(ROOT, 'tools/build_wat.mjs'), () => {
-    console.log('  Change: tools/build_wat.mjs');
-    onChange();
-  });
-
-  // Initial build
+  watch(resolve(ROOT, 'tools/build_wat.mjs'), () => onChange());
   build();
 }
 
-// ── Main ──
 if (process.argv.includes('--watch')) {
   watchMode();
 } else {

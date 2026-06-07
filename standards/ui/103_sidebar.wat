@@ -1,4 +1,4 @@
-  (func (export "er_ui_sidebar_rail_w") (result f32) f32.const 62)
+(func (export "er_ui_sidebar_rail_w") (result f32) f32.const 62)
   (func (export "er_ui_sidebar_content_gap") (result f32) f32.const 10)
   (func (export "er_ui_sidebar_radius") (result f32) f32.const 8)
   (func (export "er_ui_sidebar_trigger_x") (result f32) f32.const 17)

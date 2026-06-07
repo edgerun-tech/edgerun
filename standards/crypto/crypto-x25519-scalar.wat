@@ -1,6 +1,6 @@
-  ;; X25519 scalar multiplication (radix-2^25.5, 10 limbs).
+;; X25519 scalar multiplication (radix-2^25.5, 10 limbs).
   ;; Ported from edgerun_crypto_curve25519.inc — self-contained.
-  (import "edgerun" "memcpy" (func $m64memcpy (param i32 i32 i32)))
+  
   ;; Scratch: 8192 = product (19×i64), 8448+ = temp fe (80 bytes each)
   ;; A=8448 AA=8528 B=8608 BB=8688 E=8768 C=8848 D=8928 DA=9008
   ;; CB=9088 T0=9168 T1=9248 X1=9328 X2=9408 Z2=9488 X3=9568 Z3=9648
@@ -571,7 +571,7 @@
     i32.const 9840 local.set $tmp
 
     ;; Copy scalar and clamp
-    local.get $sc local.get $scalar i32.const 32 call $m64memcpy
+    local.get $sc local.get $scalar i32.const 32 call $memcpy
     local.get $sc local.get $sc i32.load8_u i32.const 248 i32.and i32.store8
     local.get $sc i32.const 31 i32.add
     local.get $sc i32.const 31 i32.add i32.load8_u i32.const 127 i32.and i32.const 64 i32.or
@@ -636,4 +636,3 @@
     local.get $out local.get $tmp call $fe_tobytes
 
     i32.const 0)
-

@@ -1,5 +1,3 @@
-  (import "edgerun" "to_lower" (func $m195lower (param i32) (result i32)))
-
 ;; Captures the portable meaning from edgerun-wasm-bindgen and its macro-support:
   ;; ABI primitive packing, descriptor wrappers, closure ownership, attribute parsing,
   ;; AST import/export classification, and custom-section encoding rules.

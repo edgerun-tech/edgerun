@@ -1,4 +1,4 @@
-  ;; EdgeRun Repo Dashboard — production UI component tree using er_ui_writer_* API
+;; EdgeRun Repo Dashboard — production UI component tree using er_ui_writer_* API
   ;;
   ;; Builds a dashboard UI tree with:
   ;;   1. Summary card (stats: files, lines, modules, stages, tests, build %)
@@ -107,7 +107,7 @@
     (local.get $dst))
 
   ;; ── dashboard_render: build UI tree, render to commands, return count ──
-  (func (export "dashboard_render") (result i32)
+  (func $dashboard_render (export "dashboard_render") (result i32)
     (local $p i32) (local $tree_len i32) (local $ok i32) (local $cmd_count i32)
     (local $node i32) (local $parent i32)
     (local $meta i32) (local $mod_off i32) (local $stage_off i32)

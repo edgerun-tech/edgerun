@@ -1,6 +1,4 @@
-
-
-  (func $m175emit
+(func $m175emit
     (param $out i32) (param $cap i32) (param $count i32)
     (param $kind i32) (param $start i32) (param $len i32)
     (param $param_start i32) (param $param_len i32)

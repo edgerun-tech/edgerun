@@ -1,4 +1,4 @@
-  (func $font_write_command (param $out i32) (param $cap i32) (param $count i32) (param $src i32) (result i32)
+(func $font_write_command (param $out i32) (param $cap i32) (param $count i32) (param $src i32) (result i32)
     (local $dst i32)
     local.get $count
     i32.const 1

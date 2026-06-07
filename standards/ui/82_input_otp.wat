@@ -1,4 +1,4 @@
-  (func (export "er_ui_input_otp_slot_count") (result i32) i32.const 6)
+(func (export "er_ui_input_otp_slot_count") (result i32) i32.const 6)
   (func (export "er_ui_input_otp_slot_size") (result f32) f32.const 36)
   (func (export "er_ui_input_otp_slot_gap") (result f32) f32.const 0)
   (func (export "er_ui_input_otp_text_padding") (result f32) f32.const 8)

@@ -1,6 +1,4 @@
-
-
-  (func $store_record
+(func $store_record
     (param $base i32) (param $idx i32)
     (param $event_ptr i32) (param $event_len i32)
     (param $data_ptr i32) (param $data_len i32)

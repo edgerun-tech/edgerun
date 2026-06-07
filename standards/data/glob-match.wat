@@ -1,4 +1,3 @@
-
 ;; Wildcard/glob pattern matching — case-insensitive.
   ;; Supports '*' (match any sequence) and '?' (match single char).
   ;;

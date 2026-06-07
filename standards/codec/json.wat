@@ -1,12 +1,4 @@
-(module
-  (import "edgerun" "load8_u" (func $m126byte_at (param i32 i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))
-  (memory (export "memory") 1)
-
-
-  (func $token_addr (param $token_ptr i32) (param $idx i32) (result i32)
+(func $token_addr (param $token_ptr i32) (param $idx i32) (result i32)
     local.get $token_ptr
     local.get $idx
     i32.const 20
@@ -34,6 +26,9 @@
     i32.const 12
     i32.add
     i32.load)
+
+  (func $m126byte_at (param $ptr i32) (param $offset i32) (result i32)
+    (i32.load8_u (i32.add (local.get $ptr) (local.get $offset))))
 
   (func $limit_digit (param $limit i32) (param $idx i32) (result i32)
     local.get $limit
@@ -2650,4 +2645,3 @@
 
   (data (i32.const 60000) "9223372036854775807")
   (data (i32.const 60032) "18446744073709551615")
-)

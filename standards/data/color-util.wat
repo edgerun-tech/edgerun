@@ -1,5 +1,3 @@
-(import "math" "clamp" (func $clamp (param i32 i32 i32) (result i32)))
-
 ;; Color utilities — hex/ARGB color parsing, formatting, lerp, alpha compositing.
   ;;
   ;; Exports:

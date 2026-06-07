@@ -1,4 +1,4 @@
-  (func (export "er_ui_drawer_trigger_y") (result f32) f32.const 4)
+(func (export "er_ui_drawer_trigger_y") (result f32) f32.const 4)
   (func (export "er_ui_drawer_trigger_w") (result f32) f32.const 62)
   (func (export "er_ui_drawer_trigger_h") (result f32) f32.const 30)
   (func (export "er_ui_drawer_trigger_padding") (result f32) f32.const 8)

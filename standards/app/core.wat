@@ -1,11 +1,3 @@
-(module
-  (import "edgerun" "to_lower" (func $m93ascii_lower (param i32) (result i32)))
-  (import "edgerun" "fnv1a_lower" (func $m93fnv_lower (param i32 i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (memory (export "memory") 1)
 ;; EdgeRun capability policy and remote capability semantics plundered from
   ;; edgerun-capabilities and edgerun-remote-capability.
 
@@ -848,7 +840,7 @@
     (param $ptr i32)
     (param $len i32)
     (result i32)
-    (call $provider_id_from_hash (call $m93fnv_lower (local.get $ptr) (local.get $len))))
+    (call $provider_id_from_hash (call $fnv1a_lower (local.get $ptr) (local.get $len))))
 
   (func (export "exchange_provider_features") (param $provider i32) (result i32)
     (if (i32.eq (local.get $provider) (i32.const 1))
@@ -869,8 +861,8 @@
     (local $status i32)
     (local.set $provider
       (call $provider_id_from_hash
-        (call $m93fnv_lower (local.get $provider_ptr) (local.get $provider_len))))
-    (local.set $status (call $m93fnv_lower (local.get $status_ptr) (local.get $status_len)))
+        (call $fnv1a_lower (local.get $provider_ptr) (local.get $provider_len))))
+    (local.set $status (call $fnv1a_lower (local.get $status_ptr) (local.get $status_len)))
 
     (if (i32.eq (local.get $provider) (i32.const 1))
       (then
@@ -964,7 +956,7 @@
     i32.const 0)
 
   (func (export "exchange_hash_lower") (param $ptr i32) (param $len i32) (result i32)
-    (call $m93fnv_lower (local.get $ptr) (local.get $len)))
+    (call $fnv1a_lower (local.get $ptr) (local.get $len)))
 
   (func (export "exchange_event_stream_type") (param $event_kind i32) (result i32)
     (if (i32.eq (local.get $event_kind) (i32.const 1)) (then (return (i32.const 1))))
@@ -1474,5 +1466,3 @@
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 29)) (i32.const 48))
     (i32.store8 (i32.add (local.get $out_ptr) (i32.const 30)) (i32.const 48))
     (call $pack (i32.const 0) (i32.const 31)))
-
-)

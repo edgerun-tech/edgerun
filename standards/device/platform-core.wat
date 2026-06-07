@@ -1,6 +1,6 @@
 ;; Bare-metal platform semantics plundered from edgerun-platform.
 
-  (import "math" "align_up" (func $align_up_internal (param i32 i32) (result i32)))
+  
 
   (func (export "platform_core_abi_version") (result i32) i32.const 1)
   (func (export "platform_max_cpus") (result i32) i32.const 64)

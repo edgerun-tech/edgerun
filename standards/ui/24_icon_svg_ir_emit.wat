@@ -1,4 +1,4 @@
-  (func $svg_write_op1 (param $out i32) (param $cap i32) (param $count i32) (param $op f32) (result i32)
+(func $svg_write_op1 (param $out i32) (param $cap i32) (param $count i32) (param $op f32) (result i32)
     local.get $count i32.const 1 i32.add i32.const 4 i32.mul local.get $cap i32.gt_u
     if i32.const -1 return end
     local.get $out local.get $count i32.const 4 i32.mul i32.add local.get $op f32.store

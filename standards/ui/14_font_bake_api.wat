@@ -1,4 +1,4 @@
-  (func (export "er_ui_font_glyph_render_alpha_baked") (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
+(func (export "er_ui_font_glyph_render_alpha_baked") (param $codepoint i32) (param $alpha i32) (param $stride i32) (param $cap_w i32) (param $cap_h i32) (param $size f32) (param $out_metrics i32) (result i32)
     (local $glyph i32)
     (local $x i32)
     (local $y i32)

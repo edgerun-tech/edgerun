@@ -1,11 +1,4 @@
-(module
-  (import "math" "min" (func $min2 (param i32 i32) (result i32)))
-  (import "math" "max" (func $max2 (param i32 i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (memory (export "memory") 1)
-  ;; ── Error codes ──
+;; ── Error codes ──
   (global $DEF_OK       i32 (i32.const 0))
   (global $DEF_ERR_BOUNDS   i32 (i32.const 1))
   (global $DEF_ERR_OPCODE   i32 (i32.const 2))
@@ -171,7 +164,7 @@
   ;; Internal reader helpers
   ;; ══════════════════════════════════════════════════════════════════
 
-  (func $read_u8 (param $ctx i32) (result i32)
+  (func $model_read_u8 (param $ctx i32) (result i32)
     (local $pos i32)
     local.get $ctx i32.load offset=0 local.tee $pos
     local.get $ctx i32.load offset=8
@@ -235,7 +228,7 @@
 
   (func $read_nullable_large_smart (param $ctx i32) (result i32)
     (local $b i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.tee $b
     i32.const 0x80 i32.and
     if
@@ -244,7 +237,7 @@
       return
     end
     local.get $b i32.const 8 i32.shl
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     i32.or
     local.tee $b
     i32.const 65535 i32.eq
@@ -315,11 +308,11 @@
   )
 
   (func (export "def_read_u8") (param $ctx i32) (result i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
   )
 
   (func (export "def_read_i8") (param $ctx i32) (result i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     i32.extend8_s
   )
 
@@ -356,7 +349,7 @@
   (func (export "def_read_varint") (param $ctx i32) (result i32)
     (local $val i32) (local $b i32)
     loop $continue
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $b
       i32.const 0x80 i32.and
       if
@@ -417,7 +410,7 @@
 
   (func $def_decode_params_skip (export "def_decode_params_skip") (param $ctx i32) (result i32)
     (local $count i32) (local $type i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.tee $count
     i32.eqz
     if global.get $DEF_OK return end
@@ -425,7 +418,7 @@
       loop $continue
         local.get $count i32.eqz
         if br $done end
-        local.get $ctx call $read_u8
+        local.get $ctx call $model_read_u8
         local.set $type
         local.get $ctx call $read_u24be
         drop
@@ -459,7 +452,7 @@
     local.get $vb i32.const 0 i32.store8 offset=4
     local.get $vb i32.const 0 i32.store8 offset=5
     loop $continue
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
       local.get $opcode
@@ -470,9 +463,9 @@
       end
       local.get $ctx call $read_u16be
       local.get $vb i32.store offset=0
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.get $vb i32.store8 offset=4
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.get $vb i32.store8 offset=5
       br $continue
     end
@@ -493,7 +486,7 @@
     (local $opcode i32)
     local.get $inv i32.const 0 i32.store offset=0
     loop $continue
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
       local.get $opcode
@@ -661,7 +654,7 @@
 
   (func $object_models_typed (param $ctx i32) (param $obj i32) (param $gameval i32)
     (local $count i32) (local $i i32) (local $model_id i32) (local $model_type i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.set $count
     local.get $count
     local.get $obj global.get $OBJ_MODEL_COUNT i32.add i32.store
@@ -672,7 +665,7 @@
         if br $done end
         local.get $ctx local.get $gameval call $read_model_id
         local.set $model_id
-        local.get $ctx call $read_u8
+        local.get $ctx call $model_read_u8
         local.set $model_type
         local.get $obj local.get $i local.get $model_id local.get $model_type call $object_store_model
         local.get $i i32.const 1 i32.add local.set $i
@@ -684,7 +677,7 @@
 
   (func $object_models_untyped (param $ctx i32) (param $obj i32) (param $gameval i32)
     (local $count i32) (local $i i32) (local $model_id i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.set $count
     local.get $count
     local.get $obj global.get $OBJ_MODEL_COUNT i32.add i32.store
@@ -714,7 +707,7 @@
       local.get $ctx call $object_read_nullable_u16
       local.set $fallback
     end
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     i32.const 1 i32.add
     local.tee $count
     i32.const 1 i32.add
@@ -742,7 +735,7 @@
     drop
     local.get $ctx i32.const 2 call $skip_bytes
     drop
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.tee $count
     loop $continue
       local.get $count i32.eqz if return end
@@ -761,7 +754,7 @@
     (local $opcode i32) (local $interact i32)
     local.get $obj call $object_init_defaults
     loop $loop
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
 
@@ -798,13 +791,13 @@
         end
         local.get $opcode i32.const 14 i32.eq
         if
-          local.get $ctx call $read_u8
+          local.get $ctx call $model_read_u8
           local.get $obj global.get $OBJ_SIZE_X i32.add i32.store
           br $op_done
         end
         local.get $opcode i32.const 15 i32.eq
         if
-          local.get $ctx call $read_u8
+          local.get $ctx call $model_read_u8
           local.get $obj global.get $OBJ_SIZE_Y i32.add i32.store
           br $op_done
         end
@@ -832,7 +825,7 @@
         end
         local.get $opcode i32.const 19 i32.eq
         if
-          local.get $ctx call $read_u8
+          local.get $ctx call $model_read_u8
           local.tee $interact
           local.get $obj global.get $OBJ_INTERACT_TYPE i32.add i32.store
           local.get $interact
@@ -882,10 +875,10 @@
           br $op_done
         end
         local.get $opcode i32.const 28 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 29 i32.eq
         if
-          local.get $ctx call $read_u8 drop
+          local.get $ctx call $model_read_u8 drop
           br $op_done
         end
         local.get $opcode i32.const 30 i32.ge_s
@@ -897,7 +890,7 @@
           end
         end
         local.get $opcode i32.const 39 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 40 i32.eq  local.get $opcode i32.const 41 i32.eq  i32.or
         if
           local.get $ctx call $skip_count_u16_u16
@@ -928,7 +921,7 @@
         i32.or
         if local.get $ctx call $read_u16be drop br $op_done end
         local.get $opcode i32.const 69 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 70 i32.eq  local.get $opcode i32.const 71 i32.eq  i32.or
         local.get $opcode i32.const 72 i32.eq  i32.or
         if local.get $ctx call $read_u16be drop br $op_done end
@@ -952,7 +945,7 @@
           br $op_done
         end
         local.get $opcode i32.const 75 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 77 i32.eq
         if
           local.get $ctx local.get $obj i32.const 0 call $object_transforms
@@ -971,14 +964,14 @@
           br $op_done
         end
         local.get $opcode i32.const 81 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 82 i32.eq
         if local.get $ctx call $read_u16be drop br $op_done end
         local.get $opcode i32.const 89 i32.eq  local.get $opcode i32.const 90 i32.eq
         i32.or
         if br $op_done end
         local.get $opcode i32.const 91 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 92 i32.eq
         if
           local.get $ctx local.get $obj i32.const 1 call $object_transforms
@@ -990,7 +983,7 @@
           br $op_done
         end
         local.get $opcode i32.const 95 i32.eq  local.get $opcode i32.const 96 i32.eq i32.or
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 100 i32.ge_s
         if
           local.get $opcode i32.const 102 i32.le_s
@@ -1029,7 +1022,7 @@
 
   (func $skip_count_u8 (param $ctx i32) (result i32)
     (local $n i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.tee $n
     if
       local.get $ctx local.get $n call $skip_bytes
@@ -1039,13 +1032,13 @@
   )
 
   (func $skip_count_u16 (param $ctx i32) (result i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     i32.const 2 i32.mul
     local.get $ctx call $skip_bytes
   )
 
   (func $skip_count_u16_u16 (param $ctx i32) (result i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     i32.const 2 i32.shl
     local.get $ctx call $skip_bytes
   )
@@ -1058,7 +1051,7 @@
 
   (func $skip_count_gameval (param $ctx i32) (result i32)
     (local $count i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.tee $count
     if
       loop $continue
@@ -1078,7 +1071,7 @@
     if
       local.get $ctx call $read_u16be drop
     end
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     i32.const 1 i32.add
     local.set $count
     loop $continue
@@ -1092,7 +1085,7 @@
 
   (func $skip_npc_headicons (param $ctx i32) (result i32)
     (local $bitset i32) (local $i i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     local.set $bitset
     loop $continue
       local.get $i i32.const 8 i32.ge_s if global.get $DEF_OK return end
@@ -1128,7 +1121,7 @@
   )
 
   (func $skip_sequence_secondary_frames (param $ctx i32) (result i32)
-    local.get $ctx call $read_u8
+    local.get $ctx call $model_read_u8
     i32.const 2 i32.shl
     local.get $ctx call $skip_bytes
   )
@@ -1154,7 +1147,7 @@
   (func (export "def_decode_npc_ctx") (param $ctx i32) (param $npc i32) (result i32)
     (local $opcode i32)
     loop $loop
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
       (block $op_done
@@ -1163,7 +1156,7 @@
         local.get $opcode i32.const 2 i32.eq
         if local.get $ctx call $skip_string drop br $op_done end
         local.get $opcode i32.const 12 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 13 i32.eq  local.get $opcode i32.const 14 i32.eq i32.or
         local.get $opcode i32.const 15 i32.eq  local.get $opcode i32.const 16 i32.eq i32.or
         i32.or
@@ -1199,7 +1192,7 @@
         local.get $opcode i32.const 99 i32.eq
         if br $op_done end
         local.get $opcode i32.const 100 i32.eq  local.get $opcode i32.const 101 i32.eq i32.or
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 102 i32.eq
         if local.get $ctx call $skip_npc_headicons drop br $op_done end
         local.get $opcode i32.const 103 i32.eq
@@ -1256,7 +1249,7 @@
     local.get $item global.get $ITEM_NOTE_TEMPLATE_ID i32.add global.get $DEF_ID_NONE i32.store
     local.get $item global.get $ITEM_PARAMS_PTR i32.add i64.const 0 i64.store offset=0
     loop $loop
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
       (block $op_done
@@ -1321,7 +1314,7 @@
         local.get $opcode i32.const 40 i32.eq  local.get $opcode i32.const 41 i32.eq i32.or
         if local.get $ctx call $skip_count_u16_u16 drop br $op_done end
         local.get $opcode i32.const 42 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 43 i32.eq
         if local.get $ctx call $skip_item_subactions drop br $op_done end
         local.get $opcode i32.const 44 i32.eq
@@ -1372,9 +1365,9 @@
         local.get $opcode i32.const 112 i32.eq  i32.or
         if local.get $ctx call $read_u16be drop br $op_done end
         local.get $opcode i32.const 113 i32.eq  local.get $opcode i32.const 114 i32.eq i32.or
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 115 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 139 i32.eq  local.get $opcode i32.const 140 i32.eq i32.or
         if local.get $ctx call $read_u16be drop br $op_done end
         local.get $opcode i32.const 148 i32.eq  local.get $opcode i32.const 149 i32.eq i32.or
@@ -1505,7 +1498,7 @@
     local.get $seq global.get $SEQ_RIGHT_HAND_ITEM i32.add global.get $DEF_ID_NONE i32.store
     local.get $seq global.get $SEQ_SOUND_COUNT i32.add i32.const 0 i32.store
     loop $loop
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
       (block $op_done
@@ -1526,7 +1519,7 @@
         if br $op_done end
         local.get $opcode i32.const 5 i32.eq
         if
-          local.get $ctx call $read_u8
+          local.get $ctx call $model_read_u8
           local.get $seq global.get $SEQ_FORCED_PRIORITY i32.add i32.store
           br $loop
         end
@@ -1545,7 +1538,7 @@
         local.get $opcode i32.const 8 i32.eq  local.get $opcode i32.const 9 i32.eq i32.or
         local.get $opcode i32.const 10 i32.eq  local.get $opcode i32.const 11 i32.eq i32.or
         i32.or
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 12 i32.eq
         if local.get $ctx call $skip_sequence_secondary_frames drop br $op_done end
         local.get $opcode i32.const 13 i32.eq
@@ -1558,7 +1551,7 @@
         local.get $opcode i32.const 15 i32.eq
         if local.get $ctx i32.const 4 call $skip_bytes drop br $op_done end
         local.get $opcode i32.const 16 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 17 i32.eq
         if local.get $ctx call $skip_count_u8 drop br $op_done end
         local.get $opcode i32.const 19 i32.eq
@@ -1578,7 +1571,7 @@
   (func (export "def_decode_item_skip_ctx") (param $ctx i32) (param $item i32) (result i32)
     (local $opcode i32)
     loop $loop
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
       (block $op_done
@@ -1618,7 +1611,7 @@
         local.get $opcode i32.const 40 i32.eq  local.get $opcode i32.const 41 i32.eq i32.or
         if local.get $ctx call $skip_count_u16_u16 drop br $op_done end
         local.get $opcode i32.const 42 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 43 i32.eq
         if local.get $ctx call $skip_item_subactions drop br $op_done end
         local.get $opcode i32.const 44 i32.eq
@@ -1653,9 +1646,9 @@
         local.get $opcode i32.const 112 i32.eq  i32.or
         if local.get $ctx call $read_u16be drop br $op_done end
         local.get $opcode i32.const 113 i32.eq  local.get $opcode i32.const 114 i32.eq i32.or
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 115 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 139 i32.eq  local.get $opcode i32.const 140 i32.eq i32.or
         if local.get $ctx call $read_u16be drop br $op_done end
         local.get $opcode i32.const 148 i32.eq  local.get $opcode i32.const 149 i32.eq i32.or
@@ -1673,7 +1666,7 @@
   (func (export "def_decode_sequence_skip_ctx") (param $ctx i32) (param $seq i32) (result i32)
     (local $opcode i32)
     loop $loop
-      local.get $ctx call $read_u8
+      local.get $ctx call $model_read_u8
       local.tee $opcode
       i32.eqz if global.get $DEF_OK return end
       (block $op_done
@@ -1686,13 +1679,13 @@
         local.get $opcode i32.const 4 i32.eq
         if br $op_done end
         local.get $opcode i32.const 5 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 6 i32.eq  local.get $opcode i32.const 7 i32.eq i32.or
         if local.get $ctx call $read_u16be drop br $op_done end
         local.get $opcode i32.const 8 i32.eq  local.get $opcode i32.const 9 i32.eq i32.or
         local.get $opcode i32.const 10 i32.eq  local.get $opcode i32.const 11 i32.eq i32.or
         i32.or
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 12 i32.eq
         if local.get $ctx call $skip_sequence_secondary_frames drop br $op_done end
         local.get $opcode i32.const 13 i32.eq
@@ -1702,7 +1695,7 @@
         local.get $opcode i32.const 15 i32.eq
         if local.get $ctx i32.const 4 call $skip_bytes drop br $op_done end
         local.get $opcode i32.const 16 i32.eq
-        if local.get $ctx call $read_u8 drop br $op_done end
+        if local.get $ctx call $model_read_u8 drop br $op_done end
         local.get $opcode i32.const 17 i32.eq
         if local.get $ctx call $skip_count_u8 drop br $op_done end
         local.get $opcode i32.const 19 i32.eq
@@ -2579,7 +2572,7 @@
     local.get $o i32.const 2 i32.add
   )
 
-  (func $read_short_smart (param $p i32) (param $len i32) (param $o i32) (result i32 i32)
+  (func $model_read_short_smart (param $p i32) (param $len i32) (param $o i32) (result i32 i32)
     (local $b i32)
     local.get $o local.get $len i32.ge_u if i32.const 0 local.get $o return end
     local.get $p local.get $o i32.add i32.load8_u
@@ -2882,7 +2875,7 @@
       local.get $var11 i32.const 1 i32.and
       if
         local.get $payload local.get $len local.get $v
-        call $read_short_smart
+        call $model_read_short_smart
         local.set $v
         local.set $da
         local.get $cur_x local.get $da i32.add local.set $cur_x
@@ -2891,7 +2884,7 @@
       local.get $var11 i32.const 2 i32.and
       if
         local.get $payload local.get $len local.get $f_types_off
-        call $read_short_smart
+        call $model_read_short_smart
         local.set $f_types_off
         local.set $da
         local.get $cur_y local.get $da i32.add local.set $cur_y
@@ -2900,7 +2893,7 @@
       local.get $var11 i32.const 4 i32.and
       if
         local.get $payload local.get $len local.get $f_colors_off
-        call $read_short_smart
+        call $model_read_short_smart
         local.set $f_colors_off
         local.set $da
         local.get $cur_z local.get $da i32.add local.set $cur_z
@@ -3033,21 +3026,21 @@
       i32.const 1 i32.eq
       if
         local.get $payload local.get $len local.get $f_idx_off
-        call $read_short_smart
+        call $model_read_short_smart
         local.set $f_idx_off
         local.set $da
         local.get $da local.get $prev_high i32.add
         local.set $prev_a
 
         local.get $payload local.get $len local.get $f_idx_off
-        call $read_short_smart
+        call $model_read_short_smart
         local.set $f_idx_off
         local.set $da
         local.get $da local.get $prev_a i32.add
         local.set $prev_b
 
         local.get $payload local.get $len local.get $f_idx_off
-        call $read_short_smart
+        call $model_read_short_smart
         local.set $f_idx_off
         local.set $da
         local.get $da local.get $prev_b i32.add
@@ -3059,7 +3052,7 @@
         if
           local.get $prev_c local.set $prev_b
           local.get $payload local.get $len local.get $f_idx_off
-          call $read_short_smart
+          call $model_read_short_smart
           local.set $f_idx_off
           local.set $da
           local.get $da local.get $prev_high i32.add
@@ -3071,7 +3064,7 @@
           if
             local.get $prev_c local.set $prev_a
             local.get $payload local.get $len local.get $f_idx_off
-            call $read_short_smart
+            call $model_read_short_smart
             local.set $f_idx_off
             local.set $da
             local.get $da local.get $prev_high i32.add
@@ -3085,7 +3078,7 @@
               local.get $prev_b local.set $prev_a
               local.get $tmp local.set $prev_b
               local.get $payload local.get $len local.get $f_idx_off
-              call $read_short_smart
+              call $model_read_short_smart
               local.set $f_idx_off
               local.set $da
               local.get $da local.get $prev_high i32.add
@@ -3630,12 +3623,31 @@
 
   ;; helper: min3(a,b,c)
   (func $min3 (param $a i32) (param $b i32) (param $c i32) (result i32)
-    local.get $a local.get $b local.get $c call $min2 call $min2
+    (if (result i32)
+      (i32.lt_s (local.get $a) (local.get $b))
+      (then
+        (if (result i32)
+          (i32.lt_s (local.get $a) (local.get $c))
+          (then (local.get $a))
+          (else (local.get $c))))
+      (else
+        (if (result i32)
+          (i32.lt_s (local.get $b) (local.get $c))
+          (then (local.get $b))
+          (else (local.get $c)))))
   )
   ;; helper: max3(a,b,c)
   (func $max3 (param $a i32) (param $b i32) (param $c i32) (result i32)
-    local.get $a local.get $b local.get $c call $max2 call $max2
+    (if (result i32)
+      (i32.gt_s (local.get $a) (local.get $b))
+      (then
+        (if (result i32)
+          (i32.gt_s (local.get $a) (local.get $c))
+          (then (local.get $a))
+          (else (local.get $c))))
+      (else
+        (if (result i32)
+          (i32.gt_s (local.get $b) (local.get $c))
+          (then (local.get $b))
+          (else (local.get $c)))))
   )
-
-
-)

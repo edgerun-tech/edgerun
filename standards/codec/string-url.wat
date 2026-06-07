@@ -1,14 +1,4 @@
-(module
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))
-  (import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))
-  (import "edgerun" "to_upper" (func $to_upper (param i32) (result i32)))
-  (memory (export "memory") 1)
-
-  (func $m147hex_nibble (param $c i32) (result i32)
+(func $m147hex_nibble (param $c i32) (result i32)
     local.get $c
     i32.const 48
     i32.ge_u
@@ -1890,5 +1880,3 @@
     i32.const 0
     local.get $total
     call $pack)
-
-)

@@ -1,12 +1,20 @@
-(module
-  (import "edgerun" "string_eq" (func $m188eq (param i32 i32 i32 i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (memory (export "memory") 1)
+(func $m188eq (param $ptr i32) (param $len i32) (param $lit_ptr i32) (param $lit_len i32) (result i32)
+  (local $i i32)
+  (if (i32.ne (local.get $len) (local.get $lit_len))
+    (then (return (i32.const 0))))
+  (block $done
+    (loop $loop
+      (br_if $done (i32.ge_u (local.get $i) (local.get $lit_len)))
+      (if
+        (i32.ne
+          (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+          (i32.load8_u (i32.add (local.get $lit_ptr) (local.get $i))))
+        (then (return (i32.const 0))))
+      (local.set $i (i32.add (local.get $i) (i32.const 1)))
+      (br $loop)))
+  i32.const 1)
 
-
-  (func (export "ui_scene_render_layer_code") (param $ptr i32) (param $len i32) (result i32)
+(func (export "ui_scene_render_layer_code") (param $ptr i32) (param $len i32) (result i32)
     (if (call $m188eq (local.get $ptr) (local.get $len) (i32.const 16) (i32.const 5)) (then (return (i32.const 1))))
     (if (call $m188eq (local.get $ptr) (local.get $len) (i32.const 21) (i32.const 5)) (then (return (i32.const 2))))
     (if (call $m188eq (local.get $ptr) (local.get $len) (i32.const 26) (i32.const 10)) (then (return (i32.const 3))))
@@ -291,4 +299,3 @@
   (data (i32.const 1104) "network_app_promptapp_store_cardtrust_manager_actionsruntime_event_rowproof_rowreceipt_payment")
   (data (i32.const 1216) "wrong_magiclength_overflowlimit_exceededtruncatedinvalid_boolinvalid_utf8trailing_bytes")
   (data (i32.const 1312) "genericgrouptextbuttoncheckboxradiotextboxcomboboxdialogtooltipstatusprogressbartablerowcelltab_listtabmenu_itemlist_itemnavigationimageslider")
-)

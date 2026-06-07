@@ -1,5 +1,3 @@
-(import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-
 (global $parsed_kind (mut i32) (i32.const 0))
 
   (func $write_summary

@@ -1,4 +1,4 @@
-  (global $ble_uart_abi i32 (i32.const 1))
+(global $ble_uart_abi i32 (i32.const 1))
 
   ;; Nordic UART Service UUIDs
   (global $nus_service_uuid_hi i64 (i64.const 0x6E400001B5A3F393))

@@ -1,4 +1,4 @@
-  (func (export "er_ui_tooltip_trigger_y") (result f32) f32.const 8)
+(func (export "er_ui_tooltip_trigger_y") (result f32) f32.const 8)
   (func (export "er_ui_tooltip_trigger_w") (result f32) f32.const 80)
   (func (export "er_ui_tooltip_trigger_h") (result f32) f32.const 28)
   (func (export "er_ui_tooltip_gap") (result f32) f32.const 10)

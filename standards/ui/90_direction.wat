@@ -1,4 +1,4 @@
-  (func (export "er_ui_direction_item_count") (result i32) i32.const 2)
+(func (export "er_ui_direction_item_count") (result i32) i32.const 2)
   (func (export "er_ui_direction_ltr_label_len") (result i32) i32.const 3)
   (func (export "er_ui_direction_rtl_label_len") (result i32) i32.const 3)
   (func (export "er_ui_direction_item_h") (result f32) f32.const 20)

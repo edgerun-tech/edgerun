@@ -1,4 +1,4 @@
-  (func (export "er_ui_ble_encode_frame") (param $out i32) (param $cap i32) (param $stream_id i32) (param $sequence i32) (param $kind i32) (param $body i32) (param $body_len i32) (result i32)
+(func (export "er_ui_ble_encode_frame") (param $out i32) (param $cap i32) (param $stream_id i32) (param $sequence i32) (param $kind i32) (param $body i32) (param $body_len i32) (result i32)
     local.get $body_len
     i32.const 19
     i32.gt_u

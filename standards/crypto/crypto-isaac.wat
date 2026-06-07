@@ -1,4 +1,4 @@
-  ;; ISAAC CSPRNG — Bob Jenkins' cryptographically-secure PRNG.
+;; ISAAC CSPRNG — Bob Jenkins' cryptographically-secure PRNG.
   ;; State buffer layout (2064 bytes):
   ;;   Offset 0:     mem[256]   (1024 bytes)
   ;;   Offset 1024:  rsl[256]   (1024 bytes)

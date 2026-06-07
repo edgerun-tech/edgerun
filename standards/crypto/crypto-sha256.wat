@@ -1,4 +1,3 @@
-
 (func $m62range_ok (param $ptr i32) (param $len i32) (result i32)
     (local $end i32)
     local.get $ptr

@@ -1,4 +1,4 @@
-  (func (export "er_ui_region_size") (result i32)
+(func (export "er_ui_region_size") (result i32)
     i32.const 28)
 
   (func (export "er_ui_regions_add") (param $base i32) (param $cap i32) (param $len i32) (param $slot i32) (param $kind i32) (param $id i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)

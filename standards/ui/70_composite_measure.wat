@@ -1,4 +1,4 @@
-  (func (export "er_ui_row_item_min_width") (result f32) f32.const 96)
+(func (export "er_ui_row_item_min_width") (result f32) f32.const 96)
   (func (export "er_ui_row_item_min_height") (result f32) f32.const 32)
   (func (export "er_ui_row_item_text_width") (param $bounds i32) (param $has_icon i32) (result f32)
     (local $width f32)

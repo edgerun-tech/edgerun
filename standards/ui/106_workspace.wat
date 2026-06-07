@@ -1,4 +1,4 @@
-  (func (export "er_ui_workspace_default_rail_w") (result f32) f32.const 48)
+(func (export "er_ui_workspace_default_rail_w") (result f32) f32.const 48)
   (func (export "er_ui_workspace_default_sidebar_w") (result f32) f32.const 260)
   (func (export "er_ui_workspace_default_top_h") (result f32) f32.const 56)
   (func (export "er_ui_workspace_default_status_h") (result f32) f32.const 24)

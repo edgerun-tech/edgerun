@@ -1,4 +1,4 @@
-    ;; Standard ID removed — merged into single module
+;; Standard ID removed — merged into single module
 
   ;; Config (variable length):
   ;;   +0: func_idx  i32  (function index; -1 = function 0)

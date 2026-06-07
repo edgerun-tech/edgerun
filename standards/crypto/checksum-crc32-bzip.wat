@@ -1,4 +1,4 @@
-  ;; BZip2 CRC-32 — non-reflected CRC-32 with polynomial 0x04c11db7.
+;; BZip2 CRC-32 — non-reflected CRC-32 with polynomial 0x04c11db7.
   ;; This is the CRC used by bzip2 block checksums, distinct from the
   ;; reflected IEEE/GZip CRC-32 (polynomial 0xedb88320).
   ;; Exports: bzip_crc32(data_ptr, data_len) -> i32

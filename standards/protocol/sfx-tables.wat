@@ -1,5 +1,4 @@
-  (memory (export "memory") 2)
-  (global (export "sine_table") i32 (i32.const 0))
+(global (export "sine_table") i32 (i32.const 0))
   (global (export "noise_table") i32 (i32.const 65536))
 
   (data (i32.const 0)

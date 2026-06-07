@@ -1,7 +1,6 @@
-
 (global $last_carry (mut i32) (i32.const 0))
 
-  (func (export "carry") (result i32)
+  (func $carry (export "carry") (result i32)
     global.get $last_carry)
 
   (func $byte_len (param $limbs i32) (result i32)

@@ -1,6 +1,4 @@
-
-
-  (func $m173is_wsp (param $b i32) (result i32)
+(func $m173is_wsp (param $b i32) (result i32)
     local.get $b
     i32.const 32
     i32.eq

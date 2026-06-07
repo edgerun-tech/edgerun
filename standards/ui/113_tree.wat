@@ -1,4 +1,4 @@
-  (func (export "er_ui_tree_descriptor_unknown") (result i32) i32.const 0)
+(func (export "er_ui_tree_descriptor_unknown") (result i32) i32.const 0)
   (func (export "er_ui_tree_descriptor_stack") (result i32) i32.const 1)
   (func (export "er_ui_tree_descriptor_slot") (result i32) i32.const 2)
 

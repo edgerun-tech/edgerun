@@ -1,4 +1,4 @@
-  (func (export "er_ui_accordion_id_stride") (result i32) i32.const 2)
+(func (export "er_ui_accordion_id_stride") (result i32) i32.const 2)
   (func (export "er_ui_accordion_trigger_h") (result f32) f32.const 36)
   (func (export "er_ui_accordion_trigger_text_y") (result f32) f32.const 10)
   (func (export "er_ui_accordion_icon_space") (result f32) f32.const 22)

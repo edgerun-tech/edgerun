@@ -1,4 +1,4 @@
-  (func (export "er_ui_graph_min_thickness") (result f32) f32.const 1)
+(func (export "er_ui_graph_min_thickness") (result f32) f32.const 1)
   (func (export "er_ui_graph_elbow_min_mid_gap") (result f32) f32.const 10)
   (func (export "er_ui_graph_arrow_w") (result f32) f32.const 8)
   (func (export "er_ui_graph_arrow_h") (result f32) f32.const 8)

@@ -1,4 +1,4 @@
-  (func (export "er_ui_icon_op_polyline") (result f32) f32.const 1)
+(func (export "er_ui_icon_op_polyline") (result f32) f32.const 1)
   (func (export "er_ui_icon_op_circle") (result f32) f32.const 2)
   (func (export "er_ui_icon_op_ellipse") (result f32) f32.const 3)
   (func (export "er_ui_icon_op_round_rect") (result f32) f32.const 4)

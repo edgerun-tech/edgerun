@@ -1,4 +1,4 @@
-  ;; Internet Checksum Pipeline Stage — slot 25
+;; Internet Checksum Pipeline Stage — slot 25
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 2-byte internet checksum (RFC 1071, big-endian i16) via output pipe

@@ -1,4 +1,4 @@
-  ;; Frame Core — framed I/O (8-byte header)
+;; Frame Core — framed I/O (8-byte header)
 
     ;; Standard ID removed — merged into single module
 
@@ -57,7 +57,7 @@
   ;; frame_route(pipe, stream_dst, scratch) → pack(status, stream_id)
   ;; Reads header from pipe, then reads payload directly to stream_dst
   ;; scratch[0..7] used for header only
-  (func (export "frame_route")
+  (func $frame_route (export "frame_route")
     (param $pipe i32) (param $stream_dst i32) (param $scratch i32) (result i64)
     (local $r i32) (local $stream_id i32) (local $payload_len i32)
     (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (i32.const 8)))
@@ -74,7 +74,7 @@
 
   ;; ── Message queue: [len:u32_le][payload] ──
 
-  (func (export "msg_write")
+  (func $msg_write (export "msg_write")
     (param $pipe i32) (param $data i32) (param $len i32) (result i32)
     (local $r i32)
     (i32.store (global.get $HDR) (local.get $len))
@@ -84,7 +84,7 @@
 
   ;; msg_read(pipe, scratch, scap) → payload_len (bytes in scratch) | 0 | negative error
   ;; On success: stores payload_len at scratch[0..4], payload at scratch[4..4+payload_len)
-  (func (export "msg_read")
+  (func $msg_read (export "msg_read")
     (param $pipe i32) (param $scratch i32) (param $scap i32) (result i32)
     (local $r i32) (local $payload_len i32)
     (local.set $r (call $pipe_read (local.get $pipe) (local.get $scratch) (i32.const 4)))

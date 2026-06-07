@@ -1,4 +1,4 @@
-  (func $font_sample_offset (param $i i32) (result f32)
+(func $font_sample_offset (param $i i32) (result f32)
     local.get $i
     f32.convert_i32_u
     f32.const 0.5

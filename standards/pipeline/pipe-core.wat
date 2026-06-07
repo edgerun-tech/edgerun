@@ -1,4 +1,4 @@
-   ;; Pipe Core — byte pipes + bump allocators
+;; Pipe Core — byte pipes + bump allocators
    ;; $min_u is defined in runtime/math-utils.wat (include before this fragment)
 
     ;; Standard ID removed — merged into single module

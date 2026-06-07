@@ -1,4 +1,4 @@
-  (func (export "er_ui_breadcrumb_icon_size") (result f32) f32.const 12)
+(func (export "er_ui_breadcrumb_icon_size") (result f32) f32.const 12)
   (func (export "er_ui_breadcrumb_separator_gap") (result f32) f32.const 6)
   (func (export "er_ui_breadcrumb_vertical_padding") (result f32) f32.const 8)
   (func (export "er_ui_breadcrumb_label_max_lines") (result i32) i32.const 1)

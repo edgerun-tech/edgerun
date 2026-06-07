@@ -1,4 +1,4 @@
-  ;; AES-128-CTR XOR Pipeline Stage — slot 23
+;; AES-128-CTR XOR Pipeline Stage — slot 23
   ;; Stage type: batch (state=0)
   ;; Config layout:
   ;;   +0: key_len (i32) — expected 16

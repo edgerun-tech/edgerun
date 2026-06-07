@@ -1,16 +1,4 @@
-(module
-  (import "edgerun" "to_lower" (func $m140ascii_lower (param i32) (result i32)))
-  (import "edgerun" "fnv1a_lower" (func $m140fnv_lower (param i32 i32) (result i32)))
-  (import "edgerun" "load8_u" (func $m142b (param i32 i32) (result i32)))
-  (import "edgerun" "string_eq" (func $m142eq_lit (param i32 i32 i32 i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))
-  (import "edgerun" "is_alnum" (func $is_alnum (param i32) (result i32)))
-  (memory (export "memory") 1)
-  ;; Linux syscall number globals (placeholder values — real values in edgerun-core)
+;; Linux syscall number globals (placeholder values — real values in edgerun-core)
   (global $LX64_UNSHARE      i32 (i32.const 272))
   (global $LX64_SETNS        i32 (i32.const 308))
   (global $LX64_SETHOSTNAME  i32 (i32.const 161))
@@ -65,11 +53,11 @@
 
 
   (func (export "oci_config_hash_lower") (param $ptr i32) (param $len i32) (result i32)
-    (call $m140fnv_lower (local.get $ptr) (local.get $len)))
+    (call $fnv1a_lower (local.get $ptr) (local.get $len)))
 
   (func (export "oci_namespace_kind") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
-    (local.set $h (call $m140fnv_lower (local.get $ptr) (local.get $len)))
+    (local.set $h (call $fnv1a_lower (local.get $ptr) (local.get $len)))
     (if (i32.eq (local.get $h) (i32.const 1813408442)) (then (return (i32.const 1)))) ;; mount
     (if (i32.eq (local.get $h) (i32.const 1765866786)) (then (return (i32.const 2)))) ;; pid
     (if (i32.eq (local.get $h) (i32.const 1377339077)) (then (return (i32.const 3)))) ;; network
@@ -96,7 +84,7 @@
 
   (func (export "oci_pull_policy") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
-    (local.set $h (call $m140fnv_lower (local.get $ptr) (local.get $len)))
+    (local.set $h (call $fnv1a_lower (local.get $ptr) (local.get $len)))
     (if (i32.eq (local.get $h) (i32.const 3069444615)) (then (return (i32.const 1)))) ;; missing
     (if (i32.eq (local.get $h) (i32.const 647213027)) (then (return (i32.const 1)))) ;; if-missing
     (if (i32.eq (local.get $h) (i32.const 1731637220)) (then (return (i32.const 2)))) ;; always
@@ -105,7 +93,7 @@
 
   (func (export "oci_mount_option_flag") (param $ptr i32) (param $len i32) (result i32)
     (local $h i32)
-    (local.set $h (call $m140fnv_lower (local.get $ptr) (local.get $len)))
+    (local.set $h (call $fnv1a_lower (local.get $ptr) (local.get $len)))
     (if (i32.eq (local.get $h) (i32.const 1649706254)) (then (return (i32.const 1)))) ;; ro
     (if (i32.eq (local.get $h) (i32.const 1247043398)) (then (return (i32.const 2)))) ;; rw
     (if (i32.eq (local.get $h) (i32.const 3344129838)) (then (return (i32.const 4)))) ;; bind
@@ -215,7 +203,7 @@
             (i32.or
               (i32.and (i32.ge_u (local.get $c) (i32.const 48)) (i32.le_u (local.get $c) (i32.const 57)))
               (i32.or
-                (i32.and (i32.ge_u (call $m140ascii_lower (local.get $c)) (i32.const 97)) (i32.le_u (call $m140ascii_lower (local.get $c)) (i32.const 102)))
+                (i32.and (i32.ge_u (call $to_lower (local.get $c)) (i32.const 97)) (i32.le_u (call $to_lower (local.get $c)) (i32.const 102)))
                 (i32.or
                   (i32.eq (local.get $c) (i32.const 46))
                   (i32.eq (local.get $c) (i32.const 58))))))
@@ -734,6 +722,27 @@
             (i32.or
               (i32.eq (local.get $c) (i32.const 58))
               (i32.or (i32.eq (local.get $c) (i32.const 91)) (i32.eq (local.get $c) (i32.const 93)))))))))
+
+  (func $m142b (param $ptr i32) (param $off i32) (result i32)
+    local.get $ptr
+    local.get $off
+    i32.add
+    i32.load8_u)
+
+  (func $m142eq_lit (param $ptr i32) (param $len i32) (param $lit_ptr i32) (param $lit_len i32) (result i32)
+    (local $i i32)
+    (if (i32.ne (local.get $len) (local.get $lit_len))
+      (then (return (i32.const 0))))
+    (block $done
+      (loop $scan
+        (br_if $done (i32.ge_u (local.get $i) (local.get $lit_len)))
+        (if (i32.ne
+              (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+              (i32.load8_u (i32.add (local.get $lit_ptr) (local.get $i))))
+          (then (return (i32.const 0))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $scan)))
+    i32.const 1)
 
 
   (func $validate_tag (param $ptr i32) (param $start i32) (param $len i32) (result i32)
@@ -1376,4 +1385,3 @@
   (data (i32.const 1040) "running")
   (data (i32.const 1048) "stopped")
   (data (i32.const 1056) "deleted")
-)

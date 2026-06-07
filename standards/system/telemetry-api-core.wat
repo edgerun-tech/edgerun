@@ -1,10 +1,8 @@
-  (import "edgerun" "is_hex" (func $m145is_hex (param i32) (result i32)))
-
 ;; Captures edgerun-opentelemetry-upstream API semantics: W3C baggage,
   ;; tracestate/traceparent validation, metric builders, span status/kind, and log severity.
 
-  (import "edgerun" "is_lower" (func $is_lower (param i32) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
+  
+  
 
   (func $is_lower_or_digit (param $c i32) (result i32)
     (i32.or (call $is_lower (local.get $c)) (call $is_digit (local.get $c))))

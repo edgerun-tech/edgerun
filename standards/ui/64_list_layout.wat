@@ -1,4 +1,4 @@
-  (func $er_ui_list_equal_segment_bounds_gap (export "er_ui_list_equal_segment_bounds_gap") (param $bounds i32) (param $index i32) (param $item_count i32) (param $gap f32) (param $out i32) (result i32)
+(func $er_ui_list_equal_segment_bounds_gap (export "er_ui_list_equal_segment_bounds_gap") (param $bounds i32) (param $index i32) (param $item_count i32) (param $gap f32) (param $out i32) (result i32)
     (local $count f32)
     (local $total_gap f32)
     (local $segment_w f32)

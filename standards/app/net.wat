@@ -1,9 +1,3 @@
-(module
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (memory (export "memory") 1)
 ;; EdgeRun mesh semantics plundered from edgerun-mesh.
   ;; Shared result codes: 0 ok/false, 1 true or primary failure.
 
@@ -1018,5 +1012,3 @@
     (if (i32.eqz (i32.and (i32.and (local.get $request_matches) (local.get $admission_matches)) (i32.and (i32.and (local.get $worker_target_matches) (local.get $worker_role_matches)) (local.get $relay_matches)))) (then (return (i32.const 2))))
     (if (i64.gt_u (local.get $claim) (local.get $admitted_budget)) (then (return (i32.const 3))))
     i32.const 0)
-
-)

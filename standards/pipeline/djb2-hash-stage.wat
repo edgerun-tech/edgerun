@@ -1,4 +1,4 @@
-  ;; DJB2 Hash Pipeline Stage — slot 24
+;; DJB2 Hash Pipeline Stage — slot 24
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 4-byte DJB2 hash (little-endian i32) via output pipe

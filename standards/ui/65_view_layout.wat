@@ -1,4 +1,4 @@
-  (func (export "er_ui_view_stack_cursor_size") (result i32)
+(func (export "er_ui_view_stack_cursor_size") (result i32)
     i32.const 24)
 
   (func (export "er_ui_view_row_cursor_size") (result i32)

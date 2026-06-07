@@ -1,4 +1,4 @@
-  ;; Mux Core — static/dynamic mux + demux
+;; Mux Core — static/dynamic mux + demux
 
     ;; Standard ID removed — merged into single module
 

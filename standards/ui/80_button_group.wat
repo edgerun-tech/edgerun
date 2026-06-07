@@ -1,4 +1,4 @@
-  (func (export "er_ui_button_group_item_count") (result i32) i32.const 2)
+(func (export "er_ui_button_group_item_count") (result i32) i32.const 2)
   (func (export "er_ui_button_group_text_padding") (result f32) f32.const 8)
 
   (func (export "er_ui_button_group_active_index") (param $active i32) (result i32)

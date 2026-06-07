@@ -1,4 +1,4 @@
-  (func (export "er_ui_gallery_preview_base_id") (result i32) i32.const 18000)
+(func (export "er_ui_gallery_preview_base_id") (result i32) i32.const 18000)
   (func (export "er_ui_gallery_first_catalog_card_id") (result i32) i32.const 20000)
   (func (export "er_ui_gallery_catalog_preview_id_base") (result i32) i32.const 23000)
   (func (export "er_ui_gallery_selected_preview_id_base") (result i32) i32.const 25000)

@@ -1,4 +1,4 @@
-  (func (export "er_ui_timeline_min_scale") (result f32) f32.const 0.05)
+(func (export "er_ui_timeline_min_scale") (result f32) f32.const 0.05)
   (func (export "er_ui_timeline_min_window_w") (result f32) f32.const 0.01)
   (func (export "er_ui_timeline_pan_factor") (result f32) f32.const 0.25)
   (func (export "er_ui_timeline_min_zoom") (result f32) f32.const 1)

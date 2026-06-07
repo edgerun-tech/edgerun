@@ -1,12 +1,4 @@
-(module
-  (import "edgerun" "to_lower" (func $to_lower (param i32) (result i32)))
-  (import "edgerun" "is_alpha" (func $is_alpha (param i32) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "quic" "quic_varint_decode_at" (func $quic_varint_decode_at (param i32 i32 i32 i32) (result i64)))
-  (import "math" "prefix_mask" (func $m110prefix_mask (param i32) (result i32)))
-  (memory (export "memory") 1)
-  ;; ═════════════════════════════════════════════════════════════════════
+;; ═════════════════════════════════════════════════════════════════════
   ;; HTTP Core Primitives — shared across all HTTP parsers
   ;; ═════════════════════════════════════════════════════════════════════
 
@@ -5342,7 +5334,7 @@
       (then (return (i32.const 3))))
     (if (i32.eqz (local.get $in_len))
       (then (return (i32.const 1))))
-    (local.set $mask (call $m110prefix_mask (local.get $prefix_bits)))
+    (local.set $mask (call $prefix_mask (local.get $prefix_bits)))
     (local.set $first (i32.load8_u (local.get $in_ptr)))
     (local.set $flags (i32.shr_u (local.get $first) (local.get $prefix_bits)))
     (local.set $value (i64.extend_i32_u (i32.and (local.get $first) (local.get $mask))))
@@ -5381,7 +5373,7 @@
       (br $again))
     (i32.const 1))
 
-  (func $prefix_encode
+(func $http_prefix_encode
     (param $value i64) (param $prefix_bits i32) (param $prefix_high_bits i32)
     (param $out_ptr i32) (param $out_cap i32)
     (result i64)
@@ -5397,7 +5389,7 @@
       (then (return (call $pack (i32.const 3) (i32.const 0)))))
     (if (i32.eqz (local.get $out_cap))
       (then (return (call $pack (i32.const 2) (i32.const 0)))))
-    (local.set $mask (call $m110prefix_mask (local.get $prefix_bits)))
+    (local.set $mask (call $prefix_mask (local.get $prefix_bits)))
     (if
       (i32.ge_u
         (local.get $prefix_high_bits)
@@ -5439,7 +5431,7 @@
     (param $value i64) (param $prefix_bits i32) (param $prefix_high_bits i32)
     (param $out_ptr i32) (param $out_cap i32)
     (result i64)
-    (call $prefix_encode
+    (call $http_prefix_encode
       (local.get $value) (local.get $prefix_bits) (local.get $prefix_high_bits)
       (local.get $out_ptr) (local.get $out_cap)))
 
@@ -5454,7 +5446,7 @@
     (param $value i64) (param $prefix_bits i32) (param $prefix_high_bits i32)
     (param $out_ptr i32) (param $out_cap i32)
     (result i64)
-    (call $prefix_encode
+    (call $http_prefix_encode
       (local.get $value) (local.get $prefix_bits) (local.get $prefix_high_bits)
       (local.get $out_ptr) (local.get $out_cap)))
 
@@ -5471,4 +5463,3 @@
   (data (i32.const 1200) "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday,  GMT")
   (data (i32.const 1280) "MonTueWedThuFriSatSun")
   (data (i32.const 1304) "JanFebMarAprMayJunJulAugSepOctNovDec")
-)

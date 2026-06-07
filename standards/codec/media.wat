@@ -1,10 +1,3 @@
-(module
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (memory (export "memory") 1)
-
 (func $is_sixel (param $c i32) (result i32)
     local.get $c
     i32.const 63
@@ -1696,22 +1689,7 @@
     local.get $r
   )
 
-  (func $reverse_bits (param $val i32) (param $bits i32) (result i32)
-    (local $r i32) (local $i i32)
-    i32.const 0 local.set $r
-    i32.const 0 local.set $i
-    (block $done
-      (loop $loop
-        local.get $i local.get $bits i32.ge_u br_if $done
-        local.get $r i32.const 1 i32.shl local.set $r
-        local.get $r local.get $val i32.const 1 i32.and i32.or local.set $r
-        local.get $val i32.const 1 i32.shr_u local.set $val
-        local.get $i i32.const 1 i32.add local.set $i
-        br $loop
-      )
-    )
-    local.get $r
-  )
+  
 
   (func $unpack_float_q15 (param $val i32) (result i32)
     (local $mant i32) (local $exp i32)
@@ -4027,4 +4005,3 @@
   (data (i32.const 40) "\1d\16\0f\17\1e\25\2c\33")
   (data (i32.const 48) "\3a\3b\34\2d\26\1f\27\2e")
   (data (i32.const 56) "\35\3c\3d\36\2f\37\3e\3f")
-)

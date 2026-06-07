@@ -1,4 +1,4 @@
-  (func $jit_compile (export "jit_compile") (param $func_idx i32) (result i32)
+(func $jit_compile (export "jit_compile") (param $func_idx i32) (result i32)
     (local $dec_ptr i32) (local $opcode i32) (local $imm0 i32)
     (local $code_start i32) (local $label_level i32)
     (local $loop_top_offset i32)

@@ -1,17 +1,3 @@
-(module
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))
-  (import "crypto" "sha1" (func $sha1 (param i32 i32 i32) (result i64)))
-  (import "codec" "base64_encode" (func $base64_encode (param i32 i32 i32 i32) (result i64)))
-  (import "host" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))
-  (import "host" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))
-  (import "host" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))
-  (import "host" "sock_close" (func $sock_close (param i32) (result i32)))
-  (import "pipeline" "pipe_read" (func $pipe_read (param i32 i32 i32) (result i32)))
-  (import "pipeline" "pipe_write" (func $pipe_write (param i32 i32 i32) (result i32)))
-  (import "edgerun" "STATUS_MORE" (global $STATUS_MORE i32))
-  (import "edgerun" "STATUS_TIMEOUT" (global $STATUS_TIMEOUT i32))
-  (memory (export "memory") 1)
 ;; ws-accept — WebSocket accept handshake (key + GUID → SHA-1 → base64)
 
 
@@ -2343,4 +2329,3 @@
   ;; memcpy imported from edgerun-core as $memcpy(dst, src, len)
 
   (data (i32.const 62024) "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
-)

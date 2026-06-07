@@ -1,4 +1,4 @@
-  (func (export "er_ui_table_radius") (result f32) f32.const 6)
+(func (export "er_ui_table_radius") (result f32) f32.const 6)
   (func (export "er_ui_table_padding_x") (result f32) f32.const 8)
   (func (export "er_ui_table_header_h") (result f32) f32.const 24)
   (func (export "er_ui_table_header_y") (result f32) f32.const 5)

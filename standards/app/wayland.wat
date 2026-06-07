@@ -1,10 +1,4 @@
-(module
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (memory (export "memory") 1)
-
-  ;; Status values:
+;; Status values:
   ;; 0 ok, 1 input_short, 2 output_short, 3 invalid, 4 incomplete,
   ;; 5 too_large, 6 unaligned.
 
@@ -333,4 +327,3 @@
       (i32.const 0)
       (i32.const 1)
       (i32.le_u (local.get $end) (local.get $arg_len))))
-)

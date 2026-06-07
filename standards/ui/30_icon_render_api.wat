@@ -1,4 +1,4 @@
-  (func $er_ui_icon_render_alpha (export "er_ui_icon_render_alpha") (param $icon i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
+(func $er_ui_icon_render_alpha (export "er_ui_icon_render_alpha") (param $icon i32) (param $alpha i32) (param $width i32) (param $height i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
     (local $ptr i32) (local $end i32) (local $op f32) (local $stroke f32) (local $stroke_cap f32) (local $stroke_join f32) (local $stroke_miter_limit f32)
     (local $dash_on f32) (local $dash_off f32) (local $dash_base_offset f32) (local $dash_offset f32) (local $dash_dx f32) (local $dash_dy f32)
     (local $cx f32) (local $cy f32) (local $sx f32) (local $sy f32) (local $nx f32) (local $ny f32) (local $px0 f32) (local $py0 f32) (local $has_current i32) (local $has_segment i32)

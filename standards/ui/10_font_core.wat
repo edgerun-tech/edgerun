@@ -1,4 +1,4 @@
-  (func (export "er_ui_version") (result i32)
+(func (export "er_ui_version") (result i32)
     i32.const 1)
 
   (func (export "er_ui_record_kind_count") (result i32)
@@ -713,4 +713,3 @@
     i32.const 20
     i32.mul
     i32.add)
-

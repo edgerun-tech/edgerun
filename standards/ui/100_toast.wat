@@ -1,4 +1,4 @@
-  (func (export "er_ui_toast_radius") (result f32) f32.const 8)
+(func (export "er_ui_toast_radius") (result f32) f32.const 8)
   (func (export "er_ui_toast_padding") (result f32) f32.const 10)
   (func (export "er_ui_toast_icon_x") (result f32) f32.const 12)
   (func (export "er_ui_toast_icon_size") (result f32) f32.const 16)

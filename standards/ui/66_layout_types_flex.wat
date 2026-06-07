@@ -1,4 +1,4 @@
-  (func (export "er_ui_layout_axis_horizontal") (result i32) i32.const 0)
+(func (export "er_ui_layout_axis_horizontal") (result i32) i32.const 0)
   (func (export "er_ui_layout_axis_vertical") (result i32) i32.const 1)
   (func (export "er_ui_layout_align_start") (result i32) i32.const 0)
   (func (export "er_ui_layout_align_stretch") (result i32) i32.const 1)

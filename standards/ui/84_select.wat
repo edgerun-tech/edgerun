@@ -1,4 +1,4 @@
-  (func (export "er_ui_select_arrow_w") (result f32) f32.const 18)
+(func (export "er_ui_select_arrow_w") (result f32) f32.const 18)
   (func (export "er_ui_select_icon_size") (result f32) f32.const 14)
   (func (export "er_ui_select_label_max_lines") (result i32) i32.const 2)
   (func (export "er_ui_select_min_width") (result f32) f32.const 112)

@@ -1,4 +1,3 @@
-
 (func $digest_len (param $alg i32) (result i32)
     local.get $alg
     i32.const 256

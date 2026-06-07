@@ -1,15 +1,3 @@
-(module
-  (import "edgerun" "strlen" (func $strlen_at (param i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "host" "sock_open" (func $sock_open (param i32 i32 i32) (result i32)))
-  (import "host" "sock_close" (func $sock_close (param i32) (result i32)))
-  (import "host" "sock_send" (func $sock_send (param i32 i32 i32) (result i32)))
-  (import "host" "sock_recv" (func $sock_recv (param i32 i32 i32) (result i32)))
-  (memory (export "memory") 1)
 ;; OAuth 2.0 authorization code flow + PKCE — URL building and token body.
   ;; Uses memory for output buffers — caller reads from linear memory.
 
@@ -313,6 +301,24 @@
   ;; --- helpers ---
 
   ;; strlen_at(addr) -> length (finds null terminator)
+  (func $strlen_at (param $ptr i32) (result i32)
+    (local $n i32)
+    block $done
+      loop $loop
+        local.get $ptr
+        local.get $n
+        i32.add
+        i32.load8_u
+        i32.eqz
+        br_if $done
+        local.get $n
+        i32.const 1
+        i32.add
+        local.set $n
+        br $loop
+      end
+    end
+    local.get $n)
 
   ;; memcpy(src, dst, len)
   (func $m137memcpy (param $src i32) (param $dst i32) (param $len i32)
@@ -2054,4 +2060,3 @@
   (data (i32.const 2064) "session_id")
   (data (i32.const 2080) "/oauth2/token")
   (data (i32.const 256) "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-)

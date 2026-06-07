@@ -1,5 +1,3 @@
-  (import "edgerun" "to_upper" (func $m151upper (param i32) (result i32)))
-
 (func $m151b (param $ptr i32) (param $off i32) (result i32)
     (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
 

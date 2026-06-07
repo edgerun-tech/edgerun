@@ -1,4 +1,4 @@
-  (func (export "er_ui_toggle_text_padding") (result f32) f32.const 8)
+(func (export "er_ui_toggle_text_padding") (result f32) f32.const 8)
   (func (export "er_ui_toggle_label_max_lines") (result i32) i32.const 1)
   (func (export "er_ui_toggle_group_item_count") (result i32) i32.const 3)
   (func (export "er_ui_toggle_group_id_stride") (result i32) i32.const 3)

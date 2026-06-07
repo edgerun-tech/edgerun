@@ -1,4 +1,4 @@
-  (func (export "er_ui_ble_decode_route") (param $route i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
+(func (export "er_ui_ble_decode_route") (param $route i32) (param $len i32) (param $out i32) (param $cap i32) (result i32)
     (local $name_len i32)
     local.get $len
     i32.const 3

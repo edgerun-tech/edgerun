@@ -1,4 +1,4 @@
-  ;; ═════════════════════════════════════════════════════════════════════
+;; ═════════════════════════════════════════════════════════════════════
   ;; EdgeRun WASM Interpreter Core — shared between compiler/ and pipeline/
   ;;
   ;; Contains the interpreter engine (load, validate, decode, execute)
@@ -147,8 +147,6 @@
   (global $EXT_GLOBAL i32 (i32.const 3))
 
   ;; ── Error codes ─────────────────────────────────────────────────────
-  (global $OK           i32 (i32.const 0))
-  (global $ERR_UNSUP    i32 (i32.const 1))
   (global $ERR_CORRUPT  i32 (i32.const 2))
   (global $ERR_STK_UND  i32 (i32.const 3))
   (global $ERR_STK_OV   i32 (i32.const 4))
@@ -5606,4 +5604,3 @@
   ;;   0x8C01C: Body offset (temp)
   ;;   0x8B000: Symbol table (256 entries × 16 bytes)
   ;;   0x8D000: WASM bytecode emission buffer (4KB)
-

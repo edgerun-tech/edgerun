@@ -1,6 +1,6 @@
-  (func (export "er_ui_stack_default_gap") (result i32) i32.const 8)
+(func (export "er_ui_stack_default_gap") (result i32) i32.const 8)
   (func (export "er_ui_stack_default_padding") (result i32) i32.const 0)
-  (func (export "er_ui_stack_axis_column") (result i32) i32.const 0)
+  (func $er_ui_stack_axis_column (export "er_ui_stack_axis_column") (result i32) i32.const 0)
   (func (export "er_ui_stack_axis_row") (result i32) i32.const 1)
 
   (func $er_ui_stack_layout_axis (export "er_ui_stack_layout_axis") (param $axis i32) (result i32)

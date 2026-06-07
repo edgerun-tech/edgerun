@@ -1,4 +1,4 @@
-  (func (export "er_ui_app_panel_scaffold_default_inset") (result f32) f32.const 16)
+(func (export "er_ui_app_panel_scaffold_default_inset") (result f32) f32.const 16)
   (func (export "er_ui_app_panel_scaffold_default_header_h") (result f32) f32.const 42)
   (func (export "er_ui_app_panel_scaffold_default_header_gap") (result f32) f32.const 16)
   (func (export "er_ui_app_panel_list_default_row_h") (result f32) f32.const 42)

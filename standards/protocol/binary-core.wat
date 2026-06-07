@@ -1,11 +1,7 @@
-(module
-  ;; ═════════════════════════════════════════════════════════════════════
+;; ═════════════════════════════════════════════════════════════════════
   ;; Binary Core Primitives — shared big-endian integer read/write helpers
   ;; ═════════════════════════════════════════════════════════════════════
-
-  (memory (export "memory") 1)
-
-  ;; Raw big-endian u16 read from ptr (no bounds checking).
+;; Raw big-endian u16 read from ptr (no bounds checking).
   (func $read_u16_be (export "read_u16_be") (param $ptr i32) (result i32)
     (i32.or
       (i32.shl (i32.load8_u (local.get $ptr)) (i32.const 8))
@@ -40,4 +36,3 @@
     (i32.store8 (i32.add (local.get $ptr) (i32.const 1)) (i32.shr_u (local.get $v) (i32.const 16)))
     (i32.store8 (i32.add (local.get $ptr) (i32.const 2)) (i32.shr_u (local.get $v) (i32.const 8)))
     (i32.store8 (i32.add (local.get $ptr) (i32.const 3)) (local.get $v)))
-)

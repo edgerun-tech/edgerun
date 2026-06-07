@@ -1,4 +1,4 @@
-  ;; HMAC-SHA256 Pipeline Stage — slot 17
+;; HMAC-SHA256 Pipeline Stage — slot 17
   ;; Stage type: batch (state=0)
   ;; Input:  message bytes via input pipe
   ;; Output: 32-byte HMAC-SHA256 tag via output pipe

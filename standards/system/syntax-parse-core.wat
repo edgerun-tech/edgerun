@@ -1,5 +1,3 @@
-  (import "edgerun" "string_eq" (func $m160eq (param i32 i32 i32 i32) (result i32)))
-
 (func $contains (param $ptr i32) (param $len i32) (param $byte i32) (result i32)
     (local $i i32)
     (block $done

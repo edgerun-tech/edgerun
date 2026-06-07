@@ -1,4 +1,4 @@
-  (global $BISTDIO_ABI i32 (i32.const 1))
+(global $BISTDIO_ABI i32 (i32.const 1))
 
   ;; Frame types
   (global $FT_IDENTITY_REQUEST i32 (i32.const 0x01))

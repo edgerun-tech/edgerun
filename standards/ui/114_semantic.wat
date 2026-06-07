@@ -1,4 +1,4 @@
-  (func (export "er_ui_semantic_kind_identity") (result i32) i32.const 0)
+(func (export "er_ui_semantic_kind_identity") (result i32) i32.const 0)
   (func (export "er_ui_semantic_kind_metric") (result i32) i32.const 1)
   (func (export "er_ui_semantic_kind_resource") (result i32) i32.const 2)
   (func (export "er_ui_semantic_kind_path") (result i32) i32.const 3)

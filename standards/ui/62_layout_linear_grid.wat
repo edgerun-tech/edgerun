@@ -1,4 +1,4 @@
-  (func $er_ui_layout_linear_child (export "er_ui_layout_linear_child") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $axis i32) (param $gap f32) (param $padding f32) (result i32)
+(func $er_ui_layout_linear_child (export "er_ui_layout_linear_child") (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (param $children i32) (param $index i32) (param $axis i32) (param $gap f32) (param $padding f32) (result i32)
     (local $content_x f32)
     (local $content_y f32)
     (local $content_w f32)

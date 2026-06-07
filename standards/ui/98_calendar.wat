@@ -1,4 +1,4 @@
-  (func (export "er_ui_calendar_day_count") (result i32) i32.const 28)
+(func (export "er_ui_calendar_day_count") (result i32) i32.const 28)
   (func (export "er_ui_calendar_day_id_offset") (result i32) i32.const 2)
   (func (export "er_ui_calendar_column_count") (result i32) i32.const 7)
   (func (export "er_ui_calendar_row_count") (result f32) f32.const 4)

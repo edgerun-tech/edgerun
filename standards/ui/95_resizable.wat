@@ -1,4 +1,4 @@
-  (func (export "er_ui_resizable_handle_w") (result f32) f32.const 6)
+(func (export "er_ui_resizable_handle_w") (result f32) f32.const 6)
   (func (export "er_ui_resizable_handle_radius") (result f32) f32.const 3)
   (func (export "er_ui_resizable_handle_hit_outset") (result f32) f32.const 6)
   (func (export "er_ui_resizable_min_width") (result f32) f32.const 96)

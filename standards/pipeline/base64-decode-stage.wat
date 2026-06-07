@@ -1,4 +1,4 @@
-  ;; Base64 Decode Pipeline Stage — slot 4
+;; Base64 Decode Pipeline Stage — slot 4
   ;; Stage type: batch (state=0)
   ;; Input:  Base64 text via input pipe (RFC 4648, `+/` alphabet, `=` pad)
   ;; Output: Decoded raw bytes via output pipe

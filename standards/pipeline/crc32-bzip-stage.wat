@@ -1,4 +1,4 @@
-  ;; CRC-32 (BZIP2) Pipeline Stage — slot 26
+;; CRC-32 (BZIP2) Pipeline Stage — slot 26
   ;; Stage type: batch (state=0)
   ;; Input:  raw bytes via input pipe
   ;; Output: 4-byte CRC-32 (little-endian i32) via output pipe

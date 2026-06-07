@@ -1,4 +1,4 @@
-  ;; Session Core — pipeline session scheduler
+;; Session Core — pipeline session scheduler
   ;; Manages upstream + downstream pipeline pairs sharing a socket and epoch.
 
   ;; Session descriptor layout (48 bytes, at 0x98000+)

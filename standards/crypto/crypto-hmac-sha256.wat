@@ -1,5 +1,5 @@
-  ;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
-  (import "edgerun" "memcpy" (func $m59memcpy (param i32 i32 i32)))
+;; HMAC-SHA256 (RFC 2104) — self-contained with inline SHA-256.
+  
   ;; Memory layout:
   ;; 16384-16639: W array (64 × 4 bytes)
   ;; 16640-16671: hash state H (8 × 4 bytes)
@@ -209,7 +209,7 @@
 
     ;; Copy remaining bytes to blk
     local.get $blk i32.const 64 i32.const 0 call $m59memset
-    local.get $blk local.get $data local.get $rem call $m59memcpy
+    local.get $blk local.get $data local.get $rem call $memcpy
     local.get $blk local.get $rem i32.add i32.const 0x80 i32.store8
 
     ;; Check if we have room for 8-byte length
@@ -299,7 +299,7 @@
     local.get $klen i32.const 64 i32.le_u
     if
       ;; Short key: copy and zero-fill
-      local.get $buf local.get $key local.get $klen call $m59memcpy
+      local.get $buf local.get $key local.get $klen call $memcpy
       local.get $klen local.set $i
       block $zfill
       loop $zfl
@@ -340,7 +340,7 @@
     end
 
     ;; Concatenate msg after ipad_key (at buf+64)
-    local.get $buf i32.const 64 i32.add local.get $msg local.get $mlen call $m59memcpy
+    local.get $buf i32.const 64 i32.add local.get $msg local.get $mlen call $memcpy
 
     ;; SHA256 of (buf, 64 + mlen)
     local.get $buf i32.const 64 local.get $mlen i32.add call $sha256_process
@@ -378,7 +378,7 @@
     end
 
     ;; Copy inner hash from blk (16672) to buf+64
-    local.get $buf i32.const 64 i32.add i32.const 16672 i32.const 32 call $m59memcpy
+    local.get $buf i32.const 64 i32.add i32.const 16672 i32.const 32 call $memcpy
     ;; SHA256 of (buf, 64+32 = 96)
     local.get $buf i32.const 96 call $sha256_process
 

@@ -1,18 +1,4 @@
-(module
-  (import "edgerun" "load8_u" (func $m31ch (param i32 i32) (result i32)))
-  (import "edgerun" "to_lower" (func $m31lower (param i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (import "edgerun" "is_digit" (func $is_digit (param i32) (result i32)))
-  (import "edgerun" "is_hex" (func $is_hex (param i32) (result i32)))
-  (import "edgerun" "is_alnum" (func $is_alnum (param i32) (result i32)))
-  (import "edgerun" "memcpy" (func $memcpy (param i32 i32 i32)))
-  (import "edgerun" "is_scheme_byte" (func $is_scheme_byte (param i32) (result i32)))
-  (memory (export "memory") 1)
-
-
-  ;; Status: 0 ok, 2 no finding, 3 unsupported/invalid.
+;; Status: 0 ok, 2 no finding, 3 unsupported/invalid.
   ;; Finding record, 20 bytes:
   ;;   u32 kind, u32 start_byte, u32 end_byte, u32 flags, u32 status.
   ;; Kinds: 1 package, 2 permission, 3 platform_api, 4 import_api, 5 uri,
@@ -5282,4 +5268,3 @@
     "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
     "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00"
   )
-)

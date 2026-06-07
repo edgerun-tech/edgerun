@@ -1,6 +1,4 @@
-
-
-  (func $is_pass_byte (param $b i32) (result i32)
+(func $is_pass_byte (param $b i32) (result i32)
     local.get $b
     i32.const 33
     i32.ge_u

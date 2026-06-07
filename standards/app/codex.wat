@@ -1,9 +1,3 @@
-(module
-  (import "edgerun" "string_eq" (func $m45eq (param i32 i32 i32 i32) (result i32)))
-  (import "edgerun" "pack" (func $pack (param i32 i32) (result i64)))
-  (import "edgerun" "lo" (func $lo (param i64) (result i32)))
-  (import "edgerun" "hi" (func $hi (param i64) (result i32)))
-  (memory (export "memory") 1)
 ;; Agent/client/tool semantics plundered from crates/edgerun-codex.
   (func (export "codex_schema_type_code") (param $ptr i32) (param $len i32) (result i32)
     ;; string=1 number=2 boolean=3 integer=4 object=5 array=6 null=7 unknown=0.
@@ -266,6 +260,22 @@
   (func $m45starts (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
     (local $i i32)
     (if (i32.lt_u (local.get $len) (local.get $lit_len))
+      (then (return (i32.const 0))))
+    (block $done
+      (loop $loop
+        (br_if $done (i32.ge_u (local.get $i) (local.get $lit_len)))
+        (if
+          (i32.ne
+            (i32.load8_u (i32.add (local.get $ptr) (local.get $i)))
+            (i32.load8_u (i32.add (local.get $lit) (local.get $i))))
+          (then (return (i32.const 0))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $loop)))
+    i32.const 1)
+
+  (func $m45eq (param $ptr i32) (param $len i32) (param $lit i32) (param $lit_len i32) (result i32)
+    (local $i i32)
+    (if (i32.ne (local.get $len) (local.get $lit_len))
       (then (return (i32.const 0))))
     (block $done
       (loop $loop
@@ -624,4 +634,3 @@
   (data (i32.const 224) "rm-f-rfsudo")
   (data (i32.const 256) "bashzshsh")
   (data (i32.const 272) "-c-lc")
-)

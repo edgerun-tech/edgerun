@@ -1,4 +1,4 @@
-  ;; Hex utility functions — shared core for nibble/hex-char conversions.
+;; Hex utility functions — shared core for nibble/hex-char conversions.
   ;; $hex_digit: nibble → lowercase hex char (0-9a-f), writes to memory at $out
   ;; $hex_digit_upper: nibble → uppercase hex char (0-9A-F), writes to memory at $out
   ;; $hex_char_upper: nibble → uppercase hex char value

@@ -1,4 +1,4 @@
-  (func (export "er_ui_patch_encode_bool") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value i32) (result i32)
+(func (export "er_ui_patch_encode_bool") (param $out i32) (param $cap i32) (param $kind i32) (param $component_id i32) (param $value i32) (result i32)
     local.get $cap
     i32.const 3
     i32.lt_u

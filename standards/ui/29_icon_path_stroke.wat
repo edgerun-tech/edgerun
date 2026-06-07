@@ -1,4 +1,4 @@
-  (func $icon_render_round_cap_alpha (param $alpha i32) (param $width i32) (param $height i32) (param $bx f32) (param $by f32) (param $bw f32) (param $bh f32) (param $xn f32) (param $yn f32) (param $stroke_n f32)
+(func $icon_render_round_cap_alpha (param $alpha i32) (param $width i32) (param $height i32) (param $bx f32) (param $by f32) (param $bw f32) (param $bh f32) (param $xn f32) (param $yn f32) (param $stroke_n f32)
     (local $cx f32) (local $cy f32) (local $radius f32)
     (local $minx i32) (local $maxx i32) (local $miny i32) (local $maxy i32) (local $px i32) (local $py i32)
     (local $pcx f32) (local $pcy f32) (local $dist f32) (local $coverage f32)

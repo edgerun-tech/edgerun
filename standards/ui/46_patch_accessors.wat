@@ -1,4 +1,4 @@
-  (func $er_ui_patch_bool_value (export "er_ui_patch_bool_value") (param $patch i32) (param $len i32) (result i32)
+(func $er_ui_patch_bool_value (export "er_ui_patch_bool_value") (param $patch i32) (param $len i32) (result i32)
     local.get $len
     i32.const 3
     i32.lt_u

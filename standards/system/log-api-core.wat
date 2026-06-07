@@ -1,6 +1,3 @@
-  (import "edgerun" "to_lower" (func $m186lower (param i32) (result i32)))
-  (import "edgerun" "fnv1a_lower" (func $m186fnv1a_lower (param i32 i32) (result i32)))
-
 ;; Captures remaining tracing/tracing-core/tracing-log/tracing-attributes semantics.
   ;; Level codes: off=0, error=1, warn=2, info=3, debug=4, trace=5.
   ;; Interest codes: never=0, sometimes=1, always=2.

@@ -1,4 +1,4 @@
-  (func (export "er_ui_pagination_page_count") (result i32) i32.const 3)
+(func (export "er_ui_pagination_page_count") (result i32) i32.const 3)
   (func (export "er_ui_pagination_item_count") (result i32) i32.const 5)
   (func (export "er_ui_pagination_gap") (result f32) f32.const 4)
   (func (export "er_ui_pagination_text_padding") (result f32) f32.const 2)

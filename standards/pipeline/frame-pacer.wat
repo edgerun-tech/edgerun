@@ -1,4 +1,4 @@
-  ;; Frame Pacer Stage — tick-driven accumulation to frame_size chunks
+;; Frame Pacer Stage — tick-driven accumulation to frame_size chunks
   ;; Slots into any pipeline to provide frame-aligned data to downstream stages.
   ;;
   ;; State (80 bytes):
@@ -78,4 +78,3 @@
         (return (global.get $STATUS_MORE))))
 
     (global.get $STATUS_OK))
-

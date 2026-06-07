@@ -1,4 +1,4 @@
-  ;; Pipeline Core — pipeline_run + dispatch table
+;; Pipeline Core — pipeline_run + dispatch table
 
     ;; Standard ID removed — merged into single module
 
@@ -21,6 +21,15 @@
   (func (export "STAGE_WS_DECODE")    (result i32) i32.const 12)
   (func (export "STAGE_EXEC")         (result i32) i32.const 13)
   (func (export "STAGE_FRAME_PACER")  (result i32) i32.const 15)
+
+  ;; ── Edgerun pipeline stages (compiler/interpreter) ──
+  (func (export "STAGE_EDGERUN_PARSE") (result i32) i32.const 46)
+  (func (export "STAGE_EDGERUN_EXEC")  (result i32) i32.const 47)
+
+  ;; ── Queue/Buffer/CDC stages ──
+  (func (export "STAGE_QUEUE")  (result i32) i32.const 48)
+  (func (export "STAGE_BUFFER") (result i32) i32.const 49)
+  (func (export "STAGE_CDC")    (result i32) i32.const 50)
   (func (export "STAGE_SHA256")       (result i32) i32.const 16)
   (func (export "STAGE_HMAC_SHA256")  (result i32) i32.const 17)
   (func (export "STAGE_SHA1")         (result i32) i32.const 18)
@@ -56,7 +65,7 @@
    ;; PD_* and PS_* offset globals are defined in runtime/memory-map.wat — included before this fragment.
 
   ;; pipeline_create(pipe_cap, stage_count) → desc_ptr | -1
-  (func (export "pipeline_create") (param $pcap i32) (param $count i32) (result i32)
+  (func $pipeline_create (export "pipeline_create") (param $pcap i32) (param $count i32) (result i32)
     (local $desc i32) (local $sz i32)
     (local.set $sz (i32.add (global.get $PD_STAGES)
       (i32.mul (local.get $count) (global.get $PS_SIZE))))
@@ -72,7 +81,7 @@
     local.get $desc)
 
   ;; pipeline_set_stage(desc, index, stage_type, config, config_len)
-  (func (export "pipeline_set_stage")
+  (func $pipeline_set_stage (export "pipeline_set_stage")
     (param $desc i32) (param $idx i32) (param $stype i32)
     (param $cfg i32) (param $clen i32)
     (local $slot i32)

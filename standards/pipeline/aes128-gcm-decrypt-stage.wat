@@ -1,4 +1,4 @@
-  ;; AES-128-GCM Decrypt Pipeline Stage — slot 22
+;; AES-128-GCM Decrypt Pipeline Stage — slot 22
   ;; Stage type: batch (state=0)
   ;; Config layout:
   ;;   +0: key_len (i32) — expected 16

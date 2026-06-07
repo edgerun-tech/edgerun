@@ -1,4 +1,4 @@
-  (func (export "er_ui_dialog_trigger_y") (result f32) f32.const 6)
+(func (export "er_ui_dialog_trigger_y") (result f32) f32.const 6)
   (func (export "er_ui_dialog_trigger_w") (result f32) f32.const 66)
   (func (export "er_ui_dialog_trigger_h") (result f32) f32.const 30)
   (func (export "er_ui_dialog_gap") (result f32) f32.const 12)

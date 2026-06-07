@@ -1,4 +1,4 @@
-  (func (export "er_ui_switch_knob_size") (result f32) f32.const 14)
+(func (export "er_ui_switch_knob_size") (result f32) f32.const 14)
   (func (export "er_ui_switch_knob_inset") (result f32) f32.const 3)
   (func (export "er_ui_switch_label_gap") (result f32) f32.const 10)
   (func (export "er_ui_switch_label_height") (result f32) f32.const 16)
