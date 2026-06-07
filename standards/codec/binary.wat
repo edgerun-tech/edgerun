@@ -2238,7 +2238,7 @@
 
   ;; Scan host[:port] using the last colon as the separator, matching the Rust
   ;; parse_host_port_with_default helper. Output offsets are relative to ptr.
-  (func (export "host_port_scan")
+  (func $host_port_scan (export "host_port_scan")
     (param $ptr i32)
     (param $len i32)
     (param $default_port i32)

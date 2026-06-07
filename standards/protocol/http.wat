@@ -2786,7 +2786,7 @@
       end
     end)
 
-  (func (export "http_find_crlf") (param $ptr i32) (param $len i32) (param $start i32) (result i64)
+  (func $http_find_crlf (export "http_find_crlf") (param $ptr i32) (param $len i32) (param $start i32) (result i64)
     (local $i i32)
     local.get $start
     local.get $len
@@ -2839,7 +2839,7 @@
     local.get $len
     call $pack)
 
-  (func (export "http_find_double_crlf") (param $ptr i32) (param $len i32) (param $start i32) (result i64)
+  (func $http_find_double_crlf (export "http_find_double_crlf") (param $ptr i32) (param $len i32) (param $start i32) (result i64)
     (local $i i32)
     local.get $start
     local.get $len

@@ -680,7 +680,7 @@
       (i32.sub (local.get $content_end) (local.get $content_start)))
     (i32.const 0))
 
-  (func (export "yaml_scan_document") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
+  (func $yaml_scan_document (export "yaml_scan_document") (param $ptr i32) (param $len i32) (param $out i32) (result i32)
     (local $p i32)
     (local $status i32)
     (local $kind i32)
@@ -824,7 +824,7 @@
 
   ;; Split on the first ':' and trim outer whitespace on both spans.
   ;; out: key_off, key_len, value_off, value_len
-  (func (export "kv_colon_scan")
+  (func $kv_colon_scan (export "kv_colon_scan")
     (param $ptr i32) (param $len i32) (param $out i32)
     (result i32)
     (local $i i32)
@@ -895,7 +895,7 @@
   ;; Iterate comma-separated list items from either "a, b" or "[a, b]".
   ;; offset is relative to ptr. out: item_off, item_len.
   ;; packed return: low u32 status, high u32 next_offset.
-  (func (export "bracket_list_next")
+  (func $bracket_list_next (export "bracket_list_next")
     (param $ptr i32) (param $len i32) (param $offset i32) (param $out i32)
     (result i64)
     (local $i i32)
@@ -1076,7 +1076,7 @@
 
   ;; Trim outer whitespace and strip matching single or double quotes.
   ;; out: span_off, span_len
-  (func (export "unquote_span")
+  (func $unquote_span (export "unquote_span")
     (param $ptr i32) (param $len i32) (param $out i32)
     (result i32)
     (local $start i32)

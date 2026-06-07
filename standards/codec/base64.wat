@@ -1325,7 +1325,7 @@
     i32.eq
     i32.or)
 
-  (func (export "base32hex_encode")
+  (func $base32hex_encode (export "base32hex_encode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $needed i32)
@@ -1440,7 +1440,7 @@
     local.get $written
     call $pack)
 
-  (func (export "base32hex_decode")
+  (func $base32hex_decode (export "base32hex_decode")
     (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32)
     (result i64)
     (local $needed i32)

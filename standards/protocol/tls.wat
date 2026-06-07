@@ -479,7 +479,7 @@
       (i64.shl (i64.extend_i32_u (local.get $content_type)) (i64.const 16))))
 
   ;; Return bits: low32=status, high32=written.
-  (func (export "tls_record_header_encode")
+  (func $tls_record_header_encode (export "tls_record_header_encode")
     (param $content_type i32) (param $version i32) (param $fragment_len i32)
     (param $out_ptr i32) (param $out_cap i32) (result i64)
     (if (i32.lt_u (local.get $out_cap) (i32.const 5))
@@ -508,7 +508,7 @@
 
   ;; tls_handshake_header_decode return bits:
   ;; low16=status, next8=handshake_type, next24=body_len.
-  (func (export "tls_handshake_header_decode") (param $in_ptr i32) (param $in_len i32) (result i64)
+  (func $tls_handshake_header_decode (export "tls_handshake_header_decode") (param $in_ptr i32) (param $in_len i32) (result i64)
     (local $handshake_type i32)
     (local $body_len i32)
     (if (i32.lt_u (local.get $in_len) (i32.const 4))
@@ -890,7 +890,7 @@
 
   ;; Iterate a TLS ExtensionList payload.
   ;; Output record: extension_type:u32, data_offset:u32, data_len:u32, next_offset:u32.
-  (func (export "tls_extension_next") (param $ptr i32) (param $len i32) (param $start i32) (param $out_ptr i32) (result i32)
+  (func $tls_extension_next (export "tls_extension_next") (param $ptr i32) (param $len i32) (param $start i32) (param $out_ptr i32) (result i32)
     (local $ext_type i32)
     (local $data_len i32)
     (local $data_offset i32)

@@ -210,6 +210,26 @@
   (elem (i32.const 127) $process_http_find_crlf)
   ;; Slot 128: JSON unescape string
   (elem (i32.const 128) $process_json_unescape_string)
+  ;; Slot 129: HTTP find double CRLF
+  (elem (i32.const 129) $process_http_find_double_crlf)
+  ;; Slot 130: TLS extension next
+  (elem (i32.const 130) $process_tls_extension_next)
+  ;; Slot 131: QPACK prefix integer decode
+  (elem (i32.const 131) $process_qpack_prefix_int_decode)
+  ;; Slot 132: QUIC varint decode
+  (elem (i32.const 132) $process_quic_varint_decode)
+  ;; Slot 133: QUIC varint encode
+  (elem (i32.const 133) $process_quic_varint_encode)
+  ;; Slot 134: YAML scan document
+  (elem (i32.const 134) $process_yaml_scan_document)
+  ;; Slot 135: Key:Value colon scan
+  (elem (i32.const 135) $process_kv_colon_scan)
+  ;; Slot 136: Unquote span
+  (elem (i32.const 136) $process_unquote_span)
+  ;; Slot 137: Bracket list next
+  (elem (i32.const 137) $process_bracket_list_next)
+  ;; Slot 138: Host:Port scan
+  (elem (i32.const 138) $process_host_port_scan)
 
   ;; Slots 46-47: Edgerun compiler/interpreter stages
   (elem (i32.const 46) $process_edgerun_parse)

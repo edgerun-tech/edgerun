@@ -1201,7 +1201,7 @@
     (i32.store8 (i32.add (local.get $out_ptr) (i32.add (local.get $written) (i32.const 3))) (i32.or (i32.const 128) (i32.and (local.get $cp) (i32.const 63))))
     (call $pack (i32.const 0) (i32.add (local.get $written) (i32.const 4))))
 
-  (func (export "json_unescape_string") (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32) (result i64)
+  (func $json_unescape_string (export "json_unescape_string") (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (param $out_cap i32) (result i64)
     (local $scan i64)
     (local $p i32)
     (local $end i32)

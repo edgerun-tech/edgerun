@@ -1188,7 +1188,7 @@
 
   ;; Prefix output record, little-endian:
   ;; 0:u32 flags_high_bits, 4:u32 consumed, 8:u64 value.
-  (func (export "qpack_prefix_int_decode")
+  (func $qpack_prefix_int_decode (export "qpack_prefix_int_decode")
     (param $in_ptr i32) (param $in_len i32) (param $prefix_bits i32) (param $out_ptr i32)
     (result i32)
     (call $qpack_prefix_decode

@@ -138,6 +138,16 @@
   (func (export "STAGE_TLS_HANDSHAKE_HEADER_DECODE") (result i32) i32.const 126)
   (func (export "STAGE_HTTP_FIND_CRLF")          (result i32) i32.const 127)
   (func (export "STAGE_JSON_UNESCAPE_STRING")    (result i32) i32.const 128)
+  (func (export "STAGE_HTTP_FIND_DOUBLE_CRLF")   (result i32) i32.const 129)
+  (func (export "STAGE_TLS_EXTENSION_NEXT")      (result i32) i32.const 130)
+  (func (export "STAGE_QPACK_PREFIX_INT_DECODE") (result i32) i32.const 131)
+  (func (export "STAGE_QUIC_VARINT_DECODE")      (result i32) i32.const 132)
+  (func (export "STAGE_QUIC_VARINT_ENCODE")      (result i32) i32.const 133)
+  (func (export "STAGE_YAML_SCAN_DOCUMENT")     (result i32) i32.const 134)
+  (func (export "STAGE_KV_COLON_SCAN")          (result i32) i32.const 135)
+  (func (export "STAGE_UNQUOTE_SPAN")           (result i32) i32.const 136)
+  (func (export "STAGE_BRACKET_LIST_NEXT")      (result i32) i32.const 137)
+  (func (export "STAGE_HOST_PORT_SCAN")         (result i32) i32.const 138)
   (func (export "STAGE_DASHBOARD")         (result i32) i32.const 14)
 
   ;; ── Stage function type ──
