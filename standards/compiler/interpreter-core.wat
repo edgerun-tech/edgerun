@@ -2025,14 +2025,16 @@
     (local.set $dec_count (i32.load (i32.add (local.get $code_base) (i32.const 32))))
     (local.set $dec_idx (local.get $dec_start))
 
-    ;; Read local count
+    ;; Read local count (declared locals)
     (local.set $local_count (i32.load (i32.add (local.get $code_base) (i32.const 16))))
     (i32.store (global.get $OFF_EXEC_LOCAL_COUNT) (local.get $local_count))
+    ;; Include params in local count for init/save/restore
+    (local.set $local_count (i32.add (local.get $local_count) (local.get $args_len)))
     ;; Cache stack length in global for fast access
     (global.set $FAST_STACK_LEN (i32.load (global.get $OFF_EXEC_STACK_LEN)))
 
-    ;; Initialize locals
-    (local.set $i (i32.const 0))
+    ;; Initialize locals (skip params)
+    (local.set $i (local.get $args_len))
     (block $init_lp
       (loop $init_cont
         (if (i32.ge_u (local.get $i) (local.get $local_count)) (then (br $init_lp)))
@@ -2533,7 +2535,7 @@
                 (loop $save_cont
                   (if (i32.ge_u (local.get $i) (local.get $local_count)) (then (br $save_locals)))
                   (i32.store
-                    (i32.add (local.get $op_base) (i32.const 16) (i32.shl (local.get $i) (i32.const 2)))
+                    (i32.add (i32.add (local.get $op_base) (i32.const 16)) (i32.shl (local.get $i) (i32.const 2)))
                     (i32.load (i32.add (global.get $OFF_EXEC_LOCALS) (i32.shl (local.get $i) (i32.const 2))))
                   )
                   (local.set $i (i32.add (local.get $i) (i32.const 1)))
@@ -2561,7 +2563,7 @@
                   (if (i32.ge_u (local.get $i) (local.get $local_count)) (then (br $rest_locals)))
                   (i32.store
                     (i32.add (global.get $OFF_EXEC_LOCALS) (i32.shl (local.get $i) (i32.const 2)))
-                    (i32.load (i32.add (local.get $op_base) (i32.const 16) (i32.shl (local.get $i) (i32.const 2))))
+                    (i32.load (i32.add (i32.add (local.get $op_base) (i32.const 16)) (i32.shl (local.get $i) (i32.const 2))))
                   )
                   (local.set $i (i32.add (local.get $i) (i32.const 1)))
                   (br $rest_cont)

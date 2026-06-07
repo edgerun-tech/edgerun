@@ -12,8 +12,9 @@
  * Usage: bun tools/test.mjs
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { spawnSync } from 'child_process';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const PASS = '\x1b[32m';
@@ -558,6 +559,49 @@ const u32 = new Uint32Array(mem.buffer);
 
   const hitMiss = wasm.er_ui_layout_hit_test(9999, 9999, 3);
   check(hitMiss === -1, `hit-test (9999,9999) returned ${hitMiss} (-1 = miss)`);
+}
+
+// ── Test 13: Self-hosting pipeline — WAT → JIT → ELF → native execution ──
+{
+  const wcPath = resolve(ROOT, 'app/wayland-client.wat');
+  const wcText = readFileSync(wcPath);
+  const WAT_ADDR = 0x300000;
+  const wcBytes = new Uint8Array(wasm.memory.buffer, WAT_ADDR, wcText.length);
+  wcBytes.set(wcText);
+
+  const loadStatus = wasm.load_wat(WAT_ADDR, wcText.length);
+  check(loadStatus === 0, `wayland: load_wat status=${loadStatus}`);
+
+  if (loadStatus === 0) {
+    wasm.patch_wayland_syscalls();
+    check(true, 'wayland: syscall map patched');
+
+    const importCount = new Uint32Array(wasm.memory.buffer, 0x4108, 1)[0];
+    check(importCount === 12, `wayland: import count = ${importCount}`);
+
+    const [elfAddr, elfSize] = wasm.compile_to_elf_x86_64(importCount);
+    check(elfAddr > 0 && elfSize > 0,
+      `wayland: ELF addr=0x${elfAddr.toString(16)} size=${elfSize}`);
+
+    const elfBytes = new Uint8Array(wasm.memory.buffer, elfAddr, elfSize);
+    const elfPath = '/tmp/wayland-demo.elf';
+    writeFileSync(elfPath, elfBytes);
+    check(true, `wayland: wrote ${elfSize} bytes to ${elfPath}`);
+
+    try {
+      spawnSync('chmod', ['+x', elfPath], { timeout: 2000 });
+      const run = spawnSync(elfPath, [], {
+        timeout: 15000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY || 'wayland-0' }
+      });
+      const exitCode = run.status;
+      check(typeof exitCode === 'number' && exitCode >= 0 && exitCode < 256,
+        `wayland: ELF exited with code ${exitCode}`);
+    } catch (e) {
+      check(false, `wayland: execution error — ${e.message}`);
+    }
+  }
 }
 
 // ── Summary ──
