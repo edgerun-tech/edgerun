@@ -1,42 +1,21 @@
-(func $block_size (param $alg i32) (result i32)
-    local.get $alg
-    i32.const 256
-    i32.eq
-    if
-      i32.const 64
-      return
-    end
-    local.get $alg
-    i32.const 384
-    i32.eq
-    if
-      i32.const 128
-      return
-    end
-    i32.const 0)
+;; Algorithm profile lookup table at 0x3100 (scratch area)
+;; 2 entries × 4 bytes: [block_size, digest_size]
+;; Index: (alg >> 7) - 2  (0=SHA-256, 1=SHA-384)
+(data (i32.const 0x3100) "\40\00\00\00\20\00\00\00\80\00\00\00\30\00\00\00")
 
-  (func $digest_size (param $alg i32) (result i32)
-    local.get $alg
-    i32.const 256
-    i32.eq
-    if
-      i32.const 32
-      return
-    end
-    local.get $alg
-    i32.const 384
-    i32.eq
-    if
-      i32.const 48
-      return
-    end
-    i32.const 0)
+(func $alg_lookup (param $alg i32) (param $field i32) (result i32)
+  (local $idx i32)
+  local.get $alg i32.const 7 i32.shr_u i32.const 2 i32.sub local.set $idx
+  local.get $idx i32.const 0 i32.lt_s if i32.const 0 return end
+  local.get $idx i32.const 2 i32.ge_u if i32.const 0 return end
+  i32.load (i32.add (i32.const 0x3100) (i32.add (i32.shl (local.get $idx) (i32.const 3)) (i32.shl (local.get $field) (i32.const 2)))))
 
   (func (export "crypto_hmac_profile") (param $alg i32) (param $out_ptr i32) (result i32)
     (local $block i32)
     (local $digest i32)
     local.get $alg
-    call $block_size
+    i32.const 0
+    call $alg_lookup
     local.tee $block
     i32.eqz
     if
@@ -44,7 +23,8 @@
       return
     end
     local.get $alg
-    call $digest_size
+    i32.const 1
+    call $alg_lookup
     local.set $digest
     local.get $out_ptr
     local.get $block
@@ -74,7 +54,8 @@
     (local $i i32)
     (local $key_byte i32)
     local.get $alg
-    call $block_size
+    i32.const 0
+    call $alg_lookup
     local.tee $block
     i32.eqz
     if
@@ -141,7 +122,8 @@
     (local $digest i32)
     (local $needed i32)
     local.get $alg
-    call $digest_size
+    i32.const 1
+    call $alg_lookup
     local.tee $digest
     i32.eqz
     if

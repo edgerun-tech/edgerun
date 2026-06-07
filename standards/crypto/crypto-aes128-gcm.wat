@@ -34,31 +34,6 @@
   (global $LEN_BLOCK i32 (i32.const 16736))
   (global $TMP i32 (i32.const 16752))
 
-  ;; ── Helper: load big-endian 32-bit word ──
-  (func $load_be32 (param $p i32) (result i32)
-    local.get $p i32.load8_u i32.const 24 i32.shl
-    local.get $p i32.const 1 i32.add i32.load8_u i32.const 16 i32.shl i32.or
-    local.get $p i32.const 2 i32.add i32.load8_u i32.const 8 i32.shl i32.or
-    local.get $p i32.const 3 i32.add i32.load8_u i32.or)
-
-  ;; ── Helper: store big-endian 32-bit word ──
-  (func $store_be32 (param $p i32) (param $v i32)
-    local.get $p i32.const 0 i32.add local.get $v i32.const 24 i32.shr_u i32.store8
-    local.get $p i32.const 1 i32.add local.get $v i32.const 16 i32.shr_u i32.const 0xFF i32.and i32.store8
-    local.get $p i32.const 2 i32.add local.get $v i32.const 8 i32.shr_u i32.const 0xFF i32.and i32.store8
-    local.get $p i32.const 3 i32.add local.get $v i32.const 0xFF i32.and i32.store8)
-
-  ;; ── Helper: store big-endian 64-bit value ──
-  (func $store_be64 (param $p i32) (param $v i64)
-    local.get $p i32.const 0 i32.add local.get $v i64.const 56 i64.shr_u i64.store8
-    local.get $p i32.const 1 i32.add local.get $v i64.const 48 i64.shr_u i64.const 0xFF i64.and i64.store8
-    local.get $p i32.const 2 i32.add local.get $v i64.const 40 i64.shr_u i64.const 0xFF i64.and i64.store8
-    local.get $p i32.const 3 i32.add local.get $v i64.const 32 i64.shr_u i64.const 0xFF i64.and i64.store8
-    local.get $p i32.const 4 i32.add local.get $v i64.const 24 i64.shr_u i64.const 0xFF i64.and i64.store8
-    local.get $p i32.const 5 i32.add local.get $v i64.const 16 i64.shr_u i64.const 0xFF i64.and i64.store8
-    local.get $p i32.const 6 i32.add local.get $v i64.const 8 i64.shr_u i64.const 0xFF i64.and i64.store8
-    local.get $p i32.const 7 i32.add local.get $v i64.const 0xFF i64.and i64.store8)
-
   ;; ── SubWord: S-box applied to each byte of a little-endian word ──
   (func $sub_word (param $w i32) (result i32)
     local.get $w i32.const 0xFF i32.and i32.load8_u

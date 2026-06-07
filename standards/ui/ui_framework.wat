@@ -186,11 +186,6 @@
       f32.div
     end)
 
-  (func $er_ui_snap_pixel  (param $v f32) (param $dpr f32) (result f32)
-    local.get $v
-    local.get $dpr
-    call $snap_pixel)
-
   (func $er_ui_snap_stroke_center  (param $v f32) (param $dpr f32) (result f32)
     local.get $dpr
     f32.const 0
@@ -382,129 +377,66 @@
 
   (func $second_ref_is_packed (param $kind i32) (result i32)
     local.get $kind
-    i32.const 7
-    i32.eq
+    i32.const 0x09D13080
+    i32.const 0x03801020
+    call $kind_in_mask)
+
+  (func $kind_in_mask (param $kind i32) (param $lo i32) (param $hi i32) (result i32)
     local.get $kind
-    i32.const 12
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 13
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 16
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 20
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 22
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 23
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 24
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 27
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 37
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 44
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 55
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 56
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 57
-    i32.eq
-    i32.or)
+    i32.const 32
+    i32.lt_u
+    if (result i32)
+      local.get $lo
+      local.get $kind
+      i32.shr_u
+      i32.const 1
+      i32.and
+    else
+      local.get $hi
+      local.get $kind
+      i32.const 32
+      i32.sub
+      i32.shr_u
+      i32.const 1
+      i32.and
+    end)
 
   (func $packed_second_ref_valid (param $kind i32) (param $ref i32) (result i32)
+    (local $ref_hi i32)
+    (local $ref_lo i32)
+    local.get $ref
+    i32.const 16
+    i32.shr_u
+    local.set $ref_hi
+    local.get $ref
+    i32.const 65535
+    i32.and
+    local.set $ref_lo
     local.get $kind
-    i32.const 22
-    i32.eq
-    local.get $kind
-    i32.const 23
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 56
-    i32.eq
-    i32.or
+    i32.const 0x00C00000
+    i32.const 0x01000000
+    call $kind_in_mask
     if (result i32)
-      local.get $ref
-      i32.const 16
-      i32.shr_u
+      local.get $ref_hi
       i32.eqz
-      local.get $ref
-      i32.const 65535
-      i32.and
+      local.get $ref_lo
       i32.const 1
       i32.le_u
       i32.and
     else
-        local.get $kind
-        i32.const 7
-        i32.eq
-        local.get $kind
-        i32.const 20
-        i32.eq
-        i32.or
-        local.get $kind
-        i32.const 24
-        i32.eq
-        i32.or
-        local.get $kind
-        i32.const 37
-        i32.eq
-      i32.or
       local.get $kind
-      i32.const 16
-      i32.eq
-      i32.or
-      local.get $kind
-      i32.const 27
-      i32.eq
-      i32.or
-      local.get $kind
-      i32.const 44
-      i32.eq
-      i32.or
-      local.get $kind
-      i32.const 57
-      i32.eq
-      i32.or
+      i32.const 0x09110080
+      i32.const 0x20010020
+      call $kind_in_mask
       if (result i32)
-        local.get $ref
-        i32.const 16
-        i32.shr_u
+        local.get $ref_hi
         i32.eqz
       else
         local.get $kind
         i32.const 12
         i32.eq
         if (result i32)
-          local.get $ref
-          i32.const 16
-          i32.shr_u
+          local.get $ref_hi
           i32.const 511
           i32.le_u
         else
@@ -512,9 +444,7 @@
           i32.const 13
           i32.eq
           if (result i32)
-            local.get $ref
-            i32.const 65535
-            i32.and
+            local.get $ref_lo
             i32.const 255
             i32.le_u
           else
@@ -522,9 +452,7 @@
             i32.const 55
             i32.eq
             if (result i32)
-              local.get $ref
-              i32.const 65535
-              i32.and
+              local.get $ref_lo
               i32.eqz
             else
               i32.const 1
@@ -560,80 +488,23 @@
         f32.const 1
       else
         local.get $kind
-        i32.const 44
-        i32.eq
-        local.get $kind
-        i32.const 27
-        i32.eq
-        i32.or
-        local.get $kind
-        i32.const 56
-        i32.eq
-        i32.or
+        i32.const 0x08000000
+        i32.const 0x01001000
+        call $kind_in_mask
         if (result f32)
           f32.const 64
         else
           local.get $kind
-          i32.const 12
-          i32.eq
-          local.get $kind
-          i32.const 13
-          i32.eq
-          i32.or
-          local.get $kind
-          i32.const 22
-          i32.eq
-          i32.or
-          local.get $kind
-          i32.const 23
-          i32.eq
-          i32.or
-          local.get $kind
-          i32.const 36
-          i32.eq
-          i32.or
-          local.get $kind
-          i32.const 39
-          i32.eq
-          i32.or
-          local.get $kind
-          i32.const 42
-          i32.eq
-          i32.or
-          local.get $kind
-          i32.const 57
-          i32.eq
-          i32.or
+          i32.const 0x00C03000
+          i32.const 0x02000490
+          call $kind_in_mask
           if (result f32)
             f32.const 120
           else
             local.get $kind
-            i32.const 16
-            i32.eq
-            local.get $kind
-            i32.const 18
-            i32.eq
-            i32.or
-            local.get $kind
-            i32.const 19
-            i32.eq
-            i32.or
-            local.get $kind
-            i32.const 24
-            i32.eq
-            i32.or
-            local.get $kind
-            i32.const 25
-            i32.eq
-            i32.or
-            local.get $kind
-            i32.const 37
-            i32.eq
-            i32.or
-            local.get $kind
-            i32.const 57
-            i32.eq
-            i32.or
+            i32.const 0x030D0000
+            i32.const 0x02000020
+            call $kind_in_mask
             if (result f32)
               f32.const 180
             else
@@ -677,12 +548,9 @@
             f32.const 90
           else
             local.get $kind
-            i32.const 27
-            i32.eq
-            local.get $kind
-            i32.const 56
-            i32.eq
-            i32.or
+            i32.const 0x08000000
+            i32.const 0x01000000
+            call $kind_in_mask
             if (result f32)
               f32.const 24
             else
@@ -889,47 +757,41 @@
     local.get $meta
     call $store32)
 
+  (func $record_kind_group (param $kind i32) (result i32)
+    local.get $kind
+    i32.const 0x2004008
+    i32.const 0xC00
+    call $kind_in_mask
+    if (result i32)
+      i32.const 0
+    else
+      local.get $kind
+      i32.const 0x8000
+      i32.const 0x380
+      call $kind_in_mask
+      if (result i32)
+        i32.const 1
+      else
+        i32.const 2
+      end
+    end)
+
   (func $record_encoded_state (param $kind i32) (param $id i32) (result i32)
+    (local $group i32)
     local.get $kind
-    i32.const 3
-    i32.eq
-    local.get $kind
-    i32.const 14
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 25
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 42
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 43
-    i32.eq
-    i32.or
+    call $record_kind_group
+    local.set $group
+    local.get $group
+    i32.eqz
     if
       local.get $id
       i32.const 2
       i32.rem_u
       return
     end
-    local.get $kind
-    i32.const 15
+    local.get $group
+    i32.const 1
     i32.eq
-    local.get $kind
-    i32.const 39
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 40
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 41
-    i32.eq
-    i32.or
     if
       local.get $id
       i32.const 3
@@ -939,44 +801,19 @@
     i32.const -1)
 
   (func $record_encoded_mul (param $kind i32) (result i32)
+    (local $group i32)
     local.get $kind
-    i32.const 3
-    i32.eq
-    local.get $kind
-    i32.const 14
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 25
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 42
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 43
-    i32.eq
-    i32.or
+    call $record_kind_group
+    local.set $group
+    local.get $group
+    i32.eqz
     if
       i32.const 2
       return
     end
-    local.get $kind
-    i32.const 15
+    local.get $group
+    i32.const 1
     i32.eq
-    local.get $kind
-    i32.const 39
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 40
-    i32.eq
-    i32.or
-    local.get $kind
-    i32.const 41
-    i32.eq
-    i32.or
     if
       i32.const 3
       return
@@ -1016,14 +853,6 @@
     local.get $h
     f32.store
     i32.const 1)
-
-  (func $er_ui_rect_init  (param $out i32) (param $x f32) (param $y f32) (param $w f32) (param $h f32) (result i32)
-    local.get $out
-    local.get $x
-    local.get $y
-    local.get $w
-    local.get $h
-    call $rect_store)
 
   (func $er_ui_rect_valid  (param $rect i32) (result i32)
     local.get $rect
@@ -1151,12 +980,6 @@
     local.get $y local.get $rect i32.const 4 i32.add f32.load f32.ge i32.and
     local.get $x local.get $rect f32.load local.get $rect i32.const 8 i32.add f32.load f32.add f32.lt i32.and
     local.get $y local.get $rect i32.const 4 i32.add f32.load local.get $rect i32.const 12 i32.add f32.load f32.add f32.lt i32.and)
-
-  (func $er_ui_geometry_clamp  (param $value f32) (param $lo f32) (param $hi f32) (result f32)
-    local.get $value
-    local.get $lo
-    local.get $hi
-    call $clamp_f32)
 
   (func $er_ui_theme_uniform_grid_size  (result i32)
     i32.const 40)
@@ -1861,17 +1684,6 @@
     end
     i32.const 0)
 
-  (func $er_ui_font_reference_loaded  (result i32)
-    global.get $font_body_ptr
-    global.get $font_body_len
-    call $font_body_valid_at)
-
-  (func $er_ui_font_body_ptr  (result i32)
-    global.get $font_body_ptr)
-
-  (func $er_ui_font_body_len  (result i32)
-    global.get $font_body_len)
-
   (func $font_glyph_count (result i32)
     global.get $font_body_ptr
     i32.const 12
@@ -1890,57 +1702,12 @@
     i32.add
     i32.load)
 
-  (func $er_ui_font_ref_glyph_count  (result i32)
-    call $font_glyph_count)
-
-  (func $er_ui_font_ref_command_count  (result i32)
-    call $font_command_count)
-
-  (func $er_ui_font_ref_kern_count  (result i32)
-    call $font_kern_count)
-
   (func $font_units_per_em (result f32)
     global.get $font_body_ptr
     i32.const 8
     i32.add
     i32.load16_u
     f32.convert_i32_u)
-
-  (func $er_ui_font_ref_units_per_em  (result i32)
-    global.get $font_body_ptr
-    i32.const 8
-    i32.add
-    i32.load16_u)
-
-  (func $er_ui_font_ref_ascender  (result f32)
-    global.get $font_body_ptr
-    i32.const 24
-    i32.add
-    f32.load)
-
-  (func $er_ui_font_ref_descender  (result f32)
-    global.get $font_body_ptr
-    i32.const 28
-    i32.add
-    f32.load)
-
-  (func $er_ui_font_ref_line_gap  (result f32)
-    global.get $font_body_ptr
-    i32.const 32
-    i32.add
-    f32.load)
-
-  (func $er_ui_font_ref_y_min  (result f32)
-    global.get $font_body_ptr
-    i32.const 36
-    i32.add
-    f32.load)
-
-  (func $er_ui_font_ref_y_max  (result f32)
-    global.get $font_body_ptr
-    i32.const 40
-    i32.add
-    f32.load)
 
   (func $font_glyph_record_ptr_by_index (param $index i32) (result i32)
     global.get $font_body_ptr

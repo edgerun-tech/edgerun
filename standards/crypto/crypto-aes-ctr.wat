@@ -11,20 +11,6 @@
   ;; 16624-16639: keystream block
   ;; 16640+: scratch
 
-  ;; ── Helper: load big-endian word ──
-  (func $m54load_be32 (param $p i32) (result i32)
-    local.get $p i32.load8_u i32.const 24 i32.shl
-    local.get $p i32.const 1 i32.add i32.load8_u i32.const 16 i32.shl i32.or
-    local.get $p i32.const 2 i32.add i32.load8_u i32.const 8 i32.shl i32.or
-    local.get $p i32.const 3 i32.add i32.load8_u i32.or)
-
-  ;; ── Helper: store big-endian word ──
-  (func $m54store_be32 (param $p i32) (param $v i32)
-    local.get $p i32.const 0 i32.add local.get $v i32.const 24 i32.shr_u i32.store8
-    local.get $p i32.const 1 i32.add local.get $v i32.const 16 i32.shr_u i32.const 0xFF i32.and i32.store8
-    local.get $p i32.const 2 i32.add local.get $v i32.const 8 i32.shr_u i32.const 0xFF i32.and i32.store8
-    local.get $p i32.const 3 i32.add local.get $v i32.const 0xFF i32.and i32.store8)
-
   ;; ── SubWord: S-box applied to each byte of a little-endian word ──
   (func $ctr_sub_word (param $w i32) (result i32)
     local.get $w i32.const 0xFF i32.and i32.load8_u
@@ -46,10 +32,10 @@
     (local $i i32) (local $w i32) (local $t i32) (local $rcon_idx i32)
 
     ;; Copy first 16 bytes (4 words) directly
-    local.get $rk i32.const 0 i32.add local.get $key i32.const 0 i32.add call $m54load_be32 call $m54store_be32
-    local.get $rk i32.const 4 i32.add local.get $key i32.const 4 i32.add call $m54load_be32 call $m54store_be32
-    local.get $rk i32.const 8 i32.add local.get $key i32.const 8 i32.add call $m54load_be32 call $m54store_be32
-    local.get $rk i32.const 12 i32.add local.get $key i32.const 12 i32.add call $m54load_be32 call $m54store_be32
+    local.get $rk i32.const 0 i32.add local.get $key i32.const 0 i32.add call $load_be32 call $store_be32
+    local.get $rk i32.const 4 i32.add local.get $key i32.const 4 i32.add call $load_be32 call $store_be32
+    local.get $rk i32.const 8 i32.add local.get $key i32.const 8 i32.add call $load_be32 call $store_be32
+    local.get $rk i32.const 12 i32.add local.get $key i32.const 12 i32.add call $load_be32 call $store_be32
 
     i32.const 4 local.set $i
     i32.const 0 local.set $rcon_idx
@@ -58,7 +44,7 @@
       local.get $i i32.const 44 i32.ge_u br_if $done  ;; 44 words = 176 bytes
 
       ;; Previous word (W[i-1])
-      local.get $rk local.get $i i32.const 1 i32.sub i32.const 2 i32.shl i32.add call $m54load_be32
+      local.get $rk local.get $i i32.const 1 i32.sub i32.const 2 i32.shl i32.add call $load_be32
       local.set $w
 
       local.get $i i32.const 4 i32.rem_s i32.eqz
@@ -75,9 +61,9 @@
 
       ;; W[i] = W[i-4] ^ t
       local.get $rk local.get $i i32.const 2 i32.shl i32.add
-      local.get $rk local.get $i i32.const 4 i32.sub i32.const 2 i32.shl i32.add call $m54load_be32
+      local.get $rk local.get $i i32.const 4 i32.sub i32.const 2 i32.shl i32.add call $load_be32
       local.get $t i32.xor
-      call $m54store_be32
+      call $store_be32
 
       local.get $i i32.const 1 i32.add local.set $i
       br $loop
@@ -265,13 +251,13 @@
 
       ;; Increment counter (big-endian, low 64 bits = bytes 8-15)
       local.get $cbuf i32.const 12 i32.add
-      local.get $cbuf i32.const 12 i32.add call $m54load_be32 i32.const 1 i32.add
-      call $m54store_be32
-      local.get $cbuf i32.const 12 i32.add call $m54load_be32 i32.eqz
+      local.get $cbuf i32.const 12 i32.add call $load_be32 i32.const 1 i32.add
+      call $store_be32
+      local.get $cbuf i32.const 12 i32.add call $load_be32 i32.eqz
       if
         local.get $cbuf i32.const 8 i32.add
-        local.get $cbuf i32.const 8 i32.add call $m54load_be32 i32.const 1 i32.add
-        call $m54store_be32
+        local.get $cbuf i32.const 8 i32.add call $load_be32 i32.const 1 i32.add
+        call $store_be32
       end
 
       br $ctr_loop

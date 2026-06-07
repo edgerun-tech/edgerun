@@ -8,18 +8,10 @@
   ;;
   ;; key_ptr points to 16 bytes of key material (4 × 32-bit big-endian words).
   (func $m65load_be32 (param $p i32) (result i32)
-    local.get $p i32.load8_u i32.const 24 i32.shl
-    local.get $p i32.const 1 i32.add i32.load8_u i32.const 16 i32.shl i32.or
-    local.get $p i32.const 2 i32.add i32.load8_u i32.const 8 i32.shl i32.or
-    local.get $p i32.const 3 i32.add i32.load8_u i32.or
-  )
+    local.get $p call $load_be32)
 
   (func $m65store_be32 (param $p i32) (param $v i32)
-    local.get $p local.get $v i32.const 24 i32.shr_u i32.store8
-    local.get $p i32.const 1 i32.add local.get $v i32.const 16 i32.shr_u i32.const 0xff i32.and i32.store8
-    local.get $p i32.const 2 i32.add local.get $v i32.const 8 i32.shr_u i32.const 0xff i32.and i32.store8
-    local.get $p i32.const 3 i32.add local.get $v i32.const 0xff i32.and i32.store8
-  )
+    local.get $p local.get $v call $store_be32)
 
   (func $encrypt_block (param $block i32) (param $key i32)
     (local $v0 i32) (local $v1 i32) (local $sum i32) (local $i i32)

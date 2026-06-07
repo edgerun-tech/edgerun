@@ -1,21 +1,7 @@
 ;; AES S-box, Inv S-box, and Rcon data — see crypto-aes-sbox-data.wat for shared definition
 
   (func $m53range_ok (param $ptr i32) (param $len i32) (result i32)
-    (local $end i32)
-    local.get $ptr
-    local.get $len
-    i32.add
-    local.set $end
-    local.get $end
-    local.get $ptr
-    i32.lt_u
-    if
-      i32.const 0
-      return
-    end
-    local.get $end
-    i32.const 131072
-    i32.le_u)
+    local.get $ptr local.get $len i32.const 131072 call $range_ok)
 
   (func $valid (param $key i32) (param $key_len i32) (param $block i32) (param $block_len i32) (param $out i32) (param $want_key i32) (result i32)
     local.get $key_len

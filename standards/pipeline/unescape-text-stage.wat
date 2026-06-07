@@ -1,9 +1,5 @@
-;; Unescape Text Pipeline Stage — slot 56
-  ;; Stage type: batch (state=0)
-  ;; Input:  Jagex-escaped text bytes via input pipe
-  ;; Output: raw decoded text bytes via output pipe
-  ;; Calls $unescape_text from codec/string-url.wat
 
+;; Process unescape_text Stage — slot 56
   (func $process_unescape_text (export "process_unescape_text")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

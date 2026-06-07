@@ -1,9 +1,5 @@
-;; Title Case Pipeline Stage — slot 53
-  ;; Stage type: batch (state=0)
-  ;; Input:  SNAKE_CASE ASCII bytes via input pipe
-  ;; Output: "Title Case" ASCII bytes via output pipe
-  ;; Calls $to_title_case from codec/text.wat
 
+;; Process to_title_case Stage — slot 53
   (func $process_to_title_case (export "process_to_title_case")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

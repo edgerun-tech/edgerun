@@ -1,21 +1,7 @@
 ;; crypto-sha1 — SHA-1 hash (work buffer at 0x10000, 80×4 = 320 bytes)
 
   (func $m61range_ok (param $ptr i32) (param $len i32) (result i32)
-    (local $end i32)
-    local.get $ptr
-    local.get $len
-    i32.add
-    local.set $end
-    local.get $end
-    local.get $ptr
-    i32.lt_u
-    if
-      i32.const 0
-      return
-    end
-    local.get $end
-    i32.const 65536
-    i32.le_u)
+    local.get $ptr local.get $len i32.const 65536 call $range_ok)
 
   (func $m61w_addr (param $i i32) (result i32)
     i32.const 65536
@@ -126,31 +112,9 @@
     call $padded_byte
     i32.or)
 
+  ;; delegates to crypto-core
   (func $m61store_be32 (param $ptr i32) (param $value i32)
-    local.get $ptr
-    local.get $value
-    i32.const 24
-    i32.shr_u
-    i32.store8
-    local.get $ptr
-    i32.const 1
-    i32.add
-    local.get $value
-    i32.const 16
-    i32.shr_u
-    i32.store8
-    local.get $ptr
-    i32.const 2
-    i32.add
-    local.get $value
-    i32.const 8
-    i32.shr_u
-    i32.store8
-    local.get $ptr
-    i32.const 3
-    i32.add
-    local.get $value
-    i32.store8)
+    local.get $ptr local.get $value call $store_be32)
 
   (func $sha1
     (param $ptr i32)

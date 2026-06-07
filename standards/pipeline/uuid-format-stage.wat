@@ -1,9 +1,5 @@
-;; UUID Format Pipeline Stage — slot 51
-  ;; Stage type: batch (state=0)
-  ;; Input:  16-byte binary UUID via input pipe
-  ;; Output: 36-byte formatted UUID string (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) via output pipe
-  ;; Calls $uuid_format from data/uuid-util.wat
 
+;; Process uuid_format Stage — slot 51
   (func $process_uuid_format (export "process_uuid_format")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

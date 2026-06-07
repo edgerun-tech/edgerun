@@ -15,23 +15,6 @@
     local.get $i
     call $m62k)
 
-  ;; Load big-endian word from ptr
-  (func $m59load_be32 (param $p i32) (result i32)
-    local.get $p i32.load8_u i32.const 24 i32.shl
-    local.get $p i32.const 1 i32.add i32.load8_u i32.const 16 i32.shl
-    i32.or
-    local.get $p i32.const 2 i32.add i32.load8_u i32.const 8 i32.shl
-    i32.or
-    local.get $p i32.const 3 i32.add i32.load8_u
-    i32.or)
-
-  ;; Store big-endian word to ptr
-  (func $m59store_be32 (param $p i32) (param $v i32)
-    local.get $p i32.const 0 i32.add local.get $v i32.const 24 i32.shr_u i32.store8
-    local.get $p i32.const 1 i32.add local.get $v i32.const 16 i32.shr_u i32.const 0xFF i32.and i32.store8
-    local.get $p i32.const 2 i32.add local.get $v i32.const 8 i32.shr_u i32.const 0xFF i32.and i32.store8
-    local.get $p i32.const 3 i32.add local.get $v i32.const 0xFF i32.and i32.store8)
-
   ;; SHA-256 compress one 64-byte block (little-endian words in W array)
   (func $m59compress (param $W i32) (param $H i32)
     (local $i i32)
@@ -181,7 +164,7 @@
     loop $w0l
       local.get $i i32.const 16 i32.ge_u br_if $w0
       local.get $W local.get $i i32.const 2 i32.shl i32.add
-      local.get $data local.get $i i32.const 2 i32.shl i32.add call $m59load_be32
+      local.get $data local.get $i i32.const 2 i32.shl i32.add call $load_be32
       i32.store
       local.get $i i32.const 1 i32.add local.set $i
       br $w0l
@@ -339,14 +322,14 @@
 
   ;; Write hash state (H) to buf as 32 big-endian bytes
   (func $hash_to_buf (param $buf i32) (param $H i32)
-    local.get $buf i32.const 0 i32.add local.get $H i32.load offset=0 call $m59store_be32
-    local.get $buf i32.const 4 i32.add local.get $H i32.load offset=4 call $m59store_be32
-    local.get $buf i32.const 8 i32.add local.get $H i32.load offset=8 call $m59store_be32
-    local.get $buf i32.const 12 i32.add local.get $H i32.load offset=12 call $m59store_be32
-    local.get $buf i32.const 16 i32.add local.get $H i32.load offset=16 call $m59store_be32
-    local.get $buf i32.const 20 i32.add local.get $H i32.load offset=20 call $m59store_be32
-    local.get $buf i32.const 24 i32.add local.get $H i32.load offset=24 call $m59store_be32
-    local.get $buf i32.const 28 i32.add local.get $H i32.load offset=28 call $m59store_be32)
+    local.get $buf i32.const 0 i32.add local.get $H i32.load offset=0 call $store_be32
+    local.get $buf i32.const 4 i32.add local.get $H i32.load offset=4 call $store_be32
+    local.get $buf i32.const 8 i32.add local.get $H i32.load offset=8 call $store_be32
+    local.get $buf i32.const 12 i32.add local.get $H i32.load offset=12 call $store_be32
+    local.get $buf i32.const 16 i32.add local.get $H i32.load offset=16 call $store_be32
+    local.get $buf i32.const 20 i32.add local.get $H i32.load offset=20 call $store_be32
+    local.get $buf i32.const 24 i32.add local.get $H i32.load offset=24 call $store_be32
+    local.get $buf i32.const 28 i32.add local.get $H i32.load offset=28 call $store_be32)
 
   ;; ── memset ──
   (func $m59memset (param $dst i32) (param $len i32) (param $val i32)

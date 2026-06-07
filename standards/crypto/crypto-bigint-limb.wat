@@ -9,21 +9,7 @@
     i32.shl)
 
   (func $m55range_ok (param $ptr i32) (param $len i32) (result i32)
-    (local $end i32)
-    local.get $ptr
-    local.get $len
-    i32.add
-    local.set $end
-    local.get $end
-    local.get $ptr
-    i32.lt_u
-    if
-      i32.const 0
-      return
-    end
-    local.get $end
-    i32.const 131072
-    i32.le_u)
+    local.get $ptr local.get $len i32.const 131072 call $range_ok)
 
   (func $limbs_ok (param $limbs i32) (result i32)
     local.get $limbs

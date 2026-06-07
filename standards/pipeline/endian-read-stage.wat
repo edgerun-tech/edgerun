@@ -1,16 +1,17 @@
-;; Endian Read Stage — slot 73
-  ;; Input:  20 bytes {offset, width, endian, signed, buf_bytes...} via input pipe
-  ;; Output: 8 bytes {value_lo, value_hi} as i32le
-  ;; Calls $endian_read from codec/binary.wat
 
+;; Process endian_read Stage — slot 73
   (func $process_endian_read (export "process_endian_read")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
     (local $status i32)
-    (local $offset i32) (local $width i32) (local $endian i32) (local $signed i32) (local $read i32)
+    (local $offset i32)
+    (local $width i32)
+    (local $endian i32)
+    (local $signed i32)
+    (local $read i32)
     (local.set $read (call $stage_read_input (local.get $input) (local.get $scratch) (local.get $scap)))
     (if (i32.lt_u (local.get $read) (i32.const 20)) (then (return (i32.const 0))))
-    (local.set $offset (i32.load (global.get $SCRATCH_BUF)))
+        (local.set $offset (i32.load (global.get $SCRATCH_BUF)))
     (local.set $width (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 4))))
     (local.set $endian (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 8))))
     (local.set $signed (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 12))))

@@ -1,19 +1,5 @@
 (func $m62range_ok (param $ptr i32) (param $len i32) (result i32)
-    (local $end i32)
-    local.get $ptr
-    local.get $len
-    i32.add
-    local.set $end
-    local.get $end
-    local.get $ptr
-    i32.lt_u
-    if
-      i32.const 0
-      return
-    end
-    local.get $end
-    i32.const 65536
-    i32.le_u)
+  local.get $ptr local.get $len i32.const 65536 call $range_ok)
 
   (func $m62w_addr (param $i i32) (result i32)
     i32.const 65536
@@ -214,38 +200,7 @@
     i32.xor)
 
   (func $m62store_be32 (param $ptr i32) (param $offset i32) (param $word i32)
-    local.get $ptr
-    local.get $offset
-    i32.add
-    local.get $word
-    i32.const 24
-    i32.shr_u
-    i32.store8
-    local.get $ptr
-    local.get $offset
-    i32.add
-    i32.const 1
-    i32.add
-    local.get $word
-    i32.const 16
-    i32.shr_u
-    i32.store8
-    local.get $ptr
-    local.get $offset
-    i32.add
-    i32.const 2
-    i32.add
-    local.get $word
-    i32.const 8
-    i32.shr_u
-    i32.store8
-    local.get $ptr
-    local.get $offset
-    i32.add
-    i32.const 3
-    i32.add
-    local.get $word
-    i32.store8)
+    local.get $ptr local.get $offset i32.add local.get $word call $store_be32)
 
   (func $sha256 (export "sha256") (param $ptr i32) (param $len i32) (param $out_ptr i32) (result i64)
     (local $blocks i32)

@@ -1,9 +1,5 @@
-;; CP1252 Decode Pipeline Stage — slot 40
-  ;; Stage type: batch (state=0)
-  ;; Input:  CP1252-encoded bytes via input pipe
-  ;; Output: UTF-8 decoded bytes via output pipe
-  ;; Calls $cp1252_decode_string from codec/text.wat
 
+;; Process cp1252_decode Stage — slot 40
   (func $process_cp1252_decode (export "process_cp1252_decode")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)

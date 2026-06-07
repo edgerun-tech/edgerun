@@ -1,9 +1,5 @@
-;; Escape Text Pipeline Stage — slot 55
-  ;; Stage type: batch (state=0)
-  ;; Input:  raw text bytes via input pipe
-  ;; Output: Jagex-escaped text bytes via output pipe
-  ;; Calls $escape_text from codec/string-url.wat
 
+;; Process escape_text Stage — slot 55
   (func $process_escape_text (export "process_escape_text")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
