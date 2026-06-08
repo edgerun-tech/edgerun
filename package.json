@@ -201,10 +201,7 @@
         "path": "pipeline/hmac-sha256-stage.wat"
       },
       {
-        "path": "pipeline/aes128-gcm-encrypt-stage.wat"
-      },
-      {
-        "path": "pipeline/aes128-gcm-decrypt-stage.wat"
+        "path": "pipeline/aes128-gcm-stage.wat"
       },
       {
         "path": "pipeline/aes128-ctr-xor-stage.wat"
@@ -216,16 +213,10 @@
         "path": "pipeline/deflate-encode-stage.wat"
       },
       {
-        "path": "pipeline/gzip-decode-stage.wat"
+        "path": "pipeline/compress-decode-stage.wat"
       },
       {
-        "path": "pipeline/gzip-encode-stage.wat"
-      },
-      {
-        "path": "pipeline/zlib-decode-stage.wat"
-      },
-      {
-        "path": "pipeline/zlib-encode-stage.wat"
+        "path": "pipeline/compress-encode-stage.wat"
       },
       {
         "path": "pipeline/json-parse-stage.wat"
@@ -280,10 +271,7 @@
         "path": "pipeline/form-urlencoded-next-pair-stage.wat"
       },
       {
-        "path": "pipeline/base64url-encode-stage.wat"
-      },
-      {
-        "path": "pipeline/base64url-decode-stage.wat"
+        "path": "pipeline/base64url-stage.wat"
       },
       {
         "path": "pipeline/yaml-scan-line-stage.wat"
@@ -5972,6 +5960,10 @@
       "GALLERY_HIT_STRING": {
         "start": "65000",
         "size": 20
+      },
+      "WAT_OPCODE_LUT": {
+        "start": "73000",
+        "size": 8192
       }
     },
     "memory": {
