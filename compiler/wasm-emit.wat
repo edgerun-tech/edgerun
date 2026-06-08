@@ -1,7 +1,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   ;; WASM Binary Emitter — serializes decoded module back to .wasm binary
   ;;
-  ;; Reads decoded structures from interpreter-core state and writes
+  ;; Reads decoded structures from interpreter state and writes
   ;; a valid WASM binary to the output buffer.
   ;;
   ;; Exports: emit_wasm(out, max) -> i64 pack(status, size)

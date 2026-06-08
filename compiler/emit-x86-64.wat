@@ -1424,28 +1424,7 @@
   ;; ELF64 binary output
   ;; ═════════════════════════════════════════════════════════════════════
 
-  (global $ELF_OUT_BUF_x86_64  i32 (i32.const 0x400000))
-  (global $ELF_OUT_OFF_x86_64  i32 (i32.const 0x300000))  ;; ELF_OUT_BUF - JIT_CACHE
-
-  (global $TEXT_VA_x86_64      i32 (i32.const 0x400000))
-  (global $BSS_VA_x86_64       i32 (i32.const 0x500000))
-
-  (global $EHDR_SIZE_x86_64    i32 (i32.const 64))
-  (global $PHDR_SIZE_x86_64    i32 (i32.const 56))
-  (global $ELF_STUB_OFF_x86_64 i32 (i32.const 120))       ;; after 1 phdr (64 + 56)
-  (global $ELF_CODE_OFF_x86_64 i32 (i32.const 256))        ;; aligned after stub
-  (global $BSS_SIZE_x86_64     i32 (i32.const 0x100000))   ;; 1MB — covers import_count (0x4108), syscall_map (0x90000), runtime state
-
-  ;; Scratch areas for multi-function JIT (at WASM linear memory address 0x80000+)
-  (global $FUNC_OFF_TABLE_x86_64 i32 (i32.const 0x80000))   ;; 256 funcs * 4 bytes = 1KB
-  (global $CALL_FIXUP_TABLE_x86_64 i32 (i32.const 0x80800)) ;; 256 fixups * 8 bytes = 2KB
-
-  ;; BSS item VAs (relative to BSS_VA)
-  (global $BSS_JITGLOBALS_x86_64 i32 (i32.const 0x500000))
-  (global $BSS_MEM_x86_64       i32 (i32.const 0x500080))
-  (global $BSS_LOCALS_x86_64    i32 (i32.const 0x510080))
-  (global $BSS_GLOBALS_x86_64   i32 (i32.const 0x520080))
-  (global $BSS_TABLE_x86_64     i32 (i32.const 0x530080))
+  ;; x86-64 globals defined in out/gen/config.wat (from package.json edgerun.globals)
 
   ;; ── Multi-function JIT helpers ─────────────────────────────────────
 
@@ -1962,9 +1941,10 @@
     (call $emit_x86_byte (i32.const 0x02))
   )
 
-  ;; Cross-arch dispatch stubs (these are NOT in the dispatch file)
-  (func $jit_compile_arm32 (param $i i32) (result i32) (i32.const -1))
-  (func $jit_compile_aarch64 (param $i i32) (result i32) (i32.const -1))
+  ;; Cross-arch dispatch stubs — provided by per-arch dispatches in unified build
+  ;; Kept as placeholders for standalone x86_64 builds (without other backend dispatches)
+  ;; $jit_compile_arm32 / $jit_compile_aarch64 live in out/gen/jit-dispatch-{arm32,aarch64}.wat
+  ;; $compile_to_elf_arm32 / $compile_to_elf_aarch64 — TODO: native ELF generation
   (func $compile_to_elf_arm32 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
   (func $compile_to_elf_aarch64 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
   ;; Stubs referenced by dispatch but not implemented for x86_64

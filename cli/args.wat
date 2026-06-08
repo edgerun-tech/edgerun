@@ -1,11 +1,9 @@
-;; ── CLI Args: argument parsing via WASI args_sizes_get / args_get ──
-  ;; The argument pointers are stored at 0x20 + idx*4 (up to 64 args).
-  ;; The argument strings are stored starting at 0x200.
-
-  (global $ARGV_BUF i32 (i32.const 0x20))
-  (global $ARGV_STR_BUF i32 (i32.const 0x200))
+  ;; ── CLI Args: argument parsing via WASI args_sizes_get / args_get ──
+  ;; The argument pointers are stored at ARGV_BUF (up to 64 args).
+  ;; The argument strings are stored starting at ARGV_STR_BUF.
+  ;; ARGV_BUF and ARGV_STR_BUF come from config.wat
   (global $ARGV_MAX i32 (i32.const 64))
-  (global $ARGV_STR_MAX i32 (i32.const 0xE00))
+  (global $ARGV_STR_MAX i32 (i32.const 0x10000))
 
   (global $argc (mut i32) (i32.const -1))
   (global $argc_fetched (mut i32) (i32.const 0))
@@ -19,7 +17,7 @@
     global.get $ARGV_STR_BUF
     call $args_get
     local.set $ret
-    global.get $ret
+    local.get $ret
     i32.eqz
     if
       global.get $ARGV_BUF
@@ -31,24 +29,24 @@
 
   ;; Get argument count.
   (func $get_argc (export "get_argc") (result i32)
+    (local $ret i32)
+    (local $count i32)
+    (local $size i32)
     global.get $argc_fetched
     if (result i32)
       global.get $argc
     else
-      (local $ret i32)
-      (local $count i32)
-      (local $size i32)
       global.get $ARGV_BUF
       global.get $ARGV_STR_BUF
       call $args_sizes_get
       local.set $ret
-      global.get $ret
+      local.get $ret
       if (result i32)
         i32.const 0
       else
         global.get $ARGV_BUF
         i32.load
-        local.set $argc
+        global.set $argc
         i32.const 1
         global.set $argc_fetched
         global.get $argc

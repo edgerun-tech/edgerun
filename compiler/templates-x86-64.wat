@@ -334,7 +334,7 @@
   )
 
   (func $template_i32_or_x86_64
-    (call $emit_x86_pop2_rcx_rax) (call $emit_x86_ror32) (call $emit_x86_maybe_push_rax)
+    (call $emit_x86_pop2_rcx_rax) (call $emit_x86_or32) (call $emit_x86_maybe_push_rax)
   )
 
   (func $template_i32_xor_x86_64
@@ -403,7 +403,7 @@
   )
 
   (func $template_i64_or_x86_64
-    (call $emit_x86_pop2_rcx_rax) (call $emit_x86_xor64) (call $emit_x86_maybe_push_rax)
+    (call $emit_x86_pop2_rcx_rax) (call $emit_x86_or64) (call $emit_x86_maybe_push_rax)
   )
 
   (func $template_i64_xor_x86_64

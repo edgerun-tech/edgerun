@@ -1,6 +1,5 @@
    ;; EdgeRun shared runtime helpers — fragment for inclusion in single module.
-   ;; (memory) and LUT data are in runtime/memory.wat — include that first.
-   ;; Memory map constants are in runtime/memory-map.wat — include that second.
+  ;; (memory), LUT data, and all address globals are in out/gen/config.wat — from package.json edgerun
    ;; This file provides char helpers, pack/unpack, memcpy, status codes, syscalls.
 
   ;; ── Character classification helpers ──
@@ -226,10 +225,7 @@
    (global $STATUS_MORE         (export "STATUS_MORE")         i32 (i32.const 7))
    (global $STATUS_TIMEOUT      (export "STATUS_TIMEOUT")      i32 (i32.const 8))
 
-    ;; ── $OK alias — used by interpreter core (STATUS_OK = 0) ──
-    (global $OK i32 (i32.const 0))
-    ;; ── $ERR_UNSUP — unsupported feature error ──
-    (global $ERR_UNSUP i32 (i32.const 1))
+    ;; $OK, $ERR_UNSUP defined in out/gen/config.wat
 
    ;; ── Global epoch — shared tick counter across all modules ──
   ;; Schedulers increment this before driving pipelines. Stages read it

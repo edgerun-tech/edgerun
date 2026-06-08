@@ -2,7 +2,7 @@
   ;; Hit-tests a point against the cached layout buffer.
   ;; Requires that er_ui_layout_set_buf was called and layout stage ran first.
 
-  (global $UI_EVENT_TMP i32 (i32.const 0x1110000))
+  ;; $UI_EVENT_TMP comes from config.wat
   ;; Input:  [px: f32][py: f32][node_count: i32] (12 bytes total, at UI_EVENT_TMP)
   ;; Output: [hit_index: i32]  (-1 = no hit, >=0 = node index hit)
   ;; Wire format (input):

@@ -381,7 +381,7 @@
 
   ;; sock_open(type, cfg_ptr, cfg_len, pipe_cap) → socket_handle | -1
   ;; Allocates a socket struct + two pipes (send + recv).
-  (func (export "sock_open")
+  (func $sock_open (export "sock_open")
     (param $type i32) (param $cfg i32) (param $clen i32) (param $pcap i32) (result i32)
     (local $s i32) (local $snd i32) (local $rcv i32)
     (local.set $s (call $pipe_alloc (i32.const 24)))
@@ -400,18 +400,18 @@
 
   ;; sock_send(socket, data, len) → status
   ;; Writes data to the socket's send pipe.
-  (func (export "sock_send")
+  (func $sock_send (export "sock_send")
     (param $s i32) (param $data i32) (param $len i32) (result i32)
     (call $pipe_write (i32.load offset=0 (local.get $s)) (local.get $data) (local.get $len)))
 
   ;; sock_recv(socket, dst, max) → bytes_read
   ;; Reads from the socket's recv pipe.
-  (func (export "sock_recv")
+  (func $sock_recv (export "sock_recv")
     (param $s i32) (param $dst i32) (param $max i32) (result i32)
     (call $pipe_read (i32.load offset=4 (local.get $s)) (local.get $dst) (local.get $max)))
 
   ;; sock_close(socket) — closes both pipes, marks socket closed
-  (func (export "sock_close") (param $s i32)
+  (func $sock_close (export "sock_close") (param $s i32)
     (call $pipe_close (i32.load offset=0 (local.get $s)))
     (call $pipe_close (i32.load offset=4 (local.get $s)))
     (i32.store offset=8 (local.get $s) (i32.const 0)))

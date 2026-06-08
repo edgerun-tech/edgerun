@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // er — EdgeRun CLI: view, edit, build, commit
 //
 //  er build [--output out.wasm]   Assemble + compile + embed source
@@ -15,6 +15,7 @@ import { execSync, spawnSync } from 'child_process';
 import { resolve, dirname, relative } from 'path';
 import { tmpdir } from 'os';
 import { gzipSync, gunzipSync } from 'zlib';
+import { writeLEB128, readLEB128, leb128Size } from './er-codec.mjs';
 
 const CUSTOM_SECTION_NAME = 'source';
 
@@ -27,7 +28,7 @@ function help() {
   er commit                     Rebuild from previously edited source
   er help                       This message
 
-  ER_OUT  env var  Default output path (default: edgerun.wasm)
+  ER_OUT  env var  Default output path (default: out/edgerun.wasm)
   `);
 }
 
@@ -375,40 +376,17 @@ function walk(root, dir, map, seen) {
     const full = `${dir}/${e.name}`;
     if (e.name.startsWith('.')) continue;
     if (e.isDirectory()) {
-      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'out' || e.name === 'gen' || e.name === 'fragments') continue;
+      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'out') continue;
       walk(root, full, map, seen);
-    } else if (e.name.endsWith('.wat') || e.name.endsWith('.mjs') || e.name.endsWith('.json') || e.name.endsWith('.js') || e.name.endsWith('.md') || e.name === 'Makefile') {
+    } else if (e.name.endsWith('.wat') || e.name.endsWith('.mjs') || e.name.endsWith('.json') || e.name.endsWith('.js') || e.name.endsWith('.md')) {
       const rel = relative(root, full);
       if (!seen.has(rel)) {
         seen.add(rel);
-        if (rel === 'ui/ui_framework.wat') continue;  // assembled from ui/src/*.wat, skip
+        if (rel === 'out/ui/ui_framework.wat') continue;  // assembled from ui/src/*.wat, skip
         try { map[rel] = readFileSync(full, 'utf8'); } catch {}
       }
     }
   }
-}
-
-// ── LEB128 helpers ─────────────────────────────────────────────────
-function leb128Size(n) {
-  let s = 1;
-  while (n >= 128) { s++; n >>>= 7; }
-  return s;
-}
-function writeLEB128(buf, off, n) {
-  let pos = off;
-  while (n >= 128) { buf[pos++] = (n & 127) | 128; n >>>= 7; }
-  buf[pos++] = n;
-  return pos;
-}
-function readLEB128(buf, off) {
-  let val = 0, shift = 0, pos = off;
-  while (pos < buf.length) {
-    const b = buf[pos++];
-    val |= (b & 127) << shift;
-    shift += 7;
-    if (!(b & 128)) return [val, pos - off];
-  }
-  return [val, pos - off];
 }
 
 function embedSourceIntoWasm(wasmPath, outputPath, files) {

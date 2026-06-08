@@ -1,8 +1,7 @@
 ;; ws-accept — WebSocket accept handshake (key + GUID → SHA-1 → base64)
 
 
-  (global $MSG_ADDR i32 (i32.const 62000))
-  (global $DIGEST_ADDR i32 (i32.const 62100))
+  ;; $MSG_ADDR and $DIGEST_ADDR come from config.wat
 
   (func $b64val (param $ch i32) (result i32)
     local.get $ch
@@ -303,37 +302,37 @@
     ;; 5. Send request
     local.get $fd local.get $req local.get $p local.get $req i32.sub call $sock_send
     i32.const 0 i32.lt_s
-    if local.get $fd call $sock_close drop i64.const -3 return end
+    if local.get $fd call $sock_close i64.const -3 return end
 
     ;; 6. Receive response (up to 1024 bytes)
     local.get $fd local.get $rsp i32.const 1024 call $sock_recv
     local.tee $rc
     i32.const 0 i32.le_s
-    if local.get $fd call $sock_close drop i64.const -4 return end
+    if local.get $fd call $sock_close i64.const -4 return end
     local.get $rc local.set $rlen
 
     ;; 7. Validate 101 status line
     local.get $rlen i32.const 14 i32.lt_u
-    if local.get $fd call $sock_close drop i64.const -5 return end
+    if local.get $fd call $sock_close i64.const -5 return end
 
     ;; "HTTP/1.1 101\r\n" — 14 bytes minimum
     local.get $rsp i32.load i32.const 0x50545448 i32.ne
-    if local.get $fd call $sock_close drop i64.const -5 return end
+    if local.get $fd call $sock_close i64.const -5 return end
     local.get $rsp i32.load offset=4 i32.const 0x312E312F i32.ne
-    if local.get $fd call $sock_close drop i64.const -5 return end
+    if local.get $fd call $sock_close i64.const -5 return end
     local.get $rsp i32.load8_u offset=8 i32.const 0x20 i32.ne
-    if local.get $fd call $sock_close drop i64.const -5 return end
+    if local.get $fd call $sock_close i64.const -5 return end
     local.get $rsp i32.load8_u offset=9 i32.const 0x31 i32.ne
-    if local.get $fd call $sock_close drop i64.const -6 return end
+    if local.get $fd call $sock_close i64.const -6 return end
     local.get $rsp i32.load8_u offset=10 i32.const 0x30 i32.ne
-    if local.get $fd call $sock_close drop i64.const -6 return end
+    if local.get $fd call $sock_close i64.const -6 return end
     local.get $rsp i32.load8_u offset=11 i32.const 0x31 i32.ne
-    if local.get $fd call $sock_close drop i64.const -6 return end
+    if local.get $fd call $sock_close i64.const -6 return end
 
     ;; 8. Scan headers for required values
     local.get $rsp local.get $rlen call $scan_ws_headers
     i32.eqz
-    if local.get $fd call $sock_close drop i64.const -6 return end
+    if local.get $fd call $sock_close i64.const -6 return end
 
     ;; 9. Extract Sec-WebSocket-Accept value → 6168
     local.get $rsp local.get $rlen i32.const 0x30D18 call $extract_accept

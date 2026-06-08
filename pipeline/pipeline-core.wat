@@ -171,7 +171,7 @@
   (func (export "PIPELINE_MAGIC")   (result i32) i32.const 0x50495045)
   (func (export "PIPELINE_VERSION") (result i32) i32.const 1)
 
-   ;; PD_* and PS_* offset globals are defined in runtime/memory-map.wat — included before this fragment.
+   ;; PD_* and PS_* offset globals are defined in out/gen/config.wat (from package.json) — always available
 
   ;; pipeline_create(pipe_cap, stage_count) → desc_ptr | -1
   (func $pipeline_create (export "pipeline_create") (param $pcap i32) (param $count i32) (result i32)

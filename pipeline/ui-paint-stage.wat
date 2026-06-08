@@ -23,9 +23,8 @@
   ;;   -1: pipe_read or er_ui_render returned error
   ;; Memory: reads at 0x1110000, writes at 0x1120000
 
-  (global $UI_PAINT_TREE i32 (i32.const 0x1110000))
   (global $UI_PAINT_TREE_CAP i32 (i32.const 131072))
-  (global $UI_PAINT_CMD i32 (i32.const 0x1120000))
+  ;; $UI_PAINT_TREE and $UI_PAINT_CMD come from config.wat
   (global $UI_PAINT_CMD_CAP i32 (i32.const 131072))
 
   (func $process_ui_paint (export "process_ui_paint")

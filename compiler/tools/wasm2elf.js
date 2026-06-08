@@ -1,11 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const JIT_WASM = join(__dirname, '..', 'gen', 'jit-full-x86-64.wasm');
+const JIT_WASM = join(__dirname, '..', '..', 'out', 'gen', 'jit-full-x86-64.wasm');
 
 const OFF_TYPE_COUNT = 256;
 const OFF_TYPES_BUF = 0x104;
@@ -306,7 +306,7 @@ function writeELFFromWasm(inputPath, outputPath) {
     throw new Error('No exported "main" function found in code section');
 
   if (!existsSync(JIT_WASM))
-    throw new Error('JIT WASM not found. Run: node tools/gen_compiler.js --assemble x86_64');
+    throw new Error('JIT WASM not found. Run: bun run gen');
 
   const jitWasm = readFileSync(JIT_WASM);
   const jitMod = new WebAssembly.Module(jitWasm);

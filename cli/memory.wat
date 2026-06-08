@@ -1,18 +1,20 @@
 ;; ── CLI Memory: bump allocator and string utilities ──
 
-  (global $heap_ptr (mut i32) (i32.const 0x1000))
-  (global $HEAP_END i32 (i32.const 0x10000))
+  (global $cli_heap_ptr (mut i32) (i32.const 0))
+  ;; $CLI_HEAP_START and $HEAP_END come from config.wat
 
   ;; Allocate bytes from bump heap. Returns pointer, or 0 if OOM.
   (func $alloc (export "alloc") (param $size i32) (result i32)
     (local $ptr i32)
-    global.get $heap_ptr
+    (if (i32.eqz (global.get $cli_heap_ptr))
+      (then (global.set $cli_heap_ptr (global.get $CLI_HEAP_START))))
+    global.get $cli_heap_ptr
     local.set $ptr
-    global.get $heap_ptr
+    global.get $cli_heap_ptr
     local.get $size
     i32.add
-    global.set $heap_ptr
-    global.get $heap_ptr
+    global.set $cli_heap_ptr
+    global.get $cli_heap_ptr
     global.get $HEAP_END
     i32.gt_u
     if

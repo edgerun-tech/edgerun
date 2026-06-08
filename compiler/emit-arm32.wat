@@ -17,6 +17,16 @@
     (call $emit_arm32_dword (local.get $val))
   )
 
+  ;; ARM32 register aliases
+  (global $REG_R0 i32 (i32.const 0))
+  (global $REG_R1 i32 (i32.const 1))
+  (global $REG_R2 i32 (i32.const 2))
+  (global $REG_R8 i32 (i32.const 8))
+  (global $REG_R9 i32 (i32.const 9))
+  (global $REG_R11 i32 (i32.const 11))
+  ;; ARM32 mutable JIT globals
+  (global $CURRENT_DEC_PTR_arm32 (mut i32) (i32.const 0))
+
   ;; ── ARM32 Data Processing (ALU) helpers ───────────────────────────
   ;; Base: cond=AL(1110), opcode(4), S=0, Rn(4), Rd(4), operand2
   ;; For register operand2: imm5(5) shift(2) shift_type(2) Rm(4)

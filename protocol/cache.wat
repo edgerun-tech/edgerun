@@ -15,8 +15,6 @@
   (global $ERR_PROTOCOL i32 (i32.const -2))
   (global $ERR_CAPACITY i32 (i32.const -3))
   (global $ERR_FLAGS i32 (i32.const -4))
-  (global $MAX_ROWS i32 (i32.const 65536))
-  (global $ROW_SIZE i32 (i32.const 32))
   (global $RA i32 (i32.const 0))
   (global $RNH i32 (i32.const 4))
   (global $RCRC i32 (i32.const 8))
@@ -471,8 +469,6 @@
   (global $CONTAINER_NONE i32 (i32.const 0))
   (global $CONTAINER_BZIP i32 (i32.const 1))
   (global $CONTAINER_GZIP i32 (i32.const 2))
-
-  (global $DEFAULT_BYTES i32 (i32.const 1048576))
   (global $FIRST_CHUNK i32 (i32.const 504))
   (global $NEXT_CHUNK i32 (i32.const 511))
 

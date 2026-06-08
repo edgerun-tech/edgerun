@@ -1141,15 +1141,15 @@
     ;; ── 6. sock_send(fd, qbuf, qlen) ──
     local.get $fd local.get $qbuf local.get $qlen call $sock_send
     i32.const 0 i32.lt_s
-    if local.get $fd call $sock_close drop i64.const -3 return end
+    if local.get $fd call $sock_close i64.const -3 return end
 
     ;; ── 7. sock_recv into rbuf ──
     local.get $fd local.get $rbuf i32.const 512 call $sock_recv
     local.tee $rc
     i32.const 0 i32.le_s
-    if local.get $fd call $sock_close drop i64.const -4 return end
+    if local.get $fd call $sock_close i64.const -4 return end
     local.get $rc local.set $rlen
-    local.get $fd call $sock_close drop
+    local.get $fd call $sock_close
 
     ;; ── 8. Parse response header ──
     local.get $rlen i32.const 12 i32.lt_u

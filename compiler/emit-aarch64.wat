@@ -1291,8 +1291,12 @@
   (global $REG_X1 i32 (i32.const 1))
   (global $REG_X2 i32 (i32.const 2))
   (global $REG_SP i32 (i32.const 31))
+  (global $REG_V0 i32 (i32.const 0))
+  (global $REG_V1 i32 (i32.const 1))
+  (global $REG_V2 i32 (i32.const 2))
   ;; Unsuffixed JIT_ERROR alias (for SIMD template use)
   (global $JIT_ERROR (mut i32) (i32.const 0))
+  (global $CURRENT_DEC_PTR_aarch64 (mut i32) (i32.const 0))
 
   ;; ── AArch64 function prologue/epilogue ────────────────────────────
 

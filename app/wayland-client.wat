@@ -13,7 +13,8 @@
   (import "linux" "memfd_create" (func $sys_memfd_create (param i32 i32) (result i32)))
   (import "linux" "ftruncate" (func $sys_ftruncate (param i32 i32) (result i32)))
 
-  (memory (export "memory") 4 64)
+  ;; NOTE: (memory ...) removed — shared memory is defined by the hosting module.
+  ;;       When run via wasm2elf, this module inherits the host memory.
 
   ;; Helper: write a Wayland message header at the given base address.
   ;; header at $base: u32 object_id, u16 opcode, u16 size

@@ -16,10 +16,7 @@
   ;; ── Import memory from host (like all EdgeRun modules) ────────────────────
 
   ;; ── Fixed address regions ──────────────────────────────────────────────────
-  (global $FILE_TABLE    i32 (i32.const 0x3200000))  ;; entry table: 1024 × 16 B
-  (global $FILE_TABLE_END i32 (i32.const 0x3204000))
-  (global $ARENA        i32 (i32.const 0x3210000))  ;; bump arena for edited content
-  (global $SCRATCH      i32 (i32.const 0x3300000))  ;; scratch for I/O
+  ;; $FILE_TABLE, $FILE_TABLE_END, $ARENA, $SCRATCH come from config.wat
   (global $MAX_FILES    i32 (i32.const 1024))
 
   ;; ── Scratch globals (return-value convention) ──────────────────────────────

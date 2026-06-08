@@ -4,54 +4,11 @@
   ;; GENERATOR TEMPLATE — per-arch KV templates expand into dispatch tables.
   ;;
   ;; Usage:
-  ;;   python tools/gen_compiler.py templates/x86_64.json > gen/jit-dispatch-x86-64.wat
+  ;;   bun compiler/tools/gen_compiler.js templates/x86_64.json > out/gen/jit-dispatch-x86-64.wat
   ;; ═════════════════════════════════════════════════════════════════════
 
 
-  ;; ═════════════════════════════════════════════════════════════════════
-  ;; JIT State — per-architecture globals (suffixed by arch)
-  ;; ═════════════════════════════════════════════════════════════════════
-
-  (global $JIT_SLOT_SIZE{SUFFIX}  i32 (i32.const 0x40000))  ;; 256KB per function
-  (global $JIT_STATE{SUFFIX}      i32 (i32.const 0x300000))
-
-  ;; JIT state field offsets (relative to JIT_STATE)
-  (global $JS_CODE_PTR{SUFFIX}       i32 (i32.const 0))
-  (global $JS_CACHE_BASE{SUFFIX}     i32 (i32.const 4))
-  (global $JS_CACHE_END{SUFFIX}      i32 (i32.const 8))
-  (global $JS_FUNC_IDX{SUFFIX}       i32 (i32.const 12))
-  (global $JS_RESULT_COUNT{SUFFIX}   i32 (i32.const 16))
-  (global $JS_STACK_DEPTH{SUFFIX}    i32 (i32.const 20))
-  (global $JS_MAX_STACK{SUFFIX}      i32 (i32.const 24))
-  (global $JS_LABEL_DEPTH{SUFFIX}    i32 (i32.const 28))
-  (global $JS_RETURN_EMITTED{SUFFIX} i32 (i32.const 32))
-  (global $JS_LABEL_OFFSETS{SUFFIX}  i32 (i32.const 64))    ;; 256*i32 = 1024 bytes
-  (global $JS_LABEL_KINDS{SUFFIX}    i32 (i32.const 1088))   ;; 256*byte = 256 bytes
-  (global $JS_LABEL_IF_JZ{SUFFIX}    i32 (i32.const 1344))   ;; 256*i32 = 1024 bytes
-  (global $JS_FIXUP_COUNT{SUFFIX}    i32 (i32.const 2368))
-  (global $JS_FIXUP_LABEL{SUFFIX}    i32 (i32.const 2372))   ;; 256*i32 = 1024 bytes
-  (global $JS_FIXUP_OFFSET{SUFFIX}   i32 (i32.const 3396))   ;; 256*i32 = 1024 bytes
-  (global $JS_INITIALIZED{SUFFIX}    i32 (i32.const 4420))
-  (global $JS_CALL_FIXUP_COUNT{SUFFIX} i32 (i32.const 4424))
-
-  ;; Label kinds
-  (global $JIT_LABEL_BLOCK{SUFFIX}   i32 (i32.const 0))
-  (global $JIT_LABEL_LOOP{SUFFIX}    i32 (i32.const 1))
-  (global $JIT_LABEL_IF{SUFFIX}      i32 (i32.const 2))
-  (global $JIT_LABEL_ELSE    i32 (i32.const 3))
-
-  ;; Peephole optimization flag
-  (global ${RESULT_GLOBAL} (mut i32) (i32.const 0))
-
-  ;; Current decoded op pointer
-  (global $CURRENT_DEC_PTR{SUFFIX}   (mut i32) (i32.const 0))
-
-  ;; Peephole lookahead
-  (global ${NEXT_OP_GLOBAL} (mut i32) (i32.const 0))
-
-  ;; JIT error code
-  (global ${JIT_ERROR_GLOBAL} (mut i32) (i32.const 0))
-
+  ;; JIT state globals are defined in out/gen/config.wat (from package.json edgerun.globals)
   ;; ELF/binary buffer globals are defined in per-arch emit-*.wat files
 
 

@@ -105,13 +105,6 @@
   (global $SCENE_EVENT_SEQ i32 (i32.const 28))
   (global $SCENE_EVENT_SIZE i32 (i32.const 32))
 
-  (global $BUF_TINY_BYTES     i32 (i32.const 20))
-  (global $BUF_SMALL_BYTES    i32 (i32.const 100))
-  (global $BUF_MED_BYTES      i32 (i32.const 260))
-  (global $BUF_LARGE_BYTES    i32 (i32.const 10000))
-  (global $RX_BYTES           i32 (i32.const 10000))
-  (global $NODE_RING_COUNT    i32 (i32.const 32))
-
   (global $MEM_TX_BUF_STATE       i32 (i32.const 100))
   (global $MEM_RX_BUF_STATE       i32 (i32.const 200))
   (global $MEM_TX_NODE_RING       i32 (i32.const 300))

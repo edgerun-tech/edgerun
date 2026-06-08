@@ -72,7 +72,7 @@ All generated files go under `out/` and are gitignored. Notable outputs:
 | `bun run build` | Assemble `out/edgerun.wat` + `out/edgerun.wasm` (standard profile) |
 | `bun run build:full` | Assemble with all 3 JIT backends and renamed exports |
 | `bun run build:ui` | Regenerate `out/ui/fragments/` from `ui/src/` and link `out/ui/ui_framework.wat` |
-| `bun run pipeline-stages` | Generate pipeline stage WAT files from `pipeline/registry.json` |
+| `bun run pipeline-stages` | Generate pipeline stage WAT files from `edgerun.registry` in `package.json` |
 | `bun run build:cli -- <file.wat>` | Build a standalone CLI ELF from a WAT fragment |
 | `bun run clean` | Remove all build artifacts (`rm -rf out/`) |
 
@@ -80,7 +80,7 @@ All generated files go under `out/` and are gitignored. Notable outputs:
 
 All build scripts live in `tools/` and share `build-lib.mjs`:
 
-- **`tools/build.mjs`** — Manifest-based module builder. Reads `manifest.json`,
+- **`tools/build.mjs`** — Manifest-based module builder. Reads `edgerun.manifest` from `package.json`,
   concatenates fragments, wraps in a `(module)`, compiles to WASM.
 
 - **`tools/build_wat.mjs`** — Full build with all 3 JIT backends. Handles
@@ -99,23 +99,23 @@ All build scripts live in `tools/` and share `build-lib.mjs`:
   cross-fragment import/export wrappers and links `out/ui/ui_framework.wat`.
 
 - **`pipeline/gen-stages.js`** — Generates pipeline stage WAT
-  files from `pipeline/registry.json`.
+  files from `edgerun.registry` in `package.json`.
 
 - **`compiler/tools/gen_compiler.js`** — JIT compiler generator.
   Reads architecture JSON templates and emits dispatch/full JIT WAT files.
 
 ### Key Files
 
-- **`manifest.json`** — Defines every fragment in order, with build profile
+- **`package.json` → `edgerun.manifest`** — Defines every fragment in order, with build profile
   and backend tags. Source of truth for what goes into the module.
-- **`pipeline/registry.json`** — Defines all pipeline stages (slot #, name,
+- **`package.json` → `edgerun.registry`** — Defines all pipeline stages (slot #, name,
   pattern, constraints). Used by `gen-stages.js` to generate stage WAT code.
-- **`compiler/templates/*.json`** — Architecture templates for JIT backends.
-  Each inherits from `base.json` and overrides arch-specific opcodes.
+- **`package.json` → `edgerun.templates`** — Architecture templates for JIT backends.
+  Base template inherited by all arch-specific templates.
 
 ### Prerequisites
 
 - **Bun** (for ES module scripts using `import.meta.dirname`)
-- **Node.js** (for CommonJS scripts)
+- **Bun** (for all scripts)
 - **wat2wasm** or **wasm-tools** (for WAT → WASM compilation)
 - **wasm2elf** (for CLI builds, from `compiler/tools/wasm2elf.js`)

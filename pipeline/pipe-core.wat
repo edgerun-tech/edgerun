@@ -3,11 +3,10 @@
 
     ;; Standard ID removed — merged into single module
 
-   ;; ── Pipe struct layout — PIPE_* offset globals defined in runtime/memory-map.wat ──
-   ;; Include memory-map.wat before this fragment.
+   ;; ── Pipe struct layout — PIPE_* offset globals from out/gen/config.wat (package.json) ──
 
-   ;; ── Bump allocator (HEAP_START/HEAP_END from memory-map.wat) ──
-   ;; $HEAP_START = 0x40000 (from memory-map.wat)
+   ;; ── Bump allocator (HEAP_START/HEAP_END from config.wat) ──
+   ;; $HEAP_START = 0x40000
    (global $heap_ptr (mut i32) (i32.const 0x40000))
 
   (func $pipe_alloc (export "pipe_alloc") (param $size i32) (result i32)

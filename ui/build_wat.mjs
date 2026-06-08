@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import {
-  resolveRoot, rootPath, ensureDir, compileWat, wrapModule
+  ensureDir, wrapModule
 } from '../tools/build-lib.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

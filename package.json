@@ -3,12 +3,5840 @@
   "private": true,
   "scripts": {
     "all": "bun run gen && bun run build",
-    "gen": "node compiler/tools/gen_compiler.js --assemble all && node compiler/tools/gen_compiler.js compiler/templates/x86_64.json > out/gen/jit-dispatch-x86-64.wat && node compiler/tools/gen_compiler.js compiler/templates/aarch64.json > out/gen/jit-dispatch-aarch64.wat && node compiler/tools/gen_compiler.js compiler/templates/arm32.json > out/gen/jit-dispatch-arm32.wat",
-    "pipeline-stages": "node pipeline/gen-stages.js",
-    "build": "bun run pipeline-stages && bun tools/build.mjs",
-    "build:full": "bun run gen && bun run build:ui && bun run pipeline-stages && bun tools/build_wat.mjs",
+    "gen": "bun tools/build.ts gen-compiler --assemble all && bun tools/build.ts gen-compiler x86_64 > out/gen/jit-dispatch-x86-64.wat && bun tools/build.ts gen-compiler aarch64 > out/gen/jit-dispatch-aarch64.wat && bun tools/build.ts gen-compiler arm32 > out/gen/jit-dispatch-arm32.wat",
+    "gen-config": "bun tools/build.ts gen-config",
+    "pipeline-stages": "bun tools/build.ts gen-stages",
+    "build": "bun run gen-config && bun run pipeline-stages && bun tools/build.ts build",
+    "build:full": "bun run gen && bun run gen-config && bun run build:ui && bun run pipeline-stages && bun tools/build.ts build-full",
     "build:ui": "bun ui/build_wat.mjs",
-    "build:cli": "node cli/build.mjs",
+    "build:cli": "bun tools/build.ts build-cli",
+    "build:tool": "bun tools/build.ts build-tool",
     "clean": "rm -rf out/"
+  },
+  "edgerun": {
+    "manifest": [
+      {
+        "path": "runtime/memory.wat"
+      },
+      {
+        "path": "runtime/memory-map.wat"
+      },
+      {
+        "path": "out/gen/config-constants.wat"
+      },
+      {
+        "path": "runtime/edgerun-core.wat"
+      },
+      {
+        "path": "runtime/math-utils.wat"
+      },
+      {
+        "path": "pipeline/pipe-core.wat"
+      },
+      {
+        "path": "pipeline/pipeline-core.wat"
+      },
+      {
+        "path": "pipeline/frame-core.wat"
+      },
+      {
+        "path": "pipeline/frame-pacer.wat"
+      },
+      {
+        "path": "pipeline/mux-core.wat"
+      },
+      {
+        "path": "net/socket-core.wat"
+      },
+      {
+        "path": "pipeline/queue-stage.wat"
+      },
+      {
+        "path": "pipeline/buffer-stage.wat"
+      },
+      {
+        "path": "pipeline/cdc-stage.wat"
+      },
+      {
+        "path": "compiler/wasm-emit.wat"
+      },
+      {
+        "path": "compiler/interpreter.wat"
+      },
+      {
+        "path": "lang/edgerun-ir-core.wat"
+      },
+      {
+        "path": "lang/edgerun-parse.wat"
+      },
+      {
+        "path": "lang/edgerun-resolve.wat"
+      },
+      {
+        "path": "lang/edgerun-lower.wat"
+      },
+      {
+        "path": "lang/edgerun-privacy.wat"
+      },
+      {
+        "path": "pipeline/edgerun-parse-stage.wat"
+      },
+      {
+        "path": "pipeline/edgerun-exec-stage.wat"
+      },
+      {
+        "path": "compiler/base-x86-64.wat",
+        "backends": [
+          "x86_64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/emit-core.wat"
+      },
+      {
+        "path": "compiler/emit-x86-64.wat",
+        "backends": [
+          "x86_64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "out/gen/jit-dispatch-x86-64.wat",
+        "backends": [
+          "x86_64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "out/gen/jit-dispatch-aarch64.wat",
+        "backends": [
+          "aarch64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "out/gen/jit-dispatch-arm32.wat",
+        "backends": [
+          "arm32"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/templates-x86-64.wat",
+        "backends": [
+          "x86_64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/simd-x86-64.wat",
+        "backends": [
+          "x86_64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "codec/hash-djb2.wat"
+      },
+      {
+        "path": "codec/checksum-crc32-bzip.wat"
+      },
+      {
+        "path": "codec/checksum-inet.wat"
+      },
+      {
+        "path": "math/convex-hull.wat"
+      },
+      {
+        "path": "crypto/crypto-isaac.wat"
+      },
+      {
+        "path": "crypto/crypto-core.wat"
+      },
+      {
+        "path": "crypto/crypto-xtea.wat"
+      },
+      {
+        "path": "crypto/crypto-sha1.wat"
+      },
+      {
+        "path": "crypto/crypto-sha256.wat"
+      },
+      {
+        "path": "crypto/crypto-sha512.wat"
+      },
+      {
+        "path": "crypto/crypto-bigint-limb.wat"
+      },
+      {
+        "path": "crypto/crypto-ed25519-shape.wat"
+      },
+      {
+        "path": "crypto/crypto-ecdsa-der.wat"
+      },
+      {
+        "path": "crypto/crypto-rsa-pkcs1.wat"
+      },
+      {
+        "path": "crypto/crypto-hmac-hkdf.wat"
+      },
+      {
+        "path": "crypto/crypto-aes128-gcm.wat"
+      },
+      {
+        "path": "crypto/crypto-aes-ctr.wat"
+      },
+      {
+        "path": "crypto/crypto-aes-block.wat"
+      },
+      {
+        "path": "crypto/crypto-hmac-sha256.wat"
+      },
+      {
+        "path": "crypto/crypto-x25519-scalar.wat"
+      },
+      {
+        "path": "pipeline/hmac-sha256-stage.wat"
+      },
+      {
+        "path": "pipeline/aes128-gcm-encrypt-stage.wat"
+      },
+      {
+        "path": "pipeline/aes128-gcm-decrypt-stage.wat"
+      },
+      {
+        "path": "pipeline/aes128-ctr-xor-stage.wat"
+      },
+      {
+        "path": "pipeline/deflate-decode-stage.wat"
+      },
+      {
+        "path": "pipeline/deflate-encode-stage.wat"
+      },
+      {
+        "path": "pipeline/gzip-decode-stage.wat"
+      },
+      {
+        "path": "pipeline/gzip-encode-stage.wat"
+      },
+      {
+        "path": "pipeline/zlib-decode-stage.wat"
+      },
+      {
+        "path": "pipeline/zlib-encode-stage.wat"
+      },
+      {
+        "path": "pipeline/json-parse-stage.wat"
+      },
+      {
+        "path": "pipeline/wasm-exec-stage.wat",
+        "exists": false
+      },
+      {
+        "path": "pipeline/percent-encode-stage.wat"
+      },
+      {
+        "path": "pipeline/uuid-parse-stage.wat"
+      },
+      {
+        "path": "pipeline/endian-write-stage.wat"
+      },
+      {
+        "path": "pipeline/rsa-pkcs1-verify-stage.wat"
+      },
+      {
+        "path": "pipeline/rsa-pkcs1-emit-stage.wat"
+      },
+      {
+        "path": "pipeline/http2-frame-header-decode-stage.wat"
+      },
+      {
+        "path": "pipeline/http-lowercase-header-stage.wat"
+      },
+      {
+        "path": "pipeline/tls-alpn-next-stage.wat"
+      },
+      {
+        "path": "pipeline/http-validate-headers-stage.wat"
+      },
+      {
+        "path": "pipeline/tls-cert-entry-next-stage.wat"
+      },
+      {
+        "path": "pipeline/hpack-header-block-scan-stage.wat"
+      },
+      {
+        "path": "pipeline/tls-dns-name-normalize-stage.wat"
+      },
+      {
+        "path": "pipeline/der-oid-next-arc-stage.wat"
+      },
+      {
+        "path": "pipeline/json-emit-string-stage.wat"
+      },
+      {
+        "path": "pipeline/form-urlencoded-next-pair-stage.wat"
+      },
+      {
+        "path": "pipeline/base64url-encode-stage.wat"
+      },
+      {
+        "path": "pipeline/base64url-decode-stage.wat"
+      },
+      {
+        "path": "pipeline/yaml-scan-line-stage.wat"
+      },
+      {
+        "path": "pipeline/sdk-seed-shape32-stage.wat"
+      },
+      {
+        "path": "pipeline/varint-encode-stage.wat"
+      },
+      {
+        "path": "pipeline/tls-record-header-encode-stage.wat"
+      },
+      {
+        "path": "protocol/binary-core.wat"
+      },
+      {
+        "path": "protocol/cache.wat"
+      },
+      {
+        "path": "protocol/der.wat"
+      },
+      {
+        "path": "protocol/dhcp.wat"
+      },
+      {
+        "path": "protocol/hpack.wat"
+      },
+      {
+        "path": "protocol/http.wat"
+      },
+      {
+        "path": "protocol/ipv4-net.wat"
+      },
+      {
+        "path": "protocol/packet-core.wat"
+      },
+      {
+        "path": "protocol/quic.wat"
+      },
+      {
+        "path": "codec/sfx-tables.wat"
+      },
+      {
+        "path": "protocol/tls.wat"
+      },
+      {
+        "path": "codec/checksum-core.wat"
+      },
+      {
+        "path": "codec/base64.wat"
+      },
+      {
+        "path": "codec/json.wat"
+      },
+      {
+        "path": "codec/compress.wat"
+      },
+      {
+        "path": "codec/text.wat"
+      },
+      {
+        "path": "codec/serialize.wat"
+      },
+      {
+        "path": "codec/binary.wat"
+      },
+      {
+        "path": "codec/string-url.wat"
+      },
+      {
+        "path": "codec/media.wat"
+      },
+      {
+        "path": "codec/model.wat"
+      },
+      {
+        "path": "out/ui/ui_framework.wat"
+      },
+      {
+        "path": "app/oci.wat"
+      },
+      {
+        "path": "app/codex.wat"
+      },
+      {
+        "path": "app/wallet.wat"
+      },
+      {
+        "path": "app/security.wat"
+      },
+      {
+        "path": "app/identity.wat"
+      },
+      {
+        "path": "app/net.wat"
+      },
+      {
+        "path": "app/core.wat"
+      },
+      {
+        "path": "app/ui.wat"
+      },
+      {
+        "path": "app/wayland.wat"
+      },
+      {
+        "path": "app/platform.wat"
+      },
+      {
+        "path": "data/hex-core.wat"
+      },
+      {
+        "path": "data/byte-search.wat"
+      },
+      {
+        "path": "data/cache-archive-split.wat"
+      },
+      {
+        "path": "data/color-util.wat"
+      },
+      {
+        "path": "data/glob-match.wat"
+      },
+      {
+        "path": "data/html-strip.wat"
+      },
+      {
+        "path": "data/mime-quoted-printable.wat"
+      },
+      {
+        "path": "data/secret-service-core.wat"
+      },
+      {
+        "path": "data/shell-word-scan.wat"
+      },
+      {
+        "path": "data/sse-event-stream.wat"
+      },
+      {
+        "path": "data/storage-core-index.wat"
+      },
+      {
+        "path": "data/string-distance.wat"
+      },
+      {
+        "path": "data/tag-list.wat"
+      },
+      {
+        "path": "data/terminal-control-scan.wat"
+      },
+      {
+        "path": "data/terminal-state-core.wat"
+      },
+      {
+        "path": "data/uuid-util.wat"
+      },
+      {
+        "path": "out/data/generated-metadata.wat",
+        "exists": false
+      },
+      {
+        "path": "compiler/er-tools-fragment.wat"
+      },
+      {
+        "path": "compiler/er-tools-compile.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "app/wayland-patch-syscalls.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "out/data/embedded-source.wat",
+        "builds": [
+          "standard"
+        ]
+      },
+      {
+        "path": "compiler/emit-arm32.wat",
+        "backends": [
+          "arm32"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/emit-aarch64.wat",
+        "backends": [
+          "aarch64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/ws-parse-header-stage.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/ws-write-frame-header-stage.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/oauth-json-value-stage.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/oauth-parse-http-response-stage.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "protocol/dns.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "protocol/ws.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/ui-layout-stage.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/ui-paint-stage.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/ui-event-stage.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "app/oauth.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "pipeline/stage-registry.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "out/pipeline/pipeline-stages.wat",
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/simd-arm32.wat",
+        "backends": [
+          "arm32"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/templates-arm32.wat",
+        "backends": [
+          "arm32"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/simd-aarch64.wat",
+        "backends": [
+          "aarch64"
+        ],
+        "builds": [
+          "full"
+        ]
+      },
+      {
+        "path": "compiler/templates-aarch64.wat",
+        "backends": [
+          "aarch64"
+        ],
+        "builds": [
+          "full"
+        ]
+      }
+    ],
+    "registry": [
+      {
+        "slot": 1,
+        "name": "hex_encode",
+        "generated": false
+      },
+      {
+        "slot": 2,
+        "name": "hex_decode",
+        "generated": false
+      },
+      {
+        "slot": 3,
+        "name": "base64_encode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "base64_encode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "global.get $SHA256_OUT_BUF",
+          "global.get $BUF_SIZE_64K"
+        ],
+        "out_buf": "global.get $SHA256_OUT_BUF"
+      },
+      {
+        "slot": 4,
+        "name": "base64_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "base64_decode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "global.get $SHA256_OUT_BUF",
+          "global.get $BUF_SIZE_64K"
+        ],
+        "out_buf": "global.get $SHA256_OUT_BUF"
+      },
+      {
+        "slot": 5,
+        "name": "transport",
+        "generated": false
+      },
+      {
+        "slot": 6,
+        "name": "mux_static",
+        "generated": false
+      },
+      {
+        "slot": 7,
+        "name": "demux_static",
+        "generated": false
+      },
+      {
+        "slot": 8,
+        "name": "mux_dynamic",
+        "generated": false
+      },
+      {
+        "slot": 9,
+        "name": "demux_dynamic",
+        "generated": false
+      },
+      {
+        "slot": 10,
+        "name": "ws_frame",
+        "generated": false
+      },
+      {
+        "slot": 11,
+        "name": "ws_encode",
+        "generated": false
+      },
+      {
+        "slot": 12,
+        "name": "ws_decode",
+        "generated": false
+      },
+      {
+        "slot": 13,
+        "name": "wasm_detect",
+        "pattern": "raw",
+        "generated": false
+      },
+      {
+        "slot": 14,
+        "name": "wasm_load",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "memcpy"
+      },
+      {
+        "slot": 15,
+        "name": "frame_pacer",
+        "generated": false
+      },
+      {
+        "slot": 16,
+        "name": "sha256",
+        "generated": false
+      },
+      {
+        "slot": 17,
+        "name": "hmac_sha256",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "hmac_sha256"
+      },
+      {
+        "slot": 18,
+        "name": "sha1",
+        "generated": false
+      },
+      {
+        "slot": 19,
+        "name": "sha512",
+        "generated": false
+      },
+      {
+        "slot": 20,
+        "name": "sha384",
+        "generated": false
+      },
+      {
+        "slot": 21,
+        "name": "aes128_gcm_encrypt",
+        "pattern": "raw",
+        "generated": false,
+        "fn": "aes128_gcm_encrypt"
+      },
+      {
+        "slot": 22,
+        "name": "aes128_gcm_decrypt",
+        "pattern": "raw",
+        "generated": false,
+        "fn": "aes128_gcm_decrypt"
+      },
+      {
+        "slot": 23,
+        "name": "aes128_ctr_xor",
+        "pattern": "raw",
+        "generated": false,
+        "fn": "aes128_ctr_xor"
+      },
+      {
+        "slot": 24,
+        "name": "djb2_hash",
+        "pattern": "store",
+        "generated": true,
+        "fn": "djb2_hash",
+        "store_type": "i32.store",
+        "out_size": 4
+      },
+      {
+        "slot": 25,
+        "name": "inet_checksum",
+        "pattern": "store",
+        "generated": true,
+        "fn": "inet_checksum",
+        "store_type": "i32.store16",
+        "out_size": 2
+      },
+      {
+        "slot": 26,
+        "name": "crc32_bzip",
+        "pattern": "store",
+        "generated": true,
+        "fn": "bzip_crc32",
+        "store_type": "i32.store",
+        "out_size": 4
+      },
+      {
+        "slot": 27,
+        "name": "deflate_decode",
+        "pattern": "raw",
+        "generated": false,
+        "fn": "deflate_inflate_raw"
+      },
+      {
+        "slot": 28,
+        "name": "deflate_encode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "deflate_stored_encode"
+      },
+      {
+        "slot": 29,
+        "name": "gzip_decode",
+        "pattern": "raw",
+        "generated": false,
+        "fn": "gzip_member_scan"
+      },
+      {
+        "slot": 30,
+        "name": "gzip_encode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "gzip_member_write_header"
+      },
+      {
+        "slot": 31,
+        "name": "zlib_decode",
+        "pattern": "raw",
+        "generated": false,
+        "fn": "zlib_member_scan"
+      },
+      {
+        "slot": 32,
+        "name": "zlib_encode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "zlib_write_header"
+      },
+      {
+        "slot": 33,
+        "name": "json_parse",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "json_parse_tape"
+      },
+      {
+        "slot": 34,
+        "name": "percent_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "percent_decode_strict",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 35,
+        "name": "percent_encode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "percent_encode_component"
+      },
+      {
+        "slot": 36,
+        "name": "utf8_repair",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "utf8_lossy_repair",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 37,
+        "name": "to_lower",
+        "pattern": "transform",
+        "fn": "to_lower_ascii"
+      },
+      {
+        "slot": 38,
+        "name": "to_upper",
+        "pattern": "transform",
+        "fn": "to_upper_ascii"
+      },
+      {
+        "slot": 39,
+        "name": "hex_decode_compat",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "hex_decode_compat",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 40,
+        "name": "cp1252_decode",
+        "pattern": "map",
+        "generated": true,
+        "fn": "cp1252_decode_string"
+      },
+      {
+        "slot": 41,
+        "name": "pem_compact",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "pem_compact_base64",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 42,
+        "name": "aes128_encrypt",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "aes128_encrypt",
+        "args": [
+          "local.get $cfg",
+          "local.get $clen",
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch"
+        ]
+      },
+      {
+        "slot": 43,
+        "name": "aes128_decrypt",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "aes128_decrypt",
+        "args": [
+          "local.get $cfg",
+          "local.get $clen",
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch"
+        ]
+      },
+      {
+        "slot": 44,
+        "name": "http_request_line_parse",
+        "pattern": "scan",
+        "fn": "http_parse_request_line",
+        "out_size": 28
+      },
+      {
+        "slot": 45,
+        "name": "http_status_line_parse",
+        "pattern": "scan",
+        "fn": "http_parse_status_line",
+        "out_size": 24
+      },
+      {
+        "slot": 46,
+        "name": "edgerun_parse",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "er_parse"
+      },
+      {
+        "slot": 47,
+        "name": "edgerun_exec",
+        "pattern": "raw",
+        "generated": false
+      },
+      {
+        "slot": 48,
+        "name": "queue",
+        "pattern": "raw",
+        "generated": false
+      },
+      {
+        "slot": 49,
+        "name": "buffer",
+        "pattern": "raw",
+        "generated": false
+      },
+      {
+        "slot": 50,
+        "name": "cdc",
+        "pattern": "raw",
+        "generated": false
+      },
+      {
+        "slot": 51,
+        "name": "uuid_format",
+        "pattern": "map",
+        "generated": true,
+        "fn": "uuid_format",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $scratch"
+        ]
+      },
+      {
+        "slot": 52,
+        "name": "uuid_parse",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "uuid_parse"
+      },
+      {
+        "slot": 53,
+        "name": "to_title_case",
+        "pattern": "map",
+        "generated": true,
+        "fn": "to_title_case"
+      },
+      {
+        "slot": 54,
+        "name": "cesu8_to_utf8",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "cesu8_encode_utf8",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 55,
+        "name": "escape_text",
+        "pattern": "map",
+        "generated": true,
+        "fn": "escape_text"
+      },
+      {
+        "slot": 56,
+        "name": "unescape_text",
+        "pattern": "map",
+        "generated": true,
+        "fn": "unescape_text"
+      },
+      {
+        "slot": 57,
+        "name": "http_date_parse",
+        "pattern": "scan",
+        "fn": "http_date_parse",
+        "out_size": 40
+      },
+      {
+        "slot": 59,
+        "name": "dns_header_decode",
+        "pattern": "scan",
+        "fn": "dns_header_decode",
+        "out_size": 52,
+        "min_read": 12
+      },
+      {
+        "slot": 61,
+        "name": "tls_record_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "tls_record_header_decode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read"
+        ]
+      },
+      {
+        "slot": 62,
+        "name": "hpack_huffman_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "hpack_huffman_decode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 64,
+        "name": "http_chunk_scan",
+        "pattern": "scan",
+        "fn": "http1_chunk_scan_body",
+        "out_size": 28
+      },
+      {
+        "slot": 65,
+        "name": "dns_name_decompress",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "dns_name_to_lower_ascii_compressed",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "i32.const 0",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 66,
+        "name": "tls_clienthello_scan",
+        "pattern": "scan",
+        "fn": "tls_clienthello_scan",
+        "out_size": 48
+      },
+      {
+        "slot": 69,
+        "name": "frame_header_decode",
+        "pattern": "scan",
+        "fn": "frame_header_decode_u16_be",
+        "out_size": 12,
+        "min_read": 2
+      },
+      {
+        "slot": 71,
+        "name": "dns_question_next",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "dns_question_next",
+        "out_size": 20,
+        "min_read": 8,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "local.get $start",
+          "local.get $scratch"
+        ],
+        "extra_locals": [
+          "(local $start i32)"
+        ],
+        "prep": [
+          "(local.set $start (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 72,
+        "name": "dns_rr_next",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "dns_rr_next",
+        "out_size": 24,
+        "min_read": 8,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "local.get $start",
+          "local.get $scratch"
+        ],
+        "extra_locals": [
+          "(local $start i32)"
+        ],
+        "prep": [
+          "(local.set $start (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 74,
+        "name": "endian_write",
+        "generated": false,
+        "fn": "endian_write"
+      },
+      {
+        "slot": 75,
+        "name": "rsa_pkcs1_verify",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "rsa_pkcs1_v15_verify"
+      },
+      {
+        "slot": 76,
+        "name": "rsa_pkcs1_emit",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "rsa_pkcs1_v15_emit"
+      },
+      {
+        "slot": 77,
+        "name": "oauth_url_encode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "oauth_url_encode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 78,
+        "name": "http_classify_body",
+        "pattern": "scan",
+        "fn": "http_classify_body_framing",
+        "out_size": 16
+      },
+      {
+        "slot": 79,
+        "name": "url_scan",
+        "pattern": "scan",
+        "fn": "url_scan",
+        "out_size": 40
+      },
+      {
+        "slot": 80,
+        "name": "x509_cert_scan",
+        "pattern": "scan",
+        "fn": "x509_certificate_scan",
+        "out_size": 40
+      },
+      {
+        "slot": 81,
+        "name": "http2_frame_header_decode",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "http2_frame_header_decode"
+      },
+      {
+        "slot": 82,
+        "name": "http3_frame_header_decode",
+        "pattern": "scan",
+        "fn": "http3_frame_header_decode",
+        "out_size": 16
+      },
+      {
+        "slot": 83,
+        "name": "tls_cert_list_scan",
+        "pattern": "scan",
+        "fn": "tls_certificate_list_scan",
+        "out_size": 16
+      },
+      {
+        "slot": 84,
+        "name": "tls_sni_host",
+        "pattern": "scan",
+        "fn": "tls_clienthello_sni_host",
+        "out_size": 8
+      },
+      {
+        "slot": 85,
+        "name": "rfc3339_parse",
+        "pattern": "scan",
+        "fn": "rfc3339_parse",
+        "out_size": 8
+      },
+      {
+        "slot": 86,
+        "name": "http_lowercase_header",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "http_lowercase_header_name"
+      },
+      {
+        "slot": 87,
+        "name": "tls_alpn_next",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "tls_clienthello_alpn_next"
+      },
+      {
+        "slot": 88,
+        "name": "der_sequence_decode",
+        "pattern": "scan",
+        "fn": "der_asn1_sequence_decode",
+        "out_size": 16
+      },
+      {
+        "slot": 89,
+        "name": "http_validate_headers",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "http1_validate_header_block"
+      },
+      {
+        "slot": 90,
+        "name": "http_parse_content_length",
+        "pattern": "scan",
+        "fn": "http_parse_content_length",
+        "out_size": 8
+      },
+      {
+        "slot": 91,
+        "name": "der_integer_decode",
+        "pattern": "scan",
+        "fn": "der_asn1_integer_decode",
+        "out_size": 20
+      },
+      {
+        "slot": 92,
+        "name": "der_octet_string_decode",
+        "pattern": "scan",
+        "fn": "der_asn1_octet_string_decode",
+        "out_size": 16
+      },
+      {
+        "slot": 93,
+        "name": "der_time_decode",
+        "pattern": "scan",
+        "fn": "der_time_decode",
+        "out_size": 8
+      },
+      {
+        "slot": 94,
+        "name": "tls_cert_entry_next",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "tls_certificate_entry_next"
+      },
+      {
+        "slot": 95,
+        "name": "oci_reference_scan",
+        "pattern": "scan",
+        "fn": "oci_reference_scan",
+        "out_size": 48
+      },
+      {
+        "slot": 96,
+        "name": "ssh_auth_key_scan",
+        "pattern": "scan",
+        "fn": "ssh_authorized_key_scan",
+        "out_size": 24
+      },
+      {
+        "slot": 97,
+        "name": "der_bit_string_decode",
+        "pattern": "scan",
+        "fn": "der_asn1_bit_string_decode",
+        "out_size": 20
+      },
+      {
+        "slot": 98,
+        "name": "utf8_scan",
+        "pattern": "scan",
+        "fn": "utf8_scan",
+        "out_size": 4
+      },
+      {
+        "slot": 100,
+        "name": "ws_parse_header",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "ws_parse_header"
+      },
+      {
+        "slot": 101,
+        "name": "ws_write_frame_header",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "ws_write_hdr"
+      },
+      {
+        "slot": 102,
+        "name": "tls_dns_name_normalize",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "tls_dns_name_normalize"
+      },
+      {
+        "slot": 103,
+        "name": "der_oid_root_decode",
+        "pattern": "scan",
+        "fn": "der_oid_root_decode",
+        "out_size": 12
+      },
+      {
+        "slot": 104,
+        "name": "der_oid_next_arc",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "der_oid_next_arc"
+      },
+      {
+        "slot": 105,
+        "name": "json_emit_string",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "json_emit_string"
+      },
+      {
+        "slot": 106,
+        "name": "pem_find_boundaries",
+        "pattern": "scan",
+        "fn": "pem_find_boundaries",
+        "out_size": 24
+      },
+      {
+        "slot": 107,
+        "name": "uri_scan_path_query",
+        "pattern": "scan",
+        "fn": "uri_scan_path_query",
+        "out_size": 24
+      },
+      {
+        "slot": 108,
+        "name": "form_urlencoded_next_pair",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "form_urlencoded_next_pair"
+      },
+      {
+        "slot": 109,
+        "name": "base64url_encode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "b64_encode"
+      },
+      {
+        "slot": 110,
+        "name": "base64url_decode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "b64_decode"
+      },
+      {
+        "slot": 111,
+        "name": "mac_scan",
+        "pattern": "scan",
+        "fn": "mac_scan",
+        "out_size": 6
+      },
+      {
+        "slot": 112,
+        "name": "utf8_scan_simd",
+        "pattern": "scan",
+        "fn": "utf8_scan_simd",
+        "out_size": 4
+      },
+      {
+        "slot": 113,
+        "name": "toml_scan_scalar",
+        "pattern": "scan",
+        "fn": "toml_scan_scalar",
+        "out_size": 12
+      },
+      {
+        "slot": 114,
+        "name": "toml_scan_key_value",
+        "pattern": "scan",
+        "fn": "toml_scan_key_value",
+        "out_size": 24
+      },
+      {
+        "slot": 115,
+        "name": "yaml_scan_line",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "yaml_scan_line"
+      },
+      {
+        "slot": 116,
+        "name": "oauth_json_value",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "oauth_json_value"
+      },
+      {
+        "slot": 117,
+        "name": "oauth_parse_http_response",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "oauth_parse_http_response"
+      },
+      {
+        "slot": 118,
+        "name": "sdk_seed_shape32",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "sdk_seed_shape32"
+      },
+      {
+        "slot": 119,
+        "name": "crc32_unrolled",
+        "pattern": "store",
+        "generated": true,
+        "fn": "crc32_unrolled",
+        "store_type": "i32.store",
+        "out_size": 4
+      },
+      {
+        "slot": 120,
+        "name": "adler32_vec",
+        "pattern": "store",
+        "generated": true,
+        "fn": "adler32_vec",
+        "store_type": "i32.store",
+        "out_size": 4
+      },
+      {
+        "slot": 121,
+        "name": "base32hex_encode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "base32hex_encode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "global.get $WORK_BUF",
+          "global.get $BUF_SIZE_8K"
+        ],
+        "out_buf": "global.get $WORK_BUF"
+      },
+      {
+        "slot": 122,
+        "name": "base32hex_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "base32hex_decode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "global.get $WORK_BUF",
+          "global.get $BUF_SIZE_8K"
+        ],
+        "out_buf": "global.get $WORK_BUF"
+      },
+      {
+        "slot": 123,
+        "name": "varint_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "varint_decode_u64",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "global.get $SHA256_OUT_BUF"
+        ],
+        "out_buf": "global.get $SHA256_OUT_BUF"
+      },
+      {
+        "slot": 124,
+        "name": "varint_encode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "varint_encode_u64"
+      },
+      {
+        "slot": 125,
+        "name": "tls_record_header_encode",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "tls_record_header_encode"
+      },
+      {
+        "slot": 126,
+        "name": "tls_handshake_header_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "tls_handshake_header_decode",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read"
+        ]
+      },
+      {
+        "slot": 127,
+        "name": "http_find_crlf",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "http_find_crlf",
+        "out_size": 8,
+        "min_read": 0,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "local.get $start"
+        ],
+        "extra_locals": [
+          "(local $start i32)"
+        ],
+        "prep": [
+          "(local.set $start (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 128,
+        "name": "json_unescape_string",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "json_unescape_string",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "global.get $WORK_BUF",
+          "global.get $BUF_SIZE_8K"
+        ],
+        "out_buf": "global.get $WORK_BUF"
+      },
+      {
+        "slot": 129,
+        "name": "http_find_double_crlf",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "http_find_double_crlf",
+        "out_size": 8,
+        "min_read": 0,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "local.get $start"
+        ],
+        "extra_locals": [
+          "(local $start i32)"
+        ],
+        "prep": [
+          "(local.set $start (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 130,
+        "name": "tls_extension_next",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "tls_extension_next",
+        "out_size": 16,
+        "min_read": 0,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "i32.load (global.get $SCRATCH_BUF)",
+          "local.get $scratch"
+        ]
+      },
+      {
+        "slot": 131,
+        "name": "qpack_prefix_int_decode",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "qpack_prefix_int_decode",
+        "out_size": 16,
+        "min_read": 0,
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $prefix_bits",
+          "global.get $WORK_BUF"
+        ],
+        "cfg_reads": [
+          {
+            "name": "prefix_bits",
+            "type": "i32",
+            "offset": 0,
+            "default": 6
+          }
+        ]
+      },
+      {
+        "slot": 132,
+        "name": "quic_varint_decode",
+        "pattern": "scan",
+        "fn_ret_i64": true,
+        "fn": "quic_varint_decode_u64",
+        "out_size": 8
+      },
+      {
+        "slot": 133,
+        "name": "quic_varint_encode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "quic_varint_encode_u64",
+        "args": [
+          "i32.load (global.get $SCRATCH_BUF)",
+          "i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 4))",
+          "local.get $scratch",
+          "local.get $scap"
+        ]
+      },
+      {
+        "slot": 135,
+        "name": "kv_colon_scan",
+        "pattern": "scan",
+        "fn": "kv_colon_scan",
+        "out_size": 16
+      },
+      {
+        "slot": 136,
+        "name": "unquote_span",
+        "pattern": "scan",
+        "fn": "unquote_span",
+        "out_size": 8
+      },
+      {
+        "slot": 138,
+        "name": "host_port_scan",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "host_port_scan",
+        "out_size": 16,
+        "min_read": 0,
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $default_port",
+          "local.get $scratch"
+        ],
+        "cfg_reads": [
+          {
+            "name": "default_port",
+            "type": "i32",
+            "offset": 0,
+            "default": 443
+          }
+        ]
+      },
+      {
+        "slot": 139,
+        "name": "x25519_scalar_mult",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "x25519_scalar_mult",
+        "out_size": 32,
+        "min_read": 0,
+        "args": [
+          "local.get $scratch",
+          "global.get $SCRATCH_BUF",
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 32)"
+        ]
+      },
+      {
+        "slot": 141,
+        "name": "ui_layout",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "er_ui_layout"
+      },
+      {
+        "slot": 142,
+        "name": "ui_paint",
+        "pattern": "raw",
+        "generated": false,
+        "fn": "er_ui_render"
+      },
+      {
+        "slot": 143,
+        "name": "ui_event",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "er_ui_layout_hit_test"
+      },
+      {
+        "slot": 144,
+        "name": "wasm_call",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "call"
+      },
+      {
+        "slot": 145,
+        "name": "edgerun_compile",
+        "pattern": "scan",
+        "generated": false,
+        "fn": "er_parse"
+      },
+      {
+        "slot": 58,
+        "name": "http_date_format",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "http_date_format",
+        "min_read": 0,
+        "args": [
+          "local.get $lo",
+          "local.get $hi",
+          "local.get $scratch",
+          "local.get $scap"
+        ],
+        "extra_locals": [
+          "(local $lo i32)",
+          "(local $hi i32)"
+        ],
+        "prep": [
+          "(local.set $lo (i32.load (global.get $SCRATCH_BUF)))",
+          "(local.set $hi (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 4))))"
+        ]
+      },
+      {
+        "slot": 60,
+        "name": "dns_header_encode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "dns_header_encode",
+        "min_read": 0,
+        "args": [
+          "local.get $id",
+          "local.get $flags",
+          "local.get $qd",
+          "local.get $an",
+          "local.get $ns",
+          "local.get $ar",
+          "local.get $scratch",
+          "local.get $scap"
+        ],
+        "extra_locals": [
+          "(local $id i32)",
+          "(local $flags i32)",
+          "(local $qd i32)",
+          "(local $an i32)",
+          "(local $ns i32)",
+          "(local $ar i32)"
+        ],
+        "prep": [
+          "(local.set $id (i32.load (global.get $SCRATCH_BUF)))",
+          "(local.set $flags (i32.load offset=4 (global.get $SCRATCH_BUF)))",
+          "(local.set $qd (i32.load offset=8 (global.get $SCRATCH_BUF)))",
+          "(local.set $an (i32.load offset=12 (global.get $SCRATCH_BUF)))",
+          "(local.set $ns (i32.load offset=16 (global.get $SCRATCH_BUF)))",
+          "(local.set $ar (i32.load offset=20 (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 63,
+        "name": "http_next_header",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "http_next_header",
+        "out_size": 24,
+        "min_read": 8,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "local.get $start",
+          "local.get $scratch"
+        ],
+        "extra_locals": [
+          "(local $start i32)"
+        ],
+        "prep": [
+          "(local.set $start (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 67,
+        "name": "generic_tlv_decode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "generic_tlv_next",
+        "out_size": 24,
+        "min_read": 0,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "local.get $offset",
+          "local.get $scratch",
+          "i32.sub (local.get $scap) (i32.const 8)"
+        ],
+        "extra_locals": [
+          "(local $offset i32)"
+        ],
+        "prep": [
+          "(local.set $offset (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 68,
+        "name": "generic_tlv_encode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "generic_tlv_encode_header",
+        "min_read": 0,
+        "args": [
+          "local.get $tag",
+          "local.get $value_len",
+          "local.get $scratch",
+          "i32.sub (local.get $scap) (i32.const 8)"
+        ],
+        "extra_locals": [
+          "(local $tag i32)",
+          "(local $value_len i32)"
+        ],
+        "prep": [
+          "(local.set $tag (i32.load (global.get $SCRATCH_BUF)))",
+          "(local.set $value_len (i32.load offset=4 (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 70,
+        "name": "frame_header_encode",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "frame_header_encode_u16_be",
+        "min_read": 0,
+        "args": [
+          "local.get $payload_len",
+          "local.get $scratch",
+          "i32.sub (local.get $scap) (i32.const 8)"
+        ],
+        "extra_locals": [
+          "(local $payload_len i32)"
+        ],
+        "prep": [
+          "(local.set $payload_len (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 73,
+        "name": "endian_read",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "endian_read",
+        "out_size": 8,
+        "min_read": 20,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 16)",
+          "i32.sub (local.get $read) (i32.const 16)",
+          "local.get $offset",
+          "local.get $width",
+          "local.get $endian",
+          "local.get $signed",
+          "local.get $scratch"
+        ],
+        "extra_locals": [
+          "(local $offset i32)",
+          "(local $width i32)",
+          "(local $endian i32)",
+          "(local $signed i32)"
+        ],
+        "prep": [
+          "(local.set $offset (i32.load (global.get $SCRATCH_BUF)))",
+          "(local.set $width (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 4))))",
+          "(local.set $endian (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 8))))",
+          "(local.set $signed (i32.load (i32.add (global.get $SCRATCH_BUF) (i32.const 12))))"
+        ]
+      },
+      {
+        "slot": 99,
+        "name": "hpack_header_block_scan",
+        "pattern": "decode",
+        "generated": false,
+        "fn": "hpack_header_block_scan"
+      },
+      {
+        "slot": 134,
+        "name": "yaml_scan_document",
+        "pattern": "scan",
+        "generated": true,
+        "fn": "yaml_scan_document",
+        "out_size": 32,
+        "min_read": 0,
+        "out_buf": "global.get $WORK_BUF",
+        "args": [
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "global.get $WORK_BUF"
+        ]
+      },
+      {
+        "slot": 137,
+        "name": "bracket_list_next",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "bracket_list_next",
+        "out_size": 12,
+        "min_read": 0,
+        "args": [
+          "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
+          "i32.sub (local.get $read) (i32.const 4)",
+          "local.get $offset",
+          "local.get $scratch",
+          "i32.sub (local.get $scap) (i32.const 8)"
+        ],
+        "extra_locals": [
+          "(local $offset i32)"
+        ],
+        "prep": [
+          "(local.set $offset (i32.load (global.get $SCRATCH_BUF)))"
+        ]
+      },
+      {
+        "slot": 140,
+        "name": "aes256_encrypt",
+        "pattern": "decode",
+        "generated": true,
+        "fn": "aes256_encrypt",
+        "args": [
+          "local.get $cfg",
+          "local.get $clen",
+          "global.get $SCRATCH_BUF",
+          "local.get $read",
+          "local.get $scratch"
+        ]
+      }
+    ],
+    "templates": {
+      "base": {
+        "op_prefix": "template_",
+        "simd_prefix": "template_simd_",
+        "simd_suffix": "",
+        "ops": {
+          "0x00": "unreachable",
+          "0x01": "nop",
+          "0x02": "block",
+          "0x03": "loop",
+          "0x04": "if",
+          "0x05": "else",
+          "0x0B": "end",
+          "0x0C": "br",
+          "0x0D": "br_if",
+          "0x0E": "br_table",
+          "0x0F": "return",
+          "0x10": "call",
+          "0x12": "return_call",
+          "0x1A": "drop",
+          "0x1B": "select",
+          "0x20": "local_get",
+          "0x21": "local_set",
+          "0x22": "local_tee",
+          "0x23": "global_get",
+          "0x24": "global_set",
+          "0x25": "table_get",
+          "0x26": "table_set",
+          "0x28": "i32_load",
+          "0x29": "i64_load",
+          "0x2A": "f32_load",
+          "0x2B": "f64_load",
+          "0x2C": "i32_load8_s",
+          "0x2D": "i32_load8_u",
+          "0x2E": "i32_load16_s",
+          "0x2F": "i32_load16_u",
+          "0x36": "i32_store",
+          "0x37": "i64_store",
+          "0x38": "f32_store",
+          "0x39": "f64_store",
+          "0x3A": "i32_store8",
+          "0x3B": "i32_store16",
+          "0x3F": "memory_size",
+          "0x40": "memory_grow",
+          "0x41": "i32_const",
+          "0x42": "i64_const",
+          "0x45": "i32_eqz",
+          "0x46": "i32_eq",
+          "0x47": "i32_ne",
+          "0x48": "i32_lt_s",
+          "0x49": "i32_lt_u",
+          "0x4A": "i32_gt_s",
+          "0x4B": "i32_gt_u",
+          "0x4C": "i32_le_s",
+          "0x4D": "i32_le_u",
+          "0x50": "i64_eqz",
+          "0x51": "i64_eq",
+          "0x52": "i64_ne",
+          "0x53": "i64_lt_s",
+          "0x54": "i64_lt_u",
+          "0x55": "i64_gt_s",
+          "0x56": "i64_gt_u",
+          "0x57": "i64_le_s",
+          "0x58": "i64_le_u",
+          "0x67": "i32_clz",
+          "0x68": "i32_ctz",
+          "0x69": "i32_popcnt",
+          "0x6A": "i32_add",
+          "0x6B": "i32_sub",
+          "0x6C": "i32_mul",
+          "0x6D": "i32_div_s",
+          "0x6E": "i32_div_u",
+          "0x6F": "i32_rem_s",
+          "0x70": "i32_rem_u",
+          "0x71": "i32_and",
+          "0x72": "i32_or",
+          "0x73": "i32_xor",
+          "0x74": "i32_shl",
+          "0x75": "i32_shr_s",
+          "0x76": "i32_shr_u",
+          "0x77": "i32_rotl",
+          "0x78": "i32_rotr",
+          "0x79": "i64_clz",
+          "0x7A": "i64_ctz",
+          "0x7B": "i64_popcnt",
+          "0x7C": "i64_add",
+          "0x7D": "i64_sub",
+          "0x7E": "i64_mul",
+          "0x7F": "i64_div_s",
+          "0x80": "i64_div_u",
+          "0x81": "i64_rem_s",
+          "0x82": "i64_rem_u",
+          "0x83": "i64_and",
+          "0x84": "i64_or",
+          "0x85": "i64_xor",
+          "0x86": "i64_shl",
+          "0x87": "i64_shr_s",
+          "0x88": "i64_shr_u",
+          "0x89": "i64_rotl",
+          "0x8A": "i64_rotr",
+          "0xA7": "i32_wrap_i64",
+          "0xA8": "i32_trunc_f32_s",
+          "0xA9": "i32_trunc_f32_u",
+          "0xAA": "i32_trunc_f64_s",
+          "0xAB": "i32_trunc_f64_u",
+          "0xAC": "i64_extend_i32_s",
+          "0xAD": "i64_extend_i32_u",
+          "0xAE": "i64_trunc_f32_s",
+          "0xAF": "i64_trunc_f32_u",
+          "0xB0": "i64_trunc_f64_s",
+          "0xB1": "i64_trunc_f64_u",
+          "0xBC": "i32_reinterpret_f32",
+          "0xBD": "f32_reinterpret_i32",
+          "0xBE": "i64_reinterpret_f64",
+          "0xBF": "f64_reinterpret_i64"
+        },
+        "fc_ops": {
+          "0x00": "i32_trunc_sat_f32_s",
+          "0x01": "i32_trunc_sat_f32_u",
+          "0x02": "i32_trunc_sat_f64_s",
+          "0x03": "i32_trunc_sat_f64_u",
+          "0x04": "i64_trunc_sat_f32_s"
+        },
+        "fd_ops": {
+          "0x00": "v128_load",
+          "0x1B": "v128_store",
+          "0x0C": "v128_const",
+          "0x2D": "i8x16_splat",
+          "0x31": "i16x8_splat",
+          "0x35": "i32x4_splat",
+          "0x39": "i64x2_splat",
+          "0x3A": "f32x4_splat",
+          "0x3D": "f64x2_splat",
+          "0x2E": "i8x16_extract_lane_s",
+          "0x2F": "i8x16_extract_lane_u",
+          "0x32": "i16x8_extract_lane_s",
+          "0x33": "i16x8_extract_lane_u",
+          "0x36": "i32x4_extract_lane",
+          "0x38": "i64x2_extract_lane",
+          "0x3B": "f32x4_extract_lane",
+          "0x3E": "f64x2_extract_lane",
+          "0x30": "i8x16_replace_lane",
+          "0x34": "i16x8_replace_lane",
+          "0x37": "i32x4_replace_lane",
+          "0x3C": "f32x4_replace_lane",
+          "0x3F": "f64x2_replace_lane",
+          "0x40": "i8x16_add",
+          "0x51": "i16x8_add",
+          "0x62": "i32x4_add",
+          "0x73": "i64x2_add",
+          "0x84": "f32x4_add",
+          "0x95": "f64x2_add",
+          "0x41": "i8x16_sub",
+          "0x52": "i16x8_sub",
+          "0x63": "i32x4_sub",
+          "0x74": "i64x2_sub",
+          "0x85": "f32x4_sub",
+          "0x96": "f64x2_sub",
+          "0x50": "i8x16_mul",
+          "0x61": "i16x8_mul",
+          "0x72": "i32x4_mul",
+          "0x87": "f32x4_mul",
+          "0x98": "f64x2_mul",
+          "0x46": "i8x16_neg",
+          "0x57": "i16x8_neg",
+          "0x68": "i32x4_neg",
+          "0x79": "i64x2_neg",
+          "0x8A": "f32x4_neg",
+          "0x9B": "f64x2_neg",
+          "0x47": "i8x16_eq",
+          "0x58": "i16x8_eq",
+          "0x69": "i32x4_eq",
+          "0x8C": "f32x4_eq",
+          "0x9D": "f64x2_eq",
+          "0x48": "i8x16_ne",
+          "0x59": "i16x8_ne",
+          "0x6A": "i32x4_ne",
+          "0x8B": "f32x4_ne",
+          "0x9C": "f64x2_ne",
+          "0x4B": "i8x16_lt_s",
+          "0x4A": "i8x16_lt_u",
+          "0x5C": "i16x8_lt_s",
+          "0x5B": "i16x8_lt_u",
+          "0x6D": "i32x4_lt_s",
+          "0x6C": "i32x4_lt_u",
+          "0x8E": "f32x4_lt",
+          "0x9F": "f64x2_lt",
+          "0x4D": "i8x16_gt_s",
+          "0x4C": "i8x16_gt_u",
+          "0x5E": "i16x8_gt_s",
+          "0x5D": "i16x8_gt_u",
+          "0x6F": "i32x4_gt_s",
+          "0x6E": "i32x4_gt_u",
+          "0x90": "f32x4_gt",
+          "0xA1": "f64x2_gt",
+          "0x4F": "i8x16_le_s",
+          "0x4E": "i8x16_le_u",
+          "0x60": "i16x8_le_s",
+          "0x5F": "i16x8_le_u",
+          "0x71": "i32x4_le_s",
+          "0x70": "i32x4_le_u",
+          "0x92": "f32x4_le",
+          "0xA3": "f64x2_le",
+          "0x49": "i8x16_ge_s",
+          "0x5A": "i16x8_ge_s",
+          "0x6B": "i32x4_ge_s",
+          "0x94": "f32x4_ge",
+          "0xA5": "f64x2_ge",
+          "0x43": "i8x16_and",
+          "0x44": "i8x16_or",
+          "0x45": "i8x16_xor",
+          "0xA6": "v128_load8_splat",
+          "0xA7": "v128_load16_splat",
+          "0xA8": "v128_load32_splat",
+          "0xA9": "v128_load64_splat",
+          "0xAA": "i8x16_swizzle",
+          "0xAB": "i64x2_replace_lane",
+          "0xAC": "v128_not",
+          "0xAD": "v128_bitselect",
+          "0xAE": "i8x16_ge_u",
+          "0xAF": "i16x8_ge_u",
+          "0xB0": "i32x4_ge_u",
+          "0xB8": "i8x16_min_u",
+          "0xBA": "i8x16_max_u",
+          "0xBB": "i8x16_avgr_u",
+          "0xBC": "i16x8_min_u",
+          "0xBE": "i16x8_max_u",
+          "0xBF": "i16x8_avgr_u",
+          "0xE1": "f32x4_min",
+          "0xE2": "f32x4_max",
+          "0xE3": "f64x2_min",
+          "0xE4": "f64x2_max"
+        }
+      },
+      "x86_64": {
+        "arch": "x86_64",
+        "op_suffix": "_x86_64",
+        "emit_prefix": "emit_x86_",
+        "result_global": "RESULT_IN_EAX",
+        "next_op_global": "NEXT_OP_x86_64",
+        "jit_error_global": "JIT_ERROR_x86_64",
+        "code_ptr_global": "JS_CODE_PTR_x86_64",
+        "label_depth_global": "JS_LABEL_DEPTH_x86_64",
+        "func_off_table": "FUNC_OFF_TABLE_x86_64",
+        "prologue": "emit_x86_prologue",
+        "epilogue": "emit_x86_epilogue",
+        "ops": {
+          "0x30": "i64_load8_s",
+          "0x31": "i64_load8_u",
+          "0x32": "i64_load16_s",
+          "0x33": "i64_load16_u",
+          "0x34": "i64_load32_s",
+          "0x35": "i64_load32_u",
+          "0x3C": "i64_store8",
+          "0x3D": "i64_store16",
+          "0x3E": "i64_store32",
+          "0x43": "f32_const",
+          "0x44": "f64_const",
+          "0x4E": "i32_ge_s",
+          "0x4F": "i32_ge_u",
+          "0x59": "i64_ge_s",
+          "0x5A": "i64_ge_u",
+          "0x5B": "f32_eq",
+          "0x5C": "f32_ne",
+          "0x5D": "f32_lt",
+          "0x5E": "f32_gt",
+          "0x5F": "f32_le",
+          "0x60": "f32_ge",
+          "0x61": "f64_eq",
+          "0x62": "f64_ne",
+          "0x63": "f64_lt",
+          "0x64": "f64_gt",
+          "0x65": "f64_le",
+          "0x66": "f64_ge",
+          "0x8B": "f32_abs",
+          "0x8C": "f32_neg",
+          "0x8D": "f32_ceil",
+          "0x8E": "f32_floor",
+          "0x8F": "f32_trunc",
+          "0x90": "f32_nearest",
+          "0x91": "f32_sqrt",
+          "0x92": "f32_add",
+          "0x93": "f32_sub",
+          "0x94": "f32_mul",
+          "0x95": "f32_div",
+          "0x96": "f32_min",
+          "0x97": "f32_max",
+          "0x98": "f32_copysign",
+          "0x99": "f64_abs",
+          "0x9A": "f64_neg",
+          "0x9B": "f64_ceil",
+          "0x9C": "f64_floor",
+          "0x9D": "f64_trunc",
+          "0x9E": "f64_nearest",
+          "0x9F": "f64_sqrt",
+          "0xA0": "f64_add",
+          "0xA1": "f64_sub",
+          "0xA2": "f64_mul",
+          "0xA3": "f64_div",
+          "0xA4": "f64_min",
+          "0xA5": "f64_max",
+          "0xA6": "f64_copysign"
+        },
+        "fc_ops": {
+          "0x05": "i64_trunc_sat_f32_u",
+          "0x06": "i64_trunc_sat_f64_s",
+          "0x07": "i64_trunc_sat_f64_u"
+        },
+        "emit_byte": "emit_x86_byte",
+        "emit_dword": "emit_x86_dword",
+        "emit_elf_stub": "emit_elf_stub",
+        "fixup_calls": "fixup_calls_x86_64",
+        "copy_compiled_code": "copy_compiled_code_x86_64",
+        "emit_elf64_ehdr": "emit_elf64_ehdr",
+        "emit_elf64_phdr": "emit_elf64_phdr"
+      },
+      "aarch64": {
+        "arch": "aarch64",
+        "op_suffix": "_aarch64",
+        "simd_prefix": "template_aarch64_",
+        "result_global": "RESULT_IN_X0_aarch64",
+        "next_op_global": "NEXT_OP_aarch64",
+        "jit_error_global": "JIT_ERROR_aarch64",
+        "code_ptr_global": "JS_CODE_PTR_aarch64",
+        "label_depth_global": "JS_LABEL_DEPTH_aarch64",
+        "func_off_table": "FUNC_OFF_TABLE_aarch64",
+        "prologue": "emit_aarch64_prologue",
+        "epilogue": "emit_aarch64_epilogue",
+        "ops": {
+          "0xB2": "f32_convert_i32_s",
+          "0xB3": "f32_convert_i32_u",
+          "0xB4": "f32_convert_i64_s",
+          "0xB5": "f32_convert_i64_u",
+          "0xB6": "f32_demote_f64",
+          "0xB7": "f64_convert_i32_s",
+          "0xB8": "f64_convert_i32_u",
+          "0xB9": "f64_convert_i64_s",
+          "0xBA": "f64_convert_i64_u",
+          "0xBB": "f64_promote_f32"
+        },
+        "emit_byte": "emit_aarch64_byte",
+        "emit_dword": "emit_aarch64_dword",
+        "emit_elf_stub": "emit_elf_stub_aarch64",
+        "fixup_calls": "fixup_calls_aarch64",
+        "copy_compiled_code": "copy_compiled_code_aarch64",
+        "emit_elf64_ehdr": "emit_aarch64_elf64_ehdr",
+        "emit_elf64_phdr": "emit_aarch64_elf64_phdr"
+      },
+      "arm32": {
+        "arch": "arm32",
+        "op_suffix": "_arm32",
+        "simd_prefix": "template_arm32_",
+        "result_global": "RESULT_IN_X0_arm32",
+        "next_op_global": "NEXT_OP_arm32",
+        "jit_error_global": "JIT_ERROR_arm32",
+        "code_ptr_global": "JS_CODE_PTR_arm32",
+        "label_depth_global": "JS_LABEL_DEPTH_arm32",
+        "func_off_table": "FUNC_OFF_TABLE_arm32",
+        "prologue": "emit_arm32_prologue",
+        "epilogue": "emit_arm32_epilogue",
+        "ops": {
+          "0x30": "i64_load8_s",
+          "0x31": "i64_load16_s",
+          "0x32": "i64_load32_s",
+          "0x33": "i64_load32_u",
+          "0x3C": "i64_store32",
+          "0x3D": "i64_store8",
+          "0x3E": "i64_store16",
+          "0x4E": "i32_ge_s",
+          "0x4F": "i32_ge_u",
+          "0x59": "i64_ge_s",
+          "0x5A": "i64_ge_u",
+          "0xB2": "f32_convert_i32_s",
+          "0xB3": "f32_convert_i32_u",
+          "0xB4": "f32_convert_i64_s",
+          "0xB5": "f32_convert_i64_u",
+          "0xB6": "f32_demote_f64",
+          "0xB7": "f64_convert_i32_s",
+          "0xB8": "f64_convert_i32_u",
+          "0xB9": "f64_convert_i64_s",
+          "0xBA": "f64_convert_i64_u",
+          "0xBB": "f64_promote_f32",
+          "0xC2": "i64_extend8_s",
+          "0xC3": "i64_extend16_s",
+          "0xC4": "i64_extend32_s"
+        },
+        "emit_byte": "emit_arm32_byte",
+        "emit_dword": "emit_arm32_dword",
+        "emit_elf_stub": "emit_arm32_elf_stub",
+        "fixup_calls": "fixup_calls_arm32",
+        "copy_compiled_code": "copy_compiled_code_arm32",
+        "emit_elf64_ehdr": "emit_arm32_elf32_ehdr",
+        "emit_elf64_phdr": "emit_arm32_elf32_phdr"
+      }
+    },
+    "wasm_opcodes": {
+      "base": {
+        "0x00": "unreachable",
+        "0x01": "nop",
+        "0x02": "block",
+        "0x03": "loop",
+        "0x04": "if",
+        "0x05": "else",
+        "0x06": "try",
+        "0x07": "catch",
+        "0x08": "throw",
+        "0x09": "rethrow",
+        "0x0B": "end",
+        "0x0C": "br",
+        "0x0D": "br_if",
+        "0x0E": "br_table",
+        "0x0F": "return",
+        "0x10": "call",
+        "0x11": "call_indirect",
+        "0x12": "return_call",
+        "0x13": "return_call_indirect",
+        "0x1A": "drop",
+        "0x1B": "select",
+        "0x1C": "select_t",
+        "0x20": "local.get",
+        "0x21": "local.set",
+        "0x22": "local.tee",
+        "0x23": "global.get",
+        "0x24": "global.set",
+        "0x25": "table.get",
+        "0x26": "table.set",
+        "0x28": "i32.load",
+        "0x29": "i64.load",
+        "0x2A": "f32.load",
+        "0x2B": "f64.load",
+        "0x2C": "i32.load8_s",
+        "0x2D": "i32.load8_u",
+        "0x2E": "i32.load16_s",
+        "0x2F": "i32.load16_u",
+        "0x30": "i64.load8_s",
+        "0x31": "i64.load8_u",
+        "0x32": "i64.load16_s",
+        "0x33": "i64.load16_u",
+        "0x34": "i64.load32_s",
+        "0x35": "i64.load32_u",
+        "0x36": "i32.store",
+        "0x37": "i64.store",
+        "0x38": "f32.store",
+        "0x39": "f64.store",
+        "0x3A": "i32.store8",
+        "0x3B": "i32.store16",
+        "0x3C": "i64.store8",
+        "0x3D": "i64.store16",
+        "0x3E": "i64.store32",
+        "0x3F": "memory.size",
+        "0x40": "memory.grow",
+        "0x41": "i32.const",
+        "0x42": "i64.const",
+        "0x43": "f32.const",
+        "0x44": "f64.const",
+        "0x45": "i32.eqz",
+        "0x46": "i32.eq",
+        "0x47": "i32.ne",
+        "0x48": "i32.lt_s",
+        "0x49": "i32.lt_u",
+        "0x4A": "i32.gt_s",
+        "0x4B": "i32.gt_u",
+        "0x4C": "i32.le_s",
+        "0x4D": "i32.le_u",
+        "0x4E": "i32.ge_s",
+        "0x4F": "i32.ge_u",
+        "0x50": "i64.eqz",
+        "0x51": "i64.eq",
+        "0x52": "i64.ne",
+        "0x53": "i64.lt_s",
+        "0x54": "i64.lt_u",
+        "0x55": "i64.gt_s",
+        "0x56": "i64.gt_u",
+        "0x57": "i64.le_s",
+        "0x58": "i64.le_u",
+        "0x59": "i64.ge_s",
+        "0x5A": "i64.ge_u",
+        "0x5B": "f32.eq",
+        "0x5C": "f32.ne",
+        "0x5D": "f32.lt",
+        "0x5E": "f32.gt",
+        "0x5F": "f32.le",
+        "0x60": "f32.ge",
+        "0x61": "f64.eq",
+        "0x62": "f64.ne",
+        "0x63": "f64.lt",
+        "0x64": "f64.gt",
+        "0x65": "f64.le",
+        "0x66": "f64.ge",
+        "0x67": "i32.clz",
+        "0x68": "i32.ctz",
+        "0x69": "i32.popcnt",
+        "0x6A": "i32.add",
+        "0x6B": "i32.sub",
+        "0x6C": "i32.mul",
+        "0x6D": "i32.div_s",
+        "0x6E": "i32.div_u",
+        "0x6F": "i32.rem_s",
+        "0x70": "i32.rem_u",
+        "0x71": "i32.and",
+        "0x72": "i32.or",
+        "0x73": "i32.xor",
+        "0x74": "i32.shl",
+        "0x75": "i32.shr_s",
+        "0x76": "i32.shr_u",
+        "0x77": "i32.rotl",
+        "0x78": "i32.rotr",
+        "0x79": "i64.clz",
+        "0x7A": "i64.ctz",
+        "0x7B": "i64.popcnt",
+        "0x7C": "i64.add",
+        "0x7D": "i64.sub",
+        "0x7E": "i64.mul",
+        "0x7F": "i64.div_s",
+        "0x80": "i64.div_u",
+        "0x81": "i64.rem_s",
+        "0x82": "i64.rem_u",
+        "0x83": "i64.and",
+        "0x84": "i64.or",
+        "0x85": "i64.xor",
+        "0x86": "i64.shl",
+        "0x87": "i64.shr_s",
+        "0x88": "i64.shr_u",
+        "0x89": "i64.rotl",
+        "0x8A": "i64.rotr",
+        "0x8B": "f32.abs",
+        "0x8C": "f32.neg",
+        "0x8D": "f32.ceil",
+        "0x8E": "f32.floor",
+        "0x8F": "f32.trunc",
+        "0x90": "f32.nearest",
+        "0x91": "f32.sqrt",
+        "0x92": "f32.add",
+        "0x93": "f32.sub",
+        "0x94": "f32.mul",
+        "0x95": "f32.div",
+        "0x96": "f32.min",
+        "0x97": "f32.max",
+        "0x98": "f32.copysign",
+        "0x99": "f64.abs",
+        "0x9A": "f64.neg",
+        "0x9B": "f64.ceil",
+        "0x9C": "f64.floor",
+        "0x9D": "f64.trunc",
+        "0x9E": "f64.nearest",
+        "0x9F": "f64.sqrt",
+        "0xA0": "f64.add",
+        "0xA1": "f64.sub",
+        "0xA2": "f64.mul",
+        "0xA3": "f64.div",
+        "0xA4": "f64.min",
+        "0xA5": "f64.max",
+        "0xA6": "f64.copysign",
+        "0xA7": "i32.wrap_i64",
+        "0xA8": "i32.trunc_f32_s",
+        "0xA9": "i32.trunc_f32_u",
+        "0xAA": "i32.trunc_f64_s",
+        "0xAB": "i32.trunc_f64_u",
+        "0xAC": "i64.extend_i32_s",
+        "0xAD": "i64.extend_i32_u",
+        "0xAE": "i64.trunc_f32_s",
+        "0xAF": "i64.trunc_f32_u",
+        "0xB0": "i64.trunc_f64_s",
+        "0xB1": "i64.trunc_f64_u",
+        "0xB2": "f32.convert_i32_s",
+        "0xB3": "f32.convert_i32_u",
+        "0xB4": "f32.convert_i64_s",
+        "0xB5": "f32.convert_i64_u",
+        "0xB6": "f32.demote_f64",
+        "0xB7": "f64.convert_i32_s",
+        "0xB8": "f64.convert_i32_u",
+        "0xB9": "f64.convert_i64_s",
+        "0xBA": "f64.convert_i64_u",
+        "0xBB": "f64.promote_f32",
+        "0xBC": "i32.reinterpret_f32",
+        "0xBD": "f32.reinterpret_i32",
+        "0xBE": "i64.reinterpret_f64",
+        "0xBF": "f64.reinterpret_i64"
+      },
+      "fc": {
+        "0x00": "i32.trunc_sat_f32_s",
+        "0x01": "i32.trunc_sat_f32_u",
+        "0x02": "i32.trunc_sat_f64_s",
+        "0x03": "i32.trunc_sat_f64_u",
+        "0x04": "i64.trunc_sat_f32_s",
+        "0x05": "i64.trunc_sat_f32_u",
+        "0x06": "i64.trunc_sat_f64_s",
+        "0x07": "i64.trunc_sat_f64_u",
+        "0x08": "i32.extend8_s",
+        "0x09": "i32.extend16_s",
+        "0x0A": "i64.extend8_s",
+        "0x0B": "i64.extend16_s",
+        "0x0C": "i64.extend32_s"
+      },
+      "fd": {
+        "0x00": "v128.load",
+        "0x01": "v128.load8x8_s",
+        "0x02": "v128.load8x8_u",
+        "0x03": "v128.load16x4_s",
+        "0x04": "v128.load16x4_u",
+        "0x05": "v128.load32x2_s",
+        "0x06": "v128.load32x2_u",
+        "0x07": "v128.load8_splat",
+        "0x08": "v128.load16_splat",
+        "0x09": "v128.load32_splat",
+        "0x0A": "v128.load64_splat",
+        "0x0B": "v128.store",
+        "0x0C": "v128.const",
+        "0x0D": "i8x16.shuffle",
+        "0x0E": "i8x16.swizzle",
+        "0x0F": "i8x16.splat",
+        "0x10": "i16x8.splat",
+        "0x11": "i32x4.splat",
+        "0x12": "i64x2.splat",
+        "0x13": "f32x4.splat",
+        "0x14": "f64x2.splat",
+        "0x15": "i8x16.extract_lane_s",
+        "0x16": "i8x16.extract_lane_u",
+        "0x17": "i8x16.replace_lane",
+        "0x18": "i16x8.extract_lane_s",
+        "0x19": "i16x8.extract_lane_u",
+        "0x1A": "i16x8.replace_lane",
+        "0x1B": "i32x4.extract_lane",
+        "0x1C": "i32x4.replace_lane",
+        "0x1D": "i64x2.extract_lane",
+        "0x1E": "i64x2.replace_lane",
+        "0x1F": "f32x4.extract_lane",
+        "0x20": "f32x4.replace_lane",
+        "0x21": "f64x2.extract_lane",
+        "0x22": "f64x2.replace_lane",
+        "0x23": "i8x16.eq",
+        "0x24": "i8x16.ne",
+        "0x25": "i8x16.lt_s",
+        "0x26": "i8x16.lt_u",
+        "0x27": "i8x16.gt_s",
+        "0x28": "i8x16.gt_u",
+        "0x29": "i8x16.le_s",
+        "0x2A": "i8x16.le_u",
+        "0x2B": "i8x16.ge_s",
+        "0x2C": "i8x16.ge_u",
+        "0x2D": "i16x8.eq",
+        "0x2E": "i16x8.ne",
+        "0x2F": "i16x8.lt_s",
+        "0x30": "i16x8.lt_u",
+        "0x31": "i16x8.gt_s",
+        "0x32": "i16x8.gt_u",
+        "0x33": "i16x8.le_s",
+        "0x34": "i16x8.le_u",
+        "0x35": "i16x8.ge_s",
+        "0x36": "i16x8.ge_u",
+        "0x37": "i32x4.eq",
+        "0x38": "i32x4.ne",
+        "0x39": "i32x4.lt_s",
+        "0x3A": "i32x4.lt_u",
+        "0x3B": "i32x4.gt_s",
+        "0x3C": "i32x4.gt_u",
+        "0x3D": "i32x4.le_s",
+        "0x3E": "i32x4.le_u",
+        "0x3F": "i32x4.ge_s",
+        "0x40": "i32x4.ge_u",
+        "0x41": "f32x4.eq",
+        "0x42": "f32x4.ne",
+        "0x43": "f32x4.lt",
+        "0x44": "f32x4.gt",
+        "0x45": "f32x4.le",
+        "0x46": "f32x4.ge",
+        "0x47": "f64x2.eq",
+        "0x48": "f64x2.ne",
+        "0x49": "f64x2.lt",
+        "0x4A": "f64x2.gt",
+        "0x4B": "f64x2.le",
+        "0x4C": "f64x2.ge",
+        "0x4D": "v128.not",
+        "0x4E": "v128.and",
+        "0x4F": "v128.andnot",
+        "0x50": "v128.or",
+        "0x51": "v128.xor",
+        "0x52": "v128.bitselect",
+        "0x53": "v128.any_true",
+        "0x54": "v128.load8_lane",
+        "0x55": "v128.load16_lane",
+        "0x56": "v128.load32_lane",
+        "0x57": "v128.load64_lane",
+        "0x58": "v128.store8_lane",
+        "0x59": "v128.store16_lane",
+        "0x5A": "v128.store32_lane",
+        "0x5B": "v128.store64_lane",
+        "0x5C": "v128.load32_zero",
+        "0x5D": "v128.load64_zero",
+        "0x5E": "f32x4.demote_f64x2_zero",
+        "0x5F": "f64x2.promote_low_f32x4",
+        "0x60": "i8x16.abs",
+        "0x61": "i8x16.neg",
+        "0x62": "i8x16.popcnt",
+        "0x63": "i8x16.all_true",
+        "0x64": "i8x16.bitmask",
+        "0x65": "i8x16.narrow_i16x8_s",
+        "0x66": "i8x16.narrow_i16x8_u",
+        "0x67": "f32x4.ceil",
+        "0x68": "f32x4.floor",
+        "0x69": "f32x4.trunc",
+        "0x6A": "f32x4.nearest",
+        "0x6B": "i8x16.shl",
+        "0x6C": "i8x16.shr_s",
+        "0x6D": "i8x16.shr_u",
+        "0x6E": "i8x16.add",
+        "0x6F": "i8x16.add_sat_s",
+        "0x70": "i8x16.add_sat_u",
+        "0x71": "i8x16.sub",
+        "0x72": "i8x16.sub_sat_s",
+        "0x73": "i8x16.sub_sat_u",
+        "0x74": "f64x2.ceil",
+        "0x75": "f64x2.floor",
+        "0x76": "f64x2.trunc",
+        "0x77": "f64x2.nearest",
+        "0x78": "i8x16.min_s",
+        "0x79": "i8x16.min_u",
+        "0x7A": "i8x16.max_s",
+        "0x7B": "i8x16.max_u",
+        "0x80": "i8x16.avgr_u",
+        "0x81": "i16x8.extadd_pairwise_i8x16_s",
+        "0x82": "i16x8.extadd_pairwise_i8x16_u",
+        "0x83": "i32x4.extadd_pairwise_i16x8_s",
+        "0x84": "i32x4.extadd_pairwise_i16x8_u",
+        "0x85": "i16x8.abs",
+        "0x86": "i16x8.neg",
+        "0x87": "i16x8.q15mulr_sat_s",
+        "0x88": "i16x8.all_true",
+        "0x89": "i16x8.bitmask",
+        "0x8A": "i16x8.narrow_i32x4_s",
+        "0x8B": "i16x8.narrow_i32x4_u",
+        "0x8C": "i16x8.extend_low_i8x16_s",
+        "0x8D": "i16x8.extend_high_i8x16_s",
+        "0x8E": "i16x8.extend_low_i8x16_u",
+        "0x8F": "i16x8.extend_high_i8x16_u",
+        "0x90": "i16x8.shl",
+        "0x91": "i16x8.shr_s",
+        "0x92": "i16x8.shr_u",
+        "0x93": "i16x8.add",
+        "0x94": "i16x8.add_sat_s",
+        "0x95": "i16x8.add_sat_u",
+        "0x96": "i16x8.sub",
+        "0x97": "i16x8.sub_sat_s",
+        "0x98": "i16x8.sub_sat_u",
+        "0x99": "i16x8.mul",
+        "0x9A": "i16x8.min_s",
+        "0x9B": "i16x8.min_u",
+        "0x9C": "i16x8.max_s",
+        "0x9D": "i16x8.max_u",
+        "0x9E": "i16x8.avgr_u",
+        "0x9F": "i16x8.extmul_low_i8x16_s",
+        "0xA0": "i16x8.extmul_high_i8x16_s",
+        "0xA1": "i16x8.extmul_low_i8x16_u",
+        "0xA2": "i16x8.extmul_high_i8x16_u",
+        "0xA3": "i16x8.dot_i8x16_i7s_s",
+        "0xA4": "i32x4.abs",
+        "0xA5": "i32x4.neg",
+        "0xA6": "i32x4.all_true",
+        "0xA7": "i32x4.bitmask",
+        "0xA8": "i32x4.narrow_i64x2_s",
+        "0xA9": "i32x4.narrow_i64x2_u",
+        "0xAA": "i32x4.extend_low_i16x8_s",
+        "0xAB": "i32x4.extend_high_i16x8_s",
+        "0xAC": "i32x4.extend_low_i16x8_u",
+        "0xAD": "i32x4.extend_high_i16x8_u",
+        "0xAE": "i32x4.shl",
+        "0xAF": "i32x4.shr_s",
+        "0xB0": "i32x4.shr_u",
+        "0xB1": "i32x4.add",
+        "0xB2": "i32x4.sub",
+        "0xB3": "i32x4.mul",
+        "0xB4": "i32x4.min_s",
+        "0xB5": "i32x4.min_u",
+        "0xB6": "i32x4.max_s",
+        "0xB7": "i32x4.max_u",
+        "0xB8": "i32x4.dot_i16x8_s",
+        "0xB9": "i32x4.extmul_low_i16x8_s",
+        "0xBA": "i32x4.extmul_high_i16x8_s",
+        "0xBB": "i32x4.extmul_low_i16x8_u",
+        "0xBC": "i32x4.extmul_high_i16x8_u",
+        "0xBD": "i32x4.trunc_sat_f32x4_s",
+        "0xBE": "i32x4.trunc_sat_f32x4_u",
+        "0xBF": "f32x4.convert_i32x4_s",
+        "0xC0": "f32x4.convert_i32x4_u",
+        "0xC1": "i32x4.trunc_sat_f64x2_s_zero",
+        "0xC2": "i32x4.trunc_sat_f64x2_u_zero",
+        "0xC3": "f64x2.convert_low_i32x4_s",
+        "0xC4": "f64x2.convert_low_i32x4_u",
+        "0xC5": "i64x2.abs",
+        "0xC6": "i64x2.neg",
+        "0xC7": "i64x2.all_true",
+        "0xC8": "i64x2.bitmask",
+        "0xC9": "i64x2.extend_low_i32x4_s",
+        "0xCA": "i64x2.extend_high_i32x4_s",
+        "0xCB": "i64x2.extend_low_i32x4_u",
+        "0xCC": "i64x2.extend_high_i32x4_u",
+        "0xCD": "i64x2.shl",
+        "0xCE": "i64x2.shr_s",
+        "0xCF": "i64x2.shr_u",
+        "0xD0": "i64x2.add",
+        "0xD1": "i64x2.sub",
+        "0xD2": "i64x2.mul",
+        "0xD3": "i64x2.eq",
+        "0xD4": "i64x2.ne",
+        "0xD5": "i64x2.lt_s",
+        "0xD6": "i64x2.gt_s",
+        "0xD7": "i64x2.le_s",
+        "0xD8": "i64x2.ge_s",
+        "0xD9": "i64x2.extmul_low_i32x4_s",
+        "0xDA": "i64x2.extmul_high_i32x4_s",
+        "0xDB": "i64x2.extmul_low_i32x4_u",
+        "0xDC": "i64x2.extmul_high_i32x4_u",
+        "0xDD": "f32x4.abs",
+        "0xDE": "f32x4.neg",
+        "0xDF": "f32x4.sqrt",
+        "0xE0": "f32x4.add",
+        "0xE1": "f32x4.sub",
+        "0xE2": "f32x4.mul",
+        "0xE3": "f32x4.div",
+        "0xE4": "f32x4.min",
+        "0xE5": "f32x4.max",
+        "0xE6": "f32x4.pmin",
+        "0xE7": "f32x4.pmax",
+        "0xE8": "f64x2.abs",
+        "0xE9": "f64x2.neg",
+        "0xEA": "f64x2.sqrt",
+        "0xEB": "f64x2.add",
+        "0xEC": "f64x2.sub",
+        "0xED": "f64x2.mul",
+        "0xEE": "f64x2.div",
+        "0xEF": "f64x2.min",
+        "0xF0": "f64x2.max",
+        "0xF1": "f64x2.pmin",
+        "0xF2": "f64x2.pmax",
+        "0xF3": "i32x4.dot_i8x16_i7s_add_s",
+        "0xF4": "i16x8.dot_i8x16_i7s_add_s",
+        "0xF5": "i32x4.relaxed_trunc_f32x4_s",
+        "0xF6": "i32x4.relaxed_trunc_f32x4_u",
+        "0xF7": "i32x4.relaxed_trunc_f64x2_s_zero",
+        "0xF8": "i32x4.relaxed_trunc_f64x2_u_zero",
+        "0xF9": "f32x4.relaxed_madd",
+        "0xFA": "f32x4.relaxed_nmadd",
+        "0xFB": "f64x2.relaxed_madd",
+        "0xFC": "f64x2.relaxed_nmadd",
+        "0xFD": "i8x16.relaxed_laneselect",
+        "0xFE": "i16x8.relaxed_laneselect",
+        "0xFF": "i32x4.relaxed_laneselect",
+        "0x100": "i64x2.relaxed_laneselect",
+        "0x101": "f32x4.relaxed_min",
+        "0x102": "f32x4.relaxed_max",
+        "0x103": "f64x2.relaxed_min",
+        "0x104": "f64x2.relaxed_max",
+        "0x105": "i16x8.relaxed_q15mulr_s",
+        "0x106": "i16x8.relaxed_dot_i8x16_i7s_s",
+        "0x107": "i32x4.relaxed_dot_i8x16_i7s_add_s"
+      }
+    },
+    "wat_opcodes": {
+      "unreachable": [
+        "0x00"
+      ],
+      "nop": [
+        "0x01"
+      ],
+      "block": [
+        "0x02",
+        "block_type"
+      ],
+      "loop": [
+        "0x03",
+        "block_type"
+      ],
+      "if": [
+        "0x04",
+        "block_type"
+      ],
+      "else": [
+        "0x05"
+      ],
+      "end": [
+        "0x0B"
+      ],
+      "br": [
+        "0x0C",
+        "uleb128"
+      ],
+      "br_if": [
+        "0x0D",
+        "uleb128"
+      ],
+      "br_table": [
+        "0x0E",
+        "br_table"
+      ],
+      "return": [
+        "0x0F"
+      ],
+      "call": [
+        "0x10",
+        "uleb128"
+      ],
+      "call_indirect": [
+        "0x11",
+        "call_indirect"
+      ],
+      "return_call": [
+        "0x12",
+        "uleb128"
+      ],
+      "return_call_indirect": [
+        "0x13",
+        "call_indirect"
+      ],
+      "drop": [
+        "0x1A"
+      ],
+      "select": [
+        "0x1B"
+      ],
+      "local.get": [
+        "0x20",
+        "uleb128"
+      ],
+      "local.set": [
+        "0x21",
+        "uleb128"
+      ],
+      "local.tee": [
+        "0x22",
+        "uleb128"
+      ],
+      "global.get": [
+        "0x23",
+        "uleb128"
+      ],
+      "global.set": [
+        "0x24",
+        "uleb128"
+      ],
+      "table.get": [
+        "0x25",
+        "uleb128"
+      ],
+      "table.set": [
+        "0x26",
+        "uleb128"
+      ],
+      "i32.load": [
+        "0x28",
+        "memarg"
+      ],
+      "i64.load": [
+        "0x29",
+        "memarg"
+      ],
+      "f32.load": [
+        "0x2A",
+        "memarg"
+      ],
+      "f64.load": [
+        "0x2B",
+        "memarg"
+      ],
+      "i32.load8_s": [
+        "0x2C",
+        "memarg"
+      ],
+      "i32.load8_u": [
+        "0x2D",
+        "memarg"
+      ],
+      "i32.load16_s": [
+        "0x2E",
+        "memarg"
+      ],
+      "i32.load16_u": [
+        "0x2F",
+        "memarg"
+      ],
+      "i64.load8_s": [
+        "0x30",
+        "memarg"
+      ],
+      "i64.load8_u": [
+        "0x31",
+        "memarg"
+      ],
+      "i64.load16_s": [
+        "0x32",
+        "memarg"
+      ],
+      "i64.load16_u": [
+        "0x33",
+        "memarg"
+      ],
+      "i64.load32_s": [
+        "0x34",
+        "memarg"
+      ],
+      "i64.load32_u": [
+        "0x35",
+        "memarg"
+      ],
+      "i32.store": [
+        "0x36",
+        "memarg"
+      ],
+      "i64.store": [
+        "0x37",
+        "memarg"
+      ],
+      "f32.store": [
+        "0x38",
+        "memarg"
+      ],
+      "f64.store": [
+        "0x39",
+        "memarg"
+      ],
+      "i32.store8": [
+        "0x3A",
+        "memarg"
+      ],
+      "i32.store16": [
+        "0x3B",
+        "memarg"
+      ],
+      "i64.store8": [
+        "0x3C",
+        "memarg"
+      ],
+      "i64.store16": [
+        "0x3D",
+        "memarg"
+      ],
+      "i64.store32": [
+        "0x3E",
+        "memarg"
+      ],
+      "memory.size": [
+        "0x3F"
+      ],
+      "memory.grow": [
+        "0x40"
+      ],
+      "i32.const": [
+        "0x41",
+        "sleb128"
+      ],
+      "i64.const": [
+        "0x42",
+        "sleb128"
+      ],
+      "f32.const": [
+        "0x43",
+        "f32"
+      ],
+      "f64.const": [
+        "0x44",
+        "f64"
+      ],
+      "i32.eqz": [
+        "0x45"
+      ],
+      "i32.eq": [
+        "0x46"
+      ],
+      "i32.ne": [
+        "0x47"
+      ],
+      "i32.lt_s": [
+        "0x48"
+      ],
+      "i32.lt_u": [
+        "0x49"
+      ],
+      "i32.gt_s": [
+        "0x4A"
+      ],
+      "i32.gt_u": [
+        "0x4B"
+      ],
+      "i32.le_s": [
+        "0x4C"
+      ],
+      "i32.le_u": [
+        "0x4D"
+      ],
+      "i32.ge_s": [
+        "0x4E"
+      ],
+      "i32.ge_u": [
+        "0x4F"
+      ],
+      "i64.eqz": [
+        "0x50"
+      ],
+      "i64.eq": [
+        "0x51"
+      ],
+      "i64.ne": [
+        "0x52"
+      ],
+      "i64.lt_s": [
+        "0x53"
+      ],
+      "i64.lt_u": [
+        "0x54"
+      ],
+      "i64.gt_s": [
+        "0x55"
+      ],
+      "i64.gt_u": [
+        "0x56"
+      ],
+      "i64.le_s": [
+        "0x57"
+      ],
+      "i64.le_u": [
+        "0x58"
+      ],
+      "i64.ge_s": [
+        "0x59"
+      ],
+      "i64.ge_u": [
+        "0x5A"
+      ],
+      "f32.eq": [
+        "0x5B"
+      ],
+      "f32.ne": [
+        "0x5C"
+      ],
+      "f32.lt": [
+        "0x5D"
+      ],
+      "f32.gt": [
+        "0x5E"
+      ],
+      "f32.le": [
+        "0x5F"
+      ],
+      "f32.ge": [
+        "0x60"
+      ],
+      "f64.eq": [
+        "0x61"
+      ],
+      "f64.ne": [
+        "0x62"
+      ],
+      "f64.lt": [
+        "0x63"
+      ],
+      "f64.gt": [
+        "0x64"
+      ],
+      "f64.le": [
+        "0x65"
+      ],
+      "f64.ge": [
+        "0x66"
+      ],
+      "i32.clz": [
+        "0x67"
+      ],
+      "i32.ctz": [
+        "0x68"
+      ],
+      "i32.popcnt": [
+        "0x69"
+      ],
+      "i32.add": [
+        "0x6A"
+      ],
+      "i32.sub": [
+        "0x6B"
+      ],
+      "i32.mul": [
+        "0x6C"
+      ],
+      "i32.div_s": [
+        "0x6D"
+      ],
+      "i32.div_u": [
+        "0x6E"
+      ],
+      "i32.rem_s": [
+        "0x6F"
+      ],
+      "i32.rem_u": [
+        "0x70"
+      ],
+      "i32.and": [
+        "0x71"
+      ],
+      "i32.or": [
+        "0x72"
+      ],
+      "i32.xor": [
+        "0x73"
+      ],
+      "i32.shl": [
+        "0x74"
+      ],
+      "i32.shr_s": [
+        "0x75"
+      ],
+      "i32.shr_u": [
+        "0x76"
+      ],
+      "i32.rotl": [
+        "0x77"
+      ],
+      "i32.rotr": [
+        "0x78"
+      ],
+      "i64.clz": [
+        "0x79"
+      ],
+      "i64.ctz": [
+        "0x7A"
+      ],
+      "i64.popcnt": [
+        "0x7B"
+      ],
+      "i64.add": [
+        "0x7C"
+      ],
+      "i64.sub": [
+        "0x7D"
+      ],
+      "i64.mul": [
+        "0x7E"
+      ],
+      "i64.div_s": [
+        "0x7F"
+      ],
+      "i64.div_u": [
+        "0x80"
+      ],
+      "i64.rem_s": [
+        "0x81"
+      ],
+      "i64.rem_u": [
+        "0x82"
+      ],
+      "i64.and": [
+        "0x83"
+      ],
+      "i64.or": [
+        "0x84"
+      ],
+      "i64.xor": [
+        "0x85"
+      ],
+      "i64.shl": [
+        "0x86"
+      ],
+      "i64.shr_s": [
+        "0x87"
+      ],
+      "i64.shr_u": [
+        "0x88"
+      ],
+      "i64.rotl": [
+        "0x89"
+      ],
+      "i64.rotr": [
+        "0x8A"
+      ],
+      "f32.abs": [
+        "0x8B"
+      ],
+      "f32.neg": [
+        "0x8C"
+      ],
+      "f32.ceil": [
+        "0x8D"
+      ],
+      "f32.floor": [
+        "0x8E"
+      ],
+      "f32.trunc": [
+        "0x8F"
+      ],
+      "f32.nearest": [
+        "0x90"
+      ],
+      "f32.sqrt": [
+        "0x91"
+      ],
+      "f32.add": [
+        "0x92"
+      ],
+      "f32.sub": [
+        "0x93"
+      ],
+      "f32.mul": [
+        "0x94"
+      ],
+      "f32.div": [
+        "0x95"
+      ],
+      "f32.min": [
+        "0x96"
+      ],
+      "f32.max": [
+        "0x97"
+      ],
+      "f32.copysign": [
+        "0x98"
+      ],
+      "f64.abs": [
+        "0x99"
+      ],
+      "f64.neg": [
+        "0x9A"
+      ],
+      "f64.ceil": [
+        "0x9B"
+      ],
+      "f64.floor": [
+        "0x9C"
+      ],
+      "f64.trunc": [
+        "0x9D"
+      ],
+      "f64.nearest": [
+        "0x9E"
+      ],
+      "f64.sqrt": [
+        "0x9F"
+      ],
+      "f64.add": [
+        "0xA0"
+      ],
+      "f64.sub": [
+        "0xA1"
+      ],
+      "f64.mul": [
+        "0xA2"
+      ],
+      "f64.div": [
+        "0xA3"
+      ],
+      "f64.min": [
+        "0xA4"
+      ],
+      "f64.max": [
+        "0xA5"
+      ],
+      "f64.copysign": [
+        "0xA6"
+      ],
+      "i32.wrap_i64": [
+        "0xA7"
+      ],
+      "i32.trunc_f32_s": [
+        "0xA8"
+      ],
+      "i32.trunc_f32_u": [
+        "0xA9"
+      ],
+      "i32.trunc_f64_s": [
+        "0xAA"
+      ],
+      "i32.trunc_f64_u": [
+        "0xAB"
+      ],
+      "i64.extend_i32_s": [
+        "0xAC"
+      ],
+      "i64.extend_i32_u": [
+        "0xAD"
+      ],
+      "i64.trunc_f32_s": [
+        "0xAE"
+      ],
+      "i64.trunc_f32_u": [
+        "0xAF"
+      ],
+      "i64.trunc_f64_s": [
+        "0xB0"
+      ],
+      "i64.trunc_f64_u": [
+        "0xB1"
+      ],
+      "f32.convert_i32_s": [
+        "0xB2"
+      ],
+      "f32.convert_i32_u": [
+        "0xB3"
+      ],
+      "f32.convert_i64_s": [
+        "0xB4"
+      ],
+      "f32.convert_i64_u": [
+        "0xB5"
+      ],
+      "f32.demote_f64": [
+        "0xB6"
+      ],
+      "f64.convert_i32_s": [
+        "0xB7"
+      ],
+      "f64.convert_i32_u": [
+        "0xB8"
+      ],
+      "f64.convert_i64_s": [
+        "0xB9"
+      ],
+      "f64.convert_i64_u": [
+        "0xBA"
+      ],
+      "f64.promote_f32": [
+        "0xBB"
+      ],
+      "i32.reinterpret_f32": [
+        "0xBC"
+      ],
+      "f32.reinterpret_i32": [
+        "0xBD"
+      ],
+      "i64.reinterpret_f64": [
+        "0xBE"
+      ],
+      "f64.reinterpret_i64": [
+        "0xBF"
+      ],
+      "i32.trunc_sat_f32_s": [
+        [
+          "0xFC",
+          "0x00"
+        ]
+      ],
+      "i32.trunc_sat_f32_u": [
+        [
+          "0xFC",
+          "0x01"
+        ]
+      ],
+      "i32.trunc_sat_f64_s": [
+        [
+          "0xFC",
+          "0x02"
+        ]
+      ],
+      "i32.trunc_sat_f64_u": [
+        [
+          "0xFC",
+          "0x03"
+        ]
+      ],
+      "i64.trunc_sat_f32_s": [
+        [
+          "0xFC",
+          "0x04"
+        ]
+      ],
+      "i64.trunc_sat_f32_u": [
+        [
+          "0xFC",
+          "0x05"
+        ]
+      ],
+      "i64.trunc_sat_f64_s": [
+        [
+          "0xFC",
+          "0x06"
+        ]
+      ],
+      "i64.trunc_sat_f64_u": [
+        [
+          "0xFC",
+          "0x07"
+        ]
+      ],
+      "i32.extend8_s": [
+        [
+          "0xFC",
+          "0x08"
+        ]
+      ],
+      "i32.extend16_s": [
+        [
+          "0xFC",
+          "0x09"
+        ]
+      ],
+      "i64.extend8_s": [
+        [
+          "0xFC",
+          "0x0A"
+        ]
+      ],
+      "i64.extend16_s": [
+        [
+          "0xFC",
+          "0x0B"
+        ]
+      ],
+      "i64.extend32_s": [
+        [
+          "0xFC",
+          "0x0C"
+        ]
+      ],
+      "v128.load": [
+        [
+          "0xFD",
+          "0x00"
+        ],
+        "memarg"
+      ],
+      "v128.load8x8_s": [
+        [
+          "0xFD",
+          "0x01"
+        ],
+        "memarg"
+      ],
+      "v128.load8x8_u": [
+        [
+          "0xFD",
+          "0x02"
+        ],
+        "memarg"
+      ],
+      "v128.load16x4_s": [
+        [
+          "0xFD",
+          "0x03"
+        ],
+        "memarg"
+      ],
+      "v128.load16x4_u": [
+        [
+          "0xFD",
+          "0x04"
+        ],
+        "memarg"
+      ],
+      "v128.load32x2_s": [
+        [
+          "0xFD",
+          "0x05"
+        ],
+        "memarg"
+      ],
+      "v128.load32x2_u": [
+        [
+          "0xFD",
+          "0x06"
+        ],
+        "memarg"
+      ],
+      "v128.load8_splat": [
+        [
+          "0xFD",
+          "0x07"
+        ],
+        "memarg"
+      ],
+      "v128.load16_splat": [
+        [
+          "0xFD",
+          "0x08"
+        ],
+        "memarg"
+      ],
+      "v128.load32_splat": [
+        [
+          "0xFD",
+          "0x09"
+        ],
+        "memarg"
+      ],
+      "v128.load64_splat": [
+        [
+          "0xFD",
+          "0x0A"
+        ],
+        "memarg"
+      ],
+      "v128.store": [
+        [
+          "0xFD",
+          "0x0B"
+        ],
+        "memarg"
+      ],
+      "v128.const": [
+        [
+          "0xFD",
+          "0x0C"
+        ],
+        "v128"
+      ],
+      "i8x16.shuffle": [
+        [
+          "0xFD",
+          "0x0D"
+        ],
+        "shuffle"
+      ],
+      "i8x16.swizzle": [
+        [
+          "0xFD",
+          "0x0E"
+        ]
+      ],
+      "i8x16.splat": [
+        [
+          "0xFD",
+          "0x0F"
+        ]
+      ],
+      "i16x8.splat": [
+        [
+          "0xFD",
+          "0x10"
+        ]
+      ],
+      "i32x4.splat": [
+        [
+          "0xFD",
+          "0x11"
+        ]
+      ],
+      "i64x2.splat": [
+        [
+          "0xFD",
+          "0x12"
+        ]
+      ],
+      "f32x4.splat": [
+        [
+          "0xFD",
+          "0x13"
+        ]
+      ],
+      "f64x2.splat": [
+        [
+          "0xFD",
+          "0x14"
+        ]
+      ],
+      "i8x16.extract_lane_s": [
+        [
+          "0xFD",
+          "0x15"
+        ],
+        "lane"
+      ],
+      "i8x16.extract_lane_u": [
+        [
+          "0xFD",
+          "0x16"
+        ],
+        "lane"
+      ],
+      "i8x16.replace_lane": [
+        [
+          "0xFD",
+          "0x17"
+        ],
+        "lane"
+      ],
+      "i16x8.extract_lane_s": [
+        [
+          "0xFD",
+          "0x18"
+        ],
+        "lane"
+      ],
+      "i16x8.extract_lane_u": [
+        [
+          "0xFD",
+          "0x19"
+        ],
+        "lane"
+      ],
+      "i16x8.replace_lane": [
+        [
+          "0xFD",
+          "0x1A"
+        ],
+        "lane"
+      ],
+      "i32x4.extract_lane": [
+        [
+          "0xFD",
+          "0x1B"
+        ],
+        "lane"
+      ],
+      "i32x4.replace_lane": [
+        [
+          "0xFD",
+          "0x1C"
+        ],
+        "lane"
+      ],
+      "i64x2.extract_lane": [
+        [
+          "0xFD",
+          "0x1D"
+        ],
+        "lane"
+      ],
+      "i64x2.replace_lane": [
+        [
+          "0xFD",
+          "0x1E"
+        ],
+        "lane"
+      ],
+      "f32x4.extract_lane": [
+        [
+          "0xFD",
+          "0x1F"
+        ],
+        "lane"
+      ],
+      "f32x4.replace_lane": [
+        [
+          "0xFD",
+          "0x20"
+        ],
+        "lane"
+      ],
+      "f64x2.extract_lane": [
+        [
+          "0xFD",
+          "0x21"
+        ],
+        "lane"
+      ],
+      "f64x2.replace_lane": [
+        [
+          "0xFD",
+          "0x22"
+        ],
+        "lane"
+      ],
+      "i8x16.eq": [
+        [
+          "0xFD",
+          "0x23"
+        ]
+      ],
+      "i8x16.ne": [
+        [
+          "0xFD",
+          "0x24"
+        ]
+      ],
+      "i8x16.lt_s": [
+        [
+          "0xFD",
+          "0x25"
+        ]
+      ],
+      "i8x16.lt_u": [
+        [
+          "0xFD",
+          "0x26"
+        ]
+      ],
+      "i8x16.gt_s": [
+        [
+          "0xFD",
+          "0x27"
+        ]
+      ],
+      "i8x16.gt_u": [
+        [
+          "0xFD",
+          "0x28"
+        ]
+      ],
+      "i8x16.le_s": [
+        [
+          "0xFD",
+          "0x29"
+        ]
+      ],
+      "i8x16.le_u": [
+        [
+          "0xFD",
+          "0x2A"
+        ]
+      ],
+      "i8x16.ge_s": [
+        [
+          "0xFD",
+          "0x2B"
+        ]
+      ],
+      "i8x16.ge_u": [
+        [
+          "0xFD",
+          "0x2C"
+        ]
+      ],
+      "i16x8.eq": [
+        [
+          "0xFD",
+          "0x2D"
+        ]
+      ],
+      "i16x8.ne": [
+        [
+          "0xFD",
+          "0x2E"
+        ]
+      ],
+      "i16x8.lt_s": [
+        [
+          "0xFD",
+          "0x2F"
+        ]
+      ],
+      "i16x8.lt_u": [
+        [
+          "0xFD",
+          "0x30"
+        ]
+      ],
+      "i16x8.gt_s": [
+        [
+          "0xFD",
+          "0x31"
+        ]
+      ],
+      "i16x8.gt_u": [
+        [
+          "0xFD",
+          "0x32"
+        ]
+      ],
+      "i16x8.le_s": [
+        [
+          "0xFD",
+          "0x33"
+        ]
+      ],
+      "i16x8.le_u": [
+        [
+          "0xFD",
+          "0x34"
+        ]
+      ],
+      "i16x8.ge_s": [
+        [
+          "0xFD",
+          "0x35"
+        ]
+      ],
+      "i16x8.ge_u": [
+        [
+          "0xFD",
+          "0x36"
+        ]
+      ],
+      "i32x4.eq": [
+        [
+          "0xFD",
+          "0x37"
+        ]
+      ],
+      "i32x4.ne": [
+        [
+          "0xFD",
+          "0x38"
+        ]
+      ],
+      "i32x4.lt_s": [
+        [
+          "0xFD",
+          "0x39"
+        ]
+      ],
+      "i32x4.lt_u": [
+        [
+          "0xFD",
+          "0x3A"
+        ]
+      ],
+      "i32x4.gt_s": [
+        [
+          "0xFD",
+          "0x3B"
+        ]
+      ],
+      "i32x4.gt_u": [
+        [
+          "0xFD",
+          "0x3C"
+        ]
+      ],
+      "i32x4.le_s": [
+        [
+          "0xFD",
+          "0x3D"
+        ]
+      ],
+      "i32x4.le_u": [
+        [
+          "0xFD",
+          "0x3E"
+        ]
+      ],
+      "i32x4.ge_s": [
+        [
+          "0xFD",
+          "0x3F"
+        ]
+      ],
+      "i32x4.ge_u": [
+        [
+          "0xFD",
+          "0x40"
+        ]
+      ],
+      "f32x4.eq": [
+        [
+          "0xFD",
+          "0x41"
+        ]
+      ],
+      "f32x4.ne": [
+        [
+          "0xFD",
+          "0x42"
+        ]
+      ],
+      "f32x4.lt": [
+        [
+          "0xFD",
+          "0x43"
+        ]
+      ],
+      "f32x4.gt": [
+        [
+          "0xFD",
+          "0x44"
+        ]
+      ],
+      "f32x4.le": [
+        [
+          "0xFD",
+          "0x45"
+        ]
+      ],
+      "f32x4.ge": [
+        [
+          "0xFD",
+          "0x46"
+        ]
+      ],
+      "f64x2.eq": [
+        [
+          "0xFD",
+          "0x47"
+        ]
+      ],
+      "f64x2.ne": [
+        [
+          "0xFD",
+          "0x48"
+        ]
+      ],
+      "f64x2.lt": [
+        [
+          "0xFD",
+          "0x49"
+        ]
+      ],
+      "f64x2.gt": [
+        [
+          "0xFD",
+          "0x4A"
+        ]
+      ],
+      "f64x2.le": [
+        [
+          "0xFD",
+          "0x4B"
+        ]
+      ],
+      "f64x2.ge": [
+        [
+          "0xFD",
+          "0x4C"
+        ]
+      ],
+      "v128.not": [
+        [
+          "0xFD",
+          "0x4D"
+        ]
+      ],
+      "v128.and": [
+        [
+          "0xFD",
+          "0x4E"
+        ]
+      ],
+      "v128.andnot": [
+        [
+          "0xFD",
+          "0x4F"
+        ]
+      ],
+      "v128.or": [
+        [
+          "0xFD",
+          "0x50"
+        ]
+      ],
+      "v128.xor": [
+        [
+          "0xFD",
+          "0x51"
+        ]
+      ],
+      "v128.bitselect": [
+        [
+          "0xFD",
+          "0x52"
+        ]
+      ],
+      "v128.any_true": [
+        [
+          "0xFD",
+          "0x53"
+        ]
+      ],
+      "i8x16.abs": [
+        [
+          "0xFD",
+          "0x60"
+        ]
+      ],
+      "i8x16.neg": [
+        [
+          "0xFD",
+          "0x61"
+        ]
+      ],
+      "i8x16.popcnt": [
+        [
+          "0xFD",
+          "0x62"
+        ]
+      ],
+      "i8x16.all_true": [
+        [
+          "0xFD",
+          "0x63"
+        ]
+      ],
+      "i8x16.bitmask": [
+        [
+          "0xFD",
+          "0x64"
+        ]
+      ],
+      "i8x16.narrow_i16x8_s": [
+        [
+          "0xFD",
+          "0x65"
+        ]
+      ],
+      "i8x16.narrow_i16x8_u": [
+        [
+          "0xFD",
+          "0x66"
+        ]
+      ],
+      "f32x4.ceil": [
+        [
+          "0xFD",
+          "0x67"
+        ]
+      ],
+      "f32x4.floor": [
+        [
+          "0xFD",
+          "0x68"
+        ]
+      ],
+      "f32x4.trunc": [
+        [
+          "0xFD",
+          "0x69"
+        ]
+      ],
+      "f32x4.nearest": [
+        [
+          "0xFD",
+          "0x6A"
+        ]
+      ],
+      "i8x16.shl": [
+        [
+          "0xFD",
+          "0x6B"
+        ]
+      ],
+      "i8x16.shr_s": [
+        [
+          "0xFD",
+          "0x6C"
+        ]
+      ],
+      "i8x16.shr_u": [
+        [
+          "0xFD",
+          "0x6D"
+        ]
+      ],
+      "i8x16.add": [
+        [
+          "0xFD",
+          "0x6E"
+        ]
+      ],
+      "i8x16.add_sat_s": [
+        [
+          "0xFD",
+          "0x6F"
+        ]
+      ],
+      "i8x16.add_sat_u": [
+        [
+          "0xFD",
+          "0x70"
+        ]
+      ],
+      "i8x16.sub": [
+        [
+          "0xFD",
+          "0x71"
+        ]
+      ],
+      "i8x16.sub_sat_s": [
+        [
+          "0xFD",
+          "0x72"
+        ]
+      ],
+      "i8x16.sub_sat_u": [
+        [
+          "0xFD",
+          "0x73"
+        ]
+      ],
+      "f64x2.ceil": [
+        [
+          "0xFD",
+          "0x74"
+        ]
+      ],
+      "f64x2.floor": [
+        [
+          "0xFD",
+          "0x75"
+        ]
+      ],
+      "f64x2.trunc": [
+        [
+          "0xFD",
+          "0x76"
+        ]
+      ],
+      "f64x2.nearest": [
+        [
+          "0xFD",
+          "0x77"
+        ]
+      ],
+      "i8x16.min_s": [
+        [
+          "0xFD",
+          "0x78"
+        ]
+      ],
+      "i8x16.min_u": [
+        [
+          "0xFD",
+          "0x79"
+        ]
+      ],
+      "i8x16.max_s": [
+        [
+          "0xFD",
+          "0x7A"
+        ]
+      ],
+      "i8x16.max_u": [
+        [
+          "0xFD",
+          "0x7B"
+        ]
+      ],
+      "i8x16.avgr_u": [
+        [
+          "0xFD",
+          "0x80"
+        ]
+      ],
+      "i16x8.extadd_pairwise_i8x16_s": [
+        [
+          "0xFD",
+          "0x81"
+        ]
+      ],
+      "i16x8.extadd_pairwise_i8x16_u": [
+        [
+          "0xFD",
+          "0x82"
+        ]
+      ],
+      "i32x4.extadd_pairwise_i16x8_s": [
+        [
+          "0xFD",
+          "0x83"
+        ]
+      ],
+      "i32x4.extadd_pairwise_i16x8_u": [
+        [
+          "0xFD",
+          "0x84"
+        ]
+      ],
+      "i16x8.abs": [
+        [
+          "0xFD",
+          "0x85"
+        ]
+      ],
+      "i16x8.neg": [
+        [
+          "0xFD",
+          "0x86"
+        ]
+      ],
+      "i16x8.q15mulr_sat_s": [
+        [
+          "0xFD",
+          "0x87"
+        ]
+      ],
+      "i16x8.all_true": [
+        [
+          "0xFD",
+          "0x88"
+        ]
+      ],
+      "i16x8.bitmask": [
+        [
+          "0xFD",
+          "0x89"
+        ]
+      ],
+      "i16x8.narrow_i32x4_s": [
+        [
+          "0xFD",
+          "0x8A"
+        ]
+      ],
+      "i16x8.narrow_i32x4_u": [
+        [
+          "0xFD",
+          "0x8B"
+        ]
+      ],
+      "i16x8.extend_low_i8x16_s": [
+        [
+          "0xFD",
+          "0x8C"
+        ]
+      ],
+      "i16x8.extend_high_i8x16_s": [
+        [
+          "0xFD",
+          "0x8D"
+        ]
+      ],
+      "i16x8.extend_low_i8x16_u": [
+        [
+          "0xFD",
+          "0x8E"
+        ]
+      ],
+      "i16x8.extend_high_i8x16_u": [
+        [
+          "0xFD",
+          "0x8F"
+        ]
+      ],
+      "i16x8.shl": [
+        [
+          "0xFD",
+          "0x90"
+        ]
+      ],
+      "i16x8.shr_s": [
+        [
+          "0xFD",
+          "0x91"
+        ]
+      ],
+      "i16x8.shr_u": [
+        [
+          "0xFD",
+          "0x92"
+        ]
+      ],
+      "i16x8.add": [
+        [
+          "0xFD",
+          "0x93"
+        ]
+      ],
+      "i16x8.add_sat_s": [
+        [
+          "0xFD",
+          "0x94"
+        ]
+      ],
+      "i16x8.add_sat_u": [
+        [
+          "0xFD",
+          "0x95"
+        ]
+      ],
+      "i16x8.sub": [
+        [
+          "0xFD",
+          "0x96"
+        ]
+      ],
+      "i16x8.sub_sat_s": [
+        [
+          "0xFD",
+          "0x97"
+        ]
+      ],
+      "i16x8.sub_sat_u": [
+        [
+          "0xFD",
+          "0x98"
+        ]
+      ],
+      "i16x8.mul": [
+        [
+          "0xFD",
+          "0x99"
+        ]
+      ],
+      "i16x8.min_s": [
+        [
+          "0xFD",
+          "0x9A"
+        ]
+      ],
+      "i16x8.min_u": [
+        [
+          "0xFD",
+          "0x9B"
+        ]
+      ],
+      "i16x8.max_s": [
+        [
+          "0xFD",
+          "0x9C"
+        ]
+      ],
+      "i16x8.max_u": [
+        [
+          "0xFD",
+          "0x9D"
+        ]
+      ],
+      "i16x8.avgr_u": [
+        [
+          "0xFD",
+          "0x9E"
+        ]
+      ],
+      "i16x8.extmul_low_i8x16_s": [
+        [
+          "0xFD",
+          "0x9F"
+        ]
+      ],
+      "i16x8.extmul_high_i8x16_s": [
+        [
+          "0xFD",
+          "0xA0"
+        ]
+      ],
+      "i16x8.extmul_low_i8x16_u": [
+        [
+          "0xFD",
+          "0xA1"
+        ]
+      ],
+      "i16x8.extmul_high_i8x16_u": [
+        [
+          "0xFD",
+          "0xA2"
+        ]
+      ],
+      "i16x8.dot_i8x16_i7s_s": [
+        [
+          "0xFD",
+          "0xA3"
+        ]
+      ],
+      "i32x4.abs": [
+        [
+          "0xFD",
+          "0xA4"
+        ]
+      ],
+      "i32x4.neg": [
+        [
+          "0xFD",
+          "0xA5"
+        ]
+      ],
+      "i32x4.all_true": [
+        [
+          "0xFD",
+          "0xA6"
+        ]
+      ],
+      "i32x4.bitmask": [
+        [
+          "0xFD",
+          "0xA7"
+        ]
+      ],
+      "i32x4.narrow_i64x2_s": [
+        [
+          "0xFD",
+          "0xA8"
+        ]
+      ],
+      "i32x4.narrow_i64x2_u": [
+        [
+          "0xFD",
+          "0xA9"
+        ]
+      ],
+      "i32x4.extend_low_i16x8_s": [
+        [
+          "0xFD",
+          "0xAA"
+        ]
+      ],
+      "i32x4.extend_high_i16x8_s": [
+        [
+          "0xFD",
+          "0xAB"
+        ]
+      ],
+      "i32x4.extend_low_i16x8_u": [
+        [
+          "0xFD",
+          "0xAC"
+        ]
+      ],
+      "i32x4.extend_high_i16x8_u": [
+        [
+          "0xFD",
+          "0xAD"
+        ]
+      ],
+      "i32x4.shl": [
+        [
+          "0xFD",
+          "0xAE"
+        ]
+      ],
+      "i32x4.shr_s": [
+        [
+          "0xFD",
+          "0xAF"
+        ]
+      ],
+      "i32x4.shr_u": [
+        [
+          "0xFD",
+          "0xB0"
+        ]
+      ],
+      "i32x4.add": [
+        [
+          "0xFD",
+          "0xB1"
+        ]
+      ],
+      "i32x4.sub": [
+        [
+          "0xFD",
+          "0xB2"
+        ]
+      ],
+      "i32x4.mul": [
+        [
+          "0xFD",
+          "0xB3"
+        ]
+      ],
+      "i32x4.min_s": [
+        [
+          "0xFD",
+          "0xB4"
+        ]
+      ],
+      "i32x4.min_u": [
+        [
+          "0xFD",
+          "0xB5"
+        ]
+      ],
+      "i32x4.max_s": [
+        [
+          "0xFD",
+          "0xB6"
+        ]
+      ],
+      "i32x4.max_u": [
+        [
+          "0xFD",
+          "0xB7"
+        ]
+      ],
+      "i32x4.dot_i16x8_s": [
+        [
+          "0xFD",
+          "0xB8"
+        ]
+      ],
+      "i32x4.extmul_low_i16x8_s": [
+        [
+          "0xFD",
+          "0xB9"
+        ]
+      ],
+      "i32x4.extmul_high_i16x8_s": [
+        [
+          "0xFD",
+          "0xBA"
+        ]
+      ],
+      "i32x4.extmul_low_i16x8_u": [
+        [
+          "0xFD",
+          "0xBB"
+        ]
+      ],
+      "i32x4.extmul_high_i16x8_u": [
+        [
+          "0xFD",
+          "0xBC"
+        ]
+      ],
+      "i32x4.trunc_sat_f32x4_s": [
+        [
+          "0xFD",
+          "0xBD"
+        ]
+      ],
+      "i32x4.trunc_sat_f32x4_u": [
+        [
+          "0xFD",
+          "0xBE"
+        ]
+      ],
+      "f32x4.convert_i32x4_s": [
+        [
+          "0xFD",
+          "0xBF"
+        ]
+      ],
+      "f32x4.convert_i32x4_u": [
+        [
+          "0xFD",
+          "0xC0"
+        ]
+      ],
+      "i32x4.trunc_sat_f64x2_s_zero": [
+        [
+          "0xFD",
+          "0xC1"
+        ]
+      ],
+      "i32x4.trunc_sat_f64x2_u_zero": [
+        [
+          "0xFD",
+          "0xC2"
+        ]
+      ],
+      "f64x2.convert_low_i32x4_s": [
+        [
+          "0xFD",
+          "0xC3"
+        ]
+      ],
+      "f64x2.convert_low_i32x4_u": [
+        [
+          "0xFD",
+          "0xC4"
+        ]
+      ],
+      "i64x2.abs": [
+        [
+          "0xFD",
+          "0xC5"
+        ]
+      ],
+      "i64x2.neg": [
+        [
+          "0xFD",
+          "0xC6"
+        ]
+      ],
+      "i64x2.all_true": [
+        [
+          "0xFD",
+          "0xC7"
+        ]
+      ],
+      "i64x2.bitmask": [
+        [
+          "0xFD",
+          "0xC8"
+        ]
+      ],
+      "i64x2.extend_low_i32x4_s": [
+        [
+          "0xFD",
+          "0xC9"
+        ]
+      ],
+      "i64x2.extend_high_i32x4_s": [
+        [
+          "0xFD",
+          "0xCA"
+        ]
+      ],
+      "i64x2.extend_low_i32x4_u": [
+        [
+          "0xFD",
+          "0xCB"
+        ]
+      ],
+      "i64x2.extend_high_i32x4_u": [
+        [
+          "0xFD",
+          "0xCC"
+        ]
+      ],
+      "i64x2.shl": [
+        [
+          "0xFD",
+          "0xCD"
+        ]
+      ],
+      "i64x2.shr_s": [
+        [
+          "0xFD",
+          "0xCE"
+        ]
+      ],
+      "i64x2.shr_u": [
+        [
+          "0xFD",
+          "0xCF"
+        ]
+      ],
+      "i64x2.add": [
+        [
+          "0xFD",
+          "0xD0"
+        ]
+      ],
+      "i64x2.sub": [
+        [
+          "0xFD",
+          "0xD1"
+        ]
+      ],
+      "i64x2.mul": [
+        [
+          "0xFD",
+          "0xD2"
+        ]
+      ],
+      "i64x2.eq": [
+        [
+          "0xFD",
+          "0xD3"
+        ]
+      ],
+      "i64x2.ne": [
+        [
+          "0xFD",
+          "0xD4"
+        ]
+      ],
+      "i64x2.lt_s": [
+        [
+          "0xFD",
+          "0xD5"
+        ]
+      ],
+      "i64x2.gt_s": [
+        [
+          "0xFD",
+          "0xD6"
+        ]
+      ],
+      "i64x2.le_s": [
+        [
+          "0xFD",
+          "0xD7"
+        ]
+      ],
+      "i64x2.ge_s": [
+        [
+          "0xFD",
+          "0xD8"
+        ]
+      ],
+      "i64x2.extmul_low_i32x4_s": [
+        [
+          "0xFD",
+          "0xD9"
+        ]
+      ],
+      "i64x2.extmul_high_i32x4_s": [
+        [
+          "0xFD",
+          "0xDA"
+        ]
+      ],
+      "i64x2.extmul_low_i32x4_u": [
+        [
+          "0xFD",
+          "0xDB"
+        ]
+      ],
+      "i64x2.extmul_high_i32x4_u": [
+        [
+          "0xFD",
+          "0xDC"
+        ]
+      ],
+      "f32x4.abs": [
+        [
+          "0xFD",
+          "0xDD"
+        ]
+      ],
+      "f32x4.neg": [
+        [
+          "0xFD",
+          "0xDE"
+        ]
+      ],
+      "f32x4.sqrt": [
+        [
+          "0xFD",
+          "0xDF"
+        ]
+      ],
+      "f32x4.add": [
+        [
+          "0xFD",
+          "0xE0"
+        ]
+      ],
+      "f32x4.sub": [
+        [
+          "0xFD",
+          "0xE1"
+        ]
+      ],
+      "f32x4.mul": [
+        [
+          "0xFD",
+          "0xE2"
+        ]
+      ],
+      "f32x4.div": [
+        [
+          "0xFD",
+          "0xE3"
+        ]
+      ],
+      "f32x4.min": [
+        [
+          "0xFD",
+          "0xE4"
+        ]
+      ],
+      "f32x4.max": [
+        [
+          "0xFD",
+          "0xE5"
+        ]
+      ],
+      "f32x4.pmin": [
+        [
+          "0xFD",
+          "0xE6"
+        ]
+      ],
+      "f32x4.pmax": [
+        [
+          "0xFD",
+          "0xE7"
+        ]
+      ],
+      "f64x2.abs": [
+        [
+          "0xFD",
+          "0xE8"
+        ]
+      ],
+      "f64x2.neg": [
+        [
+          "0xFD",
+          "0xE9"
+        ]
+      ],
+      "f64x2.sqrt": [
+        [
+          "0xFD",
+          "0xEA"
+        ]
+      ],
+      "f64x2.add": [
+        [
+          "0xFD",
+          "0xEB"
+        ]
+      ],
+      "f64x2.sub": [
+        [
+          "0xFD",
+          "0xEC"
+        ]
+      ],
+      "f64x2.mul": [
+        [
+          "0xFD",
+          "0xED"
+        ]
+      ],
+      "f64x2.div": [
+        [
+          "0xFD",
+          "0xEE"
+        ]
+      ],
+      "f64x2.min": [
+        [
+          "0xFD",
+          "0xEF"
+        ]
+      ],
+      "f64x2.max": [
+        [
+          "0xFD",
+          "0xF0"
+        ]
+      ],
+      "f64x2.pmin": [
+        [
+          "0xFD",
+          "0xF1"
+        ]
+      ],
+      "f64x2.pmax": [
+        [
+          "0xFD",
+          "0xF2"
+        ]
+      ]
+    },
+    "encodings": {
+      "atoms": [
+        "byte",
+        "rex",
+        "modrm",
+        "regcode",
+        "sib",
+        "imm8",
+        "imm32",
+        "imm64",
+        "rel32",
+        "rel8"
+      ],
+      "x86_64": {
+        "regs": {
+          "rax": 0,
+          "rcx": 1,
+          "rdx": 2,
+          "rbx": 3,
+          "rsp": 4,
+          "rbp": 5,
+          "rsi": 6,
+          "rdi": 7,
+          "r8": 8,
+          "r9": 9,
+          "r10": 10,
+          "r11": 11,
+          "r12": 12,
+          "r13": 13,
+          "r14": 14,
+          "r15": 15
+        },
+        "t": {
+          "nop": "0x90",
+          "ud2": "0x0F 0x0B",
+          "ret": "0xC3",
+          "alu32_rr": "rex(0,$s,0,$d) @op modrm(3,$s,$d)",
+          "alu64_rr": "rex(1,$s,0,$d) @op modrm(3,$s,$d)",
+          "mul32_rr": "rex(0,$d,0,$s) 0x0F 0xAF modrm(3,$d,$s)",
+          "mul64_rr": "rex(1,$d,0,$s) 0x0F 0xAF modrm(3,$d,$s)",
+          "div32": "rex(0,0,0,$d) 0xF7 modrm(3,@ext,$d)",
+          "div64": "rex(1,0,0,$d) 0xF7 modrm(3,@ext,$d)",
+          "cmp32_rr": "rex(0,$s,0,$d) 0x39 modrm(3,$s,$d)",
+          "cmp64_rr": "rex(1,$s,0,$d) 0x39 modrm(3,$s,$d)",
+          "setcc": "0x0F @cc modrm(3,0,$d)",
+          "eqz32": "rex(0,$d,0,$d) 0x85 modrm(3,$d,$d) 0x0F 0x94 modrm(3,0,$d) 0x0F 0xB6 modrm(3,$d,$d)",
+          "eqz64": "rex(1,$d,0,$d) 0x85 modrm(3,$d,$d) 0x0F 0x94 modrm(3,0,$d) 0x0F 0xB6 modrm(3,$d,$d)",
+          "cmp32_set": "rex(0,$r,0,$l) 0x39 modrm(3,$r,$l) 0x0F @cc modrm(3,0,$d) 0x0F 0xB6 modrm(3,$d,$d)",
+          "cmp64_set": "rex(1,$r,0,$l) 0x39 modrm(3,$r,$l) 0x0F @cc modrm(3,0,$d) 0x0F 0xB6 modrm(3,$d,$d)",
+          "jcc_rel32": "0x0F @cc rel32(@target)",
+          "jcc_rel8": "@cc rel8(@target)",
+          "jmp_rel32": "0xE9 rel32(@target)",
+          "jmp_rel8": "0xEB rel8(@target)",
+          "call_rel32": "0xE8 rel32(@target)",
+          "push_r": "rex(0,0,0,$d) regcode(0x50,$d)",
+          "pop_r": "rex(0,0,0,$d) regcode(0x58,$d)",
+          "mov_ri32": "rex(0,0,0,$d) regcode(0xB8,$d) imm32(@imm)",
+          "mov_ri64": "rex(1,0,0,$d) regcode(0xB8,$d) imm64(@imm_lo,@imm_hi)",
+          "load32_mr": "rex(0,$d,0,$b) 0x8B modrm(0,$d,$b) imm8(@disp)",
+          "load64_mr": "rex(1,$d,0,$b) 0x8B modrm(0,$d,$b) imm8(@disp)",
+          "store32_rm": "rex(0,$s,0,$b) 0x89 modrm(0,$s,$b) imm8(@disp)",
+          "store64_rm": "rex(1,$s,0,$b) 0x89 modrm(0,$s,$b) imm8(@disp)",
+          "movsxd_rr": "rex(1,$d,0,$s) 0x63 modrm(3,$d,$s)",
+          "sh32_cl": "rex(0,0,0,$d) 0xD3 modrm(3,@ext,$d)",
+          "sh64_cl": "rex(1,0,0,$d) 0xD3 modrm(3,@ext,$d)",
+          "unary32": "rex(0,0,0,$d) @op modrm(3,@ext,$d)",
+          "unary64": "rex(1,0,0,$d) @op modrm(3,@ext,$d)",
+          "movzx_32_8": "rex(0,$d,0,$s) 0x0F 0xB6 modrm(3,$d,$s)",
+          "movsx_32_8": "rex(0,$d,0,$s) 0x0F 0xBE modrm(3,$d,$s)",
+          "movzx_32_16": "rex(0,$d,0,$s) 0x0F 0xB7 modrm(3,$d,$s)",
+          "movsx_32_16": "rex(0,$d,0,$s) 0x0F 0xBF modrm(3,$d,$s)",
+          "movsx_64_32": "rex(1,$d,0,$s) 0x63 modrm(3,$d,$s)",
+          "test32_rr": "rex(0,$s,0,$d) 0x85 modrm(3,$s,$d)",
+          "test64_rr": "rex(1,$s,0,$d) 0x85 modrm(3,$s,$d)",
+          "cmov32_rr": "rex(0,$s,0,$d) 0x0F @cc modrm(3,$s,$d)",
+          "cmov64_rr": "rex(1,$s,0,$d) 0x0F @cc modrm(3,$s,$d)",
+          "ldsx8": "rex(@w,$d,0,$b) 0x0F 0xBE modrm(1,$d,$b) imm8(@disp)",
+          "ldzx8": "rex(@w,$d,0,$b) 0x0F 0xB6 modrm(1,$d,$b) imm8(@disp)",
+          "ldsx16": "rex(@w,$d,0,$b) 0x0F 0xBF modrm(1,$d,$b) imm8(@disp)",
+          "ldzx16": "rex(@w,$d,0,$b) 0x0F 0xB7 modrm(1,$d,$b) imm8(@disp)",
+          "ldsx32": "rex(@w,$d,0,$b) 0x63 modrm(1,$d,$b) imm8(@disp)",
+          "st8": "rex(0,0,0,$b) 0x88 modrm(1,$s,$b) imm8(@disp)",
+          "st16": "rex(0,0,0,$b) 0x66 0x89 modrm(1,$s,$b) imm8(@disp)",
+          "fld32": "rex(0,$d,0,$b) 0xF3 0x0F 0x10 modrm(1,$d,$b) imm8(@disp)",
+          "fld64": "rex(0,$d,0,$b) 0xF2 0x0F 0x10 modrm(1,$d,$b) imm8(@disp)",
+          "fst32": "rex(0,0,0,$b) 0xF3 0x0F 0x11 modrm(1,$s,$b) imm8(@disp)",
+          "fst64": "rex(0,0,0,$b) 0xF2 0x0F 0x11 modrm(1,$s,$b) imm8(@disp)",
+          "fop32": "rex(0,$d,0,$s) 0xF3 0x0F @op modrm(3,$d,$s)",
+          "fop64": "rex(0,$d,0,$s) 0xF2 0x0F @op modrm(3,$d,$s)"
+        },
+        "wasm": {
+          "0x00": "ud2",
+          "0x01": "nop",
+          "0x0C": "jmp_rel32",
+          "0x0D": "test32_rr($d,$d) jcc_rel32(0x95)",
+          "0x0E": "",
+          "0x0F": "ret",
+          "0x10": "call_rel32",
+          "0x11": "",
+          "0x1A": "",
+          "0x1B": "cmov32_rr(cc=0x95)",
+          "0x1C": "cmov32_rr(cc=0x95)",
+          "0x20": "load64_mr(b=rsp,disp=$idx)",
+          "0x21": "store64_rm(b=rsp,disp=$idx)",
+          "0x22": "store64_rm(b=rsp,disp=$idx)",
+          "0x23": "load64_mr(b=$gbase,disp=$gidx)",
+          "0x24": "store64_rm(b=$gbase,disp=$gidx)",
+          "0x28": "load32_mr(disp=$off)",
+          "0x29": "load64_mr(disp=$off)",
+          "0x2A": "fld32(disp=$off)",
+          "0x2B": "fld64(disp=$off)",
+          "0x2C": "ldsx8(w=0,disp=$off)",
+          "0x2D": "ldzx8(w=0,disp=$off)",
+          "0x2E": "ldsx16(w=0,disp=$off)",
+          "0x2F": "ldzx16(w=0,disp=$off)",
+          "0x30": "ldsx8(w=1,disp=$off)",
+          "0x31": "ldzx8(w=1,disp=$off)",
+          "0x32": "ldsx16(w=1,disp=$off)",
+          "0x33": "ldzx16(w=1,disp=$off)",
+          "0x34": "ldsx32(w=1,disp=$off)",
+          "0x35": "load32_mr(disp=$off)",
+          "0x36": "store32_rm(disp=$off)",
+          "0x37": "store64_rm(disp=$off)",
+          "0x38": "fst32(disp=$off)",
+          "0x39": "fst64(disp=$off)",
+          "0x3A": "st8(disp=$off)",
+          "0x3B": "st16(disp=$off)",
+          "0x3C": "st8(disp=$off)",
+          "0x3D": "st16(disp=$off)",
+          "0x3E": "store32_rm(disp=$off)",
+          "0x3F": "",
+          "0x40": "",
+          "0x41": "mov_ri32(imm=$val)",
+          "0x42": "mov_ri64(imm_lo=$val_lo,imm_hi=$val_hi)",
+          "0x43": "mov_ri32(imm=$bits)",
+          "0x44": "mov_ri64(imm_lo=$bits_lo,imm_hi=$bits_hi)",
+          "0x45": "eqz32",
+          "0x46": "cmp32_set(cc=0x94)",
+          "0x47": "cmp32_set(cc=0x95)",
+          "0x48": "cmp32_set(cc=0x9C)",
+          "0x49": "cmp32_set(cc=0x92)",
+          "0x4A": "cmp32_set(cc=0x9F)",
+          "0x4B": "cmp32_set(cc=0x97)",
+          "0x4C": "cmp32_set(cc=0x9E)",
+          "0x4D": "cmp32_set(cc=0x96)",
+          "0x4E": "cmp32_set(cc=0x9D)",
+          "0x4F": "cmp32_set(cc=0x93)",
+          "0x50": "eqz64",
+          "0x51": "cmp64_set(cc=0x94)",
+          "0x52": "cmp64_set(cc=0x95)",
+          "0x53": "cmp64_set(cc=0x9C)",
+          "0x54": "cmp64_set(cc=0x92)",
+          "0x55": "cmp64_set(cc=0x9F)",
+          "0x56": "cmp64_set(cc=0x97)",
+          "0x57": "cmp64_set(cc=0x9E)",
+          "0x58": "cmp64_set(cc=0x96)",
+          "0x59": "cmp64_set(cc=0x9D)",
+          "0x5A": "cmp64_set(cc=0x93)",
+          "0x5B": "",
+          "0x5C": "",
+          "0x5D": "",
+          "0x5E": "",
+          "0x5F": "",
+          "0x60": "",
+          "0x61": "",
+          "0x62": "",
+          "0x63": "",
+          "0x64": "",
+          "0x65": "",
+          "0x66": "",
+          "0x67": "",
+          "0x68": "",
+          "0x69": "",
+          "0x6A": "alu32_rr(op=1)",
+          "0x6B": "alu32_rr(op=0x29)",
+          "0x6C": "mul32_rr",
+          "0x6D": "div32(ext=7)",
+          "0x6E": "div32(ext=6)",
+          "0x6F": "div32(ext=7)",
+          "0x70": "div32(ext=6)",
+          "0x71": "alu32_rr(op=0x21)",
+          "0x72": "alu32_rr(op=9)",
+          "0x73": "alu32_rr(op=0x31)",
+          "0x74": "sh32_cl(ext=4)",
+          "0x75": "sh32_cl(ext=7)",
+          "0x76": "sh32_cl(ext=5)",
+          "0x77": "sh32_cl(ext=0)",
+          "0x78": "sh32_cl(ext=1)",
+          "0x79": "",
+          "0x7A": "",
+          "0x7B": "",
+          "0x7C": "alu64_rr(op=1)",
+          "0x7D": "alu64_rr(op=0x29)",
+          "0x7E": "mul64_rr",
+          "0x7F": "div64(ext=7)",
+          "0x80": "div64(ext=6)",
+          "0x81": "div64(ext=7)",
+          "0x82": "div64(ext=6)",
+          "0x83": "alu64_rr(op=0x21)",
+          "0x84": "alu64_rr(op=9)",
+          "0x85": "alu64_rr(op=0x31)",
+          "0x86": "sh64_cl(ext=4)",
+          "0x87": "sh64_cl(ext=7)",
+          "0x88": "sh64_cl(ext=5)",
+          "0x89": "sh64_cl(ext=0)",
+          "0x8A": "sh64_cl(ext=1)",
+          "0x8B": "",
+          "0x8C": "",
+          "0x8D": "",
+          "0x8E": "",
+          "0x8F": "",
+          "0x90": "",
+          "0x91": "fop32(op=0x51)",
+          "0x92": "fop32(op=0x58)",
+          "0x93": "fop32(op=0x5C)",
+          "0x94": "fop32(op=0x59)",
+          "0x95": "fop32(op=0x5E)",
+          "0x96": "fop32(op=0x5D)",
+          "0x97": "fop32(op=0x5F)",
+          "0x98": "",
+          "0x99": "",
+          "0x9A": "",
+          "0x9B": "",
+          "0x9C": "",
+          "0x9D": "",
+          "0x9E": "",
+          "0x9F": "fop64(op=0x51)",
+          "0xA0": "fop64(op=0x58)",
+          "0xA1": "fop64(op=0x5C)",
+          "0xA2": "fop64(op=0x59)",
+          "0xA3": "fop64(op=0x5E)",
+          "0xA4": "fop64(op=0x5D)",
+          "0xA5": "fop64(op=0x5F)",
+          "0xA6": "",
+          "0xA7": "",
+          "0xA8": "fop32(op=0x2C)",
+          "0xA9": "",
+          "0xAA": "fop64(op=0x2C)",
+          "0xAB": "",
+          "0xAC": "movsxd_rr",
+          "0xAD": "",
+          "0xAE": "fop32(op=0x2C,w=1)",
+          "0xAF": "",
+          "0xB0": "fop64(op=0x2C,w=1)",
+          "0xB1": "",
+          "0xB2": "fop32(op=0x2A)",
+          "0xB3": "",
+          "0xB4": "fop32(op=0x2A,w=1)",
+          "0xB5": "",
+          "0xB6": "fop32(op=0x5A)",
+          "0xB7": "fop64(op=0x2A)",
+          "0xB8": "",
+          "0xB9": "fop64(op=0x2A,w=1)",
+          "0xBA": "",
+          "0xBB": "fop64(op=0x5A)",
+          "0xBC": "",
+          "0xBD": "",
+          "0xBE": "",
+          "0xBF": "",
+          "0xFC": "",
+          "0xFD": ""
+        }
+      },
+      "aarch64": {
+        "regs": {
+          "x0": 0,
+          "x1": 1,
+          "x2": 2,
+          "x3": 3,
+          "x4": 4,
+          "x5": 5,
+          "x6": 6,
+          "x7": 7,
+          "x8": 8,
+          "x9": 9,
+          "x10": 10,
+          "x11": 11,
+          "x12": 12,
+          "x13": 13,
+          "x14": 14,
+          "x15": 15,
+          "x16": 16,
+          "x17": 17,
+          "x18": 18,
+          "x19": 19,
+          "x20": 20,
+          "x21": 21,
+          "x22": 22,
+          "x23": 23,
+          "x24": 24,
+          "x25": 25,
+          "x26": 26,
+          "x27": 27,
+          "x28": 28,
+          "x29": 29,
+          "x30": 30,
+          "sp": 31,
+          "w0": 0,
+          "w1": 1,
+          "w2": 2,
+          "w3": 3,
+          "w4": 4,
+          "w5": 5,
+          "w6": 6,
+          "w7": 7
+        }
+      }
+    },
+    "config": {
+      "buffer": {
+        "BUF_SIZE_8K": 8192,
+        "BUF_SIZE_64K": 64000,
+        "PAGE_SIZE": 65536,
+        "CACHE_LINE": 64,
+        "SIMD_ALIGN": 16,
+        "VEC256_ALIGN": 32
+      },
+      "interpreter": {
+        "MAX_FUNCTIONS": 4096,
+        "MAX_IMPORTS": 64,
+        "MAX_TYPES": 128,
+        "MAX_LOCALS": 64,
+        "MAX_STACK": 1024,
+        "MAX_CTRL": 64,
+        "MAX_GLOBALS": 2048,
+        "MAX_EXPORTS": 2048,
+        "MAX_TABLE": 1024,
+        "MAX_DATAS": 256,
+        "MAX_ELEMS": 64,
+        "MAX_DECODED": 131072
+      },
+      "cache": {
+        "MAX_ROWS": 65536,
+        "ROW_SIZE": 32,
+        "DEFAULT_BYTES": 1048576
+      },
+      "packet": {
+        "BUF_TINY_BYTES": 20,
+        "BUF_SMALL_BYTES": 100,
+        "BUF_MED_BYTES": 260,
+        "BUF_LARGE_BYTES": 10000,
+        "RX_BYTES": 10000,
+        "NODE_RING_COUNT": 32
+      }
+    },
+    "memory": {
+      "pages": 1024
+    },
+    "data": [
+      {
+        "offset": "0x1000",
+        "hex": "\\00\\00\\00\\00\\00\\00\\00\\00\\00\\20\\20\\00\\00\\20\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\20\\08\\00\\08\\08\\08\\08\\08\\00\\00\\08\\48\\00\\c8\\48\\00\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\00\\00\\00\\00\\00\\00\\00\\da\\da\\da\\da\\da\\da\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\00\\00\\00\\08\\08\\08\\dc\\dc\\dc\\dc\\dc\\dc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\00\\08\\00\\08\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00"
+      },
+      {
+        "offset": "0x2000",
+        "hex": "\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\61\\62\\63\\64\\65\\66\\67\\68\\69\\6a\\6b\\6c\\6d\\6e\\6f\\70\\71\\72\\73\\74\\75\\76\\77\\78\\79\\7a\\00\\00\\00\\00\\00\\00\\61\\62\\63\\64\\65\\66\\67\\68\\69\\6a\\6b\\6c\\6d\\6e\\6f\\70\\71\\72\\73\\74\\75\\76\\77\\78\\79\\7a\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00"
+      }
+    ],
+    "globals": {
+      "BIN_OUT_OFF_aarch64": {
+        "type": "i32",
+        "value": "0x300000"
+      },
+      "BIN_OUT_OFF_arm32": {
+        "type": "i32",
+        "value": "0x300000"
+      },
+      "BSS_GLOBALS_aarch64": {
+        "type": "i32",
+        "value": "0x520080"
+      },
+      "BSS_GLOBALS_arm32": {
+        "type": "i32",
+        "value": "0x520080"
+      },
+      "BSS_JITGLOBALS_aarch64": {
+        "type": "i32",
+        "value": "0x500000"
+      },
+      "BSS_JITGLOBALS_arm32": {
+        "type": "i32",
+        "value": "0x500000"
+      },
+      "BSS_LOCALS_aarch64": {
+        "type": "i32",
+        "value": "0x510080"
+      },
+      "BSS_LOCALS_arm32": {
+        "type": "i32",
+        "value": "0x510080"
+      },
+      "BSS_MEM_aarch64": {
+        "type": "i32",
+        "value": "0x500080"
+      },
+      "BSS_MEM_arm32": {
+        "type": "i32",
+        "value": "0x500080"
+      },
+      "BSS_SIZE_x86_64": {
+        "type": "i32",
+        "value": "0x100000"
+      },
+      "BSS_TABLE_aarch64": {
+        "type": "i32",
+        "value": "0x530080"
+      },
+      "BSS_TABLE_arm32": {
+        "type": "i32",
+        "value": "0x530080"
+      },
+      "CALL_FIXUP_TABLE_x86_64": {
+        "type": "i32",
+        "value": "0x80800"
+      },
+      "CRYPTO_INPUT_BUF": {
+        "type": "i32",
+        "value": "0x6000",
+        "export": true
+      },
+      "DEC_SZ": {
+        "type": "i32",
+        "value": "32",
+        "export": true
+      },
+      "ELF_CODE_OFF_aarch64": {
+        "type": "i32",
+        "value": "256"
+      },
+      "ELF_CODE_OFF_arm32": {
+        "type": "i32",
+        "value": "256"
+      },
+      "ELF_CODE_OFF_x86_64": {
+        "type": "i32",
+        "value": "256"
+      },
+      "ELF_OUT_BUF": {
+        "type": "i32",
+        "value": "0x400000",
+        "export": true
+      },
+      "ELF_OUT_BUF_aarch64": {
+        "type": "i32",
+        "value": "0x400000"
+      },
+      "ELF_OUT_BUF_arm32": {
+        "type": "i32",
+        "value": "0x400000"
+      },
+      "ELF_OUT_BUF_x86_64": {
+        "type": "i32",
+        "value": "0x400000"
+      },
+      "ELF_OUT_OFF_aarch64": {
+        "type": "i32",
+        "value": "0x300000"
+      },
+      "ELF_OUT_OFF_arm32": {
+        "type": "i32",
+        "value": "0x300000"
+      },
+      "ELF_OUT_OFF_x86_64": {
+        "type": "i32",
+        "value": "0x300000"
+      },
+      "ELF_STUB_OFF_x86_64": {
+        "type": "i32",
+        "value": "120"
+      },
+      "ERR_UNSUP": {
+        "type": "i32",
+        "value": "1"
+      },
+      "FUNC_OFF_TABLE_x86_64": {
+        "type": "i32",
+        "value": "0x80000"
+      },
+      "HEAP_START": {
+        "type": "i32",
+        "value": "0x40000",
+        "export": true
+      },
+      "JIT_CACHE": {
+        "type": "i32",
+        "value": "0x100000",
+        "export": true
+      },
+      "JIT_SCRATCH_BASE": {
+        "type": "i32",
+        "value": "0x8000",
+        "export": true
+      },
+      "JIT_ERROR_aarch64": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "JIT_ERROR_arm32": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "JIT_ERROR_x86_64": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "JIT_LABEL_BLOCK_x86_64": {
+        "type": "i32",
+        "value": "0"
+      },
+      "JIT_LABEL_IF_x86_64": {
+        "type": "i32",
+        "value": "2"
+      },
+      "JIT_LABEL_LOOP_x86_64": {
+        "type": "i32",
+        "value": "1"
+      },
+      "JIT_SLOT_SIZE_aarch64": {
+        "type": "i32",
+        "value": "0x40000"
+      },
+      "JIT_SLOT_SIZE_arm32": {
+        "type": "i32",
+        "value": "0x40000"
+      },
+      "JIT_SLOT_SIZE_x86_64": {
+        "type": "i32",
+        "value": "0x40000"
+      },
+      "JS_CALL_FIXUP_COUNT_x86_64": {
+        "type": "i32",
+        "value": "0x9148"
+      },
+      "JS_CODE_PTR_aarch64": {
+        "type": "i32",
+        "value": "0x8000"
+      },
+      "JS_CODE_PTR_arm32": {
+        "type": "i32",
+        "value": "0x8000"
+      },
+      "JS_CODE_PTR_x86_64": {
+        "type": "i32",
+        "value": "0x8000"
+      },
+      "JS_FIXUP_COUNT_aarch64": {
+        "type": "i32",
+        "value": "0x8940"
+      },
+      "JS_FIXUP_COUNT_arm32": {
+        "type": "i32",
+        "value": "0x8940"
+      },
+      "JS_FIXUP_COUNT_x86_64": {
+        "type": "i32",
+        "value": "0x8940"
+      },
+      "JS_FIXUP_LABEL_x86_64": {
+        "type": "i32",
+        "value": "0x8944"
+      },
+      "JS_FIXUP_OFFSET_x86_64": {
+        "type": "i32",
+        "value": "0x8d44"
+      },
+      "JS_LABEL_DEPTH_aarch64": {
+        "type": "i32",
+        "value": "0x801c"
+      },
+      "JS_LABEL_DEPTH_arm32": {
+        "type": "i32",
+        "value": "0x801c"
+      },
+      "JS_LABEL_DEPTH_x86_64": {
+        "type": "i32",
+        "value": "0x801c"
+      },
+      "JS_LABEL_IF_JZ_x86_64": {
+        "type": "i32",
+        "value": "0x8540"
+      },
+      "JS_LABEL_KINDS_x86_64": {
+        "type": "i32",
+        "value": "0x8440"
+      },
+      "JS_LABEL_OFFSETS_x86_64": {
+        "type": "i32",
+        "value": "0x8040"
+      },
+      "JS_MAX_STACK_aarch64": {
+        "type": "i32",
+        "value": "0x8018"
+      },
+      "JS_MAX_STACK_arm32": {
+        "type": "i32",
+        "value": "0x8018"
+      },
+      "JS_MAX_STACK_x86_64": {
+        "type": "i32",
+        "value": "0x8018"
+      },
+      "JS_RETURN_EMITTED_aarch64": {
+        "type": "i32",
+        "value": "0x8020"
+      },
+      "JS_RETURN_EMITTED_arm32": {
+        "type": "i32",
+        "value": "0x8020"
+      },
+      "JS_RETURN_EMITTED_x86_64": {
+        "type": "i32",
+        "value": "0x8020"
+      },
+      "JS_STACK_DEPTH_aarch64": {
+        "type": "i32",
+        "value": "0x8014"
+      },
+      "JS_STACK_DEPTH_arm32": {
+        "type": "i32",
+        "value": "0x8014"
+      },
+      "JS_STACK_DEPTH_x86_64": {
+        "type": "i32",
+        "value": "0x8014"
+      },
+      "OFF_CODE_BUF": {
+        "type": "i32",
+        "value": "0x0551C",
+        "export": true
+      },
+      "OFF_DECODED_COUNT": {
+        "type": "i32",
+        "value": "0x8C000",
+        "export": true
+      },
+      "OFF_DECODED_OPS": {
+        "type": "i32",
+        "value": "0x1200000",
+        "export": true
+      },
+      "OFF_FUNCTIONS_BUF": {
+        "type": "i32",
+        "value": "0x04514",
+        "export": true
+      },
+      "OFF_IMPORT_COUNT": {
+        "type": "i32",
+        "value": "0x4108",
+        "export": true
+      },
+      "OFF_START_FUNC": {
+        "type": "i32",
+        "value": "0xA934",
+        "export": true
+      },
+      "OFF_SYSCALL_MAP": {
+        "type": "i32",
+        "value": "0x90000",
+        "export": true
+      },
+      "OFF_TYPES_BUF": {
+        "type": "i32",
+        "value": "0x00104",
+        "export": true
+      },
+      "OK": {
+        "type": "i32",
+        "value": "0"
+      },
+      "PD_STAGES": {
+        "type": "i32",
+        "value": "24",
+        "export": true
+      },
+      "PIPE_CLOSED": {
+        "type": "i32",
+        "value": "1",
+        "export": true
+      },
+      "PIPE_HEADER": {
+        "type": "i32",
+        "value": "16",
+        "export": true
+      },
+      "PIPE_MODE_CIRCULAR": {
+        "type": "i32",
+        "value": "2",
+        "export": true
+      },
+      "PS_SIZE": {
+        "type": "i32",
+        "value": "16",
+        "export": true
+      },
+      "REG_SP_aarch64": {
+        "type": "i32",
+        "value": "31"
+      },
+      "REG_X0_aarch64": {
+        "type": "i32",
+        "value": "0"
+      },
+      "REG_X0_arm32": {
+        "type": "i32",
+        "value": "0"
+      },
+      "REG_X19_aarch64": {
+        "type": "i32",
+        "value": "19"
+      },
+      "REG_X1_aarch64": {
+        "type": "i32",
+        "value": "1"
+      },
+      "REG_X20_aarch64": {
+        "type": "i32",
+        "value": "20"
+      },
+      "REG_X2_aarch64": {
+        "type": "i32",
+        "value": "2"
+      },
+      "REG_XZR_aarch64": {
+        "type": "i32",
+        "value": "31"
+      },
+      "CURRENT_DEC_PTR_x86_64": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "RESULT_IN_EAX": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "RESULT_IN_X0_aarch64": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "RESULT_IN_X0_arm32": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "SCRATCH_BUF": {
+        "type": "i32",
+        "value": "0x3000",
+        "export": true
+      },
+      "SHA256_OUT_BUF": {
+        "type": "i32",
+        "value": "0x5000",
+        "export": true
+      },
+      "SZ_CODE": {
+        "type": "i32",
+        "value": "64",
+        "export": true
+      },
+      "SZ_FUNC": {
+        "type": "i32",
+        "value": "16",
+        "export": true
+      },
+      "SZ_TYPE": {
+        "type": "i32",
+        "value": "140",
+        "export": true
+      },
+      "TEXT_VA_aarch64": {
+        "type": "i32",
+        "value": "0x400000"
+      },
+      "TEXT_VA_arm32": {
+        "type": "i32",
+        "value": "0x400000"
+      },
+      "TEXT_VA_x86_64": {
+        "type": "i32",
+        "value": "0x400000"
+      },
+      "WAT_EMIT_BUF": {
+        "type": "i32",
+        "value": "0x8D000",
+        "export": true
+      },
+      "WORK_BUF": {
+        "type": "i32",
+        "value": "0x4000",
+        "export": true
+      },
+      "OFF_TYPE_COUNT": {
+        "type": "i32",
+        "value": "0x100",
+        "export": true
+      },
+      "OFF_FUNC_COUNT": {
+        "type": "i32",
+        "value": "0x4510",
+        "export": true
+      },
+      "OFF_CODE_COUNT": {
+        "type": "i32",
+        "value": "0x5518",
+        "export": true
+      },
+      "NEXT_OP_x86_64": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "NEXT_OP_aarch64": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "NEXT_OP_arm32": {
+        "type": "i32",
+        "value": "0",
+        "mut": true
+      },
+      "FUNC_OFF_TABLE_aarch64": {
+        "type": "i32",
+        "value": "0x80000"
+      },
+      "FUNC_OFF_TABLE_arm32": {
+        "type": "i32",
+        "value": "0x80000"
+      },
+      "JS_CALL_FIXUP_COUNT_aarch64": {
+        "type": "i32",
+        "value": "0x9148"
+      },
+      "JS_CALL_FIXUP_COUNT_arm32": {
+        "type": "i32",
+        "value": "0x9148"
+      },
+      "JS_FIXUP_LABEL_aarch64": {
+        "type": "i32",
+        "value": "0x8944"
+      },
+      "JS_FIXUP_LABEL_arm32": {
+        "type": "i32",
+        "value": "0x8944"
+      },
+      "JS_FIXUP_OFFSET_aarch64": {
+        "type": "i32",
+        "value": "0x8d44"
+      },
+      "JS_FIXUP_OFFSET_arm32": {
+        "type": "i32",
+        "value": "0x8d44"
+      },
+      "JS_LABEL_IF_JZ_aarch64": {
+        "type": "i32",
+        "value": "0x8540"
+      },
+      "JS_LABEL_IF_JZ_arm32": {
+        "type": "i32",
+        "value": "0x8540"
+      },
+      "JS_LABEL_KINDS_aarch64": {
+        "type": "i32",
+        "value": "0x8440"
+      },
+      "JS_LABEL_KINDS_arm32": {
+        "type": "i32",
+        "value": "0x8440"
+      },
+      "JS_LABEL_OFFSETS_aarch64": {
+        "type": "i32",
+        "value": "0x8040"
+      },
+      "JS_LABEL_OFFSETS_arm32": {
+        "type": "i32",
+        "value": "0x8040"
+      },
+      "BSS_SIZE_aarch64": {
+        "type": "i32",
+        "value": "0x100000"
+      },
+      "BSS_SIZE_arm32": {
+        "type": "i32",
+        "value": "0x100000"
+      },
+      "ELF_STUB_OFF_aarch64": {
+        "type": "i32",
+        "value": "120"
+      },
+      "ELF_STUB_OFF_arm32": {
+        "type": "i32",
+        "value": "120"
+      },
+      "JIT_LABEL_BLOCK_aarch64": {
+        "type": "i32",
+        "value": "0"
+      },
+      "JIT_LABEL_BLOCK_arm32": {
+        "type": "i32",
+        "value": "0"
+      },
+      "HEAP_END": {
+        "type": "i32",
+        "value": "0x100000"
+      },
+      "CLI_HEAP_START": {
+        "type": "i32",
+        "value": "0x30000"
+      },
+      "ARGV_BUF": {
+        "type": "i32",
+        "value": "0x3400000"
+      },
+      "ARGV_STR_BUF": {
+        "type": "i32",
+        "value": "0x3401000"
+      },
+      "HDR": {
+        "type": "i32",
+        "value": "0x3FFF0"
+      },
+      "UI_LAYOUT_TREE": {
+        "type": "i32",
+        "value": "0x1110000"
+      },
+      "UI_PAINT_TREE": {
+        "type": "i32",
+        "value": "0x1110000"
+      },
+      "UI_PAINT_CMD": {
+        "type": "i32",
+        "value": "0x1120000"
+      },
+      "UI_EVENT_TMP": {
+        "type": "i32",
+        "value": "0x1110000"
+      },
+      "FILE_TABLE": {
+        "type": "i32",
+        "value": "0x3200000"
+      },
+      "FILE_TABLE_END": {
+        "type": "i32",
+        "value": "0x3204000"
+      },
+      "ARENA": {
+        "type": "i32",
+        "value": "0x3210000"
+      },
+      "SCRATCH": {
+        "type": "i32",
+        "value": "0x3300000"
+      },
+      "MSG_ADDR": {
+        "type": "i32",
+        "value": "62000"
+      },
+      "DIGEST_ADDR": {
+        "type": "i32",
+        "value": "62100"
+      }
+    }
   }
 }

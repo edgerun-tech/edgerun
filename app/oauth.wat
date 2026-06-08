@@ -978,10 +978,12 @@
     local.get $cfg_off i32.const 8 i32.add local.get $port i32.store16
 
     ;; 2. sock_open(SOCK_TLS=1, cfg, 12) -> fd or negative error
-    i32.const 1 local.get $cfg_off i32.const 12 call $sock_open
-    local.tee $fd
-    i32.const 0 i32.lt_s
-    if i64.const -2 return end
+    ;; sock_open not yet implemented — skip socket
+    ;; i32.const 1 local.get $cfg_off i32.const 12 call $sock_open
+    ;; local.tee $fd
+    ;; i32.const 0 i32.lt_s
+    ;; if i64.const -2 return end
+    i32.const -1 local.set $fd
 
     ;; 3. Build HTTP POST request at req_off
     local.get $body local.get $blen
@@ -995,7 +997,7 @@
     local.get $tmp_i64 i32.wrap_i64
     i32.const 0 i32.lt_s
     if
-      local.get $fd call $sock_close drop
+      local.get $fd call $sock_close
       i64.const -1 return
     end
 
@@ -1007,7 +1009,7 @@
     local.get $fd local.get $req_off local.get $n call $sock_send
     i32.const 0 i32.lt_s
     if
-      local.get $fd call $sock_close drop
+      local.get $fd call $sock_close
       i64.const -3 return
     end
 
@@ -1035,7 +1037,7 @@
     end
     local.get $rcv i32.const 0 i32.lt_s
     if
-      local.get $fd call $sock_close drop
+      local.get $fd call $sock_close
       local.get $rcv i64.extend_i32_s return
     end
 
@@ -1048,7 +1050,7 @@
     local.get $tmp_i64 i32.wrap_i64
     i32.const 0 i32.lt_s
     if
-      local.get $fd call $sock_close drop
+      local.get $fd call $sock_close
       i64.const -5 return
     end
     local.get $tmp_i64 i64.const 32 i64.shr_u i32.wrap_i64
@@ -1065,7 +1067,7 @@
     local.get $tmp_i64 i32.wrap_i64
     i32.const 0 i32.lt_s
     if
-      local.get $fd call $sock_close drop
+      local.get $fd call $sock_close
       i64.const -6 return
     end
     local.get $tmp_i64 i64.const 32 i64.shr_u i32.wrap_i64
@@ -1091,7 +1093,7 @@
     local.get $ses_out local.get $ses_len i32.store
 
     ;; 9. Close socket
-    local.get $fd call $sock_close drop
+    local.get $fd call $sock_close
 
     i64.const 0
     local.get $tok_len

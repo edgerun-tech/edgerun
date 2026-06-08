@@ -14,8 +14,8 @@
   ;;   -1: pipe_read or er_ui_layout returned error
   ;; Memory: reads/writes at 0x1110000
 
-  (global $UI_LAYOUT_TREE i32 (i32.const 0x1110000))
   (global $UI_LAYOUT_TREE_CAP i32 (i32.const 131072))
+  ;; $UI_LAYOUT_TREE comes from config.wat
 
   (func $process_ui_layout (export "process_ui_layout")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)

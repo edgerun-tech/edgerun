@@ -5,19 +5,7 @@
   ;; linear memory. Includes a WAT parser for standalone usage.
   ;; ═════════════════════════════════════════════════════════════════════
 
-;; ═════════════════════════════════════════════════════════════════════
-  ;; EdgeRun WASM Interpreter Core — shared between compiler/ and pipeline/
-  ;;
-  ;; Contains the interpreter engine (load, validate, decode, execute)
-  ;; without WAT parser or standalone entry points.
-  ;;
-  ;; Include this fragment INSIDE a (module ...) block. Then include
-  ;; either:
-  ;;   - compiler/interpreter.wat   (adds WAT parser + standalone exports)
-  ;;   - pipeline/wasm-interpreter.wat (adds pipeline import + no WAT parser)
-  ;;
-  ;; Imports memory from edgerun-core (shared linear memory).
-  ;; ═════════════════════════════════════════════════════════════════════
+
   (global $OFF_ERR         i32 (i32.const 0))
   (global $OFF_SCRATCH0    i32 (i32.const 8))
   (global $OFF_SCRATCH1    i32 (i32.const 16))
@@ -27,9 +15,6 @@
   (global $OFF_WASM_PTR    i32 (i32.const 64))
   (global $OFF_WASM_LEN    i32 (i32.const 72))
 
-  ;; Type section
-  (global $OFF_TYPE_COUNT i32 (i32.const 256))
-
   ;; Import section
   (global $OFF_IMPORTS_BUF  i32 (i32.const 16656))
 
@@ -37,7 +22,6 @@
   (global $OFF_FUNCTION_COUNT i32 (i32.const 17680))
 
   ;; Code section
-  (global $OFF_CODE_COUNT i32 (i32.const 21784))
 
   ;; Export section
   (global $OFF_EXPORT_COUNT i32 (i32.const 38176))
@@ -105,19 +89,7 @@
   (global $OFF_LABEL_STACK     i32 (i32.const 0x8F000))
   (global $OFF_LABEL_STACK_PTR i32 (i32.const 0x8EFFC))
 
-  ;; ── Resource limits ─────────────────────────────────────────────────
-  (global $MAX_FUNCTIONS i32 (i32.const 256))
-  (global $MAX_IMPORTS   i32 (i32.const 16))
-  (global $MAX_TYPES     i32 (i32.const 64))
-  (global $MAX_LOCALS    i32 (i32.const 64))
-  (global $MAX_STACK     i32 (i32.const 1024))
-  (global $MAX_CTRL      i32 (i32.const 64))
-  (global $MAX_GLOBALS   i32 (i32.const 64))
-  (global $MAX_EXPORTS   i32 (i32.const 64))
-  (global $MAX_TABLE     i32 (i32.const 256))
-  (global $MAX_DATAS     i32 (i32.const 64))
-  (global $MAX_ELEMS     i32 (i32.const 64))
-  (global $MAX_DECODED   i32 (i32.const 32768))
+  ;; ── Resource limits (from config-constants.wat) ──────────────────────
   (global $DECODED_SZ    i32 (i32.const 32))
 
   ;; ── Struct sizes ────────────────────────────────────────────────────
@@ -1837,6 +1809,7 @@
   ;; ═════════════════════════════════════════════════════════════════════
   (func $compute_end_targets (export "compute_end_targets") (param $start i32) (param $count i32) (result i32)
     (local $pos i32) (local $op_base i32) (local $op i32)
+    (local $val i32)
     (local $sp i32) (local $label_base i32) (local $label_pos i32)
 
     (i32.store (global.get $OFF_LABEL_STACK_PTR) (i32.const 0))
@@ -1908,14 +1881,15 @@
                 (i32.add (global.get $OFF_DECODED_OPS) (i32.mul (i32.add (local.get $start) (local.get $label_pos)) (global.get $DEC_SZ)))
               )
               (local.set $sp (i32.load8_u (local.get $op_base)))
+              (local.set $val (i32.add (local.get $pos) (i32.const 1)))
+              (if (i32.eq (local.get $sp) (i32.const 0x03))
+                (then (local.set $val (local.get $label_pos)))
+              )
               (i32.store
                 (i32.add (global.get $OFF_DECODED_OPS)
                   (i32.add (i32.mul (local.get $label_pos) (global.get $DEC_SZ)) (i32.const 12))
                 )
-                (if (result i32) (i32.eq (local.get $sp) (i32.const 0x03))
-                  (then (local.get $label_pos))
-                  (else (i32.add (local.get $pos) (i32.const 1)))
-                )
+                (local.get $val)
               )
               (br $skip)
             )
@@ -2822,9 +2796,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm2 (i32.load (global.get $OFF_SCRATCH0)))  ;; val1
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.eqz (local.get $imm0)) (then (local.get $imm1)) (else (local.get $imm2)))
-              ))
+              (local.set $val (local.get $imm2))
+              (if (i32.eqz (local.get $imm0)) (then (local.set $val (local.get $imm1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -2838,9 +2812,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm2 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.eqz (local.get $imm0)) (then (local.get $imm1)) (else (local.get $imm2)))
-              ))
+              (local.set $val (local.get $imm2))
+              (if (i32.eqz (local.get $imm0)) (then (local.set $val (local.get $imm1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3262,9 +3236,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $val (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.eqz (local.get $val)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.eqz (local.get $val)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3275,9 +3249,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.eq (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.eq (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3288,9 +3262,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.ne (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.ne (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3301,9 +3275,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.lt_s (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.lt_s (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3314,9 +3288,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.lt_u (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.lt_u (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3327,9 +3301,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.gt_s (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.gt_s (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3340,9 +3314,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.gt_u (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.gt_u (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3353,9 +3327,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.le_s (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.le_s (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3366,9 +3340,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.le_u (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.le_u (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3379,9 +3353,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.ge_s (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.ge_s (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3392,9 +3366,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $imm0 (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.ge_u (local.get $imm0) (local.get $imm1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.ge_u (local.get $imm0) (local.get $imm1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3402,7 +3376,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64 (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push (if (result i32) (i64.eqz (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))))
+              (local.set $val (i32.const 0))
+              (if (i64.eqz (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3413,9 +3389,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.eq (local.get $tmp64) (local.get $tmp64b)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.eq (local.get $tmp64) (local.get $tmp64b)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3426,9 +3402,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.ne (local.get $tmp64) (local.get $tmp64b)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.ne (local.get $tmp64) (local.get $tmp64b)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3439,9 +3415,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.lt_s (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.lt_s (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3452,9 +3428,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.lt_u (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.lt_u (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3465,9 +3441,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.gt_s (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.gt_s (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3478,9 +3454,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.gt_u (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.gt_u (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3491,9 +3467,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.le_s (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.le_s (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3504,9 +3480,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.le_u (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.le_u (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3517,9 +3493,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.ge_s (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.ge_s (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3530,9 +3506,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64b (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (i64.ge_u (local.get $tmp64b) (local.get $tmp64)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i64.ge_u (local.get $tmp64b) (local.get $tmp64)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3542,13 +3518,9 @@
               (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_SCRATCH0)))
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
-              (local.set $err (call $stack_push
-                (if (result i32)
-                  (f32.eq (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1))))
-                  (then (i32.const 1))
-                  (else (i32.const 0))
-                )
-              ))
+              (local.set $val (i32.const 0))
+              (if (f32.eq (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1)))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3558,13 +3530,9 @@
               (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_SCRATCH0)))
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
-              (local.set $err (call $stack_push
-                (if (result i32)
-                  (f32.ne (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1))))
-                  (then (i32.const 1))
-                  (else (i32.const 0))
-                )
-              ))
+              (local.set $val (i32.const 0))
+              (if (f32.ne (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1)))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3574,13 +3542,9 @@
               (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_SCRATCH0)))
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
-              (local.set $err (call $stack_push
-                (if (result i32)
-                  (f32.lt (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1))))
-                  (then (i32.const 1))
-                  (else (i32.const 0))
-                )
-              ))
+              (local.set $val (i32.const 0))
+              (if (f32.lt (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1)))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3590,13 +3554,9 @@
               (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_SCRATCH0)))
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
-              (local.set $err (call $stack_push
-                (if (result i32)
-                  (f32.gt (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1))))
-                  (then (i32.const 1))
-                  (else (i32.const 0))
-                )
-              ))
+              (local.set $val (i32.const 0))
+              (if (f32.gt (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1)))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3606,13 +3566,9 @@
               (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_SCRATCH0)))
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
-              (local.set $err (call $stack_push
-                (if (result i32)
-                  (f32.le (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1))))
-                  (then (i32.const 1))
-                  (else (i32.const 0))
-                )
-              ))
+              (local.set $val (i32.const 0))
+              (if (f32.le (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1)))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3622,13 +3578,9 @@
               (i32.store (global.get $OFF_SCRATCH1) (i32.load (global.get $OFF_SCRATCH0)))
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
-              (local.set $err (call $stack_push
-                (if (result i32)
-                  (f32.ge (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1))))
-                  (then (i32.const 1))
-                  (else (i32.const 0))
-                )
-              ))
+              (local.set $val (i32.const 0))
+              (if (f32.ge (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH0))) (f32.reinterpret_i32 (i32.load (global.get $OFF_SCRATCH1)))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3639,9 +3591,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64 (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (f64.eq (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (f64.eq (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3652,9 +3604,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64 (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (f64.ne (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (f64.ne (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3665,9 +3617,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64 (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (f64.lt (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (f64.lt (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3678,9 +3630,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64 (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (f64.gt (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (f64.gt (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3691,9 +3643,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64 (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (f64.le (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (f64.le (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -3704,9 +3656,9 @@
               (local.set $err (call $stack_pop_i64))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $tmp64 (i64.or (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH0))) (i64.shl (i64.extend_i32_u (i32.load (global.get $OFF_SCRATCH1))) (i64.const 32))))
-              (local.set $err (call $stack_push
-                (if (result i32) (f64.ge (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (f64.ge (f64.reinterpret_i64 (local.get $tmp64b)) (f64.reinterpret_i64 (local.get $tmp64))) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -4785,9 +4737,9 @@
               (local.set $err (call $stack_pop))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $val (i32.load (global.get $OFF_SCRATCH0)))
-              (local.set $err (call $stack_push
-                (if (result i32) (i32.eq (local.get $val) (i32.const -1)) (then (i32.const 1)) (else (i32.const 0)))
-              ))
+              (local.set $val (i32.const 0))
+              (if (i32.eq (local.get $val) (i32.const -1)) (then (local.set $val (i32.const 1))))
+              (local.set $err (call $stack_push (local.get $val)))
               (if (local.get $err) (then (return (local.get $err))))
               (local.set $dec_idx (i32.add (local.get $dec_idx) (i32.const 1)))
               (br $dispatch_loop)
@@ -4890,10 +4842,10 @@
                   (if (f32.ne (local.get $tmp_f32) (local.get $tmp_f32))
                     (then (local.set $err (call $stack_push (i32.const 0))))
                     (else
-                      (if (f32.ge (local.get $tmp_f32) (f32.const 2147483648.0))
+                      (if (f32.ge (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0x4F000000)))
                         (then (local.set $err (call $stack_push (i32.const 0x7FFFFFFF))))
                         (else
-                          (if (f32.lt (local.get $tmp_f32) (f32.const -2147483648.0))
+                          (if (f32.lt (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0xCF000000)))
                             (then (local.set $err (call $stack_push (i32.const 0x80000000))))
                             (else (local.set $err (call $stack_push (i32.trunc_f32_s (local.get $tmp_f32)))))
                           )
@@ -4914,10 +4866,10 @@
                   (if (f32.ne (local.get $tmp_f32) (local.get $tmp_f32))
                     (then (local.set $err (call $stack_push (i32.const 0))))
                     (else
-                      (if (f32.ge (local.get $tmp_f32) (f32.const 4294967296.0))
+                      (if (f32.ge (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0x4F800000)))
                         (then (local.set $err (call $stack_push (i32.const -1))))
                         (else
-                          (if (f32.lt (local.get $tmp_f32) (f32.const 0.0))
+                          (if (f32.lt (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0x00000000)))
                             (then (local.set $err (call $stack_push (i32.const 0))))
                             (else (local.set $err (call $stack_push (i32.trunc_f32_u (local.get $tmp_f32)))))
                           )
@@ -4939,10 +4891,10 @@
                   (if (f64.ne (local.get $tmp_f64) (local.get $tmp_f64))
                     (then (local.set $err (call $stack_push (i32.const 0))))
                     (else
-                      (if (f64.ge (local.get $tmp_f64) (f64.const 2147483648.0))
+                      (if (f64.ge (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0x41E0000000000000)))
                         (then (local.set $err (call $stack_push (i32.const 0x7FFFFFFF))))
                         (else
-                          (if (f64.lt (local.get $tmp_f64) (f64.const -2147483648.0))
+                          (if (f64.lt (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0xC1E0000000000000)))
                             (then (local.set $err (call $stack_push (i32.const 0x80000000))))
                             (else (local.set $err (call $stack_push (i32.trunc_f64_s (local.get $tmp_f64)))))
                           )
@@ -4964,10 +4916,10 @@
                   (if (f64.ne (local.get $tmp_f64) (local.get $tmp_f64))
                     (then (local.set $err (call $stack_push (i32.const 0))))
                     (else
-                      (if (f64.ge (local.get $tmp_f64) (f64.const 4294967296.0))
+                      (if (f64.ge (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0x41F0000000000000)))
                         (then (local.set $err (call $stack_push (i32.const -1))))
                         (else
-                          (if (f64.lt (local.get $tmp_f64) (f64.const 0.0))
+                          (if (f64.lt (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0x0000000000000000)))
                             (then (local.set $err (call $stack_push (i32.const 0))))
                             (else (local.set $err (call $stack_push (i32.trunc_f64_u (local.get $tmp_f64)))))
                           )
@@ -4991,13 +4943,13 @@
                       (local.set $err (call $stack_push_i64 (i32.const 0) (i32.const 0)))
                     )
                     (else
-                      (if (f32.ge (local.get $tmp_f32) (f32.const 9223372036854775808.0))
+                      (if (f32.ge (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0x5F000000)))
                         (then
                           (local.set $tmp64 (i64.const 0x7FFFFFFFFFFFFFFF))
                           (local.set $err (call $stack_push_i64 (i32.wrap_i64 (local.get $tmp64)) (i32.wrap_i64 (i64.shr_u (local.get $tmp64) (i64.const 32)))))
                         )
                         (else
-                          (if (f32.lt (local.get $tmp_f32) (f32.const -9223372036854775808.0))
+                          (if (f32.lt (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0xDF000000)))
                             (then
                               (local.set $tmp64 (i64.const 0x8000000000000000))
                               (local.set $err (call $stack_push_i64 (i32.wrap_i64 (local.get $tmp64)) (i32.wrap_i64 (i64.shr_u (local.get $tmp64) (i64.const 32)))))
@@ -5026,12 +4978,12 @@
                       (local.set $err (call $stack_push_i64 (i32.const 0) (i32.const 0)))
                     )
                     (else
-                      (if (f32.ge (local.get $tmp_f32) (f32.const 18446744073709551616.0))
+                      (if (f32.ge (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0x5F800000)))
                         (then
                           (local.set $err (call $stack_push_i64 (i32.const -1) (i32.const -1)))
                         )
                         (else
-                          (if (f32.lt (local.get $tmp_f32) (f32.const 0.0))
+                          (if (f32.lt (local.get $tmp_f32) (f32.reinterpret_i32 (i32.const 0x00000000)))
                             (then
                               (local.set $err (call $stack_push_i64 (i32.const 0) (i32.const 0)))
                             )
@@ -5060,13 +5012,13 @@
                       (local.set $err (call $stack_push_i64 (i32.const 0) (i32.const 0)))
                     )
                     (else
-                      (if (f64.ge (local.get $tmp_f64) (f64.const 9223372036854775808.0))
+                      (if (f64.ge (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0x43E0000000000000)))
                         (then
                           (local.set $tmp64 (i64.const 0x7FFFFFFFFFFFFFFF))
                           (local.set $err (call $stack_push_i64 (i32.wrap_i64 (local.get $tmp64)) (i32.wrap_i64 (i64.shr_u (local.get $tmp64) (i64.const 32)))))
                         )
                         (else
-                          (if (f64.lt (local.get $tmp_f64) (f64.const -9223372036854775808.0))
+                          (if (f64.lt (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0xC3E0000000000000)))
                             (then
                               (local.set $tmp64 (i64.const 0x8000000000000000))
                               (local.set $err (call $stack_push_i64 (i32.wrap_i64 (local.get $tmp64)) (i32.wrap_i64 (i64.shr_u (local.get $tmp64) (i64.const 32)))))
@@ -5096,12 +5048,12 @@
                       (local.set $err (call $stack_push_i64 (i32.const 0) (i32.const 0)))
                     )
                     (else
-                      (if (f64.ge (local.get $tmp_f64) (f64.const 18446744073709551616.0))
+                      (if (f64.ge (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0x43F0000000000000)))
                         (then
                           (local.set $err (call $stack_push_i64 (i32.const -1) (i32.const -1)))
                         )
                         (else
-                          (if (f64.lt (local.get $tmp_f64) (f64.const 0.0))
+                          (if (f64.lt (local.get $tmp_f64) (f64.reinterpret_i64 (i64.const 0x0000000000000000)))
                             (then
                               (local.set $err (call $stack_push_i64 (i32.const 0) (i32.const 0)))
                             )
