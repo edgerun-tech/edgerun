@@ -1,4 +1,3 @@
-(module
   ;; Register number globals
 
 
@@ -667,6 +666,3 @@
     (call $emit_arm32_pop_x1)
     (call $emit_arm32_mem_store64)
   )
-
-
-)

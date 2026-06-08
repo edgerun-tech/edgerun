@@ -1,0 +1,14 @@
+{
+  "name": "edgerun",
+  "private": true,
+  "scripts": {
+    "all": "bun run gen && bun run build",
+    "gen": "node compiler/tools/gen_compiler.js --assemble all && node compiler/tools/gen_compiler.js compiler/templates/x86_64.json > compiler/gen/jit-dispatch-x86-64.wat && node compiler/tools/gen_compiler.js compiler/templates/aarch64.json > compiler/gen/jit-dispatch-aarch64.wat && node compiler/tools/gen_compiler.js compiler/templates/arm32.json > compiler/gen/jit-dispatch-arm32.wat",
+    "pipeline-stages": "node pipeline/gen-stages.js",
+    "build": "bun run pipeline-stages && bun tools/build.mjs",
+    "build:full": "bun run pipeline-stages && bun tools/build_wat.mjs",
+    "build:ui": "bun ui/build_wat.mjs",
+    "build:cli": "node cli/build.mjs",
+    "clean": "rm -rf compiler/gen/ edgerun.wat edgerun.wasm data/embedded-source.wat ui/ui_framework.wat ui/ui_framework.wasm ui/fragments/"
+  }
+}

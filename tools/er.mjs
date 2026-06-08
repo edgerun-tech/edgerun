@@ -42,7 +42,26 @@ async function getErTools(wasmPath) {
     toolsBin = extractCustomSection(buf, 'edgetools');
   }
   if (!toolsBin) {
-    const toolsPath = resolve(dirname(process.argv[1]), '../compiler/er-tools.wasm');
+    const toolsDir = resolve(dirname(process.argv[1]), '../compiler');
+    const toolsPath = resolve(toolsDir, 'er-tools.wasm');
+    if (!existsSync(toolsPath)) {
+      const watPath = resolve(toolsDir, 'er-tools.wat');
+      if (existsSync(watPath)) {
+        console.log('Compiling er-tools.wat → er-tools.wasm...');
+        const { execSync } = await import('child_process');
+        try {
+          execSync(`wat2wasm "${watPath}" -o "${toolsPath}"`, { stdio: 'pipe' });
+        } catch {
+          console.error('er-tools.wasm not found and wat2wasm compilation failed.');
+          console.error('Install wabt (https://github.com/WebAssembly/wabt) and run:');
+          console.error('  wat2wasm compiler/er-tools.wat -o compiler/er-tools.wasm');
+          process.exit(1);
+        }
+      } else {
+        console.error('er-tools.wasm not found and er-tools.wat source is missing.');
+        process.exit(1);
+      }
+    }
     toolsBin = readFileSync(toolsPath);
   }
 

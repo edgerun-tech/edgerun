@@ -31,6 +31,24 @@ export function ensureDir(path) {
 // ── Fragment concatenation ────────────────────────────────────
 // Reads each file in the manifest (relative to rootDir) and returns
 // the concatenated body with `;; ── path ──` section markers.
+// Automatically strips outer (module ... ) wrappers from fragments.
+
+export function stripModuleWrapper(content) {
+  const s = content.trimStart();
+  if (!s.startsWith('(module')) return content;
+  let depth = 0;
+  let closePos = -1;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '(') depth++;
+    else if (s[i] === ')') { depth--; if (depth === 0) { closePos = i; break; } }
+  }
+  if (closePos === -1) return content;
+  const inner = s.slice(7, closePos).trim();
+  // Recursively strip nested module wrappers (e.g., jit-full files)
+  if (inner.startsWith('(module')) return stripModuleWrapper(inner);
+  return inner;
+}
+
 export function concatFragments(manifest, rootDir) {
   let body = '';
   let count = 0;
@@ -40,7 +58,8 @@ export function concatFragments(manifest, rootDir) {
       console.warn(`  ⚠  ${filePath} not found — skipping`);
       continue;
     }
-    const content = readFileSync(fullPath, 'utf-8');
+    let content = readFileSync(fullPath, 'utf-8');
+    content = stripModuleWrapper(content);
     body += `;; ── ${filePath} ──\n${content.trimEnd()}\n\n`;
     count++;
   }
@@ -59,7 +78,7 @@ export function compileWat(watPath, wasmPath) {
       return true;
     } catch (e) {
       console.error(`  ✗ wasm-tools parse failed: ${e.stderr?.slice(0, 500) || e.message}`);
-      return false;
+      console.log(`  → falling back to wat2wasm`);
     }
   }
 
