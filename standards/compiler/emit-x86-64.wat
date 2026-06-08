@@ -1910,6 +1910,58 @@
     (call $emit_x86_dword (local.get $disp))
   )
 
+  ;; ── fd_write inline wrapper helpers ──────────────────────────────────
+
+  ;; add rsi, r14 — convert WASM offset to host address (4C 01 F6)
+  (func $emit_x86_add_rsi_r14
+    (call $emit_x86_byte (i32.const 0x4C))
+    (call $emit_x86_byte (i32.const 0x01))
+    (call $emit_x86_byte (i32.const 0xF6))
+  )
+
+  ;; add rax, r14 — host_buf = mem_ptr + buf_offset (4C 01 F0)
+  (func $emit_x86_add_rax_r14
+    (call $emit_x86_byte (i32.const 0x4C))
+    (call $emit_x86_byte (i32.const 0x01))
+    (call $emit_x86_byte (i32.const 0xF0))
+  )
+
+  ;; add r10, r14 — host addr of nwritten (4D 01 F2)
+  (func $emit_x86_add_r10_r14
+    (call $emit_x86_byte (i32.const 0x4D))
+    (call $emit_x86_byte (i32.const 0x01))
+    (call $emit_x86_byte (i32.const 0xF2))
+  )
+
+  ;; mov eax, [rsi] — read WASM iovec buf_offset (8B 06)
+  (func $emit_x86_mov_eax_ind_rsi
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x06))
+  )
+
+  ;; mov eax, [rsi+4] — read WASM iovec buf_len (8B 46 04)
+  (func $emit_x86_mov_eax_ind_rsi_4
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x46))
+    (call $emit_x86_byte (i32.const 0x04))
+  )
+
+  ;; lea rsi, [rsp+disp32] — point rsi at host iovec (48 8D B4 24 dword)
+  (func $emit_x86_lea_rsi_rsp_disp (param $disp i32)
+    (call $emit_x86_rex_w)
+    (call $emit_x86_byte (i32.const 0x8D))
+    (call $emit_x86_byte (i32.const 0xB4))
+    (call $emit_x86_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_x86_dword (local.get $disp))
+  )
+
+  ;; mov [r10], eax — write syscall result to *nwritten (41 89 02)
+  (func $emit_x86_mov_dword_r10
+    (call $emit_x86_byte (i32.const 0x41))
+    (call $emit_x86_byte (i32.const 0x89))
+    (call $emit_x86_byte (i32.const 0x02))
+  )
+
   ;; Cross-arch dispatch stubs (these are NOT in the dispatch file)
   (func $jit_compile_arm32 (param $i i32) (result i32) (i32.const -1))
   (func $jit_compile_aarch64 (param $i i32) (result i32) (i32.const -1))
@@ -1917,3 +1969,25 @@
   (func $compile_to_elf_aarch64 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
   ;; Stubs referenced by dispatch but not implemented for x86_64
   (func $emit_elf_stub_x86_64 (param $bss_va i32) (param $syscall_data_va i32) (param $import_count i32))
+
+  ;; ── Save process argc/argv into JitGlobals (emitted at _start) ──────
+  ;; Must be emitted BEFORE any code that changes rsp.
+  ;; Saves: [r15+72] = argc, [r15+80] = argv pointer
+  (func $emit_argv_save
+    ;; pop rcx  (59)
+    (call $emit_x86_byte (i32.const 0x59))
+    ;; mov [r15+72], rcx  (49 89 4F 48)
+    (call $emit_x86_byte (i32.const 0x49))
+    (call $emit_x86_byte (i32.const 0x89))
+    (call $emit_x86_byte (i32.const 0x4F))
+    (call $emit_x86_byte (i32.const 72))
+    ;; mov rax, rsp  (48 89 E0)
+    (call $emit_x86_byte (i32.const 0x48))
+    (call $emit_x86_byte (i32.const 0x89))
+    (call $emit_x86_byte (i32.const 0xE0))
+    ;; mov [r15+80], rax  (49 89 47 50)
+    (call $emit_x86_byte (i32.const 0x49))
+    (call $emit_x86_byte (i32.const 0x89))
+    (call $emit_x86_byte (i32.const 0x47))
+    (call $emit_x86_byte (i32.const 80))
+  )

@@ -1,8 +1,14 @@
-import { readFileSync, writeFileSync, statSync, readdirSync } from 'fs';
-import { resolve, relative } from 'path';
+// EdgeRun Build Script — manifest-based module builder
+import { readFileSync, writeFileSync, statSync } from 'fs';
+import { resolve } from 'path';
 import { execSync } from 'child_process';
+import {
+  resolveRoot, rootPath, readFile, writeFile, fileExists,
+  concatFragments, compileWat,
+  buildSourcePayload, bytesToWatString
+} from './build-lib.mjs';
 
-const ROOT = resolve(import.meta.dirname, '..');
+const ROOT = resolveRoot();
 
 const MANIFEST = [
   'runtime/module-header.wat',
@@ -243,63 +249,6 @@ const MANIFEST = [
   'runtime/module-footer.wat',
 ];
 
-// ── LEB128 helpers ──────────────────────────────────────────
-function leb128Size(n) {
-  let s = 1;
-  while (n >= 128) { s++; n >>>= 7; }
-  return s;
-}
-
-function writeLEB128(buf, off, n) {
-  let pos = off;
-  while (n >= 128) { buf[pos++] = (n & 127) | 128; n >>>= 7; }
-  buf[pos++] = n;
-  return pos;
-}
-
-// ── Source payload helpers ──────────────────────────────────
-function collectManifestSources(root, manifest) {
-  const files = {};
-  for (const filePath of manifest) {
-    const fullPath = resolve(root, filePath);
-    try { files[filePath] = readFileSync(fullPath, 'utf8'); } catch {}
-  }
-  return files;
-}
-
-function buildSourcePayload(files) {
-  const entries = Object.entries(files);
-  const payload = [];
-  function writeLeb(n) {
-    while (n >= 128) { payload.push((n & 127) | 128); n >>>= 7; }
-    payload.push(n);
-  }
-  writeLeb(entries.length);
-  for (const [name, content] of entries) {
-    const nb = Buffer.from(name, 'utf8');
-    const cb = Buffer.from(content, 'utf8');
-    writeLeb(nb.length);
-    for (let i = 0; i < nb.length; i++) payload.push(nb[i]);
-    writeLeb(cb.length);
-    for (let i = 0; i < cb.length; i++) payload.push(cb[i]);
-  }
-  return Buffer.from(payload);
-}
-
-// ── WAT string escaping ─────────────────────────────────────
-function bytesToWatString(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i];
-    if (b >= 0x20 && b <= 0x7e && b !== 0x22 && b !== 0x5c) {
-      s += String.fromCharCode(b);
-    } else {
-      s += `\\${b.toString(16).padStart(2, '0')}`;
-    }
-  }
-  return s;
-}
-
 // ── Generate data/embedded-source.wat ───────────────────────
 function generateSourceData(sourceFiles) {
   const payload = buildSourcePayload(sourceFiles);
@@ -329,44 +278,38 @@ function generateSourceData(sourceFiles) {
   lines.push(`    (global.get \$ER_TOOLS_SOURCE_LEN)))`);
   lines.push(')');
 
-  const outPath = resolve(ROOT, 'data/embedded-source.wat');
-  writeFileSync(outPath, lines.join('\n') + '\n', 'utf-8');
+  const outPath = rootPath('data/embedded-source.wat');
+  writeFile(outPath, lines.join('\n') + '\n');
   const fileCount = Object.keys(sourceFiles).length;
   const chunkCount = Math.ceil(payload.length / 2000);
   console.log(`✓ data/embedded-source.wat generated (${(payload.length / 1024).toFixed(0)} KB, ${fileCount} files, ${chunkCount} data chunks)`);
 }
 
+function collectManifestSources(root, manifest) {
+  const files = {};
+  for (const filePath of manifest) {
+    const fullPath = resolve(root, filePath);
+    try { files[filePath] = readFileSync(fullPath, 'utf8'); } catch {}
+  }
+  return files;
+}
+
 function build() {
   // ── Collect source files ────────────────────────────────
   const sourceFiles = collectManifestSources(ROOT, MANIFEST);
-  // Exclude generated files from the source payload itself
   delete sourceFiles['data/embedded-source.wat'];
 
   // ── Generate embedded-source.wat ────────────────────────
   generateSourceData(sourceFiles);
 
   // ── Concatenate manifest ────────────────────────────────
-  const outPath = resolve(ROOT, 'edgerun.wat');
-
-  let body = '';
-  let count = 0;
-
-  for (const filePath of MANIFEST) {
-    const fullPath = resolve(ROOT, filePath);
-    if (!statSync(fullPath, { throwIfNoEntry: false })) {
-      console.warn(`  ⚠  ${filePath} not found — skipping`);
-      continue;
-    }
-    const content = readFileSync(fullPath, 'utf-8');
-    body += `;; ── ${filePath} ──\n${content.trimEnd()}\n\n`;
-    count++;
-  }
-
-  writeFileSync(outPath, body, 'utf-8');
+  const outPath = rootPath('edgerun.wat');
+  const { body, count } = concatFragments(MANIFEST, ROOT);
+  writeFile(outPath, body);
   console.log(`✓ ${count} fragments → ${outPath} (${(body.length / 1024).toFixed(0)} KB)`);
 
   // ── Parse with wasm-tools ──────────────────────────────
-  const wasmPath = resolve(ROOT, 'edgerun.wasm');
+  const wasmPath = rootPath('edgerun.wasm');
   try {
     execSync(`wasm-tools parse "${outPath}" -o "${wasmPath}"`, { stdio: 'pipe' });
     const wSize = statSync(wasmPath).size;

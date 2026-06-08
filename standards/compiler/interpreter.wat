@@ -523,11 +523,25 @@
   (func $parse_import_section (param $offset i32) (param $size i32) (result i32)
     (local $count i32) (local $i i32)
     (local $kind i32) (local $p i32) (local $end i32) (local $flags i32)
+    (local $name_ptr i32) (local $name_len i32) (local $sysno i32) (local $fi i32)
 
     (if (call $leb_u32 (local.get $offset)) (then (return (global.get $ERR_PARSE))))
     (local.set $count (i32.load (global.get $OFF_SCRATCH0)))
     (local.set $offset (i32.add (local.get $offset) (i32.load (global.get $OFF_SCRATCH1))))
     (if (i32.gt_u (local.get $count) (global.get $MAX_IMPORTS)) (then (return (global.get $ERR_PARSE))))
+
+    ;; Preset sysno sentinel (0x7FFFFFFF = not set) for all possible imports
+    (local.set $i (i32.const 0))
+    (block $preset
+      (loop $preset_lp
+        (if (i32.ge_u (local.get $i) (global.get $MAX_IMPORTS)) (then (br $preset)))
+        (i32.store
+          (i32.add (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $i) (global.get $SZ_FUNC))) (i32.const 12))
+          (i32.const 0x7FFFFFFF))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $preset_lp)
+      )
+    )
 
     (local.set $end (i32.add (local.get $offset) (local.get $size)))
     (local.set $i (i32.const 0))
@@ -540,8 +554,10 @@
         (if (call $read_name (local.get $offset)) (then (return (global.get $ERR_PARSE))))
         (local.set $offset (i32.add (local.get $offset) (i32.load (global.get $OFF_SCRATCH1))))
 
-        ;; Skip field name
+        ;; Read field name and save info before comparison
         (if (call $read_name (local.get $offset)) (then (return (global.get $ERR_PARSE))))
+        (local.set $name_ptr (i32.load (global.get $OFF_SCRATCH0)))
+        (local.set $name_len (i32.load (global.get $OFF_SCRATCH2)))
         (local.set $offset (i32.add (local.get $offset) (i32.load (global.get $OFF_SCRATCH1))))
 
         ;; Read import kind
@@ -551,8 +567,67 @@
 
         (if (i32.eq (local.get $kind) (global.get $EXT_FUNC))
           (then
-            ;; Function import: read and STORE type index in functions_buf
+            ;; Function import: read type index
             (if (call $leb_u32 (local.get $offset)) (then (return (global.get $ERR_PARSE))))
+            ;; Default sysno = import index
+            (local.set $sysno (local.get $i))
+            ;; Check against known WASI names by field name
+            ;; fd_write (len=8, 'f', 'w' at +3) → SYS_writev = 20
+            (if (i32.eq (local.get $name_len) (i32.const 8))
+              (then
+                (if (i32.eq (i32.load8_u (local.get $name_ptr)) (i32.const 0x66))
+                  (then
+                    (if (i32.eq (i32.load8_u (i32.add (local.get $name_ptr) (i32.const 3))) (i32.const 0x77))
+                      (then (local.set $sysno (i32.const 20)))
+                    )
+                  )
+                )
+              )
+            )
+            ;; fd_read (len=7, 'f', 'r' at +3) → SYS_read = 0
+            (if (i32.eq (local.get $name_len) (i32.const 7))
+              (then
+                (if (i32.eq (i32.load8_u (local.get $name_ptr)) (i32.const 0x66))
+                  (then
+                    (if (i32.eq (i32.load8_u (i32.add (local.get $name_ptr) (i32.const 3))) (i32.const 0x72))
+                      (then (local.set $sysno (i32.const 0)))
+                    )
+                  )
+                )
+              )
+            )
+            ;; proc_exit (len=9, 'p') → SYS_exit = 60
+            (if (i32.eq (local.get $name_len) (i32.const 9))
+              (then
+                (if (i32.eq (i32.load8_u (local.get $name_ptr)) (i32.const 0x70))
+                  (then (local.set $sysno (i32.const 60)))
+                )
+              )
+            )
+            ;; args_sizes_get (len=14, 'a', 's' at +5) → special -1
+            (if (i32.eq (local.get $name_len) (i32.const 14))
+              (then
+                (if (i32.eq (i32.load8_u (local.get $name_ptr)) (i32.const 0x61))
+                  (then (local.set $sysno (i32.const -1)))
+                )
+              )
+            )
+            ;; args_get (len=8, 'a', 'g' at +5) → special -2
+            (if (i32.eq (local.get $name_len) (i32.const 8))
+              (then
+                (if (i32.eq (i32.load8_u (local.get $name_ptr)) (i32.const 0x61))
+                  (then
+                    (if (i32.eq (i32.load8_u (i32.add (local.get $name_ptr) (i32.const 5))) (i32.const 0x67))
+                      (then (local.set $sysno (i32.const -2)))
+                    )
+                  )
+                )
+              )
+            )
+            ;; Store sysno in functions_buf offset 12 (for later patching)
+            (local.set $fi (i32.add (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $i) (global.get $SZ_FUNC))) (i32.const 12)))
+            (i32.store (local.get $fi) (local.get $sysno))
+            ;; Store type index in functions_buf offset 0 (existing)
             (i32.store
               (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $i) (global.get $SZ_FUNC)))
               (i32.load (global.get $OFF_SCRATCH0))
@@ -609,12 +684,17 @@
     )
     ;; Store import count
     (i32.store (global.get $OFF_IMPORT_COUNT) (local.get $count))
-    ;; Initialize syscall map: sysno[i] = i for each import
+    ;; Initialize syscall map: use stored sysno for function imports, else i
     (local.set $i (i32.const 0))
     (loop $sysinit
       (if (i32.lt_u (local.get $i) (local.get $count))
         (then
-          (i32.store (i32.add (i32.const 0x90000) (i32.shl (local.get $i) (i32.const 2))) (local.get $i))
+          ;; Check if functions_buf has a stored sysno (sentinel != 0x7FFFFFFF)
+          (local.set $sysno (i32.load (i32.add (i32.add (global.get $OFF_FUNCTIONS_BUF) (i32.mul (local.get $i) (global.get $SZ_FUNC))) (i32.const 12))))
+          (if (i32.eq (local.get $sysno) (i32.const 0x7FFFFFFF))
+            (then (local.set $sysno (local.get $i)))
+          )
+          (i32.store (i32.add (i32.const 0x90000) (i32.shl (local.get $i) (i32.const 2))) (local.get $sysno))
           (local.set $i (i32.add (local.get $i) (i32.const 1)))
           (br $sysinit)
         )
@@ -826,6 +906,25 @@
         (i32.store (i32.add (local.get $base) (i32.const 8)) (local.get $name_len))  ;; name_len
         (i32.store8 (i32.add (local.get $base) (i32.const 16)) (local.get $kind))    ;; kind
         (i32.store (i32.add (local.get $base) (i32.const 24)) (local.get $idx))      ;; index
+
+        ;; If this is "_start" export (kind=func), set OFF_START_FUNC
+        (if (i32.eq (local.get $kind) (i32.const 0))
+          (then
+            (if (i32.eq (local.get $name_len) (i32.const 6))
+              (then
+                (if (i32.eq (i32.load8_u (local.get $name_off)) (i32.const 0x5F))  ;; '_'
+                  (then
+                    (if (i32.eq (i32.load8_u (i32.add (local.get $name_off) (i32.const 1))) (i32.const 0x73))  ;; 's'
+                      (then
+                        (i32.store (global.get $OFF_START_FUNC) (local.get $idx))
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
 
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $cont)

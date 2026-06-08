@@ -1479,15 +1479,15 @@
           (i32.load (i32.add (global.get $OFF_SYSCALL_MAP) (i32.shl (local.get $func_idx) (i32.const 2))))
         )
 
-        ;; Emit: allocate 48-byte struct
-        (call $emit_x86_sub_rsp_imm (i32.const 48))
+        ;; Emit: allocate 64-byte struct (48 for params, 16 for host iovec)
+        (call $emit_x86_sub_rsp_imm (i32.const 64))
 
-        ;; Zero-fill all 6 slots: xor eax,eax; store at each offset
+        ;; Zero-fill all 8 slots: xor eax,eax; store at each offset
         (call $emit_x86_xor_eax_eax)
         (local.set $i (i32.const 0))
         (block $zfill
           (loop $zloop
-            (if (i32.eq (local.get $i) (i32.const 6)) (then (br $zfill)))
+            (if (i32.eq (local.get $i) (i32.const 8)) (then (br $zfill)))
             (call $emit_x86_store_rax_rsp_disp (i32.shl (local.get $i) (i32.const 3)))
             (local.set $i (i32.add (local.get $i) (i32.const 1)))
             (br $zloop)
@@ -1507,9 +1507,6 @@
           )
         )
 
-        ;; Set syscall number in eax
-        (call $emit_x86_mov_eax_imm (local.get $sysno))
-
         ;; Load syscall regs from struct
         (call $emit_x86_load_rdi_rsp_disp (i32.const 0))
         (call $emit_x86_load_rsi_rsp_disp (i32.const 8))
@@ -1518,11 +1515,108 @@
         (call $emit_x86_load_r8_rsp_disp (i32.const 32))
         (call $emit_x86_load_r9_rsp_disp (i32.const 40))
 
-        ;; syscall
-        (call $emit_x86_syscall)
+        ;; Check for special WASI syscalls (negative sysno)
+        (if (i32.lt_s (local.get $sysno) (i32.const 0))
+          (then
+            ;; ── args_sizes_get (-1) ─────────────────────────────────
+            ;; Handle inline: read argc from JitGlobals, write to output
+            ;; rdi = argc_out (WASM relative), rsi = buf_size_out (WASM relative)
+            (if (i32.eq (local.get $sysno) (i32.const -1))
+              (then
+                ;; mov rax, [r15+8]    (load mem_ptr)
+                (call $emit_x86_byte (i32.const 0x49))
+                (call $emit_x86_byte (i32.const 0x8B))
+                (call $emit_x86_byte (i32.const 0x47))
+                (call $emit_x86_byte (i32.const 0x08))
+                ;; mov r9d, [r15+72]   (argc)
+                (call $emit_x86_byte (i32.const 0x45))
+                (call $emit_x86_byte (i32.const 0x8B))
+                (call $emit_x86_byte (i32.const 0x4F))
+                (call $emit_x86_byte (i32.const 72))
+                ;; mov [rax+rdi], r9d  (write argc to *argc_out)
+                (call $emit_x86_byte (i32.const 0x44))
+                (call $emit_x86_byte (i32.const 0x89))
+                (call $emit_x86_byte (i32.const 0x0C))
+                (call $emit_x86_byte (i32.const 0x38))
+                ;; imul ecx, r9d, 1024 (total_size = argc * 1024)
+                (call $emit_x86_byte (i32.const 0x41))
+                (call $emit_x86_byte (i32.const 0x69))
+                (call $emit_x86_byte (i32.const 0xC9))
+                (call $emit_x86_byte (i32.const 0x00))
+                (call $emit_x86_byte (i32.const 0x04))
+                (call $emit_x86_byte (i32.const 0x00))
+                (call $emit_x86_byte (i32.const 0x00))
+                ;; mov [rax+rsi], ecx  (write total_size to *buf_size_out)
+                (call $emit_x86_byte (i32.const 0x40))
+                (call $emit_x86_byte (i32.const 0x89))
+                (call $emit_x86_byte (i32.const 0x0C))
+                (call $emit_x86_byte (i32.const 0x30))
+                ;; xor eax, eax (return 0)
+                (call $emit_x86_byte (i32.const 0x31))
+                (call $emit_x86_byte (i32.const 0xC0))
+              )
+            )
+            ;; ── args_get (-2) ───────────────────────────────────────
+            ;; For now: just write argc to *argv_buf, return 0
+            (if (i32.eq (local.get $sysno) (i32.const -2))
+              (then
+                ;; mov rax, [r15+8]    (load mem_ptr)
+                (call $emit_x86_byte (i32.const 0x49))
+                (call $emit_x86_byte (i32.const 0x8B))
+                (call $emit_x86_byte (i32.const 0x47))
+                (call $emit_x86_byte (i32.const 0x08))
+                ;; mov r9d, [r15+72]   (argc)
+                (call $emit_x86_byte (i32.const 0x45))
+                (call $emit_x86_byte (i32.const 0x8B))
+                (call $emit_x86_byte (i32.const 0x4F))
+                (call $emit_x86_byte (i32.const 72))
+                ;; mov [rax+rdi], r9d  (write argc to *argv_buf)
+                (call $emit_x86_byte (i32.const 0x44))
+                (call $emit_x86_byte (i32.const 0x89))
+                (call $emit_x86_byte (i32.const 0x0C))
+                (call $emit_x86_byte (i32.const 0x38))
+                ;; xor eax, eax (return 0)
+                (call $emit_x86_byte (i32.const 0x31))
+                (call $emit_x86_byte (i32.const 0xC0))
+              )
+            )
+          )
+          (else
+            ;; ── fd_write (SYS_writev=20) inline wrapper ──────────
+            (if (i32.eq (local.get $sysno) (i32.const 20))
+              (then
+                ;; After template's load_regs:
+                ;;   rdi = fd (rsp+0), rsi = iovs WASM offset (rsp+8)
+                ;;   rdx = iovs_len (rsp+16), r10 = nwritten WASM offset (rsp+24)
+                ;;   r14 = mem_ptr (set by stub at _start)
+                ;;
+                ;; Convert WASM iovec[0] to host iovec at rsp+48:
+                (call $emit_x86_add_rsi_r14)         ;; rsi += r14 (host addr of WASM iovec)
+                (call $emit_x86_mov_eax_ind_rsi)     ;; eax = [rsi] (buf_offset)
+                (call $emit_x86_add_rax_r14)         ;; rax += r14 (host_buf = mem_ptr + offset)
+                (call $emit_x86_store_rax_rsp_disp (i32.const 48))  ;; [rsp+48] = host iov_base
+                (call $emit_x86_mov_eax_ind_rsi_4)   ;; eax = [rsi+4] (buf_len)
+                (call $emit_x86_store_rax_rsp_disp (i32.const 56))  ;; [rsp+56] = host iov_len
+                (call $emit_x86_lea_rsi_rsp_disp (i32.const 48))    ;; rsi = &host iovec
+                ;; rdi already has fd (loaded by template)
+                (call $emit_x86_mov_edx_imm32 (i32.const 1))         ;; edx = 1 (iovcnt)
+                (call $emit_x86_mov_eax_imm (i32.const 20))          ;; eax = SYS_writev
+                (call $emit_x86_syscall)
+                ;; Write result to *nwritten (WASM *nwritten = (r14 + [rsp+24]))
+                (call $emit_x86_add_r10_r14)         ;; r10 += r14 (host addr of nwritten)
+                (call $emit_x86_mov_dword_r10)       ;; [r10] = eax (*nwritten = result)
+              )
+              (else
+                ;; Normal syscall: set eax = sysno, execute syscall
+                (call $emit_x86_mov_eax_imm (local.get $sysno))
+                (call $emit_x86_syscall)
+              )
+            )
+          )
+        )
 
         ;; Deallocate struct
-        (call $emit_x86_add_rsp_imm (i32.const 48))
+        (call $emit_x86_add_rsp_imm (i32.const 64))
 
         ;; Push return value onto WASM stack
         (call $emit_x86_byte (i32.const 0x50))  ;; push rax

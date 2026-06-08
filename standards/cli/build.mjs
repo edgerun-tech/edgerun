@@ -1,30 +1,13 @@
 #!/usr/bin/env node
-/**
- * CLI Library Build Script
- * Assembles a CLI program from library fragments and user code.
- *
- * Usage: node cli/build.mjs <user-fragment.wat> [-o <output>]
- *
- * Concatenation order:
- *   1. module-header.wat   — (module + imports + memory
- *   2. core.wat             — fd_write/exit wrappers
- *   3. io.wat               — print/read functions
- *   4. args.wat             — argument parsing (optional: --with-args)
- *   5. memory.wat           — bump allocator (optional: --with-memory)
- *   6. <user-fragment.wat>  — user's program code
- *   7. module-footer.wat    — )
- *
- * Then runs wat2wasm + wasm2elf to produce a standalone ELF binary.
- */
-
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
-import { resolve, dirname, basename } from 'path';
-import { fileURLToPath } from 'url';
+import { resolve, basename } from 'path';
+import {
+  resolveRoot, rootPath, fileExists, ensureDir
+} from '../tools/build-lib.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname);
-const WASM2ELF = resolve(ROOT, '..', 'compiler', 'tools', 'wasm2elf.js');
+const ROOT = resolveRoot();
+const WASM2ELF = rootPath('compiler', 'tools', 'wasm2elf.js');
 
 function showUsage() {
   const msg = `Usage: node cli/build.mjs <user-fragment.wat> [options]
@@ -49,7 +32,7 @@ if (args.length < 1 || args.includes('-h') || args.includes('--help')) {
 }
 
 const userPath = resolve(args[0]);
-if (!existsSync(userPath)) {
+if (!fileExists(userPath)) {
   console.error(`Error: user fragment not found: ${userPath}`);
   process.exit(1);
 }
@@ -64,20 +47,20 @@ else outputPath = resolve(basename(userPath).replace(/\.wat$/, '') + '.elf');
 const withArgs = args.includes('--with-args');
 const withMemory = args.includes('--with-memory');
 
-// ── Library fragments ──
+// ── Library fragments (CLI-specific, not in build-lib) ──
+const cliDir = rootPath('cli');
 const LIBRARY = [
-  resolve(ROOT, 'module-header.wat'),
-  resolve(ROOT, 'core.wat'),
-  resolve(ROOT, 'io.wat'),
+  resolve(cliDir, 'module-header.wat'),
+  resolve(cliDir, 'core.wat'),
+  resolve(cliDir, 'io.wat'),
 ];
-if (withArgs) LIBRARY.push(resolve(ROOT, 'args.wat'));
-if (withMemory) LIBRARY.push(resolve(ROOT, 'memory.wat'));
-const FOOTER = resolve(ROOT, 'module-footer.wat');
+if (withArgs) LIBRARY.push(resolve(cliDir, 'args.wat'));
+if (withMemory) LIBRARY.push(resolve(cliDir, 'memory.wat'));
+const FOOTER = resolve(cliDir, 'module-footer.wat');
 
-// ── Assemble ──
 let body = '';
 for (const libPath of LIBRARY) {
-  if (!existsSync(libPath)) {
+  if (!fileExists(libPath)) {
     console.error(`Warning: library module not found: ${libPath}`);
     continue;
   }
@@ -87,7 +70,6 @@ body += `;; ── User code: ${userPath} ──\n`;
 body += readFileSync(userPath, 'utf-8').trimEnd() + '\n\n';
 body += readFileSync(FOOTER, 'utf-8').trimEnd() + '\n';
 
-// ── Write temporary WAT and compile ──
 const tmpWat = resolve('/tmp', `cli-build-${process.pid}.wat`);
 const tmpWasm = resolve('/tmp', `cli-build-${process.pid}.wasm`);
 writeFileSync(tmpWat, body, 'utf-8');
@@ -97,7 +79,6 @@ try {
 } catch (e) {
   console.error(`wat2wasm failed:`);
   console.error(e.stderr?.toString() || e.message);
-  // Write the assembled WAT for debugging
   console.error(`Assembled WAT written to ${tmpWat} for debugging`);
   process.exit(1);
 }
@@ -110,7 +91,6 @@ try {
   process.exit(1);
 }
 
-// Cleanup
 try { execSync(`rm -f "${tmpWat}" "${tmpWasm}"`, { stdio: 'pipe' }); } catch {}
 
 console.error(`✓ ${outputPath}`);

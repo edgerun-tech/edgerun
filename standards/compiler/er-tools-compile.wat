@@ -107,6 +107,5 @@
       )
     )
 
-    (local.set $import_count (i32.load (global.get $OFF_IMPORT_COUNT)))
-    (return (call $compile_to_elf (local.get $import_count) (local.get $backend)))
+    (return (call $compile_all_to_elf_x86_64))
   )

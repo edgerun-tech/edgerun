@@ -4,8 +4,30 @@
 //   node tools/gen_compiler.js templates/x86_64.json              # dispatch only → stdout
 //   node tools/gen_compiler.js --assemble templates/x86_64.json   # full JIT → gen/jit-full-*.wat
 //   node tools/gen_compiler.js --assemble all                     # all 3 architectures
+//
+// Architecture JSONs inherit shared opcodes from templates/base.json.
+// Arch-specific JSONs only need to define ops not in base.json.
 const fs = require('fs');
 const path = require('path');
+
+function loadTemplate(tmplPath) {
+  const tmpl = JSON.parse(fs.readFileSync(tmplPath, 'utf8'));
+  const tmplDir = path.dirname(tmplPath);
+  const basePath = path.join(tmplDir, 'base.json');
+  if (!fs.existsSync(basePath)) return tmpl;
+
+  const base = JSON.parse(fs.readFileSync(basePath, 'utf8'));
+
+  // Start with base, overlay arch-specific fields
+  const merged = Object.assign({}, base, tmpl);
+
+  // Deep-merge dict fields: arch overrides/adds to base
+  for (const key of ['ops', 'fc_ops', 'fd_ops']) {
+    merged[key] = Object.assign({}, base[key] || {}, tmpl[key] || {});
+  }
+
+  return merged;
+}
 
 function buildOpTable(ops, prefix, suffix) {
   const entries = Object.entries(ops).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
@@ -27,7 +49,7 @@ function buildSubTable(ops, prefix, suffix, label) {
 }
 
 function generate(tmplPath, compilerPath) {
-  const tmpl = JSON.parse(fs.readFileSync(tmplPath, 'utf8'));
+  const tmpl = loadTemplate(tmplPath);
   let wat = fs.readFileSync(compilerPath, 'utf8');
   const arch = tmpl.arch;
   const opPrefix = tmpl.op_prefix;
@@ -64,7 +86,7 @@ function generate(tmplPath, compilerPath) {
 }
 
 function assemble(arch, dir, tmplPath) {
-  const tmpl = JSON.parse(fs.readFileSync(tmplPath, 'utf8'));
+  const tmpl = loadTemplate(tmplPath);
   const dispatch = generate(tmplPath, path.join(dir, 'compiler.wat'));
   const genDir = path.join(dir, 'gen');
 
@@ -124,7 +146,7 @@ function main() {
     } else {
       const tmplPath = path.resolve(target);
       if (!fs.existsSync(tmplPath)) { console.error(`Template not found: ${tmplPath}`); process.exit(1); }
-      const tmpl = JSON.parse(fs.readFileSync(tmplPath, 'utf8'));
+      const tmpl = loadTemplate(tmplPath);
       assemble(tmpl.arch, dir, tmplPath);
     }
     return;
