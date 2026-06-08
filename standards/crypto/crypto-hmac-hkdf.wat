@@ -8,7 +8,16 @@
   local.get $alg i32.const 7 i32.shr_u i32.const 2 i32.sub local.set $idx
   local.get $idx i32.const 0 i32.lt_s if i32.const 0 return end
   local.get $idx i32.const 2 i32.ge_u if i32.const 0 return end
-  i32.load (i32.add (i32.const 0x3100) (i32.add (i32.shl (local.get $idx) (i32.const 3)) (i32.shl (local.get $field) (i32.const 2)))))
+  i32.const 0x3100
+  local.get $idx
+  i32.const 3
+  i32.shl
+  local.get $field
+  i32.const 2
+  i32.shl
+  i32.add
+  i32.add
+  i32.load)
 
   (func (export "crypto_hmac_profile") (param $alg i32) (param $out_ptr i32) (result i32)
     (local $block i32)

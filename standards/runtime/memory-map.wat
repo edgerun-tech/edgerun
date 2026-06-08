@@ -98,7 +98,30 @@
 
 ;; ── Region: JIT State (1 MB @ 0x300000) ────────────────────────────
 (global $JIT_STATE       (export "JIT_STATE")       i32 (i32.const 0x300000))
-
+(global $ELF_OUT_BUF_aarch64  i32 (i32.const 0x400000))
+(global $ELF_OUT_OFF_aarch64  i32 (i32.const 0x300000))
+(global $TEXT_VA_aarch64      i32 (i32.const 0x400000))
+(global $BSS_VA_aarch64       i32 (i32.const 0x500000))
+(global $EHDR_SIZE_aarch64    i32 (i32.const 64))
+(global $PHDR_SIZE_aarch64    i32 (i32.const 56))
+(global $ELF_STUB_OFF_aarch64 i32 (i32.const 120))
+(global $ELF_CODE_OFF_aarch64 i32 (i32.const 256))
+(global $BSS_SIZE_aarch64     i32 (i32.const 0x100000))
+(global $FUNC_OFF_TABLE_aarch64 i32 (i32.const 0x80000))
+(global $CALL_FIXUP_TABLE_aarch64 i32 (i32.const 0x80800))
+(global $BSS_JITGLOBALS_aarch64 i32 (i32.const 0x500000))
+(global $BSS_MEM_aarch64       i32 (i32.const 0x500080))
+(global $BSS_LOCALS_aarch64    i32 (i32.const 0x510080))
+(global $BSS_GLOBALS_aarch64   i32 (i32.const 0x520080))
+(global $BSS_TABLE_aarch64     i32 (i32.const 0x530080))
+(global $BIN_OUT_OFF_aarch64   i32 (i32.const 0x300000))
+(global $REG_X0_aarch64 i32 (i32.const 0))
+(global $REG_X1_aarch64 i32 (i32.const 1))
+(global $REG_X2_aarch64 i32 (i32.const 2))
+(global $REG_XZR_aarch64 i32 (i32.const 31))
+(global $REG_SP_aarch64 i32 (i32.const 31))
+(global $REG_X19_aarch64 i32 (i32.const 19))
+(global $REG_X20_aarch64 i32 (i32.const 20))
 ;; ── Region: Compiler Output Buffers (1 MB each) ────────────────────
 (global $ELF_OUT_BUF     (export "ELF_OUT_BUF")     i32 (i32.const 0x400000))
 (global $BIN_OUT_BUF     (export "BIN_OUT_BUF")     i32 (i32.const 0x500000))
@@ -154,4 +177,10 @@
 (global $SZ_CODE              i32 (i32.const 64))
 (global $OFF_DECODED_COUNT   i32 (i32.const 0x8C000))
 (global $OFF_DECODED_OPS     i32 (i32.const 0xA0000))
+(global $OFF_SYSCALL_MAP     i32 (i32.const 0x90000))
+(global $OFF_IMPORT_COUNT    i32 (i32.const 0x4108))
+(global $OFF_START_FUNC      i32 (i32.const 0xA934))
 (global $DEC_SZ               i32 (i32.const 32))
+
+;; ── Linux syscall numbers ──────────────────────────────────────────
+

@@ -1455,11 +1455,11 @@
   (func $emit_call_rel32_fixup (param $target_func_idx i32)
     (local $fixup_idx i32) (local $code_off i32)
     ;; Record fixup: (code_offset, target_func_idx) at fixup_table[fixup_count]
-    (local.set $fixup_idx (i32.load (global.get $JS_FIXUP_COUNT_x86_64)))
+    (local.set $fixup_idx (i32.load (global.get $JS_CALL_FIXUP_COUNT_x86_64)))
     (local.set $code_off (i32.load (global.get $JS_CODE_PTR_x86_64)))
     (i32.store (i32.add (global.get $CALL_FIXUP_TABLE_x86_64) (i32.shl (local.get $fixup_idx) (i32.const 3))) (local.get $code_off))
     (i32.store (i32.add (i32.add (global.get $CALL_FIXUP_TABLE_x86_64) (i32.shl (local.get $fixup_idx) (i32.const 3))) (i32.const 4)) (local.get $target_func_idx))
-    (i32.store (global.get $JS_FIXUP_COUNT_x86_64) (i32.add (local.get $fixup_idx) (i32.const 1)))
+    (i32.store (global.get $JS_CALL_FIXUP_COUNT_x86_64) (i32.add (local.get $fixup_idx) (i32.const 1)))
     ;; Emit E8 + placeholder 00000000
     (call $emit_x86_byte (i32.const 0xE8))
     (call $emit_x86_dword (i32.const 0))
@@ -1471,7 +1471,7 @@
   (func $fixup_calls_x86_64 (export "fixup_calls_x86_64")
     (local $count i32) (local $i i32) (local $code_off i32) (local $target i32)
     (local $target_off i32) (local $rel i32)
-    (local.set $count (i32.load (global.get $JS_FIXUP_COUNT_x86_64)))
+    (local.set $count (i32.load (global.get $JS_CALL_FIXUP_COUNT_x86_64)))
     (local.set $i (i32.const 0))
     (block $done
       (loop $loop
@@ -1489,8 +1489,8 @@
         (br $loop)
       )
     )
-    ;; Reset fixup count for next batch
-    (i32.store (global.get $JS_FIXUP_COUNT_x86_64) (i32.const 0))
+    ;; Reset call fixup count for next batch
+    (i32.store (global.get $JS_CALL_FIXUP_COUNT_x86_64) (i32.const 0))
   )
 
   ;; ── ELF emit helpers ───────────────────────────────────────────────
@@ -1598,6 +1598,9 @@
     (call $emit_x86_byte (i32.const 0xB8))
     (call $emit_x86_dword (local.get $val))
   )
+  (func $emit_x86_mov_eax_imm (param $val i32)
+    (call $emit_mov_eax_imm (local.get $val))
+  )
 
   ;; ── ELF64 header (64 bytes) ───────────────────────────────────────
 
@@ -1638,10 +1641,16 @@
     (call $emit_x86_qword (i64.const 0x1000))    ;; p_align
   )
 
+  ;; Emit x86-64 `syscall` instruction (0F 05)
+  (func $emit_syscall
+    (call $emit_x86_byte (i32.const 0x0F))
+    (call $emit_x86_byte (i32.const 0x05))
+  )
+
   ;; ── Runtime stub: _start that calls compiled code and exits ──────
   ;; $bss_va = page-aligned start of BSS (right after compiled code)
 
-  (func $emit_elf_stub (param $bss_va i32) (param $syscall_data_va i32) (param $import_count i32)
+  (func $emit_elf_stub (param $bss_va i32) (param $syscall_data_va i32) (param $import_count i32) (param $code_va i32)
     (local $jitglobs i32) (local $mem i32) (local $locals i32)
     (local $globals i32) (local $table i32) (local $syscall_data_size i32)
 
@@ -1702,8 +1711,8 @@
     (call $emit_x86_load_r12_rbx)
     (call $emit_x86_load_r13_rbx8)
 
-    ;; call compiled_code
-    (call $emit_call_rel (i32.add (global.get $TEXT_VA_x86_64) (global.get $ELF_CODE_OFF_x86_64)))
+    ;; call start function (main)
+    (call $emit_call_rel (local.get $code_va))
 
     ;; exit(result)  — rax holds the return value from compiled code
     (call $emit_mov_edi_eax)
@@ -1738,6 +1747,7 @@
     (local $code_size i32) (local $total_size i32) (local $import_count i32)
     (local $syscall_data_size i32) (local $saved i32) (local $bss_va i32)
     (local $data_va i32) (local $i i32) (local $sysno i32)
+    (local $start_off i32) (local $start_va i32)
 
     ;; 1. Run the compiler (produces code at 0x100000)
     (local.set $code_size (call $jit_compile_x86_64 (local.get $func_idx)))
@@ -1792,8 +1802,17 @@
       (i32.add (i32.and (i32.add (local.get $total_size) (i32.const 0xFFF)) (i32.const -0x1000)) (global.get $BSS_SIZE_x86_64)) ;; p_memsz includes BSS
     )
 
-    ;; 9. Emit runtime stub (with BSS base, syscall data VA, import count)
-    (call $emit_elf_stub (local.get $bss_va) (local.get $data_va) (local.get $import_count))
+    ;; Compute start function VA (the function we just compiled)
+    (local.set $start_off
+      (i32.load
+        (i32.add (global.get $FUNC_OFF_TABLE_x86_64) (i32.shl (local.get $func_idx) (i32.const 2)))))
+    (local.set $start_va
+      (i32.add
+        (i32.add (global.get $TEXT_VA_x86_64) (global.get $ELF_CODE_OFF_x86_64))
+        (local.get $start_off)))
+
+    ;; 9. Emit runtime stub (with BSS base, syscall data VA, import count, code VA)
+    (call $emit_elf_stub (local.get $bss_va) (local.get $data_va) (local.get $import_count) (local.get $start_va))
 
     ;; 10. Pad with zeros from end of stub to ELF_CODE_OFF
     (block $pad_done
@@ -1836,6 +1855,59 @@
 
     ;; Return (buffer_address, total_size)
     (return (global.get $ELF_OUT_BUF_x86_64) (local.get $total_size))
+  )
+
+  ;; ── Emit helpers used by template code ──────────────────────────────
+
+  (func $emit_x86_syscall
+    (call $emit_syscall))
+
+  (func $emit_x86_load_rdi_rsp_disp (param $disp i32)
+    (call $emit_x86_rex_w)
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0xBC))
+    (call $emit_x86_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_x86_dword (local.get $disp))
+  )
+
+  (func $emit_x86_load_rsi_rsp_disp (param $disp i32)
+    (call $emit_x86_rex_w)
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0xB4))
+    (call $emit_x86_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_x86_dword (local.get $disp))
+  )
+
+  (func $emit_x86_load_rdx_rsp_disp (param $disp i32)
+    (call $emit_x86_rex_w)
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x94))
+    (call $emit_x86_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_x86_dword (local.get $disp))
+  )
+
+  (func $emit_x86_load_r10_rsp_disp (param $disp i32)
+    (call $emit_x86_byte (i32.const 0x4C))
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x94))
+    (call $emit_x86_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_x86_dword (local.get $disp))
+  )
+
+  (func $emit_x86_load_r8_rsp_disp (param $disp i32)
+    (call $emit_x86_byte (i32.const 0x4C))
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x84))
+    (call $emit_x86_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_x86_dword (local.get $disp))
+  )
+
+  (func $emit_x86_load_r9_rsp_disp (param $disp i32)
+    (call $emit_x86_byte (i32.const 0x4C))
+    (call $emit_x86_byte (i32.const 0x8B))
+    (call $emit_x86_byte (i32.const 0x8C))
+    (call $emit_x86_sib (i32.const 0) (i32.const 4) (i32.const 4))
+    (call $emit_x86_dword (local.get $disp))
   )
 
   ;; Cross-arch dispatch stubs (these are NOT in the dispatch file)

@@ -20,7 +20,6 @@
   (func $process_ui_layout (export "process_ui_layout")
     (param $input i32) (param $output i32) (param $cfg i32) (param $clen i32)
     (param $scratch i32) (param $scap i32) (param $state i32) (result i32)
-    (local $vp_w i32) (local $vp_h i32)
     (local $avail i32) (local $read i32) (local $vp_w f32) (local $vp_h f32)
     (local $result i32)
     (local.set $avail (call $pipe_available (local.get $input)))

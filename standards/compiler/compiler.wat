@@ -32,6 +32,7 @@
   (global $JS_FIXUP_LABEL{SUFFIX}    i32 (i32.const 2372))   ;; 256*i32 = 1024 bytes
   (global $JS_FIXUP_OFFSET{SUFFIX}   i32 (i32.const 3396))   ;; 256*i32 = 1024 bytes
   (global $JS_INITIALIZED{SUFFIX}    i32 (i32.const 4420))
+  (global $JS_CALL_FIXUP_COUNT{SUFFIX} i32 (i32.const 4424))
 
   ;; Label kinds
   (global $JIT_LABEL_BLOCK{SUFFIX}   i32 (i32.const 0))
@@ -159,8 +160,9 @@
     (local $loop_top_offset i32)
     (local $decoded_ops_base i32) (local $decoded_ops_count i32)
 
-    ;; Reset label depth
+    ;; Reset label depth and push implicit function block
     (i32.store (global.get $JS_LABEL_DEPTH{SUFFIX}) (i32.const 0))
+    (call $push_label{SUFFIX} (global.get $JIT_LABEL_BLOCK{SUFFIX}))
 
     ;; Get decoded_ops base from imported global
     (local.set $decoded_ops_base (global.get $OFF_DECODED_OPS))
@@ -174,14 +176,30 @@
     ;; ── Emit prologue ─────────────────────────────────────────────
     (call ${PROLOGUE})
 
+    ;; ── Main compile loop ─────────────────────────────────────────
+    ;; Point dec_ptr to this function's decoded ops:
+    ;;   code_entry_index = func_idx - import_count
+    ;;   decoded_start = code_entry[code_entry_index].decoded_start
+    ;;   dec_ptr = decoded_ops_base + decoded_start * DEC_SZ
+    (local.set $dec_ptr
+      (i32.add
+        (local.get $decoded_ops_base)
+        (i32.mul
+          (i32.load
+            (i32.add
+              (i32.add
+                (global.get $OFF_CODE_BUF)
+                (i32.mul
+                  (i32.sub (local.get $func_idx) (i32.load (global.get $OFF_IMPORT_COUNT)))
+                  (global.get $SZ_CODE)))
+              (i32.const 24)))
+          (global.get $DEC_SZ))))
+
     ;; ── Read next op for peephole ─────────────────────────────────
     (if (i32.load (i32.add (local.get $dec_ptr) (global.get $DEC_SZ)))
       (then (global.set ${NEXT_OP_GLOBAL} (i32.load (i32.add (local.get $dec_ptr) (global.get $DEC_SZ)))))
       (else (global.set ${NEXT_OP_GLOBAL} (i32.const 0)))
     )
-
-    ;; ── Main compile loop ─────────────────────────────────────────
-    (local.set $dec_ptr (local.get $decoded_ops_base))
     (block $compile_done
       (loop $compile_loop
         (local.set $opcode (i32.load (local.get $dec_ptr)))
@@ -224,8 +242,8 @@
         )
         ;; Advance to next decoded op
         (local.set $dec_ptr (i32.add (local.get $dec_ptr) (global.get $DEC_SZ)))
-        (br_if $compile_done (i32.eq (local.get $opcode) (i32.const 0x0F)))  ;; return
         (br_if $compile_done (i32.lt_s (i32.load (global.get $JS_LABEL_DEPTH{SUFFIX})) (i32.const 0)))
+        (br_if $compile_done (i32.eqz (i32.load (global.get $JS_LABEL_DEPTH{SUFFIX}))))
         (br $compile_loop)
       )
     )
@@ -234,7 +252,7 @@
     (call ${EPILOGUE})
 
     ;; ── Return code size ──────────────────────────────────────────
-    (i32.load (global.get $JS_CODE_PTR{SUFFIX}))
+    (return (i32.load (global.get $JS_CODE_PTR{SUFFIX})))
   )
 
 
@@ -246,12 +264,14 @@
     (local $import_count i32) (local $func_count i32) (local $i i32)
     (local $code_size i32) (local $total_size i32) (local $syscall_data_size i32)
     (local $saved i32) (local $bss_va i32) (local $data_va i32)
+    (local $start_func_idx i32) (local $start_off i32) (local $start_va i32)
 
     (local.set $import_count (i32.load (i32.const 0x4108)))
     (local.set $func_count (i32.load (i32.const 0x4510)))
 
     (i32.store (global.get $JS_CODE_PTR{SUFFIX}) (i32.const 0))
     (i32.store (global.get $JS_FIXUP_COUNT{SUFFIX}) (i32.const 0))
+    (i32.store (global.get $JS_CALL_FIXUP_COUNT{SUFFIX}) (i32.const 0))
 
     (local.set $i (local.get $import_count))
     (block $compile_done
@@ -264,6 +284,16 @@
     )
 
     (call ${FIXUP_CALLS})
+
+    ;; ── Look up start function (main) code offset ──────────────────
+    (local.set $start_func_idx (i32.load (global.get $OFF_START_FUNC)))
+    (local.set $start_off
+      (i32.load
+        (i32.add (global.get ${FUNC_OFF_TABLE}) (i32.shl (local.get $start_func_idx) (i32.const 2)))))
+    (local.set $start_va
+      (i32.add
+        (i32.add (global.get $TEXT_VA{SUFFIX}) (global.get $ELF_CODE_OFF{SUFFIX}))
+        (local.get $start_off)))
 
     (local.set $code_size (i32.load (global.get $JS_CODE_PTR{SUFFIX})))
     (local.set $syscall_data_size (i32.shl (local.get $import_count) (i32.const 2)))
@@ -299,8 +329,8 @@
         (i32.and (i32.add (local.get $total_size) (i32.const 0xFFF)) (i32.const -0x1000))
         (global.get $BSS_SIZE{SUFFIX})))
 
-    ;; ── Emit runtime stub ──
-    (call ${EMIT_ELF_STUB} (local.get $bss_va) (local.get $data_va) (local.get $import_count))
+    ;; ── Emit runtime stub (calls start function = main) ──
+    (call ${EMIT_ELF_STUB} (local.get $bss_va) (local.get $data_va) (local.get $import_count) (local.get $start_va))
 
     ;; ── Pad to ELF_CODE_OFF ──
     (block $pad_done

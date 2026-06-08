@@ -7,3 +7,9 @@ ui/ui_framework.wat
 
 # Compiler JIT generated files
 compiler/gen/
+
+# Build output
+data/embedded-source.wat
+edgerun.wat
+edgerun.wasm
+compiler/er-tools.wasm

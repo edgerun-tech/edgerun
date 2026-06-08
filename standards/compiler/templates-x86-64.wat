@@ -1,4 +1,3 @@
-(module
 ;; ═════════════════════════════════════════════════════════════════════
   ;; Opcode templates — each emits x86_64 code for one WASM opcode
   ;; Caller sets: rdi = decoded_op_ptr before calling template
@@ -951,7 +950,7 @@
     (call $emit_x86_jb_rel8 (i32.const 0))
     (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal: use unsigned truncation
-    (call $template_i32_trunc_f32_u)
+    (call $template_i32_trunc_f32_u_x86_64)
     (call $emit_x86_jmp_rel8 (i32.const 0))
     (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan: eax = 0
@@ -1033,7 +1032,7 @@
     (call $emit_x86_jb_rel8 (i32.const 0))
     (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
-    (call $template_i32_trunc_f64_u)
+    (call $template_i32_trunc_f64_u_x86_64)
     (call $emit_x86_jmp_rel8 (i32.const 0))
     (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan
@@ -1123,7 +1122,7 @@
     (call $emit_x86_jb_rel8 (i32.const 0))
     (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
-    (call $template_i64_trunc_f32_u)
+    (call $template_i64_trunc_f32_u_x86_64)
     (call $emit_x86_jmp_rel8 (i32.const 0))
     (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan: rax = 0
@@ -1220,7 +1219,7 @@
     (call $emit_x86_jb_rel8 (i32.const 0))
     (local.set $udf_p (call $get_x86_code_ptr))
     ;; Normal
-    (call $template_i64_trunc_f64_u)
+    (call $template_i64_trunc_f64_u_x86_64)
     (call $emit_x86_jmp_rel8 (i32.const 0))
     (local.set $done_p (call $get_x86_code_ptr))
     ;; .nan
@@ -2064,24 +2063,117 @@
   )
 
   ;; ── Control flow templates ─────────────────────────────────────────
-  (func $template_block_x86_64 (param $dec_ptr i32))
-  (func $template_loop_x86_64 (param $dec_ptr i32))
+  (func $template_block_x86_64 (param $dec_ptr i32)
+    (call $push_label (global.get $JIT_LABEL_BLOCK_x86_64))
+  )
+  (func $template_loop_x86_64 (param $dec_ptr i32)
+    (local $depth i32)
+    (call $push_label (global.get $JIT_LABEL_LOOP_x86_64))
+    (local.set $depth (i32.load (global.get $JS_LABEL_DEPTH_x86_64)))
+    (call $set_label_offset (local.get $depth) (i32.load (global.get $JS_CODE_PTR_x86_64)))
+  )
   (func $template_if_x86_64 (param $dec_ptr i32)
+    (local $depth i32)
     (call $emit_x86_pop_rax)
     (call $emit_x86_test_eax)
-    (call $emit_x86_jz_rel32 (i32.const 0))
+    (call $push_label (global.get $JIT_LABEL_IF_x86_64))
+    (call $emit_x86_byte (i32.const 0x0F))
+    (call $emit_x86_byte (i32.const 0x84))
+    (local.set $depth (i32.load (global.get $JS_LABEL_DEPTH_x86_64)))
+    (i32.store
+      (i32.add (global.get $JS_LABEL_IF_JZ_x86_64) (i32.shl (i32.sub (local.get $depth) (i32.const 1)) (i32.const 2)))
+      (i32.load (global.get $JS_CODE_PTR_x86_64)))
+    (call $emit_x86_dword (i32.const 0))
   )
   (func $template_else_x86_64 (param $dec_ptr i32)
-    (call $emit_x86_jmp_rel32 (i32.const 0))
+    (local $depth i32) (local $idx i32) (local $fix_off i32) (local $cur i32) (local $disp i32)
+    (local.set $depth (i32.load (global.get $JS_LABEL_DEPTH_x86_64)))
+    (local.set $idx (i32.sub (local.get $depth) (i32.const 1)))
+    ;; Patch the IF's jz to jump to current position (start of else)
+    (local.set $fix_off
+      (i32.load (i32.add (global.get $JS_LABEL_IF_JZ_x86_64) (i32.shl (local.get $idx) (i32.const 2)))))
+    (if (i32.gt_u (local.get $fix_off) (i32.const 0))
+      (then
+        (local.set $cur (i32.load (global.get $JS_CODE_PTR_x86_64)))
+        (local.set $disp (i32.sub (local.get $cur) (i32.add (local.get $fix_off) (i32.const 4))))
+        (i32.store (i32.add (global.get $JIT_CACHE) (local.get $fix_off)) (local.get $disp))
+      )
+    )
+    ;; Emit jmp placeholder for jump to end of if/else
+    (call $emit_x86_byte (i32.const 0xE9))
+    (i32.store
+      (i32.add (global.get $JS_LABEL_IF_JZ_x86_64) (i32.shl (local.get $idx) (i32.const 2)))
+      (i32.load (global.get $JS_CODE_PTR_x86_64)))
+    (call $emit_x86_dword (i32.const 0))
   )
-  (func $template_end_x86_64 (param $dec_ptr i32))
+  (func $template_end_x86_64 (param $dec_ptr i32)
+    (local $depth i32) (local $idx i32) (local $kind i32)
+    (local $fix_off i32) (local $cur i32) (local $disp i32)
+    (local.set $depth (i32.load (global.get $JS_LABEL_DEPTH_x86_64)))
+    (if (i32.gt_u (local.get $depth) (i32.const 0))
+      (then
+        (local.set $idx (i32.sub (local.get $depth) (i32.const 1)))
+        (local.set $kind (call $get_label_kind (local.get $idx)))
+        ;; Patch pending fixup (if's jz or else's jmp) stored in JS_LABEL_IF_JZ
+        (local.set $fix_off
+          (i32.load (i32.add (global.get $JS_LABEL_IF_JZ_x86_64) (i32.shl (local.get $idx) (i32.const 2)))))
+        (if (i32.gt_u (local.get $fix_off) (i32.const 0))
+          (then
+            (local.set $cur (i32.load (global.get $JS_CODE_PTR_x86_64)))
+            (local.set $disp (i32.sub (local.get $cur) (i32.add (local.get $fix_off) (i32.const 4))))
+            (i32.store (i32.add (global.get $JIT_CACHE) (local.get $fix_off)) (local.get $disp))
+          )
+        )
+        ;; Patch BR fixups at this depth (block/if only, not loop)
+        (if (i32.ne (local.get $kind) (global.get $JIT_LABEL_LOOP_x86_64))
+          (then (call $patch_fixups (local.get $depth)))
+        )
+        (drop (call $pop_label))
+      )
+    )
+  )
   (func $template_br_x86_64 (param $dec_ptr i32)
-    (call $emit_x86_jmp_rel32 (i32.const 0))
+    (local $target_rel i32) (local $target_abs i32) (local $cur_depth i32) (local $target_off i32)
+    (local.set $target_rel (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
+    (local.set $cur_depth (i32.load (global.get $JS_LABEL_DEPTH_x86_64)))
+    (local.set $target_abs (i32.sub (local.get $cur_depth) (local.get $target_rel)))
+    (local.set $target_off (call $get_label_offset (local.get $target_abs)))
+    (if (i32.eqz (local.get $target_off))
+      (then
+        ;; Forward jump — use fixup
+        (call $emit_x86_byte (i32.const 0xE9))
+        (call $push_fixup (local.get $target_abs))
+        (call $emit_x86_dword (i32.const 0))
+      )
+      (else
+        ;; Backward jump — compute displacement directly
+        (call $emit_x86_jmp_rel32
+          (i32.sub (local.get $target_off)
+            (i32.add (i32.load (global.get $JS_CODE_PTR_x86_64)) (i32.const 5))))
+      )
+    )
   )
   (func $template_br_if_x86_64 (param $dec_ptr i32)
+    (local $target_rel i32) (local $target_abs i32) (local $cur_depth i32) (local $target_off i32)
+    (local.set $target_rel (i32.load (i32.add (local.get $dec_ptr) (i32.const 4))))
+    (local.set $cur_depth (i32.load (global.get $JS_LABEL_DEPTH_x86_64)))
+    (local.set $target_abs (i32.sub (local.get $cur_depth) (local.get $target_rel)))
+    (local.set $target_off (call $get_label_offset (local.get $target_abs)))
     (call $emit_x86_pop_rax)
     (call $emit_x86_test_eax)
-    (call $emit_x86_jne_rel32 (i32.const 0))
+    (if (i32.eqz (local.get $target_off))
+      (then
+        (call $emit_x86_byte (i32.const 0x0F))
+        (call $emit_x86_byte (i32.const 0x85))
+        (call $push_fixup (local.get $target_abs))
+        (call $emit_x86_dword (i32.const 0))
+      )
+      (else
+        (call $emit_x86_jne_rel32
+          (i32.sub (local.get $target_off)
+            (i32.add (i32.load (global.get $JS_CODE_PTR_x86_64)) (i32.const 6))))
+      )
+    )
   )
   (func $template_br_table_x86_64 (param $dec_ptr i32)
     (call $emit_x86_pop_rax)
@@ -2102,4 +2194,3 @@
   (func $template_i64_reinterpret_f64_x86_64 (param $dec_ptr i32))
   (func $template_f64_reinterpret_i64_x86_64 (param $dec_ptr i32))
 
-)

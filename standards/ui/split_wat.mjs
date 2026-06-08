@@ -256,6 +256,7 @@ const missing = [...allFuncs].filter(i => !taken.has(i));
 if (missing.length > 0) {
   console.error('\n\u26a0  ' + missing.length + ' functions unassigned!');
   for (const idx of missing) console.error('  line ' + items[idx].start + ': ' + lines[items[idx].start].substring(0, 80));
+  process.exit(1);
 } else {
   console.log('\n\u2713 All ' + allFuncs.size + ' functions assigned');
 }

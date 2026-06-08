@@ -31,7 +31,6 @@
   (global $OFF_TYPE_COUNT i32 (i32.const 256))
 
   ;; Import section
-  (global $OFF_IMPORT_COUNT i32 (i32.const 16648))
   (global $OFF_IMPORTS_BUF  i32 (i32.const 16656))
 
   ;; Function section
@@ -59,7 +58,6 @@
   (global $OFF_MEM_MAX i32 (i32.const 43308))
 
   ;; Start function index
-  (global $OFF_START_FUNC i32 (i32.const 43316))
 
   ;; Data segments
   (global $OFF_DATA_COUNT i32 (i32.const 43324))

@@ -266,9 +266,9 @@
   },
   "emit_byte": "emit_arm32_byte",
   "emit_dword": "emit_arm32_dword",
-  "emit_elf_stub": "emit_elf_stub_arm32",
+  "emit_elf_stub": "emit_arm32_elf_stub",
   "fixup_calls": "fixup_calls_arm32",
   "copy_compiled_code": "copy_compiled_code_arm32",
-  "emit_elf64_ehdr": "emit_arm32_elf64_ehdr",
-  "emit_elf64_phdr": "emit_arm32_elf64_phdr"
+  "emit_elf64_ehdr": "emit_arm32_elf32_ehdr",
+  "emit_elf64_phdr": "emit_arm32_elf32_phdr"
 }

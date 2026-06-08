@@ -160,13 +160,6 @@ for (const f of fragFiles) {
 const header = readFileSync(headerFile, 'utf-8');
 const footer = readFileSync(footerFile, 'utf-8');
 
-// Collect all unique host imports
-const hostImports = new Set();
-for (const [f, { calls }] of Object.entries(parsed)) {
-  // Host imports are defined in the header — fragments don't directly reference them
-  // So no additional host imports needed
-}
-
 // Build the linked output
 const partLines = [header.trimEnd()];
 for (const f of fragFiles) {

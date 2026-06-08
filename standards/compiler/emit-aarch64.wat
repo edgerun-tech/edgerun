@@ -1286,8 +1286,6 @@
   ;; I'll use FMOV + FCMEQ + BIT/BIF approach for max/min, or just hardcode literal values.
   ;; Let me actually just use the branch-based max/min like the x86 version does.
 
-  (global $FUNC_OFF_TABLE_aarch64 i32 (i32.const 0x80000))   ;; 256 funcs * 4 bytes = 1KB
-
   ;; Short-name register aliases (for SIMD template use)
   (global $REG_X0 i32 (i32.const 0))
   (global $REG_X1 i32 (i32.const 1))
@@ -2056,13 +2054,6 @@
 
   ;; Stub for ELF runtime stub (needed by compile_all_to_elf)
   (func $emit_elf_stub_aarch64 (param $bss_va i32) (param $syscall_data_va i32) (param $import_count i32))
-
-  ;; Cross-arch dispatch stubs for runtime dispatch functions
-  (func $jit_compile_x86_64 (param $i i32) (result i32) (i32.const -1))
-  (func $jit_compile_arm32 (param $i i32) (result i32) (i32.const -1))
-  (func $compile_to_elf_x86_64 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
-  (func $compile_to_elf_arm32 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
-  (func $compile_to_elf_aarch64 (param $i i32) (result i32 i32) (i32.const 0) (i32.const 0))
 
   ;; ── b-prefix SIMD emit wrappers ──────────────────────────────────
   ;; These delegate to the non-b counterparts.

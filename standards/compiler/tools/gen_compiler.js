@@ -64,6 +64,7 @@ function generate(tmplPath, compilerPath) {
 }
 
 function assemble(arch, dir, tmplPath) {
+  const tmpl = JSON.parse(fs.readFileSync(tmplPath, 'utf8'));
   const dispatch = generate(tmplPath, path.join(dir, 'compiler.wat'));
   const genDir = path.join(dir, 'gen');
 
@@ -71,6 +72,7 @@ function assemble(arch, dir, tmplPath) {
   const fa = arch.replace(/_/g, '-');
 
   // Read fragment files
+  const memory = fs.readFileSync(path.join(dir, '..', 'runtime', 'memory.wat'), 'utf8');
   const memoryMap = fs.readFileSync(path.join(dir, '..', 'runtime', 'memory-map.wat'), 'utf8');
   const emitCore = fs.readFileSync(path.join(dir, 'emit-core.wat'), 'utf8');
   const emit = fs.readFileSync(path.join(dir, `emit-${fa}.wat`), 'utf8');
@@ -78,14 +80,25 @@ function assemble(arch, dir, tmplPath) {
   const simd = fs.readFileSync(path.join(dir, `simd-${fa}.wat`), 'utf8');
   const wasmEmit = fs.readFileSync(path.join(dir, 'wasm-emit.wat'), 'utf8');
 
-  // Strip (module ... ) wrapper from templates (it'\''s a fragment inside our module)
+  // Strip (module ... ) wrapper from templates (it's a fragment inside our module)
   if (templates.trimStart().startsWith('(module')) {
     templates = templates.replace(/^\(module\s*\n/, '');
     if (templates.endsWith(')\n')) templates = templates.slice(0, -2);
     else if (templates.endsWith(')')) templates = templates.slice(0, -1);
   }
 
-  const parts = [memoryMap, dispatch, emitCore, emit, templates, simd, wasmEmit];
+  // Template functions use arch suffix (e.g. $template_i32_add_x86_64), but internal
+  // calls within templates reference bare names (e.g. $template_i32_trunc_f32_u).
+  // Add aliases for these bare-name targets so they map to the suffixed definitions.
+  if (tmpl.op_suffix) {
+    const bareTargets = ['i32_trunc_f32_u', 'i32_trunc_f64_u', 'i64_trunc_f32_u', 'i64_trunc_f64_u'];
+    const aliases = bareTargets.map(name =>
+      `  (func $template_${name} (export "template_${name}") (call $template_${name}${tmpl.op_suffix}))`
+    ).join('\n');
+    templates += `\n\n${aliases}\n`;
+  }
+
+  const parts = [memory, memoryMap, dispatch, emitCore, emit, templates, simd];
   const full = `(module\n${parts.join('\n\n')})\n`;
 
   if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
@@ -105,7 +118,7 @@ function main() {
     const archs = ['x86-64', 'aarch64', 'arm32'];
     if (target === 'all') {
       for (const arch of archs) {
-        const tmplPath = path.join(dir, 'templates', `${arch.replace('-', '_')}.json`);
+        const tmplPath = path.join(dir, 'templates', `${arch.replace(/-/g, '_')}.json`);
         if (fs.existsSync(tmplPath)) assemble(arch, dir, tmplPath);
       }
     } else {
