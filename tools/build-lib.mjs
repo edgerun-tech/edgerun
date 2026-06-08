@@ -1,12 +1,12 @@
 // build-lib — shared utilities for EdgeRun build tools
 //
 // Provides: resolveRoot, rootPath, fileExists, ensureDir, readText, writeText,
-//           wrapModule, compileWat, writeLEB128, readLEB128, leb128Size
+//           wrapModule, embedCustomSection, writeLEB128, readLEB128, leb128Size
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
-import { spawnSync } from 'child_process';
-import { writeLEB128, readLEB128, leb128Size, compileWat as codecCompile } from './er-codec.mjs';
+import { gzipSync } from 'zlib';
+import { writeLEB128, readLEB128, leb128Size } from './er-codec.mjs';
 
 export { writeLEB128, readLEB128, leb128Size };
 
@@ -55,17 +55,36 @@ export function wrapModule(body, options = {}) {
   return result;
 }
 
-// File-based compileWat: reads WAT from disk, returns success boolean
-export function compileWat(watPath, wasmPath) {
-  try {
-    const src = readText(watPath);
-    const wasm = codecCompile(src);
-    writeFileSync(wasmPath, wasm);
-    const size = wasm.length;
-    console.log(`  ✓ ${wasmPath} (${(size / 1024).toFixed(0)} KB)`);
-    return true;
-  } catch (e) {
-    console.error(`  ✗ compile failed: ${e.message}`);
-    return false;
-  }
+// Embed a custom section into a .wasm file.
+// If opts.gzip is true, the data is gzip-compressed before embedding.
+// The custom section name is always stored as-is (not compressed).
+//
+// WASM custom section format:
+//   section_id (0x00, 1 byte)
+//   section_size (LEB128, size of name_len + name + data)
+//   name_len (LEB128)
+//   name (UTF-8 bytes)
+//   data (arbitrary bytes)
+export function embedCustomSection(wasmPath, sectionName, data, opts = {}) {
+  const buf = readFileSync(wasmPath);
+  let raw = Buffer.isBuffer(data) ? data : Buffer.from(String(data), 'utf-8');
+  if (opts.gzip) raw = gzipSync(raw);
+  const nameBytes = Buffer.from(sectionName, 'utf-8');
+  const nameLenSize = leb128Size(nameBytes.length);
+  // section content = name_len(LEB128) + name_bytes + raw_data
+  const contentSize = nameLenSize + nameBytes.length + raw.length;
+  const sectionSize = 1 + leb128Size(contentSize) + contentSize;
+
+  const out = Buffer.alloc(buf.length + sectionSize);
+  buf.copy(out);
+  let pos = buf.length;
+  out[pos++] = 0; // custom section ID
+  pos = writeLEB128(out, pos, contentSize); // section size (rest of section)
+  pos = writeLEB128(out, pos, nameBytes.length); // name length
+  out.set(nameBytes, pos); pos += nameBytes.length;
+  out.set(raw, pos); pos += raw.length;
+
+  writeFileSync(wasmPath, out);
+  return { size: data.length, compressed: raw.length, added: out.length - buf.length };
 }
+

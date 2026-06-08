@@ -294,7 +294,7 @@
     local.get $p i32.const 2 i32.add local.set $p
 
     ;; 4. sock_open
-    local.get $sock_type local.get $cfg local.get $cfg_len call $sock_open
+    local.get $sock_type local.get $cfg local.get $cfg_len i32.const 0 call $sock_open
     local.tee $fd
     i32.const 0 i32.lt_s
     if i64.const -2 return end
@@ -765,9 +765,11 @@
   (func (export "ws_close")
     (param $fd i32)
     (result i32)
+    (local $status i32)
     local.get $fd i32.const 8 i32.const 0 i32.const 0 call $ws_send
-    drop
-    local.get $fd call $sock_close)
+    local.set $status
+    local.get $fd call $sock_close
+    local.get $status)
 
 ;; Standard ID removed — merged into single module
 

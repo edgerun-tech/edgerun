@@ -240,40 +240,40 @@
     i32.const -1)
 
   (func $er_ui_gallery_category_for_index  (param $index i32) (result i32)
-    i32.const 66000 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_CATEGORY_TABLE}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_category_at  (param $index i32) (result i32)
-    i32.const 66000 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_CATEGORY_TABLE}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_preview_kind_for_index  (param $index i32) (result i32)
-    i32.const 66100 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_PREVIEW_KIND}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_preview_kind_at  (param $index i32) (result i32)
-    i32.const 66100 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_PREVIEW_KIND}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_name_len_for_index  (param $index i32) (result i32)
-    i32.const 66200 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_PROPS1}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_name_len_at  (param $index i32) (result i32)
-    i32.const 66200 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_PROPS1}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_slug_len_for_index  (param $index i32) (result i32)
-    i32.const 66300 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_PROPS2}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_slug_len_at  (param $index i32) (result i32)
-    i32.const 66300 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_PROPS2}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_source_component_len_for_index  (param $index i32) (result i32)
-    i32.const 66400 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_ITEM_COUNTS}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_source_component_len_at  (param $index i32) (result i32)
-    i32.const 66400 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_ITEM_COUNTS}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_edge_builder_len_for_index  (param $index i32) (result i32)
-    i32.const 66500 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_ITEM_WIDTHS}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_edge_builder_len_at  (param $index i32) (result i32)
-    i32.const 66500 local.get $index call $er_ui_gallery_table_u8)
+    i32.const {{GALLERY_ITEM_WIDTHS}} local.get $index call $er_ui_gallery_table_u8)
 
   (func $er_ui_gallery_component_path_len_for_index  (param $index i32) (result i32)
     i32.const 66600 local.get $index call $er_ui_gallery_table_u8)
@@ -283,27 +283,27 @@
 
   (func $er_ui_gallery_source_path_len_for_index  (param $index i32) (result i32)
     (local $source_len i32)
-    i32.const 66400 local.get $index call $er_ui_gallery_table_u8 local.tee $source_len i32.const 0 i32.lt_s
+    i32.const {{GALLERY_ITEM_COUNTS}} local.get $index call $er_ui_gallery_table_u8 local.tee $source_len i32.const 0 i32.lt_s
     if i32.const -1 return end
     i32.const 22 local.get $source_len i32.add)
 
   (func $er_ui_gallery_source_path_len_at  (param $index i32) (result i32)
     (local $source_len i32)
-    i32.const 66400 local.get $index call $er_ui_gallery_table_u8 local.tee $source_len i32.const 0 i32.lt_s
+    i32.const {{GALLERY_ITEM_COUNTS}} local.get $index call $er_ui_gallery_table_u8 local.tee $source_len i32.const 0 i32.lt_s
     if i32.const -1 return end
     i32.const 22 local.get $source_len i32.add)
 
   (func $er_ui_gallery_name_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
-    i32.const 66700 i32.const 67200 i32.const 66200 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
+    i32.const {{GALLERY_SLUG_TABLE}} i32.const {{GALLERY_SLUG_OFFSETS}} i32.const {{GALLERY_PROPS1}} local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
   (func $er_ui_gallery_slug_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
-    i32.const 67400 i32.const 67900 i32.const 66300 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
+    i32.const {{GALLERY_KEBAB_TABLE}} i32.const {{GALLERY_KEBAB_OFFSETS}} i32.const {{GALLERY_PROPS2}} local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
   (func $er_ui_gallery_source_component_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
-    i32.const 68100 i32.const 68600 i32.const 66400 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
+    i32.const {{GALLERY_DISPLAY_TABLE}} i32.const {{GALLERY_DISPLAY_OFFSETS}} i32.const {{GALLERY_ITEM_COUNTS}} local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
   (func $er_ui_gallery_edge_builder_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
-    i32.const 68800 i32.const 69600 i32.const 66500 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
+    i32.const {{GALLERY_SLUG_NODE}} i32.const {{GALLERY_SLUG_NODE_OFF}} i32.const {{GALLERY_ITEM_WIDTHS}} local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
 
   (func $er_ui_gallery_component_path_copy  (param $index i32) (param $out i32) (param $cap i32) (result i32)
     i32.const 69800 i32.const 71300 i32.const 66600 local.get $index local.get $out local.get $cap call $er_ui_gallery_copy_table_string)
@@ -312,26 +312,26 @@
     (local $source_len i32) (local $total i32) (local $source_off i32)
     local.get $index i32.const 60 i32.ge_u local.get $out i32.eqz i32.or
     if i32.const -1 return end
-    i32.const 66400 local.get $index i32.add i32.load8_u local.set $source_len
+    i32.const {{GALLERY_ITEM_COUNTS}} local.get $index i32.add i32.load8_u local.set $source_len
     i32.const 22 local.get $source_len i32.add local.tee $total local.get $cap i32.gt_u
     if i32.const -1 return end
-    i32.const 68600 local.get $index i32.const 2 i32.mul i32.add i32.load16_u local.set $source_off
+    i32.const {{GALLERY_DISPLAY_OFFSETS}} local.get $index i32.const 2 i32.mul i32.add i32.load16_u local.set $source_off
     local.get $out i32.const 71500 i32.const 18 memory.copy
-    local.get $out i32.const 18 i32.add i32.const 68100 local.get $source_off i32.add local.get $source_len memory.copy
+    local.get $out i32.const 18 i32.add i32.const {{GALLERY_DISPLAY_TABLE}} local.get $source_off i32.add local.get $source_len memory.copy
     local.get $out i32.const 18 i32.add local.get $source_len i32.add i32.const 71532 i32.const 4 memory.copy
     local.get $total)
 
   (func $er_ui_gallery_index_by_slug_bytes  (param $ptr i32) (param $len i32) (result i32)
-    i32.const 67400 i32.const 67900 i32.const 66300 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
+    i32.const {{GALLERY_KEBAB_TABLE}} i32.const {{GALLERY_KEBAB_OFFSETS}} i32.const {{GALLERY_PROPS2}} local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
 
   (func $er_ui_gallery_index_by_slug  (param $ptr i32) (param $len i32) (result i32)
-    i32.const 67400 i32.const 67900 i32.const 66300 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
+    i32.const {{GALLERY_KEBAB_TABLE}} i32.const {{GALLERY_KEBAB_OFFSETS}} i32.const {{GALLERY_PROPS2}} local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
 
   (func $er_ui_gallery_index_by_source_component_bytes  (param $ptr i32) (param $len i32) (result i32)
-    i32.const 68100 i32.const 68600 i32.const 66400 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
+    i32.const {{GALLERY_DISPLAY_TABLE}} i32.const {{GALLERY_DISPLAY_OFFSETS}} i32.const {{GALLERY_ITEM_COUNTS}} local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
 
   (func $er_ui_gallery_index_by_source_component  (param $ptr i32) (param $len i32) (result i32)
-    i32.const 68100 i32.const 68600 i32.const 66400 local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
+    i32.const {{GALLERY_DISPLAY_TABLE}} i32.const {{GALLERY_DISPLAY_OFFSETS}} i32.const {{GALLERY_ITEM_COUNTS}} local.get $ptr local.get $len call $er_ui_gallery_index_by_table_string)
   (func $er_ui_gallery_selected_preview_surface_h  (result f32) f32.const 266)
   (func $er_ui_gallery_selected_preview_compact_surface_h  (result f32) f32.const 320)
   (func $er_ui_gallery_catalog_preview_h  (result f32) f32.const 38)
@@ -441,9 +441,9 @@
     local.get $field i32.const 0 i32.eq
     if i32.const 66600 local.get $index i32.add i32.load8_u return end
     local.get $field i32.const 1 i32.eq
-    if i32.const 66400 local.get $index i32.add i32.load8_u return end
+    if i32.const {{GALLERY_ITEM_COUNTS}} local.get $index i32.add i32.load8_u return end
     local.get $field i32.const 2 i32.eq
-    if i32.const 66500 local.get $index i32.add i32.load8_u return end
+    if i32.const {{GALLERY_ITEM_WIDTHS}} local.get $index i32.add i32.load8_u return end
     i32.const -1)
 
   (func $er_ui_gallery_api_wrapped_line_count_for_len  (param $value_len i32) (param $width f32) (result i32)
@@ -618,7 +618,7 @@
   (func $er_ui_gallery_preview_strategy_for_catalog_index  (param $index i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
-    i32.const 71700 i32.const 66100 local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
+    i32.const 71700 i32.const {{GALLERY_PREVIEW_KIND}} local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
 
   (func $er_ui_gallery_preview_component_kind_for_kind  (param $kind i32) (result i32)
     i32.const 71600 local.get $kind call $er_ui_gallery_preview_table_u8)
@@ -626,7 +626,7 @@
   (func $er_ui_gallery_preview_component_kind_for_catalog_index  (param $index i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
-    i32.const 71600 i32.const 66100 local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
+    i32.const 71600 i32.const {{GALLERY_PREVIEW_KIND}} local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
 
   (func $er_ui_gallery_preview_uses_control_id_for_kind  (param $kind i32) (result i32)
     i32.const 71800 local.get $kind call $er_ui_gallery_preview_table_u8)
@@ -634,7 +634,7 @@
   (func $er_ui_gallery_preview_uses_control_id_for_catalog_index  (param $index i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
-    i32.const 71800 i32.const 66100 local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
+    i32.const 71800 i32.const {{GALLERY_PREVIEW_KIND}} local.get $index i32.add i32.load8_u call $er_ui_gallery_preview_table_u8)
 
   (func $er_ui_gallery_preview_variant_count_for_kind  (param $kind i32) (result i32)
     (local $strategy i32)
@@ -648,7 +648,7 @@
     (local $kind i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const -1 return end
-    i32.const 66100 local.get $index i32.add i32.load8_u local.tee $kind call $er_ui_gallery_preview_variant_count_for_kind)
+    i32.const {{GALLERY_PREVIEW_KIND}} local.get $index i32.add i32.load8_u local.tee $kind call $er_ui_gallery_preview_variant_count_for_kind)
 
   (func $er_ui_gallery_preview_variant_gap  (result f32) f32.const 6)
 
@@ -876,4 +876,4 @@
   (func $er_ui_gallery_preview_build_basic_for_catalog_index  (param $index i32) (param $base i32) (param $cap i32) (result i32)
     local.get $index i32.const 60 i32.ge_u
     if i32.const 0 return end
-    i32.const 66100 local.get $index i32.add i32.load8_u local.get $base local.get $cap i32.const 23000 local.get $index i32.const 32 i32.mul i32.add call $er_ui_gallery_preview_build_basic)
+    i32.const {{GALLERY_PREVIEW_KIND}} local.get $index i32.add i32.load8_u local.get $base local.get $cap i32.const 23000 local.get $index i32.const 32 i32.mul i32.add call $er_ui_gallery_preview_build_basic)

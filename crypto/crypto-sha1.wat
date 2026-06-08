@@ -1,7 +1,7 @@
 ;; crypto-sha1 — SHA-1 hash (work buffer at 0x10000, 80×4 = 320 bytes)
 
   (func $m61range_ok (param $ptr i32) (param $len i32) (result i32)
-    local.get $ptr local.get $len i32.const 65536 call $range_ok)
+    local.get $ptr local.get $len i32.const 0x100000 call $range_ok)
 
   (func $m61w_addr (param $i i32) (result i32)
     i32.const 65536
@@ -116,7 +116,7 @@
   (func $m61store_be32 (param $ptr i32) (param $value i32)
     local.get $ptr local.get $value call $store_be32)
 
-  (func $sha1
+  (func $sha1 (export "sha1")
     (param $ptr i32)
     (param $len i32)
     (param $out_ptr i32)

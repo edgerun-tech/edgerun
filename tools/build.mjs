@@ -8,7 +8,7 @@ import { resolveRoot, rootPath, fileExists, ensureDir, readText, writeText, embe
 
 // ── Memory range validation & template resolution ──
 
-function parseAddress(v: string | number): number {
+function parseAddress(v) {
   if (typeof v === 'number') return v;
   if (typeof v === 'string') {
     if (v.startsWith('0x') || v.startsWith('0X')) return parseInt(v, 16);
@@ -17,18 +17,17 @@ function parseAddress(v: string | number): number {
   return 0;
 }
 
-function loadAddressTable(pkg: any): Record<string, number> {
+function loadAddressTable(pkg) {
   const ranges = pkg?.edgerun?.memory_ranges || {};
-  const table: Record<string, number> = {};
+  const table = {};
   for (const [name, r] of Object.entries(ranges)) {
-    table[name] = parseAddress((r as any).start);
+    table[name] = parseAddress(r.start);
   }
   return table;
 }
 
-function validateMemoryRanges(ranges: Record<string, { start: string | number; size: number }>): void {
-  interface Range { name: string; start: number; end: number }
-  const list: Range[] = [];
+function validateMemoryRanges(ranges) {
+  const list = [];
   for (const [name, r] of Object.entries(ranges)) {
     const start = parseAddress(r.start);
     const end = start + r.size;
@@ -44,7 +43,7 @@ function validateMemoryRanges(ranges: Record<string, { start: string | number; s
   console.log(`  ✓ memory ranges: ${list.length} entries, no overlaps`);
 }
 
-function resolveTemplates(body: string, table: Record<string, number>): string {
+function resolveTemplates(body, table) {
   let result = body;
   for (const [name, value] of Object.entries(table)) {
     const pattern = `{{${name}}}`;
@@ -56,7 +55,7 @@ function resolveTemplates(body: string, table: Record<string, number>): string {
 
 // ── Fragment concatenation ──
 
-function stripModuleWrapper(content: string): string {
+function stripModuleWrapper(content) {
   const s = content.trimStart();
   if (!s.startsWith('(module')) return content;
   let depth = 0;
@@ -71,9 +70,9 @@ function stripModuleWrapper(content: string): string {
   return inner;
 }
 
-function extractImports(content: string): string {
+function extractImports(content) {
   const lines = content.split('\n');
-  const result: string[] = [];
+  const result = [];
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trimStart();
     if (!trimmed.startsWith('(import ')) continue;
@@ -101,9 +100,9 @@ function extractImports(content: string): string {
   return result.join('\n');
 }
 
-function removeImports(content: string): string {
+function removeImports(content) {
   const lines = content.split('\n');
-  const result: string[] = [];
+  const result = [];
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trimStart();
     if (!trimmed.startsWith('(import ')) { result.push(lines[i]); continue; }
@@ -120,7 +119,7 @@ function removeImports(content: string): string {
   return result.join('\n');
 }
 
-function concatFragments(manifest: string[], rootDir: string): { body: string; imports: string; count: number } {
+function concatFragments(manifest, rootDir) {
   let body = '';
   let allImports = '';
   let count = 0;
@@ -148,8 +147,9 @@ function concatFragments(manifest: string[], rootDir: string): { body: string; i
 // the project-root edgerun.wasm). The full runtime WAT is too large
 // for the built-in parser, so it uses wasm-tools parse.
 
-function compileWat(watPath: string, wasmPath: string): boolean {
+function compileWat(watPath, wasmPath) {
   const src = readText(watPath);
+  // Use self-hosted compile for small WATs (<500KB)
   if (src.length < 500000) {
     try {
       const wasm = codecCompile(src);
@@ -158,10 +158,12 @@ function compileWat(watPath: string, wasmPath: string): boolean {
       return true;
     } catch {}
   }
+  // Full runtime: wasm-tools parse
+  console.log(`  ↻ large WAT (${(src.length / 1024).toFixed(0)} KB) — using wasm-tools parse...`);
   try {
     const r = Bun.spawnSync(['wasm-tools', 'parse', watPath, '-o', wasmPath]);
     if (r.exitCode === 0) {
-      const size = Bun.file(wasmPath).size;
+      const size = readFileSync(wasmPath).length;
       console.log(`  ✓ ${wasmPath} (${(size / 1024).toFixed(0)} KB)`);
       return true;
     }
@@ -170,40 +172,9 @@ function compileWat(watPath: string, wasmPath: string): boolean {
   return false;
 }
 
-// ── Source payload ──
-
-function buildSourcePayload(files: Record<string, string>): Buffer {
-  const entries = Object.entries(files);
-  const buf = Buffer.alloc(1024 * 1024);
-  let pos = 0;
-  pos = writeLEB128(buf, pos, entries.length);
-  for (const [name, content] of entries) {
-    const nb = Buffer.from(name, 'utf8');
-    const cb = Buffer.from(content, 'utf8');
-    pos = writeLEB128(buf, pos, nb.length);
-    nb.copy(buf, pos); pos += nb.length;
-    pos = writeLEB128(buf, pos, cb.length);
-    cb.copy(buf, pos); pos += cb.length;
-  }
-  return buf.subarray(0, pos);
-}
-
-function bytesToWatString(bytes: Buffer | Uint8Array): string {
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i];
-    if (b >= 0x20 && b <= 0x7e && b !== 0x22 && b !== 0x5c) {
-      s += String.fromCharCode(b);
-    } else {
-      s += `\\${b.toString(16).padStart(2, '0')}`;
-    }
-  }
-  return s;
-}
-
 // ── Module wrapper ──
 
-function wrapModule(body: string, options: { variant?: string; memory?: number } = {}): string {
+function wrapModule(body, options = {}) {
   const { variant = 'runtime', memory } = options;
   let result = '(module';
   // WASI imports needed by CLI code — compiled to inline syscalls by wasm2elf
@@ -233,7 +204,7 @@ const PREFIX = [
   'runtime/edgerun-core.wat',
 ];
 
-function discoverFragments(): string[] {
+function discoverFragments() {
   const ROOT = resolveRoot();
 
   const EXCLUDE_DIRS = ['node_modules', '.git', '.opencode', 'out', 'tests', 'tools'];
@@ -247,7 +218,7 @@ function discoverFragments(): string[] {
     'pipeline/stage-registry.wat',    // references non-generated stage functions excluded by -stage regex
   ]);
 
-  function isExcluded(relPath: string): boolean {
+  function isExcluded(relPath) {
     if (relPath === '' || relPath.startsWith('.')) return true;
     for (const d of EXCLUDE_DIRS) {
       if (relPath === d || relPath.startsWith(d + '/')) return true;
@@ -259,10 +230,10 @@ function discoverFragments(): string[] {
     return false;
   }
 
-  const files: string[] = [];
+  const files = [];
 
-  function walk(subdir: string): void {
-    let entries: string[];
+  function walk(subdir) {
+    let entries;
     try { entries = readdirSync(ROOT + '/' + subdir); } catch { return; }
     for (const entry of entries) {
       const relPath = subdir ? subdir + '/' + entry : entry;
@@ -278,7 +249,7 @@ function discoverFragments(): string[] {
   walk('');
 
   const prefixSet = new Set(PREFIX);
-  const result: string[] = [];
+  const result = [];
 
   for (const f of PREFIX) {
     if (fileExists(rootPath(f))) result.push(f);
@@ -298,8 +269,8 @@ function discoverFragments(): string[] {
 
 // ── gen-config ──
 
-function cmdGenConfig(): void {
-  const pkg: any = JSON.parse(readText(rootPath('package.json')));
+function cmdGenConfig() {
+  const pkg = JSON.parse(readText(rootPath('package.json')));
   const cfg = pkg.edgerun;
   const OUT = rootPath('out/gen/config.wat');
   ensureDir(rootPath('out/gen'));
@@ -311,7 +282,7 @@ function cmdGenConfig(): void {
 
   const addrs = loadAddressTable(pkg);
 
-  const lines: string[] = [';; Auto-generated by build.ts gen-config — do not edit'];
+  const lines = [';; Auto-generated by build.ts gen-config — do not edit'];
   lines.push(';; Source: package.json edgerun.{memory,data,config,globals}');
   lines.push('');
 
@@ -340,7 +311,7 @@ function cmdGenConfig(): void {
   if (cfg?.config) {
     for (const [group, entries] of Object.entries(cfg.config)) {
       lines.push(`;; ── ${group} ──`);
-      for (const [name, value] of Object.entries(entries as Record<string, number>)) {
+      for (const [name, value] of Object.entries(entries)) {
         lines.push(`(global $${name} (export "${name}") i32 (i32.const ${value}))`);
       }
       lines.push('');
@@ -361,29 +332,29 @@ function cmdGenConfig(): void {
 
   writeText(OUT, lines.join('\n') + '\n');
   let gcount = 0;
-  if (cfg?.config) gcount += Object.values(cfg.config).reduce((n: number, g: any) => n + Object.keys(g).length, 0);
+  if (cfg?.config) gcount += Object.values(cfg.config).reduce((n, g) => n + Object.keys(g).length, 0);
   if (cfg?.globals) gcount += Object.keys(cfg.globals).length;
   console.log(`✓ ${OUT} (${memPages} pages, ${gcount} globals)`);
 }
 
 // ── gen-compiler ──
 
-function loadTemplates(pkg: any): Record<string, any> {
+function loadTemplates(pkg) {
   const templates = pkg.edgerun.templates;
-  const archs: Record<string, any> = {};
+  const archs = {};
   for (const [key, tmpl] of Object.entries(templates)) {
     if (key === 'base') continue;
     const base = templates.base || {};
     const merged = { ...base, ...tmpl };
     for (const dk of ['ops', 'fc_ops', 'fd_ops']) {
-      merged[dk] = { ...(base[dk] || {}), ...(tmpl as any)[dk] || {} };
+      merged[dk] = { ...(base[dk] || {}), ...(tmpl[dk] || {}) };
     }
     archs[key] = merged;
   }
   return archs;
 }
 
-function buildOpTable(ops: Record<string, string>, prefix: string, suffix: string): string {
+function buildOpTable(ops, prefix, suffix) {
   const entries = Object.entries(ops).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
   return entries.map(([hexcode, opname]) => {
     const funcname = `${prefix}${opname}${suffix}`;
@@ -394,7 +365,7 @@ function buildOpTable(ops: Record<string, string>, prefix: string, suffix: strin
   }).join('\n');
 }
 
-function buildSubTable(ops: Record<string, string>, prefix: string, suffix: string, label: string): string {
+function buildSubTable(ops, prefix, suffix, label) {
   const entries = Object.entries(ops).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
   return entries.map(([hexcode, opname]) => {
     const funcname = `${prefix}${opname}${suffix}`;
@@ -402,7 +373,7 @@ function buildSubTable(ops: Record<string, string>, prefix: string, suffix: stri
   }).join('\n');
 }
 
-function generateJIT(archName: string, pkg: any, compilerPath: string): string {
+function generateJIT(archName, pkg, compilerPath) {
   const archs = loadTemplates(pkg);
   const tmpl = archs[archName];
   if (!tmpl) { console.error(`Unknown arch: ${archName}`); process.exit(1); }
@@ -415,7 +386,7 @@ function generateJIT(archName: string, pkg: any, compilerPath: string): string {
   const opTable = buildOpTable(tmpl.ops, opPrefix, opSuffix);
   const fcTable = buildSubTable(tmpl.fc_ops || {}, opPrefix, opSuffix, 'fc_done');
   const fdTable = buildSubTable(tmpl.fd_ops || {}, simdPrefix, simdSuffix, 'fd_done');
-  const subs: Record<string, string> = {
+  const subs = {
     '{SUFFIX}': `_${arch}`,
     '{ARCH}': arch,
     '{OP_TABLE}': opTable,
@@ -441,7 +412,7 @@ function generateJIT(archName: string, pkg: any, compilerPath: string): string {
   return wat;
 }
 
-function assembleJIT(arch: string, pkg: any, dir: string): void {
+function assembleJIT(arch, pkg, dir) {
   const tmpl = loadTemplates(pkg)[arch];
   if (!tmpl) { console.error(`Unknown arch: ${arch}`); process.exit(1); }
   const dispatch = generateJIT(arch, pkg, [dir, 'compiler.wat'].join('/'));
@@ -477,7 +448,7 @@ function assembleJIT(arch: string, pkg: any, dir: string): void {
   console.log(`Assembled: ${outPath} (${full.length} bytes)`);
 }
 
-function cmdGenCompiler(args: string[]): void {
+function cmdGenCompiler(args) {
   const pkg = JSON.parse(readText(rootPath('package.json')));
   const dir = rootPath('compiler');
   const compiler = [dir, 'compiler.wat'].join('/');
@@ -495,7 +466,7 @@ function cmdGenCompiler(args: string[]): void {
   }
 
   if (args.length < 1) {
-    console.error('Usage: build.ts gen-compiler [--assemble <arch>|all]');
+    console.error('Usage: build.mjs gen-compiler [--assemble <arch>|all]');
     process.exit(1);
   }
   const arch = args[0].replace(/-/g, '_');
@@ -504,7 +475,7 @@ function cmdGenCompiler(args: string[]): void {
 
 // ── gen-stages ──
 
-function genCfgReads(cfg_reads: any[] | undefined): { locals: string; setup: string } {
+function genCfgReads(cfg_reads) {
   if (!cfg_reads || !cfg_reads.length) return { locals: '', setup: '' };
   const locs = cfg_reads.map(c =>
     `    (local \$${c.name} ${c.type || 'i32'})`
@@ -520,7 +491,7 @@ function genCfgReads(cfg_reads: any[] | undefined): { locals: string; setup: str
   return { locals: locs, setup };
 }
 
-function wrapStage(slot: number, name: string, locals: string, read_check: string, body: string, out_write: string, return_expr: string): string {
+function wrapStage(slot, name, locals, read_check, body, out_write, return_expr) {
   const hasRead = locals.includes('(local $read ');
   return `;; Process ${name} Stage — slot ${slot}
   (func $process_${name} (export "process_${name}")
@@ -534,8 +505,8 @@ function wrapStage(slot: number, name: string, locals: string, read_check: strin
     ${return_expr})`;
 }
 
-function makeStage(st: any): string {
-  const patterns: Record<string, (st: any) => string> = {
+function makeStage(st) {
+  const patterns = {
     scan(st) {
       const { slot, name, fn, out_size, min_read, args, out_buf, checks, cfg_reads, extra_locals, prep, fn_ret_i64 } = st;
       const mr = min_read || 1;
@@ -546,7 +517,7 @@ function makeStage(st: any): string {
       const ob = out_buf || 'local.get $scratch';
       const cfg = genCfgReads(cfg_reads);
       const xtra = extra_locals ? '\n    ' + extra_locals.join('\n    ') : '';
-      const prep_lines = prep ? prep.map((l: string) => `    ${l}`).join('\n') + '\n' : '';
+      const prep_lines = prep ? prep.map(l => `    ${l}`).join('\n') + '\n' : '';
       const locals = fn_ret_i64
         ? `(local $result i64)${cfg.locals}${xtra}`
         : `(local $status i32)${cfg.locals}${xtra}`;
@@ -574,7 +545,7 @@ function makeStage(st: any): string {
       const { slot, name, fn, out_buf, args, prep, cfg_reads, extra_locals } = st;
       const ob = out_buf || 'local.get $scratch';
       const a = (args || ['global.get $SCRATCH_BUF', 'local.get $read', 'local.get $scratch', '(i32.sub (local.get $scap) (i32.const 8))']).join(') (');
-      const prep_lines = prep ? prep.map((l: string) => `    ${l}`).join('\n') + '\n' : '';
+      const prep_lines = prep ? prep.map(l => `    ${l}`).join('\n') + '\n' : '';
       const cfg = genCfgReads(cfg_reads);
       const xtra = extra_locals ? '\n    ' + extra_locals.join('\n    ') : '';
       return wrapStage(slot, name,
@@ -612,23 +583,23 @@ function makeStage(st: any): string {
         `(drop (call $pipe_write (local.get $output) (${ob}) (local.get $out_len)))`,
         `local.get $out_len`);
     },
-    raw(st: any) { return st.body; },
-    custom(st: any) { return st.body; },
+    raw(st) { return st.body; },
+    custom(st) { return st.body; },
   };
-  const pattern = st.pattern as string;
+  const pattern = st.pattern;
   if (!patterns[pattern]) { console.error(`Unknown pattern "${pattern}" for ${st.name}, skipping`); return ''; }
   return patterns[pattern](st);
 }
 
-function cmdGenStages(args: string[]): void {
+function cmdGenStages(args) {
   const pkg = JSON.parse(readText(rootPath('package.json')));
   const REGISTRY = pkg.edgerun.registry;
 
   let header = ';; ── Auto-generated pipeline stages ──\n';
-  header += ';; Generated by build.ts gen-stages from edgerun.registry in package.json\n';
-  header += ';; DO NOT EDIT — regenerate with: bun build.ts gen-stages\n\n';
+  header += ';; Generated by build.mjs gen-stages from edgerun.registry in package.json\n';
+  header += ';; DO NOT EDIT — regenerate with: bun build.mjs gen-stages\n\n';
 
-  const bodies: string[] = [];
+  const bodies = [];
   for (const st of REGISTRY) {
     if (st.generated === false) continue;
     const body = makeStage(st);
@@ -650,30 +621,28 @@ function cmdGenStages(args: string[]): void {
       const fname = st.name.replace(/_/g, '-');
       writeText([splitDir, `${fname}-stage.wat`].join('/'), '\n' + body + '\n');
     }
-    const c = REGISTRY.filter((s: any) => s.generated !== false).length;
+    const c = REGISTRY.filter(s => s.generated !== false).length;
     console.log(`Generated ${c} individual stage files (legacy mode)`);
   }
 }
 
-// ── build (standard) ──
-
 // ── build (unified — all backends) ──
 
-function stripMultiplexer(content: string): string {
+function stripMultiplexer(content) {
   const marker = ';; Runtime Backend Dispatch';
   const idx = content.indexOf(marker);
   if (idx === -1) return content;
   return content.slice(0, idx).trimEnd() + '\n';
 }
 
-function genTemplateStubs(dispatchPaths: string[], fragments: string[], root: string): string[] {
+function genTemplateStubs(dispatchPaths, fragments, root) {
   // Collect all user-defined function CALLS from dispatch files
-  const called = new Map<string, number>();
+  const called = new Map();
   const callRe = /\(call\s+\$([a-zA-Z_][a-zA-Z0-9_]*)/g;
   for (const dp of dispatchPaths) {
     const content = readText(root + '/' + dp);
     let m;
-    while ((m = callRe.exec(content)!) !== null) {
+    while ((m = callRe.exec(content)) !== null) {
       const name = m[1];
       // Count how many args are passed at this call site
       const after = content.slice(m.index + m[0].length);
@@ -700,39 +669,39 @@ function genTemplateStubs(dispatchPaths: string[], fragments: string[], root: st
   if (called.size === 0) return [];
 
   // Collect all function DEFINITIONS from dispatch files and fragment source files
-  const defined = new Set<string>();
+  const defined = new Set();
   const funcRe = /\(func\s+\$([a-zA-Z_][a-zA-Z0-9_]*)/g;
   for (const dp of dispatchPaths) {
     const content = readText(root + '/' + dp);
     let m;
-    while ((m = funcRe.exec(content)!) !== null) defined.add(m[1]);
+    while ((m = funcRe.exec(content)) !== null) defined.add(m[1]);
   }
   for (const frag of fragments) {
     const content = readText(root + '/' + frag);
     let m;
-    while ((m = funcRe.exec(content)!) !== null) defined.add(m[1]);
+    while ((m = funcRe.exec(content)) !== null) defined.add(m[1]);
   }
 
   // Also collect imported functions (no stubs needed)
-  const imported = new Set<string>();
+  const imported = new Set();
   const importRe = /\(import[^)]+\(func\s+\$([a-zA-Z_][a-zA-Z0-9_]*)\)/g;
   for (const frag of fragments) {
     const content = readText(root + '/' + frag);
     let m;
-    while ((m = importRe.exec(content)!) !== null) imported.add(m[1]);
+    while ((m = importRe.exec(content)) !== null) imported.add(m[1]);
   }
 
   // Generate stubs for called-but-not-defined-and-not-imported functions
-  const missing: string[] = [];
+  const missing = [];
   for (const [name, argCount] of [...called].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (!defined.has(name) && !imported.has(name)) missing.push(name);
   }
   if (missing.length === 0) return [];
 
-  const lines: string[] = [
+  const lines = [
     ';; Auto-generated stubs for missing functions',
     ';; These trap at runtime — replace with real implementations',
-    ';; Generated by build.ts cmdBuild — do not edit',
+    ';; Generated by build.mjs cmdBuild — do not edit',
     '',
   ];
   for (const name of missing) {
@@ -746,8 +715,8 @@ function genTemplateStubs(dispatchPaths: string[], fragments: string[], root: st
   return ['out/gen/template-stubs.wat'];
 }
 
-function embedSource(wasmPath: string, fragmentPaths: string[], rootDir: string): void {
-  const files: Array<{ name: string; content: string }> = [];
+function embedSource(wasmPath, fragmentPaths, rootDir) {
+  const files = [];
   for (const path of fragmentPaths) {
     if (path.startsWith('out/')) continue;
     const fullPath = rootPath(path);
@@ -778,7 +747,7 @@ function embedSource(wasmPath: string, fragmentPaths: string[], rootDir: string)
   console.log(`  ✓ embedded source (${files.length} files, ${(size / 1024).toFixed(0)} KB, +${added} bytes)`);
 }
 
-function cmdBuild(args: string[]): void {
+function cmdBuild(args) {
   const ROOT = resolveRoot();
 
   cmdGenConfig();
@@ -790,7 +759,7 @@ function cmdBuild(args: string[]): void {
   ensureDir(genDir);
 
   const backends = ['x86_64', 'aarch64', 'arm32'];
-  const dispatchPaths: string[] = [];
+  const dispatchPaths = [];
 
   for (const arch of backends) {
     const dispatch = generateJIT(arch, pkg, compilerPath);
@@ -840,7 +809,7 @@ function cmdBuild(args: string[]): void {
 
 // ── build-er-tools ──
 
-function cmdBuildErTools(): void {
+function cmdBuildErTools() {
   const ROOT = resolveRoot();
   const OUT_DIR = resolve(ROOT, 'out', 'tools');
   ensureDir(OUT_DIR);
@@ -856,12 +825,12 @@ function cmdBuildErTools(): void {
 
 // ── build:cli ──
 
-function cmdBuildCli(args: string[]): void {
+function cmdBuildCli(args) {
   const ROOT = resolveRoot();
   const WASM2ELF = rootPath('compiler', 'tools', 'wasm2elf.mjs');
 
   function showUsage() {
-    const msg = `Usage: bun build.ts build-cli <user-fragment.wat> [options]
+    const msg = `Usage: bun build.mjs build-cli <user-fragment.wat> [options]
 
 Options:
   -o, --output <file>    Output ELF path (default: <name>.elf)
@@ -870,7 +839,7 @@ Options:
   -h, --help             Show this help
 
 Example:
-  bun build.ts build-cli cli/examples/hello-app.wat -o hello.elf
+  bun build.mjs build-cli cli/examples/hello-app.wat -o hello.elf
   ./hello.elf
   `;
     console.log(msg);
@@ -887,7 +856,7 @@ Example:
 
   const oi = args.indexOf('-o');
   const oi2 = args.indexOf('--output');
-  let outputPath: string;
+  let outputPath;
   if (oi !== -1 && oi + 1 < args.length) outputPath = resolve(args[oi + 1]);
   else if (oi2 !== -1 && oi2 + 1 < args.length) outputPath = resolve(args[oi2 + 1]);
   else {
@@ -899,7 +868,7 @@ Example:
   const withMemory = args.includes('--with-memory');
 
   const cliDir = rootPath('cli');
-  const LIBRARY: string[] = [
+  const LIBRARY = [
     resolve(cliDir, 'core.wat'),
     resolve(cliDir, 'io.wat'),
   ];
@@ -943,7 +912,7 @@ Example:
 // Main
 // ══════════════════════════════════════════════════════════════════════════
 
-function main(): void {
+function main() {
   const cmd = Bun.argv[2] || 'help';
   const args = Bun.argv.slice(3);
 
@@ -975,12 +944,12 @@ function main(): void {
       console.log(`
 EdgeRun Build System — consolidated build tool
 
-Usage: bun tools/build.ts <command> [options]
+Usage: bun tools/build.mjs <command> [options]
 
 Commands:
   gen-config              Generate config.wat (globals + memory + data)
   gen-compiler [opts]     Generate JIT compiler files (out/gen/jit-*.wat)
-  gen-stages [--split]    Generate pipeline stages (out/pipeline/pipeline-stages.wat)
+  gen-stages [--split]    Generate pipeline stages (out/gen/pipeline-stages.wat)
   build [opts]            Build with all 3 JIT backends (out/edgerun.wat + .wasm)
   build-cli <file> [opts] Build CLI ELF from a WAT fragment
   build-tool              Build er-tools WASM module (out/tools/er-tools.wasm)

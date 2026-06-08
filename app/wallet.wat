@@ -388,133 +388,133 @@
         (i32.const 1))
       (then
         (return
-          (i32.const 4096))))
+          (i32.const {{WALLET_ORDER_STATUSES}}))))
     (if $I1
       (i32.eq
         (local.get $p0)
         (i32.const 2))
       (then
         (return
-          (i32.const 4102))))
+          (i32.const 16390))))
     (if $I2
       (i32.eq
         (local.get $p0)
         (i32.const 3))
       (then
         (return
-          (i32.const 4115))))
+          (i32.const 16403))))
     (if $I3
       (i32.eq
         (local.get $p0)
         (i32.const 4))
       (then
         (return
-          (i32.const 4122))))
+          (i32.const 16410))))
     (if $I4
       (i32.eq
         (local.get $p0)
         (i32.const 5))
       (then
         (return
-          (i32.const 4138))))
+          (i32.const 16426))))
     (if $I5
       (i32.eq
         (local.get $p0)
         (i32.const 6))
       (then
         (return
-          (i32.const 4150))))
+          (i32.const 16438))))
     (if $I6
       (i32.eq
         (local.get $p0)
         (i32.const 7))
       (then
         (return
-          (i32.const 4167))))
+          (i32.const 16455))))
     (if $I7
       (i32.eq
         (local.get $p0)
         (i32.const 8))
       (then
         (return
-          (i32.const 4177))))
+          (i32.const 16465))))
     (if $I8
       (i32.eq
         (local.get $p0)
         (i32.const 9))
       (then
         (return
-          (i32.const 4184))))
+          (i32.const 16472))))
     (if $I9
       (i32.eq
         (local.get $p0)
         (i32.const 10))
       (then
         (return
-          (i32.const 4193))))
+          (i32.const 16481))))
     (if $I10
       (i32.eq
         (local.get $p0)
         (i32.const 11))
       (then
         (return
-          (i32.const 4208))))
+          (i32.const 16496))))
     (if $I11
       (i32.eq
         (local.get $p0)
         (i32.const 12))
       (then
         (return
-          (i32.const 4223))))
+          (i32.const 16511))))
     (if $I12
       (i32.eq
         (local.get $p0)
         (i32.const 13))
       (then
         (return
-          (i32.const 4232))))
+          (i32.const 16520))))
     (if $I13
       (i32.eq
         (local.get $p0)
         (i32.const 14))
       (then
         (return
-          (i32.const 4240))))
+          (i32.const 16528))))
     (if $I14
       (i32.eq
         (local.get $p0)
         (i32.const 15))
       (then
         (return
-          (i32.const 4247))))
+          (i32.const 16535))))
     (if $I15
       (i32.eq
         (local.get $p0)
         (i32.const 16))
       (then
         (return
-          (i32.const 4253))))
+          (i32.const 16541))))
     (if $I16
       (i32.eq
         (local.get $p0)
         (i32.const 17))
       (then
         (return
-          (i32.const 4261))))
+          (i32.const 16549))))
     (if $I17
       (i32.eq
         (local.get $p0)
         (i32.const 18))
       (then
         (return
-          (i32.const 4268))))
+          (i32.const 16556))))
     (if $I18
       (i32.eq
         (local.get $p0)
         (i32.const 19))
       (then
         (return
-          (i32.const 4276))))
+          (i32.const 16564))))
     (i32.const 0))
   (func $f7 (type $t1) (param $p0 i32) (result i32)
     (if $I0
@@ -1835,4 +1835,4 @@
     (if (i32.eqz (local.get $all_hex)) (then (return (i32.const 2))))
     i32.const 0)
 
-  (data $d0 (i32.const 4096) "QUOTEDQUOTE_EXPIREDCREATEDAWAITING_DEPOSITDEPOSIT_SEENDEPOSIT_CONFIRMEDEXCHANGINGSENDINGCOMPLETEDACTION_REQUIREDREFUND_REQUIREDREFUNDINGREFUNDEDEXPIREDFAILEDREJECTEDON_HOLDCANCELEDPARTIAL_DEPOSITS")
+  (data $d0 (i32.const {{WALLET_ORDER_STATUSES}}) "QUOTEDQUOTE_EXPIREDCREATEDAWAITING_DEPOSITDEPOSIT_SEENDEPOSIT_CONFIRMEDEXCHANGINGSENDINGCOMPLETEDACTION_REQUIREDREFUND_REQUIREDREFUNDINGREFUNDEDEXPIREDFAILEDREJECTEDON_HOLDCANCELEDPARTIAL_DEPOSITS")

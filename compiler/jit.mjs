@@ -8,11 +8,38 @@ let _inst = null;
 let _mem = null;
 let _dv = null;
 
+function stubSyscall(name) {
+  return (...args) => { throw Error(`syscall ${name} not available in JIT mode`); };
+}
+
 function inst() {
   if (!_inst) {
     const wasm = readFileSync(resolve(__dir, '..', 'out', 'edgerun.wasm'));
     const mod = new WebAssembly.Module(wasm);
-    _inst = new WebAssembly.Instance(mod);
+    const importObj = {
+      'wasi_snapshot_preview1': {
+        fd_write: stubSyscall('fd_write'),
+        fd_read: stubSyscall('fd_read'),
+        proc_exit: stubSyscall('proc_exit'),
+        args_sizes_get: stubSyscall('args_sizes_get'),
+        args_get: stubSyscall('args_get'),
+      },
+      'linux': {
+        read: stubSyscall('read'),
+        write: stubSyscall('write'),
+        open: stubSyscall('open'),
+        close: stubSyscall('close'),
+        poll: stubSyscall('poll'),
+        mmap: stubSyscall('mmap'),
+        munmap: stubSyscall('munmap'),
+        socket: stubSyscall('socket'),
+        connect: stubSyscall('connect'),
+        sendmsg: stubSyscall('sendmsg'),
+        memfd_create: stubSyscall('memfd_create'),
+        ftruncate: stubSyscall('ftruncate'),
+      }
+    };
+    _inst = new WebAssembly.Instance(mod, importObj);
     _mem = new Uint8Array(_inst.exports.memory.buffer);
     _dv = new DataView(_inst.exports.memory.buffer);
   }

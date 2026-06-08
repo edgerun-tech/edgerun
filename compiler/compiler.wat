@@ -4,7 +4,7 @@
   ;; GENERATOR TEMPLATE — per-arch KV templates expand into dispatch tables.
   ;;
   ;; Usage:
-  ;;   bun compiler/tools/gen_compiler.js templates/x86_64.json > out/gen/jit-dispatch-x86-64.wat
+  ;;   bun tools/build.ts gen-compiler x86_64 > out/gen/jit-dispatch-x86-64.wat
   ;; ═════════════════════════════════════════════════════════════════════
 
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Pre-compute x86-64 encoding pool from package.json
 // Pool: flat Uint8Array, concatenated per opcode as: [variant_0_bytes..., variant_1_bytes..., ...]
 // Meta: Int32Array[4*256] → [poolByteOffset, variantByteLen, immSlotOffset, immSlotSize]

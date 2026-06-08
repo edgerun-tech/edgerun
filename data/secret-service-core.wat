@@ -8,9 +8,9 @@
   ;; path: 1 service root, 2 collection, 3 item, 4 session, 5 prompt root.
   ;; status/error values are intentionally small integers for host ABI use.
 
-  (data (i32.const 4096) "/org/freedesktop/secrets")
-  (data (i32.const 4128) "/org/freedesktop/secrets/collections/")
-  (data (i32.const 4176) "/org/freedesktop/secrets/session/")
+  (data (i32.const {{DBUS_SECRETS_PATH}}) "/org/freedesktop/secrets")
+  (data (i32.const {{DBUS_COLLECTIONS_PATH}}) "/org/freedesktop/secrets/collections/")
+  (data (i32.const {{DBUS_SESSION_PATH}}) "/org/freedesktop/secrets/session/")
 
   (func $fnv (param $ptr i32) (param $len i32) (result i32)
     (local $i i32)
@@ -118,16 +118,16 @@
     (if
       (i32.and
         (i32.eq (local.get $len) (i32.const 24))
-        (call $m163mem_eq (local.get $ptr) (i32.const 4096) (i32.const 24)))
+        (call $m163mem_eq (local.get $ptr) (i32.const {{DBUS_SECRETS_PATH}}) (i32.const 24)))
       (then (return (i32.const 1))))
-    (if (call $starts_with (local.get $ptr) (local.get $len) (i32.const 4176) (i32.const 33))
+    (if (call $starts_with (local.get $ptr) (local.get $len) (i32.const {{DBUS_SESSION_PATH}}) (i32.const 33))
       (then
         (local.set $rest_ptr (i32.add (local.get $ptr) (i32.const 33)))
         (local.set $rest_len (i32.sub (local.get $len) (i32.const 33)))
         (if (call $secret_session_id_valid (local.get $rest_ptr) (local.get $rest_len))
           (then (return (i32.const 4))))
         (return (i32.const 0))))
-    (if (call $starts_with (local.get $ptr) (local.get $len) (i32.const 4128) (i32.const 37))
+    (if (call $starts_with (local.get $ptr) (local.get $len) (i32.const {{DBUS_COLLECTIONS_PATH}}) (i32.const 37))
       (then
         (local.set $rest_ptr (i32.add (local.get $ptr) (i32.const 37)))
         (local.set $rest_len (i32.sub (local.get $len) (i32.const 37)))

@@ -1056,7 +1056,7 @@
     (if (call $wat_match_kw (local.get $pos) (i32.const 0x8F170) (i32.const 2))  ;; "by"
       (then
         (local.set $pos (i32.add (local.get $pos) (i32.const 2)))
-        (if (call $wat_read_kw (local.get $pos)) (then (return local.get $pos)))
+        (if (call $wat_read_kw (local.get $pos)) (then (return (local.get $pos))))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
       )
     )
@@ -1071,7 +1071,7 @@
     (drop (call $er_skip_ws (local.get $pos)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     ;; Read clock name
-    (if (call $wat_read_kw (local.get $pos)) (then (return local.get $pos)))
+    (if (call $wat_read_kw (local.get $pos)) (then (return (local.get $pos))))
     (local.set $name_off (i32.load (global.get $OFF_SCRATCH0)))
     (local.set $name_len (i32.load (global.get $OFF_SCRATCH1)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
@@ -1084,7 +1084,7 @@
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x3D))  ;; =
       (then
         (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
-        (if (call $wat_read_kw (local.get $pos)) (then (return local.get $pos)))
+        (if (call $wat_read_kw (local.get $pos)) (then (return (local.get $pos))))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
       )
     )
@@ -1104,7 +1104,7 @@
     (drop (call $er_skip_ws (local.get $pos)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     ;; Read object name
-    (if (call $wat_read_kw (local.get $pos)) (then (return local.get $pos)))
+    (if (call $wat_read_kw (local.get $pos)) (then (return (local.get $pos))))
     (local.set $kw_off (i32.load (global.get $OFF_SCRATCH0)))
     (local.set $kw_len (i32.load (global.get $OFF_SCRATCH1)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
@@ -1118,7 +1118,7 @@
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x3A))  ;; :
       (then
         (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
-        (if (call $wat_read_kw (local.get $pos)) (then (return local.get $pos)))
+        (if (call $wat_read_kw (local.get $pos)) (then (return (local.get $pos))))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
       )
     )
@@ -1127,7 +1127,7 @@
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x40))  ;; @
       (then
-        (if (call $er_read_annotation (local.get $pos)) (then (return local.get $pos)))
+        (if (call $er_read_annotation (local.get $pos)) (then (return (local.get $pos))))
         (local.set $anno_off (i32.load (global.get $OFF_SCRATCH0)))
         (local.set $anno_len (i32.load (global.get $OFF_SCRATCH1)))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
@@ -1178,7 +1178,7 @@
     (drop (call $er_skip_ws (local.get $pos)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     ;; Read name
-    (if (call $wat_read_kw (local.get $pos)) (then (return local.get $pos)))
+    (if (call $wat_read_kw (local.get $pos)) (then (return (local.get $pos))))
     (local.set $name_off (i32.load (global.get $OFF_SCRATCH0)))
     (local.set $name_len (i32.load (global.get $OFF_SCRATCH1)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
@@ -1192,7 +1192,7 @@
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x3A))  ;; :
       (then
         (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
-        (if (call $wat_read_kw (local.get $pos)) (then (return local.get $pos)))
+        (if (call $wat_read_kw (local.get $pos)) (then (return (local.get $pos))))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
       )
     )
@@ -1201,7 +1201,7 @@
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x40))
       (then
-        (if (call $er_read_annotation (local.get $pos)) (then (return local.get $pos)))
+        (if (call $er_read_annotation (local.get $pos)) (then (return (local.get $pos))))
         (local.set $anno_off (i32.load (global.get $OFF_SCRATCH0)))
         (local.set $anno_len (i32.load (global.get $OFF_SCRATCH1)))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
@@ -1244,7 +1244,7 @@
     (local $b i32)
     ;; Expect '{'
     (if (i32.ne (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x7B))
-      (then (return local.get $pos))  ;; no body
+      (then (return (local.get $pos)))  ;; no body
     )
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))  ;; skip {
     (block $done
@@ -1303,7 +1303,7 @@
     (local $group_off i32) (local $group_len i32)
     (local $pos2 i32) (local $kw_off i32) (local $kw_len i32)
     (if (i32.ne (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x7B))
-      (then (return local.get $pos))
+      (then (return (local.get $pos)))
     )
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
     (block $done
@@ -1387,7 +1387,7 @@
     (local $cfg i32) (local $res_off i32) (local $res_len i32)
     (local $pol_off i32) (local $pol_len i32)
     (if (i32.ne (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x7B))
-      (then (return local.get $pos))
+      (then (return (local.get $pos)))
     )
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
     (block $done
@@ -1448,7 +1448,7 @@
   (func $er_parse_gate_body (param $g i32) (param $node i32) (param $pos i32) (result i32)
     (local $cfg i32) (local $cond_off i32) (local $cond_len i32)
     (if (i32.ne (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x7B))
-      (then (return local.get $pos))
+      (then (return (local.get $pos)))
     )
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
     ;; pass if EXPR
@@ -1588,7 +1588,7 @@
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x40))
       (then
-        (if (call $er_read_annotation (local.get $pos)) (then (return local.get $pos)))
+        (if (call $er_read_annotation (local.get $pos)) (then (return (local.get $pos))))
         (local.set $anno_off (i32.load (global.get $OFF_SCRATCH0)))
         (local.set $anno_len (i32.load (global.get $OFF_SCRATCH1)))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
@@ -1600,7 +1600,7 @@
     (drop (call $er_skip_ws (local.get $pos)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     (if (i32.ne (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x7B))
-      (then (return local.get $pos))  ;; no body
+      (then (return (local.get $pos)))  ;; no body
     )
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))  ;; skip {
     (block $body_done
@@ -1733,7 +1733,7 @@
     (drop (call $er_skip_ws (local.get $pos)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     (if (i32.ne (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x7B))
-      (then (return local.get $pos))  ;; no body, ok
+      (then (return (local.get $pos)))  ;; no body, ok
     )
     (local.set $pos (i32.add (local.get $pos) (i32.const 1)))  ;; skip {
     (block $body_done
@@ -1791,7 +1791,7 @@
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x40))
       (then
-        (if (call $er_read_annotation (local.get $pos)) (then (return local.get $pos)))
+        (if (call $er_read_annotation (local.get $pos)) (then (return (local.get $pos))))
         (local.set $anno_off (i32.load (global.get $OFF_SCRATCH0)))
         (local.set $anno_len (i32.load (global.get $OFF_SCRATCH1)))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
@@ -1830,7 +1830,7 @@
     (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
     (if (i32.eq (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))) (i32.const 0x40))
       (then
-        (if (call $er_read_annotation (local.get $pos)) (then (return local.get $pos)))
+        (if (call $er_read_annotation (local.get $pos)) (then (return (local.get $pos))))
         (local.set $anno_off (i32.load (global.get $OFF_SCRATCH0)))
         (local.set $anno_len (i32.load (global.get $OFF_SCRATCH1)))
         (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))

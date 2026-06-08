@@ -3,26 +3,22 @@
   "private": true,
   "scripts": {
     "all": "bun run gen && bun run build",
-    "gen": "bun tools/build.ts gen-compiler --assemble all && bun tools/build.ts gen-compiler x86_64 > out/gen/jit-dispatch-x86-64.wat && bun tools/build.ts gen-compiler aarch64 > out/gen/jit-dispatch-aarch64.wat && bun tools/build.ts gen-compiler arm32 > out/gen/jit-dispatch-arm32.wat",
-    "gen-config": "bun tools/build.ts gen-config",
-    "pipeline-stages": "bun tools/build.ts gen-stages",
-    "build": "bun run gen-config && bun run pipeline-stages && bun tools/build.ts build",
-    "build:full": "bun run gen && bun run gen-config && bun run build:ui && bun run pipeline-stages && bun tools/build.ts build-full",
-    "build:ui": "bun ui/build_wat.mjs",
-    "build:cli": "bun tools/build.ts build-cli",
-    "build:tool": "bun tools/build.ts build-tool",
-    "clean": "rm -rf out/"
+    "gen-config": "bun tools/build.mjs gen-config",
+    "gen": "bun run gen-config && bun tools/build.mjs gen-compiler --assemble all && bun tools/build.mjs gen-compiler x86_64 > out/gen/jit-dispatch-x86-64.wat && bun tools/build.mjs gen-compiler aarch64 > out/gen/jit-dispatch-aarch64.wat && bun tools/build.mjs gen-compiler arm32 > out/gen/jit-dispatch-arm32.wat",
+    "pipeline-stages": "bun tools/build.mjs gen-stages",
+    "build": "bun tools/build.mjs build",
+    "build:full": "bun run gen && bun tools/build.mjs build",
+    "build:cli": "bun tools/build.mjs build-cli",
+    "build:tool": "bun tools/build.mjs build-tool",
+    "clean": "rm -rf out/",
+    "test": "bun run tests/test-wasm.mjs",
+    "test:jit": "bun run tools/test-jit.mjs",
+    "test:all": "bun run test && bun run test:jit"
   },
   "edgerun": {
     "manifest": [
       {
-        "path": "runtime/memory.wat"
-      },
-      {
-        "path": "runtime/memory-map.wat"
-      },
-      {
-        "path": "out/gen/config-constants.wat"
+        "path": "out/gen/config.wat"
       },
       {
         "path": "runtime/edgerun-core.wat"
@@ -83,15 +79,6 @@
       },
       {
         "path": "pipeline/edgerun-exec-stage.wat"
-      },
-      {
-        "path": "compiler/base-x86-64.wat",
-        "backends": [
-          "x86_64"
-        ],
-        "builds": [
-          "full"
-        ]
       },
       {
         "path": "compiler/emit-core.wat"
@@ -305,7 +292,7 @@
         "path": "pipeline/sdk-seed-shape32-stage.wat"
       },
       {
-        "path": "pipeline/varint-encode-stage.wat"
+        "path": "pipeline/varint-stage.wat"
       },
       {
         "path": "pipeline/tls-record-header-encode-stage.wat"
@@ -372,9 +359,6 @@
       },
       {
         "path": "codec/model.wat"
-      },
-      {
-        "path": "out/ui/ui_framework.wat"
       },
       {
         "path": "app/oci.wat"
@@ -564,7 +548,7 @@
         ]
       },
       {
-        "path": "out/pipeline/pipeline-stages.wat",
+        "path": "out/gen/pipeline-stages.wat",
         "builds": [
           "full"
         ]
@@ -604,6 +588,249 @@
         "builds": [
           "full"
         ]
+      },
+      {
+        "path": "app/wayland-client.wat"
+      },
+      {
+        "path": "cli/args.wat"
+      },
+      {
+        "path": "cli/core.wat"
+      },
+      {
+        "path": "cli/io.wat"
+      },
+      {
+        "path": "cli/memory.wat"
+      },
+      {
+        "path": "crypto/crypto-aes-sbox-data.wat"
+      },
+      {
+        "path": "device/ble-uart-service.wat"
+      },
+      {
+        "path": "device/bt-spp-host.wat"
+      },
+      {
+        "path": "device/device-types-core.wat"
+      },
+      {
+        "path": "device/efi-bt-core.wat"
+      },
+      {
+        "path": "device/esp32s3-platform-map.wat"
+      },
+      {
+        "path": "device/linux-adapter-core.wat"
+      },
+      {
+        "path": "device/linux-machine-inventory.wat"
+      },
+      {
+        "path": "device/node-hardware-core.wat"
+      },
+      {
+        "path": "device/platform-core.wat"
+      },
+      {
+        "path": "device/tcl-bridge-esp32s3-core.wat"
+      },
+      {
+        "path": "device/tpm-identity-core.wat"
+      },
+      {
+        "path": "device/unikernel-event-core.wat"
+      },
+      {
+        "path": "device/unit-usb-bridge-core.wat"
+      },
+      {
+        "path": "device/virtio-core.wat"
+      },
+      {
+        "path": "net/bt-stdio-frame-codec.wat"
+      },
+      {
+        "path": "net/mail-protocol-state.wat"
+      },
+      {
+        "path": "net/protocol-core-validation.wat"
+      },
+      {
+        "path": "net/protocols-block-transfer.wat"
+      },
+      {
+        "path": "net/session-core.wat"
+      },
+      {
+        "path": "net/spp-frame-codec.wat"
+      },
+      {
+        "path": "pipeline/edgerun-compile-stage.wat"
+      },
+      {
+        "path": "pipeline/hash-stage.wat"
+      },
+      {
+        "path": "pipeline/wasm-call-stage.wat"
+      },
+      {
+        "path": "pipeline/wasm-detect-stage.wat"
+      },
+      {
+        "path": "pipeline/wasm-load-stage.wat"
+      },
+      {
+        "path": "system/async-state-core.wat"
+      },
+      {
+        "path": "system/bump-alloc-core.wat"
+      },
+      {
+        "path": "system/byte-layout-core.wat"
+      },
+      {
+        "path": "system/codegen-annotation-core.wat"
+      },
+      {
+        "path": "system/collection-core-state.wat"
+      },
+      {
+        "path": "system/compat-surface-core.wat"
+      },
+      {
+        "path": "system/compositor-core.wat"
+      },
+      {
+        "path": "system/event-loop-core.wat"
+      },
+      {
+        "path": "system/ffi-bridge-core.wat"
+      },
+      {
+        "path": "system/fs-walk-core.wat"
+      },
+      {
+        "path": "system/host-glue-core.wat"
+      },
+      {
+        "path": "system/js-runtime-core.wat"
+      },
+      {
+        "path": "system/log-api-core.wat"
+      },
+      {
+        "path": "system/log-telemetry-core.wat"
+      },
+      {
+        "path": "system/method-signature-core.wat"
+      },
+      {
+        "path": "system/native-runtime-binding.wat"
+      },
+      {
+        "path": "system/runtime-core-state.wat"
+      },
+      {
+        "path": "system/syntax-parse-core.wat"
+      },
+      {
+        "path": "system/telemetry-api-core.wat"
+      },
+      {
+        "path": "system/telemetry-value-core.wat"
+      },
+      {
+        "path": "system/tokenizer-core.wat"
+      },
+      {
+        "path": "system/zero-copy-archive-core.wat"
+      },
+      {
+        "path": "ui/src/00_globals.wat"
+      },
+      {
+        "path": "ui/src/01_math.wat"
+      },
+      {
+        "path": "ui/src/02_memory_io.wat"
+      },
+      {
+        "path": "ui/src/03_runtime.wat"
+      },
+      {
+        "path": "ui/src/04_hashing.wat"
+      },
+      {
+        "path": "ui/src/05_ref_kind.wat"
+      },
+      {
+        "path": "ui/src/06_rect_geom.wat"
+      },
+      {
+        "path": "ui/src/07_theme.wat"
+      },
+      {
+        "path": "ui/src/08_core_constants.wat"
+      },
+      {
+        "path": "ui/src/09_font.wat"
+      },
+      {
+        "path": "ui/src/10_icon_assets.wat"
+      },
+      {
+        "path": "ui/src/11_svg.wat"
+      },
+      {
+        "path": "ui/src/12_icon_render.wat"
+      },
+      {
+        "path": "ui/src/13_writer.wat"
+      },
+      {
+        "path": "ui/src/14_measure_layout_top.wat"
+      },
+      {
+        "path": "ui/src/15_write_patch.wat"
+      },
+      {
+        "path": "ui/src/16_widget_creation.wat"
+      },
+      {
+        "path": "ui/src/17_regions_hit.wat"
+      },
+      {
+        "path": "ui/src/18_layout_engine.wat"
+      },
+      {
+        "path": "ui/src/19_primitives_text.wat"
+      },
+      {
+        "path": "ui/src/20_components_simple.wat"
+      },
+      {
+        "path": "ui/src/21_components_toggle_alert_tabs.wat"
+      },
+      {
+        "path": "ui/src/22_components_accordion_etc.wat"
+      },
+      {
+        "path": "ui/src/23_components_popups.wat"
+      },
+      {
+        "path": "ui/src/24_components_rest.wat"
+      },
+      {
+        "path": "ui/src/25_tree_object_semantic.wat"
+      },
+      {
+        "path": "ui/src/26_gallery.wat"
+      },
+      {
+        "path": "ui/ui-graph.wat"
       }
     ],
     "registry": [
@@ -1832,8 +2059,7 @@
           "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
           "i32.sub (local.get $read) (i32.const 4)",
           "local.get $offset",
-          "local.get $scratch",
-          "i32.sub (local.get $scap) (i32.const 8)"
+          "local.get $scratch"
         ],
         "extra_locals": [
           "(local $offset i32)"
@@ -1947,8 +2173,7 @@
           "i32.add (global.get $SCRATCH_BUF) (i32.const 4)",
           "i32.sub (local.get $read) (i32.const 4)",
           "local.get $offset",
-          "local.get $scratch",
-          "i32.sub (local.get $scap) (i32.const 8)"
+          "local.get $scratch"
         ],
         "extra_locals": [
           "(local $offset i32)"
@@ -5214,19 +5439,556 @@
         "BUF_LARGE_BYTES": 10000,
         "RX_BYTES": 10000,
         "NODE_RING_COUNT": 32
+      },
+      "linux_syscall_x64": {
+        "LINUX_SYS_X64_READ": 0,
+        "LINUX_SYS_X64_WRITE": 1,
+        "LINUX_SYS_X64_OPEN": 2,
+        "LINUX_SYS_X64_CLOSE": 3,
+        "LINUX_SYS_X64_STAT": 4,
+        "LINUX_SYS_X64_FSTAT": 5,
+        "LINUX_SYS_X64_LSTAT": 6,
+        "LINUX_SYS_X64_POLL": 7,
+        "LINUX_SYS_X64_LSEEK": 8,
+        "LINUX_SYS_X64_MMAP": 9,
+        "LINUX_SYS_X64_MPROTECT": 10,
+        "LINUX_SYS_X64_MUNMAP": 11,
+        "LINUX_SYS_X64_BRK": 12,
+        "LINUX_SYS_X64_RT_SIGACTION": 13,
+        "LINUX_SYS_X64_RT_SIGPROCMASK": 14,
+        "LINUX_SYS_X64_RT_SIGRETURN": 15,
+        "LINUX_SYS_X64_IOCTL": 16,
+        "LINUX_SYS_X64_PREAD64": 17,
+        "LINUX_SYS_X64_PWRITE64": 18,
+        "LINUX_SYS_X64_READV": 19,
+        "LINUX_SYS_X64_WRITEV": 20,
+        "LINUX_SYS_X64_ACCESS": 21,
+        "LINUX_SYS_X64_PIPE": 22,
+        "LINUX_SYS_X64_SELECT": 23,
+        "LINUX_SYS_X64_SCHED_YIELD": 24,
+        "LINUX_SYS_X64_MREMAP": 25,
+        "LINUX_SYS_X64_MSYNC": 26,
+        "LINUX_SYS_X64_MINCORE": 27,
+        "LINUX_SYS_X64_MADVISE": 28,
+        "LINUX_SYS_X64_SHMGET": 29,
+        "LINUX_SYS_X64_SHMAT": 30,
+        "LINUX_SYS_X64_SHMCTL": 31,
+        "LINUX_SYS_X64_DUP": 32,
+        "LINUX_SYS_X64_DUP2": 33,
+        "LINUX_SYS_X64_PAUSE": 34,
+        "LINUX_SYS_X64_NANOSLEEP": 35,
+        "LINUX_SYS_X64_GETITIMER": 36,
+        "LINUX_SYS_X64_ALARM": 37,
+        "LINUX_SYS_X64_SETITIMER": 38,
+        "LINUX_SYS_X64_GETPID": 39,
+        "LINUX_SYS_X64_SENDFILE": 40,
+        "LINUX_SYS_X64_SOCKET": 41,
+        "LINUX_SYS_X64_CONNECT": 42,
+        "LINUX_SYS_X64_ACCEPT": 43,
+        "LINUX_SYS_X64_SENDTO": 44,
+        "LINUX_SYS_X64_RECVFROM": 45,
+        "LINUX_SYS_X64_SENDMSG": 46,
+        "LINUX_SYS_X64_RECVMSG": 47,
+        "LINUX_SYS_X64_SHUTDOWN": 48,
+        "LINUX_SYS_X64_BIND": 49,
+        "LINUX_SYS_X64_LISTEN": 50,
+        "LINUX_SYS_X64_GETSOCKNAME": 51,
+        "LINUX_SYS_X64_GETPEERNAME": 52,
+        "LINUX_SYS_X64_SOCKETPAIR": 53,
+        "LINUX_SYS_X64_SETSOCKOPT": 54,
+        "LINUX_SYS_X64_GETSOCKOPT": 55,
+        "LINUX_SYS_X64_CLONE": 56,
+        "LINUX_SYS_X64_FORK": 57,
+        "LINUX_SYS_X64_VFORK": 58,
+        "LINUX_SYS_X64_EXECVE": 59,
+        "LINUX_SYS_X64_EXIT": 60,
+        "LINUX_SYS_X64_WAIT4": 61,
+        "LINUX_SYS_X64_KILL": 62,
+        "LINUX_SYS_X64_UNAME": 63,
+        "LINUX_SYS_X64_SEMGET": 64,
+        "LINUX_SYS_X64_SEMOP": 65,
+        "LINUX_SYS_X64_SEMCTL": 66,
+        "LINUX_SYS_X64_SHMDT": 67,
+        "LINUX_SYS_X64_MSGGET": 68,
+        "LINUX_SYS_X64_MSGSND": 69,
+        "LINUX_SYS_X64_MSGRCV": 70,
+        "LINUX_SYS_X64_MSGCTL": 71,
+        "LINUX_SYS_X64_FCNTL": 72,
+        "LINUX_SYS_X64_FLOCK": 73,
+        "LINUX_SYS_X64_FSYNC": 74,
+        "LINUX_SYS_X64_FDATASYNC": 75,
+        "LINUX_SYS_X64_TRUNCATE": 76,
+        "LINUX_SYS_X64_FTRUNCATE": 77,
+        "LINUX_SYS_X64_GETDENTS": 78,
+        "LINUX_SYS_X64_GETCWD": 79,
+        "LINUX_SYS_X64_CHDIR": 80,
+        "LINUX_SYS_X64_FCHDIR": 81,
+        "LINUX_SYS_X64_RENAME": 82,
+        "LINUX_SYS_X64_MKDIR": 83,
+        "LINUX_SYS_X64_RMDIR": 84,
+        "LINUX_SYS_X64_CREAT": 85,
+        "LINUX_SYS_X64_LINK": 86,
+        "LINUX_SYS_X64_UNLINK": 87,
+        "LINUX_SYS_X64_SYMLINK": 88,
+        "LINUX_SYS_X64_READLINK": 89,
+        "LINUX_SYS_X64_CHMOD": 90,
+        "LINUX_SYS_X64_FCHMOD": 91,
+        "LINUX_SYS_X64_CHOWN": 92,
+        "LINUX_SYS_X64_FCHOWN": 93,
+        "LINUX_SYS_X64_LCHOWN": 94,
+        "LINUX_SYS_X64_UMASK": 95,
+        "LINUX_SYS_X64_GETTIMEOFDAY": 96,
+        "LINUX_SYS_X64_GETRLIMIT": 97,
+        "LINUX_SYS_X64_GETRUSAGE": 98,
+        "LINUX_SYS_X64_SYSINFO": 99,
+        "LINUX_SYS_X64_TIMES": 100,
+        "LINUX_SYS_X64_PTRACE": 101,
+        "LINUX_SYS_X64_GETUID": 102,
+        "LINUX_SYS_X64_SYSLOG": 103,
+        "LINUX_SYS_X64_GETGID": 104,
+        "LINUX_SYS_X64_SETUID": 105,
+        "LINUX_SYS_X64_SETGID": 106,
+        "LINUX_SYS_X64_GETEUID": 107,
+        "LINUX_SYS_X64_GETEGID": 108,
+        "LINUX_SYS_X64_SETPGID": 109,
+        "LINUX_SYS_X64_GETPPID": 110,
+        "LINUX_SYS_X64_GETPGRP": 111,
+        "LINUX_SYS_X64_SETSID": 112,
+        "LINUX_SYS_X64_SETREUID": 113,
+        "LINUX_SYS_X64_SETREGID": 114,
+        "LINUX_SYS_X64_GETGROUPS": 115,
+        "LINUX_SYS_X64_SETGROUPS": 116,
+        "LINUX_SYS_X64_SETRESUID": 117,
+        "LINUX_SYS_X64_GETRESUID": 118,
+        "LINUX_SYS_X64_SETRESGID": 119,
+        "LINUX_SYS_X64_GETRESGID": 120,
+        "LINUX_SYS_X64_GETPGID": 121,
+        "LINUX_SYS_X64_SETFSUID": 122,
+        "LINUX_SYS_X64_SETFSGID": 123,
+        "LINUX_SYS_X64_GETSID": 124,
+        "LINUX_SYS_X64_CAPGET": 125,
+        "LINUX_SYS_X64_CAPSET": 126,
+        "LINUX_SYS_X64_RT_SIGPENDING": 127,
+        "LINUX_SYS_X64_RT_SIGTIMEDWAIT": 128,
+        "LINUX_SYS_X64_RT_SIGQUEUEINFO": 129,
+        "LINUX_SYS_X64_RT_SIGSUSPEND": 130,
+        "LINUX_SYS_X64_SIGALTSTACK": 131,
+        "LINUX_SYS_X64_UTIME": 132,
+        "LINUX_SYS_X64_MKNOD": 133,
+        "LINUX_SYS_X64_USELIB": 134,
+        "LINUX_SYS_X64_PERSONALITY": 135,
+        "LINUX_SYS_X64_USTAT": 136,
+        "LINUX_SYS_X64_STATFS": 137,
+        "LINUX_SYS_X64_FSTATFS": 138,
+        "LINUX_SYS_X64_SYSFS": 139,
+        "LINUX_SYS_X64_GETPRIORITY": 140,
+        "LINUX_SYS_X64_SETPRIORITY": 141,
+        "LINUX_SYS_X64_SCHED_SETPARAM": 142,
+        "LINUX_SYS_X64_SCHED_GETPARAM": 143,
+        "LINUX_SYS_X64_SCHED_SETSCHEDULER": 144,
+        "LINUX_SYS_X64_SCHED_GETSCHEDULER": 145,
+        "LINUX_SYS_X64_SCHED_GET_PRIORITY_MAX": 146,
+        "LINUX_SYS_X64_SCHED_GET_PRIORITY_MIN": 147,
+        "LINUX_SYS_X64_SCHED_RR_GET_INTERVAL": 148,
+        "LINUX_SYS_X64_MLOCK": 149,
+        "LINUX_SYS_X64_MUNLOCK": 150,
+        "LINUX_SYS_X64_MLOCKALL": 151,
+        "LINUX_SYS_X64_MUNLOCKALL": 152,
+        "LINUX_SYS_X64_VHANGUP": 153,
+        "LINUX_SYS_X64_MODIFY_LDT": 154,
+        "LINUX_SYS_X64_PIVOT_ROOT": 155,
+        "LINUX_SYS_X64_SYSCTL": 156,
+        "LINUX_SYS_X64_PRCTL": 157,
+        "LINUX_SYS_X64_ARCH_PRCTL": 158,
+        "LINUX_SYS_X64_ADJTIMEX": 159,
+        "LINUX_SYS_X64_SETRLIMIT": 160,
+        "LINUX_SYS_X64_CHROOT": 161,
+        "LINUX_SYS_X64_SYNC": 162,
+        "LINUX_SYS_X64_ACCT": 163,
+        "LINUX_SYS_X64_SETTIMEOFDAY": 164,
+        "LINUX_SYS_X64_MOUNT": 165,
+        "LINUX_SYS_X64_UMOUNT2": 166,
+        "LINUX_SYS_X64_SWAPON": 167,
+        "LINUX_SYS_X64_SWAPOFF": 168,
+        "LINUX_SYS_X64_REBOOT": 169,
+        "LINUX_SYS_X64_SETHOSTNAME": 170,
+        "LINUX_SYS_X64_SETDOMAINNAME": 171,
+        "LINUX_SYS_X64_IOPL": 172,
+        "LINUX_SYS_X64_IOPERM": 173,
+        "LINUX_SYS_X64_CREATE_MODULE": 174,
+        "LINUX_SYS_X64_INIT_MODULE": 175,
+        "LINUX_SYS_X64_DELETE_MODULE": 176,
+        "LINUX_SYS_X64_GET_KERNEL_SYMS": 177,
+        "LINUX_SYS_X64_QUERY_MODULE": 178,
+        "LINUX_SYS_X64_QUOTACTL": 179,
+        "LINUX_SYS_X64_NFSSERVCTL": 180,
+        "LINUX_SYS_X64_GETPMSG": 181,
+        "LINUX_SYS_X64_PUTPMSG": 182,
+        "LINUX_SYS_X64_AFS_SYSCALL": 183,
+        "LINUX_SYS_X64_TUXCALL": 184,
+        "LINUX_SYS_X64_SECURITY": 185,
+        "LINUX_SYS_X64_GETTID": 186,
+        "LINUX_SYS_X64_READAHEAD": 187,
+        "LINUX_SYS_X64_SETXATTR": 188,
+        "LINUX_SYS_X64_LSETXATTR": 189,
+        "LINUX_SYS_X64_FSETXATTR": 190,
+        "LINUX_SYS_X64_GETXATTR": 191,
+        "LINUX_SYS_X64_LGETXATTR": 192,
+        "LINUX_SYS_X64_FGETXATTR": 193,
+        "LINUX_SYS_X64_LISTXATTR": 194,
+        "LINUX_SYS_X64_LLISTXATTR": 195,
+        "LINUX_SYS_X64_FLISTXATTR": 196,
+        "LINUX_SYS_X64_REMOVEXATTR": 197,
+        "LINUX_SYS_X64_LREMOVEXATTR": 198,
+        "LINUX_SYS_X64_FREMOVEXATTR": 199,
+        "LINUX_SYS_X64_TKILL": 200,
+        "LINUX_SYS_X64_TIME": 201,
+        "LINUX_SYS_X64_FUTEX": 202,
+        "LINUX_SYS_X64_SCHED_SETAFFINITY": 203,
+        "LINUX_SYS_X64_SCHED_GETAFFINITY": 204,
+        "LINUX_SYS_X64_SET_THREAD_AREA": 205,
+        "LINUX_SYS_X64_IO_SETUP": 206,
+        "LINUX_SYS_X64_IO_DESTROY": 207,
+        "LINUX_SYS_X64_IO_GETEVENTS": 208,
+        "LINUX_SYS_X64_IO_SUBMIT": 209,
+        "LINUX_SYS_X64_IO_CANCEL": 210,
+        "LINUX_SYS_X64_GET_THREAD_AREA": 211,
+        "LINUX_SYS_X64_LOOKUP_DCOOKIE": 212,
+        "LINUX_SYS_X64_EPOLL_CREATE": 213,
+        "LINUX_SYS_X64_EPOLL_CTL_OLD": 214,
+        "LINUX_SYS_X64_EPOLL_WAIT_OLD": 215,
+        "LINUX_SYS_X64_REMAP_FILE_PAGES": 216,
+        "LINUX_SYS_X64_GETDENTS64": 217,
+        "LINUX_SYS_X64_SET_TID_ADDRESS": 218,
+        "LINUX_SYS_X64_RESTART_SYSCALL": 219,
+        "LINUX_SYS_X64_SEMTIMEDOP": 220,
+        "LINUX_SYS_X64_FADVISE64": 221,
+        "LINUX_SYS_X64_TIMER_CREATE": 222,
+        "LINUX_SYS_X64_TIMER_SETTIME": 223,
+        "LINUX_SYS_X64_TIMER_GETTIME": 224,
+        "LINUX_SYS_X64_TIMER_GETOVERRUN": 225,
+        "LINUX_SYS_X64_TIMER_DELETE": 226,
+        "LINUX_SYS_X64_CLOCK_SETTIME": 227,
+        "LINUX_SYS_X64_CLOCK_GETTIME": 228,
+        "LINUX_SYS_X64_CLOCK_GETRES": 229,
+        "LINUX_SYS_X64_CLOCK_NANOSLEEP": 230,
+        "LINUX_SYS_X64_EXIT_GROUP": 231,
+        "LINUX_SYS_X64_EPOLL_WAIT": 232,
+        "LINUX_SYS_X64_EPOLL_CTL": 233,
+        "LINUX_SYS_X64_TGKILL": 234,
+        "LINUX_SYS_X64_UTIMES": 235,
+        "LINUX_SYS_X64_VSERVER": 236,
+        "LINUX_SYS_X64_MBIND": 237,
+        "LINUX_SYS_X64_SET_MEMPOLICY": 238,
+        "LINUX_SYS_X64_GET_MEMPOLICY": 239,
+        "LINUX_SYS_X64_MQ_OPEN": 240,
+        "LINUX_SYS_X64_MQ_UNLINK": 241,
+        "LINUX_SYS_X64_MQ_TIMEDSEND": 242,
+        "LINUX_SYS_X64_MQ_TIMEDRECEIVE": 243,
+        "LINUX_SYS_X64_MQ_NOTIFY": 244,
+        "LINUX_SYS_X64_MQ_GETSETATTR": 245,
+        "LINUX_SYS_X64_KEXEC_LOAD": 246,
+        "LINUX_SYS_X64_WAITID": 247,
+        "LINUX_SYS_X64_ADD_KEY": 248,
+        "LINUX_SYS_X64_REQUEST_KEY": 249,
+        "LINUX_SYS_X64_KEYCTL": 250,
+        "LINUX_SYS_X64_IOPRIO_SET": 251,
+        "LINUX_SYS_X64_IOPRIO_GET": 252,
+        "LINUX_SYS_X64_INOTIFY_INIT": 253,
+        "LINUX_SYS_X64_INOTIFY_ADD_WATCH": 254,
+        "LINUX_SYS_X64_INOTIFY_RM_WATCH": 255,
+        "LINUX_SYS_X64_MIGRATE_PAGES": 256,
+        "LINUX_SYS_X64_OPENAT": 257,
+        "LINUX_SYS_X64_MKDIRAT": 258,
+        "LINUX_SYS_X64_MKNODAT": 259,
+        "LINUX_SYS_X64_FCHOWNAT": 260,
+        "LINUX_SYS_X64_FUTIMESAT": 261,
+        "LINUX_SYS_X64_NEWFSTATAT": 262,
+        "LINUX_SYS_X64_UNLINKAT": 263,
+        "LINUX_SYS_X64_RENAMEAT": 264,
+        "LINUX_SYS_X64_LINKAT": 265,
+        "LINUX_SYS_X64_SYMLINKAT": 266,
+        "LINUX_SYS_X64_READLINKAT": 267,
+        "LINUX_SYS_X64_FCHMODAT": 268,
+        "LINUX_SYS_X64_FACCESSAT": 269,
+        "LINUX_SYS_X64_PSELECT6": 270,
+        "LINUX_SYS_X64_PPOLL": 271,
+        "LINUX_SYS_X64_UNSHARE": 272,
+        "LINUX_SYS_X64_SET_ROBUST_LIST": 273,
+        "LINUX_SYS_X64_GET_ROBUST_LIST": 274,
+        "LINUX_SYS_X64_SPLICE": 275,
+        "LINUX_SYS_X64_TEE": 276,
+        "LINUX_SYS_X64_SYNC_FILE_RANGE": 277,
+        "LINUX_SYS_X64_VMSPLICE": 278,
+        "LINUX_SYS_X64_MOVE_PAGES": 279,
+        "LINUX_SYS_X64_UTIMENSAT": 280,
+        "LINUX_SYS_X64_EPOLL_PWAIT": 281,
+        "LINUX_SYS_X64_SIGNALFD": 282,
+        "LINUX_SYS_X64_TIMERFD_CREATE": 283,
+        "LINUX_SYS_X64_EVENTFD": 284,
+        "LINUX_SYS_X64_FALLOCATE": 285,
+        "LINUX_SYS_X64_TIMERFD_SETTIME": 286,
+        "LINUX_SYS_X64_TIMERFD_GETTIME": 287,
+        "LINUX_SYS_X64_ACCEPT4": 288,
+        "LINUX_SYS_X64_SIGNALFD4": 289,
+        "LINUX_SYS_X64_EVENTFD2": 290,
+        "LINUX_SYS_X64_EPOLL_CREATE1": 291,
+        "LINUX_SYS_X64_DUP3": 292,
+        "LINUX_SYS_X64_PIPE2": 293,
+        "LINUX_SYS_X64_INOTIFY_INIT1": 294,
+        "LINUX_SYS_X64_PREADV": 295,
+        "LINUX_SYS_X64_PWRITEV": 296,
+        "LINUX_SYS_X64_RT_TGSIGQUEUEINFO": 297,
+        "LINUX_SYS_X64_PERF_EVENT_OPEN": 298,
+        "LINUX_SYS_X64_RECVMMSG": 299,
+        "LINUX_SYS_X64_FANOTIFY_INIT": 300,
+        "LINUX_SYS_X64_FANOTIFY_MARK": 301,
+        "LINUX_SYS_X64_PRLIMIT64": 302,
+        "LINUX_SYS_X64_NAME_TO_HANDLE_AT": 303,
+        "LINUX_SYS_X64_OPEN_BY_HANDLE_AT": 304,
+        "LINUX_SYS_X64_CLOCK_ADJTIME": 305,
+        "LINUX_SYS_X64_SYNCFS": 306,
+        "LINUX_SYS_X64_SENDMMSG": 307,
+        "LINUX_SYS_X64_SETNS": 308,
+        "LINUX_SYS_X64_GETCPU": 309,
+        "LINUX_SYS_X64_PROCESS_VM_READV": 310,
+        "LINUX_SYS_X64_PROCESS_VM_WRITEV": 311,
+        "LINUX_SYS_X64_KCMP": 312,
+        "LINUX_SYS_X64_FINIT_MODULE": 313,
+        "LINUX_SYS_X64_SCHED_SETATTR": 314,
+        "LINUX_SYS_X64_SCHED_GETATTR": 315,
+        "LINUX_SYS_X64_RENAMEAT2": 316,
+        "LINUX_SYS_X64_SECCOMP": 317,
+        "LINUX_SYS_X64_GETRANDOM": 318,
+        "LINUX_SYS_X64_MEMFD_CREATE": 319,
+        "LINUX_SYS_X64_KEXEC_FILE_LOAD": 320,
+        "LINUX_SYS_X64_BPF": 321,
+        "LINUX_SYS_X64_EXECVEAT": 322,
+        "LINUX_SYS_X64_USERFAULTFD": 323,
+        "LINUX_SYS_X64_MEMBARRIER": 324,
+        "LINUX_SYS_X64_MLOCK2": 325,
+        "LINUX_SYS_X64_COPY_FILE_RANGE": 326,
+        "LINUX_SYS_X64_PREADV2": 327,
+        "LINUX_SYS_X64_PWRITEV2": 328,
+        "LINUX_SYS_X64_PKEY_MPROTECT": 329,
+        "LINUX_SYS_X64_PKEY_ALLOC": 330,
+        "LINUX_SYS_X64_PKEY_FREE": 331,
+        "LINUX_SYS_X64_STATX": 332,
+        "LINUX_SYS_X64_IO_PGETEVENTS": 333,
+        "LINUX_SYS_X64_RSEQ": 334,
+        "LINUX_SYS_X64_URETPROBE": 335,
+        "LINUX_SYS_X64_UPROBE": 336,
+        "LINUX_SYS_X64_PIDFD_SEND_SIGNAL": 424,
+        "LINUX_SYS_X64_IO_URING_SETUP": 425,
+        "LINUX_SYS_X64_IO_URING_ENTER": 426,
+        "LINUX_SYS_X64_IO_URING_REGISTER": 427,
+        "LINUX_SYS_X64_OPEN_TREE": 428,
+        "LINUX_SYS_X64_MOVE_MOUNT": 429,
+        "LINUX_SYS_X64_FSOPEN": 430,
+        "LINUX_SYS_X64_FSCONFIG": 431,
+        "LINUX_SYS_X64_FSMOUNT": 432,
+        "LINUX_SYS_X64_FSPICK": 433,
+        "LINUX_SYS_X64_PIDFD_OPEN": 434,
+        "LINUX_SYS_X64_CLONE3": 435,
+        "LINUX_SYS_X64_CLOSE_RANGE": 436,
+        "LINUX_SYS_X64_OPENAT2": 437,
+        "LINUX_SYS_X64_PIDFD_GETFD": 438,
+        "LINUX_SYS_X64_FACCESSAT2": 439,
+        "LINUX_SYS_X64_PROCESS_MADVISE": 440,
+        "LINUX_SYS_X64_EPOLL_PWAIT2": 441,
+        "LINUX_SYS_X64_MOUNT_SETATTR": 442,
+        "LINUX_SYS_X64_QUOTACTL_FD": 443,
+        "LINUX_SYS_X64_LANDLOCK_CREATE_RULESET": 444,
+        "LINUX_SYS_X64_LANDLOCK_ADD_RULE": 445,
+        "LINUX_SYS_X64_LANDLOCK_RESTRICT_SELF": 446,
+        "LINUX_SYS_X64_MEMFD_SECRET": 447,
+        "LINUX_SYS_X64_PROCESS_MRELEASE": 448,
+        "LINUX_SYS_X64_FUTEX_WAITV": 449,
+        "LINUX_SYS_X64_SET_MEMPOLICY_HOME_NODE": 450,
+        "LINUX_SYS_X64_CACHESTAT": 451,
+        "LINUX_SYS_X64_FCHMODAT2": 452,
+        "LINUX_SYS_X64_MAP_SHADOW_STACK": 453,
+        "LINUX_SYS_X64_FUTEX_WAKE": 454,
+        "LINUX_SYS_X64_FUTEX_WAIT": 455,
+        "LINUX_SYS_X64_FUTEX_REQUEUE": 456,
+        "LINUX_SYS_X64_STATMOUNT": 457,
+        "LINUX_SYS_X64_LISTMOUNT": 458,
+        "LINUX_SYS_X64_LSM_GET_SELF_ATTR": 459,
+        "LINUX_SYS_X64_LSM_SET_SELF_ATTR": 460,
+        "LINUX_SYS_X64_LSM_LIST_MODULES": 461,
+        "LINUX_SYS_X64_MSEAL": 462,
+        "LINUX_SYS_X64_SETXATTRAT": 463,
+        "LINUX_SYS_X64_GETXATTRAT": 464,
+        "LINUX_SYS_X64_LISTXATTRAT": 465,
+        "LINUX_SYS_X64_REMOVEXATTRAT": 466,
+        "LINUX_SYS_X64_OPEN_TREE_ATTR": 467,
+        "LINUX_SYS_X64_FILE_GETATTR": 468,
+        "LINUX_SYS_X64_FILE_SETATTR": 469,
+        "LINUX_SYS_X64_LISTNS": 470,
+        "LINUX_SYS_X64_RSEQ_SLICE_YIELD": 471
+      },
+      "linux_syscall_aarch64": {
+        "LINUX_SYS_AARCH64_EXIT": 93,
+        "LINUX_SYS_AARCH64_CLONE": 220,
+        "LINUX_SYS_AARCH64_EXECVE": 221,
+        "LINUX_SYS_AARCH64_MMAP": 222,
+        "LINUX_SYS_AARCH64_MOUNT": 40,
+        "LINUX_SYS_AARCH64_UMOUNT2": 39,
+        "LINUX_SYS_AARCH64_PIVOT_ROOT": 41,
+        "LINUX_SYS_AARCH64_UNSHARE": 97,
+        "LINUX_SYS_AARCH64_SETNS": 268,
+        "LINUX_SYS_AARCH64_SETHOSTNAME": 161,
+        "LINUX_SYS_AARCH64_SETDOMAINNAME": 162,
+        "LINUX_SYS_AARCH64_SECCOMP": 277,
+        "LINUX_SYS_AARCH64_CAPSET": 91,
+        "LINUX_SYS_AARCH64_PRCTL": 167,
+        "LINUX_SYS_AARCH64_SETUID": 146,
+        "LINUX_SYS_AARCH64_SETGID": 144,
+        "LINUX_SYS_AARCH64_SETGROUPS": 159,
+        "LINUX_SYS_AARCH64_PRLIMIT64": 261,
+        "LINUX_SYS_AARCH64_SCHED_SETATTR": 274,
+        "LINUX_SYS_AARCH64_IOPRIO_SET": 30,
+        "LINUX_SYS_AARCH64_UMASK": 166,
+        "LINUX_SYS_AARCH64_KILL": 129,
+        "LINUX_SYS_AARCH64_WAIT4": 260,
+        "LINUX_SYS_AARCH64_BPF": 280,
+        "LINUX_SYS_AARCH64_OPEN_TREE": 428,
+        "LINUX_SYS_AARCH64_MOVE_MOUNT": 429,
+        "LINUX_SYS_AARCH64_MOUNT_SETATTR": 442
+      },
+      "linux_syscall_arm32": {
+        "LINUX_SYS_ARM32_EXIT": 1
+      }
+    },
+    "memory_ranges": {
+      "CHAR_CLASS_LUT": {
+        "start": "0x1000",
+        "size": 256
+      },
+      "CASE_TABLE": {
+        "start": "0x2000",
+        "size": 256
+      },
+      "SHA256_K": {
+        "start": "0x7530",
+        "size": 256
+      },
+      "SHA256_W": {
+        "start": "0x10000",
+        "size": 320
+      },
+      "MSG_BUF": {
+        "start": "62000",
+        "size": 100
+      },
+      "DIGEST_BUF": {
+        "start": "62100",
+        "size": 256
+      },
+      "GALLERY_CATEGORY_TABLE": {
+        "start": "66000",
+        "size": 60
+      },
+      "GALLERY_PREVIEW_KIND": {
+        "start": "66100",
+        "size": 61
+      },
+      "GALLERY_PROPS1": {
+        "start": "66200",
+        "size": 60
+      },
+      "GALLERY_PROPS2": {
+        "start": "66300",
+        "size": 60
+      },
+      "GALLERY_ITEM_COUNTS": {
+        "start": "66400",
+        "size": 60
+      },
+      "GALLERY_ITEM_WIDTHS": {
+        "start": "66500",
+        "size": 60
+      },
+      "GALLERY_PREVIEW_TOTAL": {
+        "start": "66600",
+        "size": 70
+      },
+      "GALLERY_SLUG_TABLE": {
+        "start": "66700",
+        "size": 500
+      },
+      "GALLERY_SLUG_OFFSETS": {
+        "start": "67200",
+        "size": 130
+      },
+      "GALLERY_KEBAB_TABLE": {
+        "start": "67400",
+        "size": 500
+      },
+      "GALLERY_KEBAB_OFFSETS": {
+        "start": "67900",
+        "size": 130
+      },
+      "GALLERY_DISPLAY_TABLE": {
+        "start": "68100",
+        "size": 500
+      },
+      "GALLERY_DISPLAY_OFFSETS": {
+        "start": "68600",
+        "size": 200
+      },
+      "GALLERY_SLUG_NODE": {
+        "start": "68800",
+        "size": 800
+      },
+      "GALLERY_SLUG_NODE_OFF": {
+        "start": "69600",
+        "size": 200
+      },
+      "GALLERY_PATH_TABLE": {
+        "start": "69800",
+        "size": 3000
+      },
+      "DBUS_SECRETS_PATH": {
+        "start": "0x7190",
+        "size": 24
+      },
+      "DBUS_COLLECTIONS_PATH": {
+        "start": "0x71A8",
+        "size": 37
+      },
+      "DBUS_SESSION_PATH": {
+        "start": "0x71D0",
+        "size": 33
+      },
+      "WALLET_ORDER_STATUSES": {
+        "start": "0x4000",
+        "size": 256
+      },
+      "GALLERY_ICON_CHECK": {
+        "start": "65100",
+        "size": 64
+      },
+      "GALLERY_HIT_STRING": {
+        "start": "65000",
+        "size": 20
       }
     },
     "memory": {
-      "pages": 1024
+      "pages": 2048
     },
     "data": [
       {
-        "offset": "0x1000",
+        "offset": "{{CHAR_CLASS_LUT}}",
         "hex": "\\00\\00\\00\\00\\00\\00\\00\\00\\00\\20\\20\\00\\00\\20\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\20\\08\\00\\08\\08\\08\\08\\08\\00\\00\\08\\48\\00\\c8\\48\\00\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\d9\\00\\00\\00\\00\\00\\00\\00\\da\\da\\da\\da\\da\\da\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\ca\\00\\00\\00\\08\\08\\08\\dc\\dc\\dc\\dc\\dc\\dc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\cc\\00\\08\\00\\08\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00"
       },
       {
-        "offset": "0x2000",
+        "offset": "{{CASE_TABLE}}",
         "hex": "\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\61\\62\\63\\64\\65\\66\\67\\68\\69\\6a\\6b\\6c\\6d\\6e\\6f\\70\\71\\72\\73\\74\\75\\76\\77\\78\\79\\7a\\00\\00\\00\\00\\00\\00\\61\\62\\63\\64\\65\\66\\67\\68\\69\\6a\\6b\\6c\\6d\\6e\\6f\\70\\71\\72\\73\\74\\75\\76\\77\\78\\79\\7a\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00\\00"
+      },
+      {
+        "offset": "{{SHA256_K}}",
+        "hex": "\\98\\2f\\8a\\42\\91\\44\\37\\71\\cf\\fb\\c0\\b5\\a5\\db\\b5\\e9\\5b\\c2\\56\\39\\f1\\11\\f1\\59\\a4\\82\\3f\\92\\d5\\5e\\1c\\ab\\98\\aa\\07\\d8\\01\\5b\\83\\12\\be\\85\\31\\24\\c3\\7d\\0c\\55\\74\\5d\\be\\72\\fe\\b1\\de\\80\\a7\\06\\dc\\9b\\74\\f1\\9b\\c1\\c1\\69\\9b\\e4\\86\\47\\be\\ef\\c6\\9d\\c1\\0f\\cc\\a1\\0c\\24\\6f\\2c\\e9\\2d\\aa\\84\\74\\4a\\dc\\a9\\b0\\5c\\da\\88\\f9\\76\\52\\51\\3e\\98\\6d\\c6\\31\\a8\\c8\\27\\03\\b0\\c7\\7f\\59\\bf\\f3\\0b\\e0\\c6\\47\\91\\a7\\d5\\51\\63\\ca\\06\\67\\29\\29\\14\\85\\0a\\b7\\27\\38\\21\\1b\\2e\\fc\\6d\\2c\\4d\\13\\0d\\38\\53\\54\\73\\0a\\65\\bb\\0a\\6a\\76\\2e\\c9\\c2\\81\\85\\2c\\72\\92\\a1\\e8\\bf\\a2\\4b\\66\\1a\\a8\\70\\8b\\4b\\c2\\a3\\51\\6c\\c7\\19\\e8\\92\\d1\\24\\06\\99\\d6\\85\\35\\0e\\f4\\70\\a0\\6a\\10\\16\\c1\\a4\\19\\08\\6c\\37\\1e\\4c\\77\\48\\27\\b5\\bc\\b0\\34\\b3\\0c\\1c\\39\\4a\\aa\\d8\\4e\\4f\\ca\\9c\\5b\\f3\\6f\\2e\\68\\ee\\82\\8f\\74\\6f\\63\\a5\\78\\14\\78\\c8\\84\\08\\02\\c7\\8c\\fa\\ff\\be\\90\\eb\\6c\\50\\a4\\f7\\a3\\f9\\be\\f2\\78\\71\\c6"
       }
     ],
     "globals": {

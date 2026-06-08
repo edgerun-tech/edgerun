@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { jitCompile, decodeWasm } from '../compiler/jit.mjs';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 

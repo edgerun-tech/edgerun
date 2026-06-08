@@ -5688,7 +5688,7 @@
   (global $WAT_SYM_SZ     i32 (i32.const 16))
   (global $WAT_MAX_SYMS   i32 (i32.const 256))
   (global $OFF_WAT_BODY   i32 (i32.const 0x8D000))
-  (global $WAT_BODY_SZ    i32 (i32.const 4096))
+  (global $WAT_BODY_SZ    i32 (i32.const 0x200000))
   (global $OFF_WAT_TMP0   i32 (i32.const 0x8C040))
   (global $OFF_WAT_TMP1   i32 (i32.const 0x8C044))
   (global $OFF_WAT_BODY_OFF i32 (i32.const 0x8C030))
@@ -6359,7 +6359,7 @@
   (func $wat_parse_body (param $pos i32) (param $body_off i32) (result i32)
     (local $err i32) (local $b i32) (local $kw_off i32)
     (local $kw_len i32) (local $b0 i32) (local $b1 i32) (local $b2 i32) (local $b3 i32)
-    (local $imm i32)
+    (local $imm i32) (local $sexpr i32)
 
     ;; Skip whitespace
     (if (call $wat_skip_ws (local.get $pos)) (then (return (global.get $ERR_PARSE))))
@@ -6409,6 +6409,17 @@
       (then (return (global.get $ERR_PARSE)))
     )
 
+    ;; Handle sexpr wrapper: '(' instr ')' — set $sexpr=1 and skip '('
+    (local.set $sexpr (i32.const 0))
+    (if (i32.eq (local.get $b) (i32.const 0x28))  ;; '('
+      (then
+        (local.set $sexpr (i32.const 1))
+        (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
+        (if (call $wat_skip_ws (local.get $pos)) (then (return (global.get $ERR_PARSE))))
+        (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
+      )
+    )
+
     ;; Read opcode keyword
     (local.set $err (call $wat_read_kw (local.get $pos)))
     (if (local.get $err) (then (return (global.get $ERR_PARSE))))
@@ -6416,6 +6427,7 @@
     (local.set $kw_len (i32.load (global.get $OFF_SCRATCH1)))
     (local.set $pos (i32.load (global.get $OFF_SCRATCH2)))
 
+    (block $instr_done
       ;; ─── Opcode dispatch ───
       ;; Inline byte comparison: load first few bytes and compare
       (local.set $b0 (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $kw_off))))
@@ -6432,9 +6444,7 @@
           (local.set $b (i32.const 0x00))
           (if (call $wat_emit_byte (local.get $body_off) (local.get $b)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_nop
           (if (i32.ne (local.get $kw_len) (i32.const 3)) (then (br $not_nop)))
@@ -6446,9 +6456,7 @@
           ;; nop
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x01)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_i32add
           (if (i32.ne (local.get $kw_len) (i32.const 7)) (then (br $not_i32add)))
@@ -6462,9 +6470,7 @@
           ;; i32.add
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x6a)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_i32sub
           (if (i32.ne (local.get $kw_len) (i32.const 7)) (then (br $not_i32sub)))
@@ -6478,9 +6484,7 @@
           ;; i32.sub
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x6b)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_i32const
           (if (i32.ne (local.get $kw_len) (i32.const 9)) (then (br $not_i32const)))
@@ -6501,9 +6505,7 @@
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_i32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_localget
           (if (i32.ne (local.get $kw_len) (i32.const 9)) (then (br $not_localget)))
@@ -6524,9 +6526,7 @@
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_u32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_localset
           (if (i32.ne (local.get $kw_len) (i32.const 9)) (then (br $not_localset)))
@@ -6547,9 +6547,7 @@
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_u32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_localtee
           (if (i32.ne (local.get $kw_len) (i32.const 9)) (then (br $not_localtee)))
@@ -6570,9 +6568,7 @@
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
           (if (call $wat_emit_leb_u32 (local.get $body_off) (local.get $imm)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_return
           (if (i32.ne (local.get $kw_len) (i32.const 6)) (then (br $not_return)))
@@ -6586,9 +6582,7 @@
           ;; return
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x0F)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_drop
           (if (i32.ne (local.get $kw_len) (i32.const 4)) (then (br $not_drop)))
@@ -6602,9 +6596,7 @@
           ;; drop
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x1A)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
         (block $not_end
           (if (i32.ne (local.get $kw_len) (i32.const 3)) (then (br $not_end)))
@@ -6616,14 +6608,31 @@
           ;; end — emit end opcode
           (if (call $wat_emit_byte (local.get $body_off) (i32.const 0x0B)) (then (return (global.get $ERR_NO_MEM))))
           (local.set $body_off (i32.load (global.get $OFF_SCRATCH0)))
-          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
-          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
-          (return (i32.const 0))
+          (br $instr_done)
         )
 
         ;; Unknown opcode
         (return (global.get $ERR_PARSE))
       )
+      ;; After instruction: store results in scratch0/1 and handle sexpr
+      (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
+      (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
+      (if (local.get $sexpr)
+        (then
+          ;; Expect closing ')' for sexpr
+          (if (call $wat_skip_ws (local.get $pos)) (then (return (global.get $ERR_PARSE))))
+          (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
+          (local.set $b (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))))
+          (if (i32.ne (local.get $b) (i32.const 0x29))  ;; ')'
+            (then (return (global.get $ERR_PARSE)))
+          )
+          (local.set $pos (i32.add (local.get $pos) (i32.const 1)))
+          (i32.store (global.get $OFF_SCRATCH0) (local.get $body_off))
+          (i32.store (global.get $OFF_SCRATCH1) (local.get $pos))
+        )
+      )
+      (return (i32.const 0))
+    )
 
   ;; ═════════════════════════════════════════════════════════════════════
   ;; Top-level declaration parsers
@@ -6920,7 +6929,7 @@
         (local.set $pos (i32.load (global.get $OFF_SCRATCH0)))
         (local.set $b (i32.load8_u (i32.add (i32.load (global.get $OFF_WAT_PTR)) (local.get $pos))))
         ;; If we see `)` we're done with type declarations, go to body
-        (if (i32.eq (local.get $b) (i32.const 0x29)) (then (local.set $pos (i32.add (local.get $pos) (i32.const 1))) (br $type_done)))
+        (if (i32.eq (local.get $b) (i32.const 0x29)) (then (br $type_done)))  ;; leave ')' for $wat_parse_body to handle as end-of-function
         ;; Must be '('
         (if (i32.ne (local.get $b) (i32.const 0x28)) (then (br $type_done)))  ;; not '(', assume body starts
         (local.set $p2 (local.get $pos))  ;; save '(' position

@@ -2,9 +2,6 @@
   ;; Scalar kinds: 1 quoted string, 2 literal string, 3 bool, 4 int, 5 float, 6 array, 7 bare string.
   ;; Line kinds: 0 blank, 1 comment, 2 key/value, 3 table, 4 array table.
 
-  (func $m185is_ws (param $c i32) (result i32)
-    (i32.or (i32.eq (local.get $c) (i32.const 32)) (i32.eq (local.get $c) (i32.const 9))))
-
   (func $m185byte (param $ptr i32) (param $off i32) (result i32)
     (i32.load8_u (i32.add (local.get $ptr) (local.get $off))))
 
@@ -30,7 +27,7 @@
 
   (func $m185skip_ws (param $ptr i32) (param $len i32) (param $p i32) (result i32)
     (loop $again
-      (if (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $m185is_ws (call $m185byte (local.get $ptr) (local.get $p))))
+      (if (i32.and (i32.lt_u (local.get $p) (local.get $len)) (call $is_ws (call $m185byte (local.get $ptr) (local.get $p))))
         (then
           (local.set $p (i32.add (local.get $p) (i32.const 1)))
           (br $again))))
@@ -40,7 +37,7 @@
     (loop $again
       (if (i32.and
             (i32.gt_u (local.get $end) (local.get $start))
-            (call $m185is_ws (call $m185byte (local.get $ptr) (i32.sub (local.get $end) (i32.const 1)))))
+            (call $is_ws (call $m185byte (local.get $ptr) (i32.sub (local.get $end) (i32.const 1)))))
         (then
           (local.set $end (i32.sub (local.get $end) (i32.const 1)))
           (br $again))))
@@ -140,7 +137,7 @@
             (loop $radix
               (if (i32.ge_u (local.get $p) (local.get $len)) (then (call $m185write2 (local.get $out_ptr) (i32.const 4) (local.get $p)) (return (i32.const 0))))
               (local.set $c (call $m185byte (local.get $ptr) (local.get $p)))
-              (if (i32.eq (call $m185is_ws (local.get $c)) (i32.const 1))
+              (if (i32.eq (call $is_ws (local.get $c)) (i32.const 1))
                 (then (call $m185write2 (local.get $out_ptr) (i32.const 4) (local.get $p)) (return (i32.const 0))))
               (if (i32.eqz (call $is_radix_digit (local.get $c) (call $m185byte (local.get $ptr) (i32.add (local.get $start) (i32.const 1)))))
                 (then (return (i32.const 3))))

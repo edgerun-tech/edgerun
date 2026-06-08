@@ -1,7 +1,8 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // WASM→ELF compiler — uses edgerun.wasm as JIT backend
 import { jitCompile, jitCompileTo } from '../jit.mjs';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, unlinkSync } from 'fs';
+import { compileWat } from '../../tools/er-codec.mjs';
 
 const args = process.argv.slice(2);
 if (args.length < 1 || args[0] === '-h' || args[0] === '--help') {
@@ -30,10 +31,11 @@ else outputPath = inputPath.replace(/\.wasm$/, '') + '.elf';
 
 let wasmBytes = readFileSync(inputPath);
 if (inputPath.endsWith('.wat')) {
-  const { execSync } = require('child_process');
   const tmpWasm = '/tmp/wasm2elf-tmp.wasm';
-  execSync(`wat2wasm "${inputPath}" -o "${tmpWasm}"`, { stdio: 'pipe' });
-  wasmBytes = readFileSync(tmpWasm);
+  const wasm = compileWat(readFileSync(inputPath, 'utf-8'));
+  writeFileSync(tmpWasm, wasm);
+  wasmBytes = wasm;
+  try { unlinkSync(tmpWasm); } catch {}
   outputPath = inputPath.replace(/\.wat$/, '') + '.elf';
 }
 

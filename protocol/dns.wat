@@ -1133,7 +1133,7 @@
     local.get $qbuf local.get $qlen i32.add i32.const 8 i32.add local.get $dns_port i32.store16
 
     ;; ── 5. sock_open(SOCK_UDP=5, cfg, 12) ──
-    i32.const 5 local.get $qbuf local.get $qlen i32.add i32.const 12 call $sock_open
+    i32.const 5 local.get $qbuf local.get $qlen i32.add i32.const 12 i32.const 0 call $sock_open
     local.tee $fd
     i32.const 0 i32.lt_s
     if i64.const -2 return end
