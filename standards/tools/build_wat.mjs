@@ -11,7 +11,7 @@ import { resolve } from 'path';
 import { execSync } from 'child_process';
 import {
   resolveRoot, rootPath, fileExists, concatFragments,
-  compileWat, stripWasm, optimizeWasm
+  compileWat, stripWasm, optimizeWasm, wrapModule
 } from './build-lib.mjs';
 
 const ROOT = resolveRoot();
@@ -176,7 +176,6 @@ function renameBackend(content, suffix) {
 
 // ── Manifest ──
 const MANIFEST = [
-  'runtime/module-header.wat',
   'runtime/memory.wat',
   'runtime/memory-map.wat',
   'runtime/edgerun-core.wat',
@@ -311,7 +310,6 @@ const MANIFEST = [
   'pipeline/stage-registry.wat',
   'compiler/dispatch-wrapper.wat',
   'app/wayland-patch-syscalls.wat',
-  'runtime/module-footer.wat',
 ];
 
 function build() {
@@ -358,8 +356,9 @@ function build() {
     fileIdx++;
   }
 
-  writeFileSync(outPath, body, 'utf-8');
-  console.log(`✓ ${count} fragments → ${outPath} (${body.length} bytes)`);
+  const moduleWat = wrapModule(body);
+  writeFileSync(outPath, moduleWat, 'utf-8');
+  console.log(`✓ ${count} fragments → ${outPath} (${moduleWat.length} bytes)`);
 
   if (!skipWasm) {
     const wasmPath = outPath.replace(/\.wat$/, '.wasm');

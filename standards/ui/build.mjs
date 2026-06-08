@@ -4,7 +4,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import {
-  resolveRoot, rootPath, fileExists, compileWat
+  resolveRoot, rootPath, fileExists, compileWat, wrapModule
 } from '../tools/build-lib.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -43,25 +43,12 @@ for (const f of lastFiles) {
   if (fileExists(f)) fragFiles.push(f);
 }
 
-// Read header, inject memory, concatenate
-const header = readFileSync(rootPath('runtime', 'module-header.wat'), 'utf-8').trimEnd();
-const footer = readFileSync(rootPath('runtime', 'module-footer.wat'), 'utf-8').trim();
-
-const headerLines = header.split('\n');
-let lastImport = 0;
-for (let i = 0; i < headerLines.length; i++) {
-  if (headerLines[i].includes('(import')) lastImport = i;
-}
-headerLines.splice(lastImport + 1, 0, '', '  ;; ── Memory ────────────────────────────────────────────────', '  (memory (export "memory") 288)', '');
-
-const parts = [headerLines.join('\n')];
+// Concatenate fragments and wrap in module
+const bodyParts = [];
 for (const f of fragFiles) {
-  const body = readFileSync(f, 'utf-8').trimEnd();
-  parts.push(body);
+  bodyParts.push(readFileSync(f, 'utf-8').trimEnd());
 }
-parts.push(footer);
-
-const wat = parts.join('\n');
+const wat = wrapModule(bodyParts.join('\n'), { memory: 288 });
 
 const outDir = join(__dirname);
 const outWat = join(outDir, 'er.wat');

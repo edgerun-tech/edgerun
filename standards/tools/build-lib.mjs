@@ -169,13 +169,36 @@ export function resolveTool(name) {
   } catch { return null; }
 }
 
-// ── Header/footer helpers ─────────────────────────────────────
-const ROOT = resolveRoot();
+// ── Module wrapper ────────────────────────────────────────────
+// Generates a full WAT module string from body content + options.
+// Replaces the old module-header.wat / module-footer.wat files.
+export function wrapModule(body, options = {}) {
+  const {
+    variant = 'runtime',
+    memory,
+  } = options;
 
-export function readModuleHeader(variant = 'runtime') {
-  return readFileSync(rootPath(variant, 'module-header.wat'), 'utf-8').trimEnd();
-}
+  let result = '(module';
 
-export function readModuleFooter(variant = 'runtime') {
-  return readFileSync(rootPath(variant, 'module-footer.wat'), 'utf-8').trim();
+  if (variant === 'cli') {
+    result += `
+  ;; ── System imports (compiled to inline syscalls by wasm2elf) ──
+  (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "fd_read" (func $fd_read (param i32 i32 i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))
+  (import "wasi_snapshot_preview1" "args_sizes_get" (func $args_sizes_get (param i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "args_get" (func $args_get (param i32 i32) (result i32)))
+  (memory (export "memory") 1)`;
+  } else {
+    result += `
+  ;; (No imports — network/UI modules excluded from this build)`;
+  }
+
+  if (memory !== undefined && variant !== 'cli') {
+    result += `
+  (memory (export "memory") ${memory})`;
+  }
+
+  result += '\n' + body + '\n)';
+  return result;
 }

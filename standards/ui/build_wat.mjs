@@ -3,14 +3,12 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import {
-  resolveRoot, rootPath, ensureDir, compileWat
+  resolveRoot, rootPath, ensureDir, compileWat, wrapModule
 } from '../tools/build-lib.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const srcDir = join(__dirname, 'src');
 const fragmentsDir = join(__dirname, 'fragments');
-const headerFile = rootPath('runtime', 'module-header.wat');
-const footerFile = rootPath('runtime', 'module-footer.wat');
 const outFile = join(__dirname, 'ui_framework.wat');
 
 ensureDir(fragmentsDir);
@@ -144,10 +142,7 @@ for (const f of fragFiles) {
 }
 
 // ── 6. Link: produce final module ────────────────────────────────────
-const header = readFileSync(headerFile, 'utf-8');
-const footer = readFileSync(footerFile, 'utf-8');
-
-const partLines = [header.trimEnd()];
+const body = [];
 for (const f of fragFiles) {
   const fragText = readFileSync(join(fragmentsDir, f), 'utf-8');
   const modLines = fragText.split('\n');
@@ -171,20 +166,14 @@ for (const f of fragFiles) {
   }
 
   const bodyLines = modLines.slice(bodyStart, realEnd);
-  partLines.push(bodyLines.join('\n').trimEnd());
+  body.push(bodyLines.join('\n').trimEnd());
 }
-partLines.push(footer.trim());
 
-const outContent = partLines.join('\n');
-
+const outContent = wrapModule(body.join('\n'));
 writeFileSync(outFile, outContent + '\n');
 
 const funcCount = (outContent.match(/\(func\s+\$/g) || []).length;
 
 console.log(`\nWrote ${outFile}`);
-console.log(`  Header: ${header.split('\n').length} lines`);
 console.log(`  Fragments: ${fragFiles.length}`);
-console.log(`  Footer: 1 line`);
-
-const totalLines = readFileSync(outFile, 'utf-8').split('\n').length;
-console.log(`  Total: ${totalLines} lines, ~${funcCount} functions`);
+console.log(`  Total: ${funcCount} functions`);

@@ -4,14 +4,13 @@ import { resolve } from 'path';
 import { execSync } from 'child_process';
 import {
   resolveRoot, rootPath, readFile, writeFile, fileExists,
-  concatFragments, compileWat,
+  concatFragments, compileWat, wrapModule,
   buildSourcePayload, bytesToWatString
 } from './build-lib.mjs';
 
 const ROOT = resolveRoot();
 
 const MANIFEST = [
-  'runtime/module-header.wat',
   'runtime/memory.wat',
   'runtime/memory-map.wat',
   'runtime/edgerun-core.wat',
@@ -246,7 +245,6 @@ const MANIFEST = [
   'compiler/dispatch-wrapper.wat',
   'app/wayland-patch-syscalls.wat',
   'data/embedded-source.wat',
-  'runtime/module-footer.wat',
 ];
 
 // ── Generate data/embedded-source.wat ───────────────────────
@@ -302,11 +300,12 @@ function build() {
   // ── Generate embedded-source.wat ────────────────────────
   generateSourceData(sourceFiles);
 
-  // ── Concatenate manifest ────────────────────────────────
+  // ── Concatenate manifest + wrap in module ───────────────
   const outPath = rootPath('edgerun.wat');
   const { body, count } = concatFragments(MANIFEST, ROOT);
-  writeFile(outPath, body);
-  console.log(`✓ ${count} fragments → ${outPath} (${(body.length / 1024).toFixed(0)} KB)`);
+  const moduleWat = wrapModule(body);
+  writeFile(outPath, moduleWat);
+  console.log(`✓ ${count} fragments → ${outPath} (${(moduleWat.length / 1024).toFixed(0)} KB)`);
 
   // ── Parse with wasm-tools ──────────────────────────────
   const wasmPath = rootPath('edgerun.wasm');

@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { resolve, basename } from 'path';
 import {
-  resolveRoot, rootPath, fileExists, ensureDir
+  resolveRoot, rootPath, fileExists, ensureDir, wrapModule
 } from '../tools/build-lib.mjs';
 
 const ROOT = resolveRoot();
@@ -47,16 +47,14 @@ else outputPath = resolve(basename(userPath).replace(/\.wat$/, '') + '.elf');
 const withArgs = args.includes('--with-args');
 const withMemory = args.includes('--with-memory');
 
-// ── Library fragments (CLI-specific, not in build-lib) ──
+// ── Library fragments ──
 const cliDir = rootPath('cli');
 const LIBRARY = [
-  resolve(cliDir, 'module-header.wat'),
   resolve(cliDir, 'core.wat'),
   resolve(cliDir, 'io.wat'),
 ];
 if (withArgs) LIBRARY.push(resolve(cliDir, 'args.wat'));
 if (withMemory) LIBRARY.push(resolve(cliDir, 'memory.wat'));
-const FOOTER = resolve(cliDir, 'module-footer.wat');
 
 let body = '';
 for (const libPath of LIBRARY) {
@@ -67,12 +65,12 @@ for (const libPath of LIBRARY) {
   body += readFileSync(libPath, 'utf-8').trimEnd() + '\n\n';
 }
 body += `;; ── User code: ${userPath} ──\n`;
-body += readFileSync(userPath, 'utf-8').trimEnd() + '\n\n';
-body += readFileSync(FOOTER, 'utf-8').trimEnd() + '\n';
+body += readFileSync(userPath, 'utf-8').trimEnd() + '\n';
+const fullWat = wrapModule(body, { variant: 'cli' });
 
 const tmpWat = resolve('/tmp', `cli-build-${process.pid}.wat`);
 const tmpWasm = resolve('/tmp', `cli-build-${process.pid}.wasm`);
-writeFileSync(tmpWat, body, 'utf-8');
+writeFileSync(tmpWat, fullWat, 'utf-8');
 
 try {
   execSync(`wat2wasm "${tmpWat}" -o "${tmpWasm}"`, { stdio: 'pipe' });
