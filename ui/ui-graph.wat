@@ -68,7 +68,7 @@
   ;; ── Graph renderer ──
   ;; Walks an IR graph and emits UI commands (rect, text) to the output buffer.
   ;;
-  ;; $graph = graph offset from er_parse
+  ;; $graph = graph offset
   ;; $out   = command buffer
   ;; $cap   = command buffer capacity in bytes
   ;; $x, $y = viewport origin

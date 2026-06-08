@@ -158,20 +158,88 @@ export function endianReadBE(buf, off, width) {
 // load_wat supports: i32.const, i32.add, i32.sub, nop, drop, return,
 // unreachable, local.get, param, result, export, func.
 
+function preprocessWat(source) {
+  // f32.const <float> → f32.const 0xHEX (raw IEEE 754 bits as hex token)
+  source = source.replace(/(f32\.const)\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?|nan(?::0x[0-9a-fA-F]+)?|inf|[-+]inf|[-+]nan)/g,
+    (m, op, num) => {
+      try {
+        const f32 = new Float32Array([parseFloat(num)]);
+        const hex = new Uint32Array(f32.buffer)[0];
+        return `${op} 0x${(hex >>> 0).toString(16)}`;
+      } catch { return m; }
+    }
+  );
+  // f64.const <float> → f64.const LO_HEX HI_HEX (two raw i32 tokens)
+  source = source.replace(/(f64\.const)\s+([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?|nan(?::0x[0-9a-fA-F]+)?|inf|[-+]inf|[-+]nan)/g,
+    (m, op, num) => {
+      try {
+        const f64 = new Float64Array([parseFloat(num)]);
+        const u32 = new Uint32Array(f64.buffer);
+        return `${op} 0x${u32[0].toString(16)} 0x${u32[1].toString(16)}`;
+      } catch { return m; }
+    }
+  );
+  // v128.const <shape> vals... → v128.const HEX0 HEX1 HEX2 HEX3
+  source = source.replace(/v128\.const\s+(i32x4|i16x8|i8x16|f32x4|i64x2|f64x2)\s+([^()\n]+)/g,
+    (m, shape, vals) => {
+      try {
+        const parts = vals.trim().split(/\s+/).map(parseFloat);
+        const buf = new ArrayBuffer(16);
+        const v = new DataView(buf);
+        switch (shape) {
+          case 'i32x4': for (let i = 0; i < 4; i++) v.setInt32(i*4, parts[i]|0, true); break;
+          case 'i16x8': for (let i = 0; i < 8; i++) v.setInt16(i*2, parts[i]|0, true); break;
+          case 'i8x16': for (let i = 0; i < 16; i++) v.setInt8(i, parts[i]|0); break;
+          case 'f32x4': for (let i = 0; i < 4; i++) v.setFloat32(i*4, parts[i], true); break;
+          case 'i64x2': for (let i = 0; i < 2; i++) v.setBigInt64(i*8, BigInt(parts[i]), true); break;
+          case 'f64x2': for (let i = 0; i < 2; i++) v.setFloat64(i*8, parts[i], true); break;
+        }
+        const u32 = new Uint32Array(buf);
+        const hex = Array.from(u32).map(x => '0x' + (x >>> 0).toString(16)).join(' ');
+        return `v128.const ${hex}`;
+      } catch { return m; }
+    }
+  );
+  return source;
+}
+
 export function compileWat(watSource) {
   const { e, u8 } = getWasm();
   const memPages = e.memory?.value ?? 2048;
   const memSize = memPages * 65536;
-  const WAT_OFF = 0x200000;
-  const WASM_OFF = 0x800000;
-  const WASM_CAP = 0x200000;
+  const WAT_OFF = 0x500000;
+  const WASM_OFF = 0xC00000;
+  const WASM_CAP = 0x400000;
 
+  watSource = preprocessWat(watSource);
   const enc = new TextEncoder().encode(watSource);
   const maxLen = memSize - WAT_OFF - 0x100000;
   if (enc.length > maxLen) throw new Error(`WAT source too large (${enc.length} > ${maxLen})`);
   u8.set(enc, WAT_OFF);
   const err = e.load_wat(WAT_OFF, enc.length);
-  if (err !== 0) throw new Error(`load_wat failed: ${err}`);
+  if (err !== 0) {
+    const dv = new DataView(u8.buffer);
+    const dbg = dv.getInt32(0x8C020, true);
+    const typeCount = dv.getInt32(0x100, true);
+    const funcCount = dv.getInt32(17680, true);
+    const exportCount = dv.getInt32(38176, true);
+    const globalCount = dv.getInt32(40232, true);
+    const dataCount = dv.getInt32(43324, true);
+    // OFF_WAT_PTR at 0x8C000, OFF_WAT_LEN at 0x8C008
+    const watPtr = dv.getInt32(0x8C000, true);
+    const watLen = dv.getInt32(0x8C008, true);
+    // Read 60 bytes around position from error to understand context
+    // Try to find position from OFF_SCRATCH0 (at 8) or scan near end
+    const pos = dv.getInt32(8, true);  // OFF_SCRATCH0
+    let ctx = '';
+    if (watPtr && watLen && pos >= 0 && pos < watLen) {
+      const start = Math.max(0, Math.min(pos - 30, watLen - 60));
+      const end = Math.min(start + 60, watLen);
+      ctx = new TextDecoder().decode(u8.slice(watPtr + start, watPtr + end));
+      ctx = `pos=${pos} ctx="{${ctx.replace(/[\x00-\x1f]/g, '.')}}"`;
+    }
+    throw new Error(`load_wat failed: ${err} (${ctx || `dbg=0x${dbg.toString(16)}`} t=${typeCount} f=${funcCount} e=${exportCount} g=${globalCount} d=${dataCount})`);
+  }
   const r = e.emit_wasm(WASM_OFF, WASM_CAP);
   const status = Number(r >> 32n);
   if (status) throw new Error(`emit_wasm failed: ${status}`);

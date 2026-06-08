@@ -47,8 +47,6 @@
     ;; 3. Get import count (first module function index)
     (local.set $import_count (i32.load (i32.const 0x4108)))
 
-    ;; 4. compile_to_elf handles jit_compile internally.
-    ;;    The first module function is at index = import_count.
-    ;; compile_to_elf dispatch not available yet — return -1
+    ;; 4. reserved
     (return (i32.const -1) (i32.const 0))
   )

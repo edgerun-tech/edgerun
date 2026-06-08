@@ -70,9 +70,7 @@
   ;; Slots 44-45: HTTP request line / status line parse
   (elem (i32.const 44) $process_http_request_line_parse)
   (elem (i32.const 45) $process_http_status_line_parse)
-  ;; Slots 46-47: Edgerun compiler/interpreter stages
-  (elem (i32.const 46) $process_edgerun_parse)
-  (elem (i32.const 47) $process_edgerun_exec)
+  ;; Slots 46-47: reserved
   ;; Slots 48-50: Queue/Buffer/CDC stages
   (elem (i32.const 48) $process_queue)
   (elem (i32.const 49) $process_buffer)
@@ -248,4 +246,3 @@
   (elem (i32.const 143) $process_ui_event)
   ;; Slot 144: WASM call
   (elem (i32.const 144) $process_wasm_call)
-  (elem (i32.const 145) $process_edgerun_compile)

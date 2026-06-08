@@ -25,15 +25,12 @@ Before adding any dependency (npm package, external binary, new script),
 check this table:
 
 | Capability | Internal tool | Use instead of |
-|---|---|---|
+|---|---|---|---|
 | WAT → WASM compile | `er-codec.mjs:compileWat(src)` | `wat2wasm`, `wasm-tools` (banned) |
 | LEB128 encode/decode | `er-codec.mjs` (LEB128 helpers) | third-party LEB128 libs |
 | Endian read/write | `er-codec.mjs` (endian helpers) | third-party binary libs |
 | Build orchestration | `tools/build.mjs` (all commands) | Make, just, shell scripts |
 | Source viewer | `tools/er.mjs` (`er list`, `er cat`) | custom dump scripts |
-| WASM → ELF compile | `compiler/tools/wasm2elf.mjs` | external `wasm2elf` |
-| Encoding pools | `tools/gen-encoder.mjs` | manual encoding tables |
-| JIT test helper | `tools/test-jit.mjs` | ad-hoc test scripts |
 | File I/O | `build-lib.mjs` (`readText`, `writeText`, `fileExists`, `ensureDir`) | `fs` calls |
 | Memory range validation | `build.mjs` `validateMemoryRanges` | manual checking |
 
@@ -53,8 +50,7 @@ Every change must leave the repo cleaner than it was found:
 - **`bun run clean` before commit** if you generated any `out/` files during
   your work.
 - **No commented-out code.** Delete it. Git history has the original.
-- **No dead fragments.** If a `.wat` file is no longer in the manifest
-  (`package.json` → `edgerun.manifest`), delete it.
+- **No dead fragments.** Delete any `.wat` files that are orphaned (no longer reachable from the filesystem discovery).
 
 ## 4. No External Dependencies
 
@@ -65,7 +61,6 @@ Every change must leave the repo cleaner than it was found:
 - `wat2wasm`, `wasm-tools`, `wasm2elf` are **banned** — never invoke them.
   All WAT compilation uses `er-codec.mjs:compileWat()` which calls
   the built-in `load_wat`/`emit_wasm` exports in `edgerun.wasm`.
-  ELF compilation uses `compiler/tools/wasm2elf.mjs`.
 - The ARCHITECTURE.md "Prerequisites" lists only **Bun**. If you see a
   reference to another external tool in the docs, remove it.
 
@@ -95,20 +90,15 @@ All WAT code must follow these rules:
    name, pattern, and function name.
 2. Write the backing WAT function in the appropriate directory (e.g.
    `data/`, `codec/`, `crypto/`, `protocol/`, etc.).
-3. Add the fragment to `package.json` → `edgerun.manifest`.
-4. Run `bun run build` to regenerate pipeline stages and rebuild.
+3. Run `bun run build` to regenerate pipeline stages and rebuild.
 
 ### Adding a constant or global
 1. Add to `package.json` → `edgerun.config` (grouped constants) or
    `edgerun.globals` (exported globals).
 2. Run `bun run gen-config` to regenerate `out/gen/config.wat`.
 
-### Adding a JIT backend instruction
-1. Add the opcode mapping to `package.json` → `edgerun.templates.<arch>.ops`.
-2. Run `bun run gen-compiler --assemble <arch>` to regenerate dispatch tables.
-
 ### Removing something
-1. Remove from manifest/registry/templates.
+1. Remove from registry. Delete the `.wat` fragment file.
 2. Run `bun run clean && bun run build` to verify nothing breaks.
 3. Delete the `.wat` fragment file.
 4. If removing from the registry, do not reuse the slot number (it is

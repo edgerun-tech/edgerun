@@ -143,24 +143,32 @@ function concatFragments(manifest, rootDir) {
 }
 
 // ── WAT compilation ──
-// Uses er-codec.mjs:compileWat (load_wat/emit_wasm from the project-root
-// edgerun.wasm). The internal compiler handles the instruction subset used
-// by tool and generated WATs. Full runtime WAT exceeds the internal
-// compiler's capability and is distributed as .wat (compiled externally).
+// Uses edgerun.wasm's built-in load_wat + emit_wasm via er-codec.mjs:compileWat.
+// Falls back to wasm-tools parse only for bootstrapping (first build when
+// edgerun.wasm doesn't exist yet, or when the internal parser can't handle
+// a construct it emits but can't parse). TODO: remove after bootstrap stable.
 
 function compileWat(watPath, wasmPath) {
   const src = readText(watPath);
-  if (src.length < 500000) {
-    try {
-      const wasm = codecCompile(src);
-      writeFileSync(wasmPath, wasm);
-      console.log(`  ✓ ${wasmPath} (${(wasm.length / 1024).toFixed(0)} KB)`);
-      return true;
-    } catch (e) {
-      console.log(`  ↻ internal compile failed (${e.message})`);
-    }
+  const label = `${(src.length / 1024).toFixed(0)} KB`;
+  try {
+    const wasm = codecCompile(src);
+    writeFileSync(wasmPath, wasm);
+    console.log(`  ✓ ${wasmPath} (${(label)})`);
+    return true;
+  } catch (e) {
+    console.log(`  ↻ internal compile failed (${label}): ${e.message?.slice(0, 120)}`);
   }
-  console.log(`  ↻ WAT too large for internal compiler (${(src.length / 1024).toFixed(0)} KB). WASM binary not built — use prebuilt edgerun.wasm or compile with wat2wasm externally.`);
+  console.log(`  ↻ trying wasm-tools parse (${label})...`);
+  try {
+    const r = Bun.spawnSync(['wasm-tools', 'parse', watPath, '-o', wasmPath]);
+    if (r.exitCode === 0) {
+      const size = readFileSync(wasmPath).length;
+      console.log(`  ✓ ${wasmPath} (${(size / 1024).toFixed(0)} KB)`);
+      return true;
+    }
+    console.error(`  ✗ wasm-tools parse failed: ${r.stderr.toString().slice(0, 500)}`);
+  } catch {}
   return false;
 }
 
@@ -169,9 +177,9 @@ function compileWat(watPath, wasmPath) {
 function wrapModule(body, options = {}) {
   const { variant = 'runtime', memory } = options;
   let result = '(module';
-  // WASI imports needed by CLI code — compiled to inline syscalls by wasm2elf
+  // WASI imports for CLI builds
   result += `
-  ;; ── System imports (compiled to inline syscalls by wasm2elf) ──
+  ;; ── System imports ──
   (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))
   (import "wasi_snapshot_preview1" "fd_read" (func $fd_read (param i32 i32 i32 i32) (result i32)))
   (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))
@@ -202,8 +210,6 @@ function discoverFragments() {
   const EXCLUDE_DIRS = ['node_modules', '.git', '.opencode', 'out', 'tests', 'tools'];
 
   const EXCLUDE_FILES = new Set([
-    'compiler/compiler.wat',          // template — not a valid fragment
-    'compiler/er-tools.wat',          // standalone module (memory import) — use er-tools-fragment.wat instead
     'cli/examples/cat.wat',           // standalone examples, not production code
     'cli/examples/hello-app.wat',
     'cli/examples/hello.wat',
@@ -329,141 +335,7 @@ function cmdGenConfig() {
   console.log(`✓ ${OUT} (${memPages} pages, ${gcount} globals)`);
 }
 
-// ── gen-compiler ──
 
-function loadTemplates(pkg) {
-  const templates = pkg.edgerun.templates;
-  const archs = {};
-  for (const [key, tmpl] of Object.entries(templates)) {
-    if (key === 'base') continue;
-    const base = templates.base || {};
-    const merged = { ...base, ...tmpl };
-    for (const dk of ['ops', 'fc_ops', 'fd_ops']) {
-      merged[dk] = { ...(base[dk] || {}), ...(tmpl[dk] || {}) };
-    }
-    archs[key] = merged;
-  }
-  return archs;
-}
-
-function buildOpTable(ops, prefix, suffix) {
-  const entries = Object.entries(ops).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
-  return entries.map(([hexcode, opname]) => {
-    const funcname = `${prefix}${opname}${suffix}`;
-    const code = parseInt(hexcode, 16);
-    if (code === 0x00)
-      return `          (if (i32.eqz (local.get $opcode))\n            (then (call $${funcname} (local.get $dec_ptr)) (br $dispatch_done)))`;
-    return `          (if (i32.eq (local.get $opcode) (i32.const ${hexcode}))\n            (then (call $${funcname} (local.get $dec_ptr)) (br $dispatch_done)))`;
-  }).join('\n');
-}
-
-function buildSubTable(ops, prefix, suffix, label) {
-  const entries = Object.entries(ops).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
-  return entries.map(([hexcode, opname]) => {
-    const funcname = `${prefix}${opname}${suffix}`;
-    return `                (if (i32.eq (local.get $imm0) (i32.const ${hexcode}))\n                  (then (call $${funcname} (local.get $dec_ptr)) (br $${label})))`;
-  }).join('\n');
-}
-
-function generateJIT(archName, pkg, compilerPath) {
-  const archs = loadTemplates(pkg);
-  const tmpl = archs[archName];
-  if (!tmpl) { console.error(`Unknown arch: ${archName}`); process.exit(1); }
-  let wat = readText(compilerPath);
-  const arch = tmpl.arch;
-  const opPrefix = tmpl.op_prefix;
-  const opSuffix = tmpl.op_suffix;
-  const simdPrefix = tmpl.simd_prefix !== undefined ? tmpl.simd_prefix : opPrefix;
-  const simdSuffix = tmpl.simd_suffix !== undefined ? tmpl.simd_suffix : opSuffix;
-  const opTable = buildOpTable(tmpl.ops, opPrefix, opSuffix);
-  const fcTable = buildSubTable(tmpl.fc_ops || {}, opPrefix, opSuffix, 'fc_done');
-  const fdTable = buildSubTable(tmpl.fd_ops || {}, simdPrefix, simdSuffix, 'fd_done');
-  const subs = {
-    '{SUFFIX}': `_${arch}`,
-    '{ARCH}': arch,
-    '{OP_TABLE}': opTable,
-    '{FC_TABLE}': fcTable,
-    '{FD_TABLE}': fdTable,
-    '{PROLOGUE}': tmpl.prologue,
-    '{EPILOGUE}': tmpl.epilogue,
-    '{EMIT_BYTE}': tmpl.emit_byte,
-    '{EMIT_DWORD}': tmpl.emit_dword,
-    '{EMIT_ELF_STUB}': tmpl.emit_elf_stub,
-    '{EMIT_ELF64_EHDR}': tmpl.emit_elf64_ehdr,
-    '{EMIT_ELF64_PHDR}': tmpl.emit_elf64_phdr,
-    '{FIXUP_CALLS}': tmpl.fixup_calls,
-    '{COPY_COMPILED_CODE}': tmpl.copy_compiled_code,
-    '{RESULT_GLOBAL}': tmpl.result_global,
-    '{NEXT_OP_GLOBAL}': tmpl.next_op_global,
-    '{JIT_ERROR_GLOBAL}': tmpl.jit_error_global,
-    '{CODE_PTR_GLOBAL}': tmpl.code_ptr_global,
-    '{LABEL_DEPTH_GLOBAL}': tmpl.label_depth_global,
-    '{FUNC_OFF_TABLE}': tmpl.func_off_table,
-  };
-  for (const [k, v] of Object.entries(subs)) wat = wat.split(k).join(v);
-  return wat;
-}
-
-function assembleJIT(arch, pkg, dir) {
-  const tmpl = loadTemplates(pkg)[arch];
-  if (!tmpl) { console.error(`Unknown arch: ${arch}`); process.exit(1); }
-  const dispatch = generateJIT(arch, pkg, [dir, 'compiler.wat'].join('/'));
-  const genDir = [dir, '..', 'out', 'gen'].join('/');
-  const fa = arch.replace(/_/g, '-');
-
-  const config = readText([dir, '..', 'out', 'gen', 'config.wat'].join('/')).replace(/^\(module\s*\n/, '').replace(/\n\)\n?$/, '');
-  const emitCore = readText([dir, 'emit-core.wat'].join('/'));
-  const emit = readText([dir, `emit-${fa}.wat`].join('/'));
-  let templates = readText([dir, `templates-${fa}.wat`].join('/'));
-  const simd = readText([dir, `simd-${fa}.wat`].join('/'));
-
-  if (templates.trimStart().startsWith('(module')) {
-    templates = templates.replace(/^\(module\s*\n/, '');
-    if (templates.endsWith(')\n')) templates = templates.slice(0, -2);
-    else if (templates.endsWith(')')) templates = templates.slice(0, -1);
-  }
-
-  if (tmpl.op_suffix) {
-    const bareTargets = ['i32_trunc_f32_u', 'i32_trunc_f64_u', 'i64_trunc_f32_u', 'i64_trunc_f64_u'];
-    const aliases = bareTargets.map(name =>
-      `  (func $template_${name} (export "template_${name}") (call $template_${name}${tmpl.op_suffix}))`
-    ).join('\n');
-    templates += `\n\n${aliases}\n`;
-  }
-
-  const parts = [config, dispatch, emitCore, emit, templates, simd];
-  const full = `(module\n${parts.join('\n\n')})\n`;
-
-  ensureDir(genDir);
-  const outPath = [genDir, `jit-full-${fa}.wat`].join('/');
-  writeText(outPath, full);
-  console.log(`Assembled: ${outPath} (${full.length} bytes)`);
-}
-
-function cmdGenCompiler(args) {
-  const pkg = JSON.parse(readText(rootPath('package.json')));
-  const dir = rootPath('compiler');
-  const compiler = [dir, 'compiler.wat'].join('/');
-
-  if (args[0] === '--assemble') {
-    const target = args[1];
-    const archs = ['x86_64', 'aarch64', 'arm32'];
-    if (target === 'all') {
-      for (const arch of archs) assembleJIT(arch, pkg, dir);
-    } else {
-      if (!archs.includes(target)) { console.error(`Unknown arch: ${target}`); process.exit(1); }
-      assembleJIT(target, pkg, dir);
-    }
-    return;
-  }
-
-  if (args.length < 1) {
-    console.error('Usage: build.mjs gen-compiler [--assemble <arch>|all]');
-    process.exit(1);
-  }
-  const arch = args[0].replace(/-/g, '_');
-  process.stdout.write(generateJIT(arch, pkg, compiler));
-}
 
 // ── gen-stages ──
 
@@ -618,94 +490,7 @@ function cmdGenStages(args) {
   }
 }
 
-// ── build (unified — all backends) ──
-
-function stripMultiplexer(content) {
-  const marker = ';; Runtime Backend Dispatch';
-  const idx = content.indexOf(marker);
-  if (idx === -1) return content;
-  return content.slice(0, idx).trimEnd() + '\n';
-}
-
-function genTemplateStubs(dispatchPaths, fragments, root) {
-  // Collect all user-defined function CALLS from dispatch files
-  const called = new Map();
-  const callRe = /\(call\s+\$([a-zA-Z_][a-zA-Z0-9_]*)/g;
-  for (const dp of dispatchPaths) {
-    const content = readText(root + '/' + dp);
-    let m;
-    while ((m = callRe.exec(content)) !== null) {
-      const name = m[1];
-      // Count how many args are passed at this call site
-      const after = content.slice(m.index + m[0].length);
-      let depth = 0, args = 0, i = 0;
-      for (; i < after.length; i++) {
-        const ch = after[i];
-        if (ch === '(') depth++;
-        else if (ch === ')') { if (depth === 0) break; depth--; }
-        else if (ch === ' ' && depth === 0) { if (args === 0 && i > 0) args++; }
-      }
-      // Count args between the fn name and closing paren
-      let j = 0, argCount = 0;
-      let d = 0;
-      while (j < i) {
-        while (j < i && after[j] === ' ') j++;
-        if (j >= i) break;
-        if (after[j] === '(') { d++; argCount++; j++; while (j < i && d > 0) { if (after[j] === '(') d++; else if (after[j] === ')') d--; j++; } }
-        else { j++; }
-      }
-      const existing = called.get(name);
-      if (existing === undefined || argCount > existing) called.set(name, argCount);
-    }
-  }
-  if (called.size === 0) return [];
-
-  // Collect all function DEFINITIONS from dispatch files and fragment source files
-  const defined = new Set();
-  const funcRe = /\(func\s+\$([a-zA-Z_][a-zA-Z0-9_]*)/g;
-  for (const dp of dispatchPaths) {
-    const content = readText(root + '/' + dp);
-    let m;
-    while ((m = funcRe.exec(content)) !== null) defined.add(m[1]);
-  }
-  for (const frag of fragments) {
-    const content = readText(root + '/' + frag);
-    let m;
-    while ((m = funcRe.exec(content)) !== null) defined.add(m[1]);
-  }
-
-  // Also collect imported functions (no stubs needed)
-  const imported = new Set();
-  const importRe = /\(import[^)]+\(func\s+\$([a-zA-Z_][a-zA-Z0-9_]*)\)/g;
-  for (const frag of fragments) {
-    const content = readText(root + '/' + frag);
-    let m;
-    while ((m = importRe.exec(content)) !== null) imported.add(m[1]);
-  }
-
-  // Generate stubs for called-but-not-defined-and-not-imported functions
-  const missing = [];
-  for (const [name, argCount] of [...called].sort((a, b) => a[0].localeCompare(b[0]))) {
-    if (!defined.has(name) && !imported.has(name)) missing.push(name);
-  }
-  if (missing.length === 0) return [];
-
-  const lines = [
-    ';; Auto-generated stubs for missing functions',
-    ';; These trap at runtime — replace with real implementations',
-    ';; Generated by build.mjs cmdBuild — do not edit',
-    '',
-  ];
-  for (const name of missing) {
-    const params = called.get(name) || 0;
-    const p = params > 0 ? ` (param i32${params > 1 ? ` i32`.repeat(params - 1) : ''})` : '';
-    lines.push(`  (func $${name}${p} (unreachable))`);
-  }
-  const outPath = root + '/out/gen/template-stubs.wat';
-  writeText(outPath, lines.join('\n') + '\n');
-  console.log(`✓ out/gen/template-stubs.wat (${missing.length} stubs)`);
-  return ['out/gen/template-stubs.wat'];
-}
+// ── build ──
 
 function embedSource(wasmPath, fragmentPaths, rootDir) {
   const files = [];
@@ -739,46 +524,18 @@ function embedSource(wasmPath, fragmentPaths, rootDir) {
   console.log(`  ✓ embedded source (${files.length} files, ${(size / 1024).toFixed(0)} KB, +${added} bytes)`);
 }
 
-function cmdGenOpcodes() {
-  const r = Bun.spawnSync(['bun', 'run', 'tools/gen-opcodes.mjs'], { cwd: resolveRoot() });
-  if (r.exitCode !== 0) {
-    console.error(r.stderr.toString());
-    process.exit(1);
-  }
-  console.log(r.stdout.toString());
-}
-
 function cmdBuild(args) {
   const ROOT = resolveRoot();
 
   cmdGenConfig();
-  cmdGenOpcodes();
   cmdGenStages([]);
 
   const pkg = JSON.parse(readText(rootPath('package.json')));
-  const compilerPath = rootPath('compiler/compiler.wat');
-  const genDir = rootPath('out/gen');
-  ensureDir(genDir);
-
-  const backends = ['x86_64', 'aarch64', 'arm32'];
-  const dispatchPaths = [];
-
-  for (const arch of backends) {
-    const dispatch = generateJIT(arch, pkg, compilerPath);
-    const fa = arch.replace('_', '-');
-    const path = rootPath(`out/gen/jit-dispatch-${fa}.wat`);
-    const final = arch !== 'x86_64' ? stripMultiplexer(dispatch) : dispatch;
-    writeText(path, final);
-    console.log(`  ✓ jit-dispatch-${fa}.wat (${final.length} bytes)`);
-    dispatchPaths.push(`out/gen/jit-dispatch-${fa}.wat`);
-  }
+  ensureDir(rootPath('out/gen'));
 
   const fragments = discoverFragments();
   const PREFIX_COUNT = PREFIX.length;
   const prefix = fragments.slice(0, PREFIX_COUNT);
-
-  // Generate stub template functions for arm32/aarch64 (pre-existing gaps)
-  const stubPaths = genTemplateStubs(dispatchPaths, fragments, ROOT);
 
   const outArg = args.find(a => a.startsWith('--out='));
   const outPath = outArg ? resolve(ROOT, outArg.slice(6)) : rootPath('out/edgerun.wat');
@@ -786,10 +543,9 @@ function cmdBuild(args) {
 
   console.log(`\nEdgeRun Build — ${new Date().toISOString()}`);
   console.log(`Output: ${outPath}\n`);
-  console.log(`All 3 JIT backends: x86-64 + ARM32 + AArch64`);
 
   const pipelineStagesPath = ['out/gen/pipeline-stages.wat'];
-  const allPaths = [...prefix, ...dispatchPaths, ...stubPaths, ...pipelineStagesPath, ...fragments.slice(PREFIX_COUNT)];
+  const allPaths = [...prefix, ...pipelineStagesPath, ...fragments.slice(PREFIX_COUNT)];
   const { body, imports, count } = concatFragments(allPaths, ROOT);
 
   // Resolve all {{NAME}} template references from memory_ranges
@@ -809,107 +565,6 @@ function cmdBuild(args) {
   }
 }
 
-// ── build-er-tools ──
-
-function cmdBuildErTools() {
-  const ROOT = resolveRoot();
-  const OUT_DIR = resolve(ROOT, 'out', 'tools');
-  ensureDir(OUT_DIR);
-  const watPath = resolve(ROOT, 'compiler', 'er-tools.wat');
-  const wasmPath = resolve(OUT_DIR, 'er-tools.wasm');
-
-  const src = readText(watPath);
-  const wasm = codecCompile(src);
-  writeFileSync(wasmPath, wasm);
-  const size = wasm.length;
-  console.log(`  ✓ ${wasmPath} (${(size / 1024).toFixed(0)} KB)`);
-}
-
-// ── build:cli ──
-
-function cmdBuildCli(args) {
-  const ROOT = resolveRoot();
-  const WASM2ELF = rootPath('compiler', 'tools', 'wasm2elf.mjs');
-
-  function showUsage() {
-    const msg = `Usage: bun build.mjs build-cli <user-fragment.wat> [options]
-
-Options:
-  -o, --output <file>    Output ELF path (default: <name>.elf)
-  --with-args            Include argument parsing (args_sizes_get / args_get)
-  --with-memory          Include bump allocator and string utilities
-  -h, --help             Show this help
-
-Example:
-  bun build.mjs build-cli cli/examples/hello-app.wat -o hello.elf
-  ./hello.elf
-  `;
-    console.log(msg);
-    process.exit(0);
-  }
-
-  if (args.length < 1 || args.includes('-h') || args.includes('--help')) showUsage();
-
-  const userPath = args[0];
-  if (!fileExists(userPath)) {
-    console.error(`Error: user fragment not found: ${userPath}`);
-    process.exit(1);
-  }
-
-  const oi = args.indexOf('-o');
-  const oi2 = args.indexOf('--output');
-  let outputPath;
-  if (oi !== -1 && oi + 1 < args.length) outputPath = resolve(args[oi + 1]);
-  else if (oi2 !== -1 && oi2 + 1 < args.length) outputPath = resolve(args[oi2 + 1]);
-  else {
-    const name = userPath.replace(/\.wat$/, '');
-    outputPath = name.endsWith('.elf') ? name : name + '.elf';
-  }
-
-  const withArgs = args.includes('--with-args');
-  const withMemory = args.includes('--with-memory');
-
-  const cliDir = rootPath('cli');
-  const LIBRARY = [
-    resolve(cliDir, 'core.wat'),
-    resolve(cliDir, 'io.wat'),
-  ];
-  if (withArgs) LIBRARY.push(resolve(cliDir, 'args.wat'));
-  if (withMemory) LIBRARY.push(resolve(cliDir, 'memory.wat'));
-
-  let body = '';
-  for (const libPath of LIBRARY) {
-    if (!fileExists(libPath)) {
-      console.error(`Warning: library module not found: ${libPath}`);
-      continue;
-    }
-    body += readText(libPath).trimEnd() + '\n\n';
-  }
-  body += `;; ── User code: ${userPath} ──\n`;
-  body += readText(userPath).trimEnd() + '\n';
-  const fullWat = wrapModule(body, { variant: 'cli' });
-
-  const pid = process.pid;
-  const tmpWat = `/tmp/cli-build-${pid}.wat`;
-  const tmpWasm = `/tmp/cli-build-${pid}.wasm`;
-  writeText(tmpWat, fullWat);
-
-  if (!compileWat(tmpWat, tmpWasm)) {
-    console.error(`Assembled WAT written to ${tmpWat} for debugging`);
-    process.exit(1);
-  }
-
-  const r2 = Bun.spawnSync(['bun', WASM2ELF, tmpWasm, '-o', outputPath], { stdio: 'inherit' });
-  if (r2.exitCode !== 0) {
-    console.error('wasm2elf failed');
-    process.exit(1);
-  }
-
-  try { unlinkSync(tmpWat); } catch {}
-  try { unlinkSync(tmpWasm); } catch {}
-  console.error(`✓ ${outputPath}`);
-}
-
 // ══════════════════════════════════════════════════════════════════════════
 // Main
 // ══════════════════════════════════════════════════════════════════════════
@@ -922,12 +577,6 @@ function main() {
     case 'gen-config':
       cmdGenConfig();
       break;
-    case 'gen-compiler':
-      cmdGenCompiler(args);
-      break;
-    case 'gen-opcodes':
-      cmdGenOpcodes();
-      break;
     case 'gen-stages':
       cmdGenStages(args);
       break;
@@ -935,14 +584,6 @@ function main() {
     case 'build:full':
     case 'build-full':
       cmdBuild(args);
-      break;
-    case 'build:cli':
-    case 'build-cli':
-      cmdBuildCli(args);
-      break;
-    case 'build:tool':
-    case 'build-tool':
-      cmdBuildErTools();
       break;
     case 'help':
     default:
@@ -953,12 +594,8 @@ Usage: bun tools/build.mjs <command> [options]
 
 Commands:
   gen-config              Generate config.wat (globals + memory + data)
-  gen-compiler [opts]     Generate JIT compiler files (out/gen/jit-*.wat)
-  gen-opcodes             Generate WAT opcode LUT (out/gen/opcode-table.wat)
   gen-stages [--split]    Generate pipeline stages (out/gen/pipeline-stages.wat)
-  build [opts]            Build with all 3 JIT backends (out/edgerun.wat + .wasm)
-  build-cli <file> [opts] Build CLI ELF from a WAT fragment
-  build-tool              Build er-tools WASM module (out/tools/er-tools.wasm)
+  build [opts]            Build edgerun.wasm from fragments
   help                    Show this help
 `);
   }
