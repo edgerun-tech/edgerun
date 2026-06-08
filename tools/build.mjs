@@ -143,32 +143,24 @@ function concatFragments(manifest, rootDir) {
 }
 
 // ── WAT compilation ──
-// Small tool WATs use er-codec.mjs:compileWat (load_wat/emit_wasm from
-// the project-root edgerun.wasm). The full runtime WAT is too large
-// for the built-in parser, so it uses wasm-tools parse.
+// Uses er-codec.mjs:compileWat (load_wat/emit_wasm from the project-root
+// edgerun.wasm). The internal compiler handles the instruction subset used
+// by tool and generated WATs. Full runtime WAT exceeds the internal
+// compiler's capability and is distributed as .wat (compiled externally).
 
 function compileWat(watPath, wasmPath) {
   const src = readText(watPath);
-  // Use self-hosted compile for small WATs (<500KB)
   if (src.length < 500000) {
     try {
       const wasm = codecCompile(src);
       writeFileSync(wasmPath, wasm);
       console.log(`  ✓ ${wasmPath} (${(wasm.length / 1024).toFixed(0)} KB)`);
       return true;
-    } catch {}
-  }
-  // Full runtime: wasm-tools parse
-  console.log(`  ↻ large WAT (${(src.length / 1024).toFixed(0)} KB) — using wasm-tools parse...`);
-  try {
-    const r = Bun.spawnSync(['wasm-tools', 'parse', watPath, '-o', wasmPath]);
-    if (r.exitCode === 0) {
-      const size = readFileSync(wasmPath).length;
-      console.log(`  ✓ ${wasmPath} (${(size / 1024).toFixed(0)} KB)`);
-      return true;
+    } catch (e) {
+      console.log(`  ↻ internal compile failed (${e.message})`);
     }
-    console.error(`  ✗ wasm-tools parse failed: ${r.stderr.toString().slice(0, 500)}`);
-  } catch {}
+  }
+  console.log(`  ↻ WAT too large for internal compiler (${(src.length / 1024).toFixed(0)} KB). WASM binary not built — use prebuilt edgerun.wasm or compile with wat2wasm externally.`);
   return false;
 }
 
@@ -747,10 +739,20 @@ function embedSource(wasmPath, fragmentPaths, rootDir) {
   console.log(`  ✓ embedded source (${files.length} files, ${(size / 1024).toFixed(0)} KB, +${added} bytes)`);
 }
 
+function cmdGenOpcodes() {
+  const r = Bun.spawnSync(['bun', 'run', 'tools/gen-opcodes.mjs'], { cwd: resolveRoot() });
+  if (r.exitCode !== 0) {
+    console.error(r.stderr.toString());
+    process.exit(1);
+  }
+  console.log(r.stdout.toString());
+}
+
 function cmdBuild(args) {
   const ROOT = resolveRoot();
 
   cmdGenConfig();
+  cmdGenOpcodes();
   cmdGenStages([]);
 
   const pkg = JSON.parse(readText(rootPath('package.json')));
@@ -923,6 +925,9 @@ function main() {
     case 'gen-compiler':
       cmdGenCompiler(args);
       break;
+    case 'gen-opcodes':
+      cmdGenOpcodes();
+      break;
     case 'gen-stages':
       cmdGenStages(args);
       break;
@@ -949,6 +954,7 @@ Usage: bun tools/build.mjs <command> [options]
 Commands:
   gen-config              Generate config.wat (globals + memory + data)
   gen-compiler [opts]     Generate JIT compiler files (out/gen/jit-*.wat)
+  gen-opcodes             Generate WAT opcode LUT (out/gen/opcode-table.wat)
   gen-stages [--split]    Generate pipeline stages (out/gen/pipeline-stages.wat)
   build [opts]            Build with all 3 JIT backends (out/edgerun.wat + .wasm)
   build-cli <file> [opts] Build CLI ELF from a WAT fragment

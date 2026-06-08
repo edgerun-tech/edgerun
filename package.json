@@ -60,6 +60,9 @@
         "path": "compiler/interpreter.wat"
       },
       {
+        "path": "compiler/wat-opcodes.wat"
+      },
+      {
         "path": "lang/edgerun-ir-core.wat"
       },
       {
@@ -220,10 +223,6 @@
       },
       {
         "path": "pipeline/json-parse-stage.wat"
-      },
-      {
-        "path": "pipeline/wasm-exec-stage.wat",
-        "exists": false
       },
       {
         "path": "pipeline/percent-encode-stage.wat"
@@ -427,10 +426,6 @@
         "path": "data/uuid-util.wat"
       },
       {
-        "path": "out/data/generated-metadata.wat",
-        "exists": false
-      },
-      {
         "path": "compiler/er-tools-fragment.wat"
       },
       {
@@ -443,12 +438,6 @@
         "path": "app/wayland-patch-syscalls.wat",
         "builds": [
           "full"
-        ]
-      },
-      {
-        "path": "out/data/embedded-source.wat",
-        "builds": [
-          "standard"
         ]
       },
       {
@@ -5962,7 +5951,7 @@
         "size": 20
       },
       "WAT_OPCODE_LUT": {
-        "start": "73000",
+        "start": "0x8000",
         "size": 8192
       }
     },

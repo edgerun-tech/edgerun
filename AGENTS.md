@@ -11,7 +11,7 @@ dependencies. The project's core commitments:
 - **Reduction.** Consolidate tooling, remove external deps, merge scripts.
   Every PR must have fewer files or fewer dependencies than before.
 - **Integration.** New capabilities must hook into the existing build system
-  (`tools/build.ts`) and pipeline stage system (`package.json` → `edgerun.registry`).
+  (`tools/build.mjs`) and pipeline stage system (`package.json` → `edgerun.registry`).
   No standalone scripts, no new npm commands.
 - **Self-hosting.** Everything is written in WAT. JS/TS tooling is a temporary
   bridge for build-time orchestration only. Runtime code never leaves WAT.
@@ -29,13 +29,13 @@ check this table:
 | WAT → WASM compile | `er-codec.mjs:compileWat(src)` | `wat2wasm`, `wasm-tools` (banned) |
 | LEB128 encode/decode | `er-codec.mjs` (LEB128 helpers) | third-party LEB128 libs |
 | Endian read/write | `er-codec.mjs` (endian helpers) | third-party binary libs |
-| Build orchestration | `tools/build.ts` (all commands) | Make, just, shell scripts |
+| Build orchestration | `tools/build.mjs` (all commands) | Make, just, shell scripts |
 | Source viewer | `tools/er.mjs` (`er list`, `er cat`) | custom dump scripts |
 | WASM → ELF compile | `compiler/tools/wasm2elf.mjs` | external `wasm2elf` |
 | Encoding pools | `tools/gen-encoder.mjs` | manual encoding tables |
 | JIT test helper | `tools/test-jit.mjs` | ad-hoc test scripts |
 | File I/O | `build-lib.mjs` (`readText`, `writeText`, `fileExists`, `ensureDir`) | `fs` calls |
-| Memory range validation | `build.ts` `validateMemoryRanges` | manual checking |
+| Memory range validation | `build.mjs` `validateMemoryRanges` | manual checking |
 
 **Rule:** If an internal tool provides the capability you need, use it. Do
 not add a new dependency. Do not call external binaries. If no internal tool
@@ -133,7 +133,7 @@ placeholders that are resolved to numeric hex values at build time.
    ```wat
    i32.const {{SHA256_K}}   ;; resolved to 0x7530
    ```
-3. **Build resolves it** — `tools/build.ts:resolveTemplates()` replaces every
+3. **Build resolves it** — `tools/build.mjs:resolveTemplates()` replaces every
    `{{NAME}}` with the hex address from `loadAddressTable()` after fragment
    concatenation, before WAT output.
 
