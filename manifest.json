@@ -87,7 +87,7 @@
     ]
   },
   {
-    "path": "compiler/gen/jit-dispatch-x86-64.wat",
+    "path": "out/gen/jit-dispatch-x86-64.wat",
     "backends": [
       "x86_64"
     ],
@@ -96,7 +96,7 @@
     ]
   },
   {
-    "path": "compiler/gen/jit-dispatch-aarch64.wat",
+    "path": "out/gen/jit-dispatch-aarch64.wat",
     "backends": [
       "aarch64"
     ],
@@ -105,7 +105,7 @@
     ]
   },
   {
-    "path": "compiler/gen/jit-dispatch-arm32.wat",
+    "path": "out/gen/jit-dispatch-arm32.wat",
     "backends": [
       "arm32"
     ],
@@ -355,7 +355,7 @@
     "path": "codec/model.wat"
   },
   {
-    "path": "ui/ui_framework.wat"
+    "path": "out/ui/ui_framework.wat"
   },
   {
     "path": "app/oci.wat"
@@ -455,7 +455,7 @@
     ]
   },
   {
-    "path": "data/embedded-source.wat",
+    "path": "out/data/embedded-source.wat",
     "builds": [
       "standard"
     ]
@@ -545,7 +545,7 @@
     ]
   },
   {
-    "path": "pipeline/pipeline-stages.wat",
+    "path": "out/pipeline/pipeline-stages.wat",
     "builds": [
       "full"
     ]

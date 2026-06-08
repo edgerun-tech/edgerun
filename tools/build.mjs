@@ -1,12 +1,16 @@
 // EdgeRun Build Script — manifest-based module builder
-import { readFileSync, writeFileSync, statSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync, writeFileSync, statSync, existsSync, mkdirSync } from 'fs';
+import { resolve, dirname } from 'path';
 import { execSync } from 'child_process';
 import {
   resolveRoot, rootPath, readFile, writeFile, fileExists,
   concatFragments, compileWat, wrapModule,
   buildSourcePayload, bytesToWatString
 } from './build-lib.mjs';
+
+function ensureDir(path) {
+  if (!existsSync(path)) mkdirSync(path, { recursive: true });
+}
 
 const ROOT = resolveRoot();
 
@@ -45,7 +49,8 @@ function generateSourceData(sourceFiles) {
   lines.push(`    (global.get \$ER_TOOLS_SOURCE_LEN)))`);
   lines.push(')');
 
-  const outPath = rootPath('data/embedded-source.wat');
+  const outPath = rootPath('out/data/embedded-source.wat');
+  ensureDir(dirname(outPath));
   writeFile(outPath, lines.join('\n') + '\n');
   const fileCount = Object.keys(sourceFiles).length;
   const chunkCount = Math.ceil(payload.length / 2000);
@@ -64,20 +69,21 @@ function collectManifestSources(root, manifest) {
 function build() {
   // ── Collect source files ────────────────────────────────
   const sourceFiles = collectManifestSources(ROOT, MANIFEST);
-  delete sourceFiles['data/embedded-source.wat'];
+  delete sourceFiles['out/data/embedded-source.wat'];
 
   // ── Generate embedded-source.wat ────────────────────────
   generateSourceData(sourceFiles);
 
   // ── Concatenate manifest + wrap in module ───────────────
-  const outPath = rootPath('edgerun.wat');
+  const outPath = rootPath('out/edgerun.wat');
+  ensureDir(dirname(outPath));
   const { body, count } = concatFragments(MANIFEST, ROOT);
   const moduleWat = wrapModule(body);
   writeFile(outPath, moduleWat);
   console.log(`✓ ${count} fragments → ${outPath} (${(moduleWat.length / 1024).toFixed(0)} KB)`);
 
   // ── Parse with wasm-tools ──────────────────────────────
-  const wasmPath = rootPath('edgerun.wasm');
+  const wasmPath = rootPath('out/edgerun.wasm');
   try {
     execSync(`wasm-tools parse "${outPath}" -o "${wasmPath}"`, { stdio: 'pipe' });
     const wSize = statSync(wasmPath).size;

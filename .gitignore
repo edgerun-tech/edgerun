@@ -1,26 +1,3 @@
 # ── Build outputs ────────────────────────────────────────────
-edgerun.wat
-edgerun.wasm
-edgerun-stripped.wasm
-edgerun-opt.wasm
+/out/
 *.elf
-cli/*.elf
-
-# ── Generated JIT compiler files — regenerate via `bun run gen` ──
-compiler/gen/
-
-# ── Generated pipeline stages — regenerate via `bun run pipeline-stages` ──
-pipeline/pipeline-stages.wat
-
-# ── Generated data ───────────────────────────────────────────
-data/generated-metadata.wat
-data/embedded-source.wat
-
-# ── Generated UI files ───────────────────────────────────────
-ui/ui_framework.wat
-ui/ui_framework.wasm
-ui/er.wat
-ui/fragments/
-
-# ── Generated compiler tools ─────────────────────────────────
-compiler/er-tools.wasm

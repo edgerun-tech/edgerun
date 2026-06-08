@@ -174,7 +174,7 @@ function renameBackend(content, suffix) {
 }
 
 function build() {
-  const outPath = resolve(ROOT, argv.find((a) => a.startsWith('--out='))?.slice(6) || 'edgerun.wat');
+  const outPath = resolve(ROOT, argv.find((a) => a.startsWith('--out='))?.slice(6) || 'out/edgerun.wat');
   const skipWasm = process.argv.includes('--no-wasm');
 
   console.log(`EdgeRun Build — ${new Date().toISOString()}`);

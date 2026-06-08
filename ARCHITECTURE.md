@@ -5,7 +5,7 @@ data transformation pipelines. Zero dependencies. Self-hosted tooling only.
 
 ## Design
 
-All code lives in a single `(module ...)` block in `edgerun.wat`. The module
+All code lives in a single `(module ...)` block in `out/edgerun.wat`. The module
 owns linear memory, exports a pipeline runner, and exposes every stage through
 a 64-slot dispatch table. Pipelines are arrays of stage IDs + config pointers;
 `pipeline_run` drives them sequentially through intermediate pipes.
@@ -19,7 +19,7 @@ duplication, and no loss of meaning.
 ### Architecture
 
 ```
-edgerun.wat (single module)
+out/edgerun.wat (single module)
 ├── Memory + LUTs           (char classification, lowercase maps)
 ├── Shared globals          (status codes, heap bounds, pipe offsets, syscalls)
 ├── Core helpers            (memcpy, pack, bounds_check, char class, SIMD)
@@ -116,18 +116,26 @@ an output pipe. Intermediate pipes are created/destroyed by the runtime.
 ## Build System
 
 The build is orchestrated via `package.json` scripts at the repo root.
-All generated files (`compiler/gen/*.wat`, `ui/fragments/*`, `edgerun.wat`,
-`edgerun.wasm`) are gitignored and should not be edited directly.
+All generated files go under `out/` and are gitignored. Notable outputs:
+- `out/edgerun.wat` — assembled single-module WAT
+- `out/edgerun.wasm` — compiled WASM binary
+- `out/gen/jit-dispatch-*.wat` — JIT dispatch tables
+- `out/gen/jit-full-*.wat` — full JIT modules per architecture
+- `out/pipeline/pipeline-stages.wat` — generated pipeline stages
+- `out/ui/fragments/` — UI framework fragment wrappers
+- `out/ui/ui_framework.wat` — linked UI framework module
+- `out/data/embedded-source.wat` — source payload for er-tools
+- `out/compiler/er-tools.wasm` — compiled er-tools binary
 
 ### Scripts
 
 | Command | Description |
 |---------|-------------|
-| `bun run all` | Full build: generate JIT dispatch tables → pipeline stages → assemble `edgerun.wasm` |
-| `bun run gen` | Generate JIT dispatch tables (`compiler/gen/jit-dispatch-*.wat`) and full JIT files (`compiler/gen/jit-full-*.wat`) |
-| `bun run build` | Assemble `edgerun.wat` + `edgerun.wasm` from manifest fragments (standard profile) |
+| `bun run all` | Full build: generate JIT dispatch tables → assemble `out/edgerun.wasm` |
+| `bun run gen` | Generate JIT dispatch tables (`out/gen/jit-dispatch-*.wat`) and full JIT files (`out/gen/jit-full-*.wat`) |
+| `bun run build` | Assemble `out/edgerun.wat` + `out/edgerun.wasm` from manifest fragments (standard profile) |
 | `bun run build:full` | Assemble with all 3 JIT backends (x86-64, ARM32, AArch64) with renamed exports |
-| `bun run build:ui` | Regenerate `ui/fragments/` from `ui/src/` and link `ui_framework.wat` (only needed when UI fragments change) |
+| `bun run build:ui` | Regenerate `out/ui/fragments/` from `ui/src/` and link `out/ui/ui_framework.wat` |
 | `bun run pipeline-stages` | Generate pipeline stage WAT files from `pipeline/registry.json` |
 | `bun run build:cli -- <file.wat>` | Build a standalone CLI ELF from a WAT fragment |
 | `bun run clean` | Remove all build artifacts |
@@ -147,7 +155,7 @@ All build scripts live in `tools/` and share `build-lib.mjs`:
   compilation (wasm-tools → wat2wasm fallback), WASM stripping/optimization.
 
 - **`tools/er.mjs`** — `er` CLI tool for view/edit/build/commit workflows.
-  Uses `compiler/er-tools.wasm` for self-hosting source management.
+  Uses `out/compiler/er-tools.wasm` for self-hosting source management.
 
 ### Other Scripts
 
@@ -155,7 +163,7 @@ All build scripts live in `tools/` and share `build-lib.mjs`:
   libs and compiles via `wasm2elf` to produce a standalone ELF.
 
 - **`ui/build_wat.mjs`** — UI framework builder. Generates
-  cross-fragment import/export wrappers and links `ui_framework.wat`.
+  cross-fragment import/export wrappers and links `out/ui/ui_framework.wat`.
 
 - **`pipeline/gen-stages.js`** — Generates pipeline stage `.wat`
   files from `pipeline/registry.json`.

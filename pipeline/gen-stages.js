@@ -139,7 +139,9 @@ function genAll() {
     bodies.push(t(st));
   }
   const out = header + bodies.join('\n\n') + '\n';
-  fs.writeFileSync(path.join(__dirname, 'pipeline-stages.wat'), out);
+  const outDir = path.join(__dirname, '..', 'out', 'pipeline');
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(path.join(outDir, 'pipeline-stages.wat'), out);
   console.log(`Generated ${bodies.length} stages into pipeline-stages.wat`);
 }
 
@@ -150,8 +152,10 @@ if (process.argv[2] === '--split') {
     const t = TMPLS[st.pattern];
     if (!t) { console.error(`Unknown pattern "${st.pattern}" for ${st.name}, skipping`); continue; }
     const body = t(st);
-    const fname = st.name.replace(/_/g, '-');
-    fs.writeFileSync(path.join(__dirname, `${fname}-stage.wat`), '\n' + body + '\n');
+      const fname = st.name.replace(/_/g, '-');
+      const splitDir = path.join(__dirname, '..', 'out', 'pipeline');
+      if (!fs.existsSync(splitDir)) fs.mkdirSync(splitDir, { recursive: true });
+    fs.writeFileSync(path.join(splitDir, `${fname}-stage.wat`), '\n' + body + '\n');
   }
   const c = REGISTRY.filter(s => s.generated !== false).length;
   console.log(`Generated ${c} individual stage files (legacy mode)`);

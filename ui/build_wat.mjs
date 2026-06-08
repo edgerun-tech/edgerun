@@ -8,8 +8,8 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const srcDir = join(__dirname, 'src');
-const fragmentsDir = join(__dirname, 'fragments');
-const outFile = join(__dirname, 'ui_framework.wat');
+const fragmentsDir = join(__dirname, '..', 'out', 'ui', 'fragments');
+const outFile = join(__dirname, '..', 'out', 'ui', 'ui_framework.wat');
 
 ensureDir(fragmentsDir);
 

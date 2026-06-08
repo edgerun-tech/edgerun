@@ -88,7 +88,7 @@ function generate(tmplPath, compilerPath) {
 function assemble(arch, dir, tmplPath) {
   const tmpl = loadTemplate(tmplPath);
   const dispatch = generate(tmplPath, path.join(dir, 'compiler.wat'));
-  const genDir = path.join(dir, 'gen');
+  const genDir = path.join(dir, '..', 'out', 'gen');
 
   // Normalize arch for file names (x86_64 → x86-64)
   const fa = arch.replace(/_/g, '-');

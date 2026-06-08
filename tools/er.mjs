@@ -42,10 +42,10 @@ async function getErTools(wasmPath) {
     toolsBin = extractCustomSection(buf, 'edgetools');
   }
   if (!toolsBin) {
-    const toolsDir = resolve(dirname(process.argv[1]), '../compiler');
-    const toolsPath = resolve(toolsDir, 'er-tools.wasm');
+    const outDir = resolve(dirname(process.argv[1]), '..', 'out', 'compiler');
+    const toolsPath = resolve(outDir, 'er-tools.wasm');
     if (!existsSync(toolsPath)) {
-      const watPath = resolve(toolsDir, 'er-tools.wat');
+      const watPath = resolve(dirname(process.argv[1]), '..', 'compiler', 'er-tools.wat');
       if (existsSync(watPath)) {
         console.log('Compiling er-tools.wat → er-tools.wasm...');
         const { execSync } = await import('child_process');
@@ -54,7 +54,7 @@ async function getErTools(wasmPath) {
         } catch {
           console.error('er-tools.wasm not found and wat2wasm compilation failed.');
           console.error('Install wabt (https://github.com/WebAssembly/wabt) and run:');
-          console.error('  wat2wasm compiler/er-tools.wat -o compiler/er-tools.wasm');
+          console.error('  wat2wasm compiler/er-tools.wat -o out/compiler/er-tools.wasm');
           process.exit(1);
         }
       } else {
@@ -212,8 +212,8 @@ async function cmdEdit(args) {
     }
 
     const root = resolve(dirname(process.argv[1]), '..', '..');
-    console.log('• Running make...');
-    execSync('make all', { stdio: 'inherit', cwd: root });
+    console.log('• Running build...');
+    execSync('bun run all', { stdio: 'inherit', cwd: root });
 
     console.log('• Rebuilding .wasm with embedded source...');
     cmdBuild(['--output', wp]);
@@ -239,8 +239,8 @@ async function cmdCommit() {
   }
 
   const root = resolve(dirname(process.argv[1]), '..', '..');
-  console.log('Running make...');
-  execSync('make all', { stdio: 'inherit', cwd: root });
+  console.log('Running build...');
+  execSync('bun run all', { stdio: 'inherit', cwd: root });
 
   cmdBuild(['--output', wasm]);
 }
@@ -282,7 +282,7 @@ function readDirToFiles(dir) {
 function cmdBuild(args) {
   const outIdx = args.indexOf('--output');
   const watchFlag = args.includes('--watch');
-  let output = 'edgerun.wasm';
+  let output = 'out/edgerun.wasm';
   const standards = resolve(dirname(process.argv[1]), '..');
   const sourceDirs = [standards];
   if (outIdx >= 0 && outIdx + 1 < args.length) {
@@ -294,11 +294,11 @@ function cmdBuild(args) {
 
     console.log('• Generating JIT dispatch tables...');
     const root = resolve(dirname(process.argv[1]), '..', '..');
-    try { execSync('make gen', { stdio: 'pipe', cwd: root }); } catch {}
+    try { execSync('bun run gen', { stdio: 'pipe', cwd: root }); } catch {}
 
-    const ui = `${standards}/ui/ui_framework.wat`;
+    const ui = `${resolve(dirname(process.argv[1]), '..')}/out/ui/ui_framework.wat`;
     if (!existsSync(ui)) {
-      console.error('ui_framework.wat not found — run build_wat.mjs first');
+      console.error('out/ui/ui_framework.wat not found — run build_wat.mjs first');
       process.exit(1);
     }
 
@@ -329,7 +329,7 @@ function cmdBuild(args) {
     embedSourceIntoWasm(wasmTmp, output, files);
 
     console.log('• Embedding er-tools.wasm...');
-    const erToolsPath = resolve(dirname(process.argv[1]), '../compiler/er-tools.wasm');
+    const erToolsPath = resolve(dirname(process.argv[1]), '..', 'out', 'compiler', 'er-tools.wasm');
     embedSectionIntoWasm(output, output, 'edgetools', readFileSync(erToolsPath));
 
     rmSync(wasmTmp);
@@ -375,7 +375,7 @@ function walk(root, dir, map, seen) {
     const full = `${dir}/${e.name}`;
     if (e.name.startsWith('.')) continue;
     if (e.isDirectory()) {
-      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'gen' || e.name === 'fragments') continue;
+      if (e.name === 'node_modules' || e.name === '.git' || e.name === 'out' || e.name === 'gen' || e.name === 'fragments') continue;
       walk(root, full, map, seen);
     } else if (e.name.endsWith('.wat') || e.name.endsWith('.mjs') || e.name.endsWith('.json') || e.name.endsWith('.js') || e.name.endsWith('.md') || e.name === 'Makefile') {
       const rel = relative(root, full);
@@ -494,7 +494,7 @@ function findTool(name) {
 function findWasm() {
   const env = process.env.ER_OUT;
   if (env && existsSync(env)) return env;
-  const candidates = ['edgerun.wasm', 'er.wasm'];
+  const candidates = ['out/edgerun.wasm', 'edgerun.wasm', 'er.wasm'];
   for (const c of candidates) {
     if (existsSync(c)) return resolve(c);
     const p = resolve(dirname(process.argv[1]), '..', c);
